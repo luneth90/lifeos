@@ -11,8 +11,6 @@ export interface InstallResult {
 	unchanged: string[];
 }
 
-const SKIP_SKILLS = new Set(['lifeos-init']);
-
 /**
  * Copy language-specific templates from assets to vault.
  * Always overwrites existing files (Tier 1).
@@ -66,8 +64,6 @@ export function installSkills(
 	if (!existsSync(skillsSrc)) return result;
 
 	for (const skillName of readdirSync(skillsSrc)) {
-		if (SKIP_SKILLS.has(skillName)) continue;
-
 		const skillSrcDir = join(skillsSrc, skillName);
 		const fileMap = resolveSkillFiles(skillSrcDir, lang);
 

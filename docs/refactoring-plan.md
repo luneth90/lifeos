@@ -1058,33 +1058,7 @@ subDirPath(parent: string, child: string): string {
 - `src/skill-context/index.ts` — loadTaskboardSummary
 - `src/utils/context-policy.ts` — contextPolicyPath
 
-- [ ] **Step 7: upgrade 命令兼容迁移**
-
-在 `upgrade.ts` 中检测旧格式（扁平 `subdirectories`），自动转换为嵌套格式并写回 `lifeos.yaml`：
-
-```typescript
-function migrateSubdirectories(config: Record<string, unknown>): void {
-  const subs = config.subdirectories as Record<string, unknown>;
-  if (typeof subs?.knowledge_notes === 'string') {
-    // Old flat format → convert to nested
-    config.subdirectories = {
-      knowledge: { notes: subs.knowledge_notes, wiki: subs.knowledge_wiki },
-      system: {
-        templates: subs.templates,
-        schema: subs.schema,
-        memory: subs.memory,
-        archive: {
-          projects: subs.archive_projects,
-          drafts: subs.archive_drafts,
-          plans: subs.archive_plans,
-        },
-      },
-    };
-  }
-}
-```
-
-- [ ] **Step 8: 更新测试**
+- [ ] **Step 7: 更新测试**
 
 - config.test.ts：更新 `subDirPath` / `subDirPrefix` 测试为新签名
 - init.test.ts：更新子目录断言

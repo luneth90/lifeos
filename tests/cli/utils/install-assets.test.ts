@@ -46,9 +46,6 @@ describe('installSkills', () => {
 			expect(result.skipped).toHaveLength(0);
 			expect(result.unchanged).toHaveLength(0);
 
-			// lifeos-init skill should not be copied
-			expect(existsSync(join(dir, '.agents', 'skills', 'lifeos-init'))).toBe(false);
-
 			// Known skills should exist
 			expect(existsSync(join(dir, '.agents', 'skills', 'today'))).toBe(true);
 			expect(existsSync(join(dir, '.agents', 'skills', 'research'))).toBe(true);

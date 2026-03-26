@@ -141,13 +141,6 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(existsSync(join(skillsDir, 'research'))).toBe(true);
 	});
 
-	test('skips lifeos-init skill', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
-		const initSkill = join(dir, '.agents', 'skills', 'lifeos-init');
-		expect(existsSync(initSkill)).toBe(false);
-	});
-
 	test('copies CLAUDE.md to vault root', async () => {
 		await init([dir, '--lang', lang, '--no-mcp']);
 

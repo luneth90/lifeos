@@ -1,8 +1,7 @@
 /**
  * config.ts — LifeOS 路径解析的唯一入口。
  *
- * Migrated from Python vault_config.py. Provides VaultConfig class and
- * module-level singleton helpers.
+ * Provides VaultConfig class and module-level singleton helpers.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
