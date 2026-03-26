@@ -56,8 +56,8 @@ id: Project_Template
 - ⚠️ CRITICAL STRICT PATH RULES（章节目录结构）:
 - MUST include the Domain subfolder.
 - `<ExactResourceName>` MUST be the EXACT file name including extensions (e.g., `.pdf`, `.epub`) as written in the plan. Do NOT abbreviate.
-- 笔记 (体系): `[[40_知识/笔记/<Domain>/<BookName>/<ChapterName>/<ChapterName>]]`（章节目录结构：笔记在以章节名命名的子目录中）
-- 百科 (原子): `[[40_知识/百科/<Domain>/<概念名称>]]`
+- 笔记 (体系): `[[{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>]]`（章节目录结构：笔记在以章节名命名的子目录中）
+- 百科 (原子): `[[{知识目录}/{百科子目录}/<Domain>/<概念名称>]]`
 -->
 
 > **目标:** [学完这个章节后能做什么]
