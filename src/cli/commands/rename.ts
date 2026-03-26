@@ -83,7 +83,7 @@ export default async function rename(args: string[]): Promise<RenameResult> {
 		// Interactive mode
 		const rl = createInterface({ input: process.stdin, output: process.stdout });
 		try {
-			console.log('\n' + bold('当前目录配置:\n'));
+			console.log(`\n${bold('当前目录配置:\n')}`);
 			console.log('  顶级目录:');
 			items.forEach((item, i) => {
 				if (!item.isSubdir) {
@@ -103,7 +103,7 @@ export default async function rename(args: string[]): Promise<RenameResult> {
 
 			const numStr = await rl.question('\n? 选择要重命名的目录 [编号]: ');
 			const idx = Number.parseInt(numStr, 10) - 1;
-			if (isNaN(idx) || idx < 0 || idx >= items.length) {
+			if (Number.isNaN(idx) || idx < 0 || idx >= items.length) {
 				throw new Error('Invalid selection');
 			}
 			selectedItem = items[idx];
@@ -122,18 +122,19 @@ export default async function rename(args: string[]): Promise<RenameResult> {
 	if (selectedItem.isSubdir) {
 		// For subdirectories, only rename the leaf part
 		// Update config
-		const parts = selectedItem.childKey!.split('.');
+		const parentLogical = selectedItem.parentLogical as string;
+		const parts = (selectedItem.childKey as string).split('.');
 		const subGroup = config.subdirectories as unknown as Record<string, Record<string, unknown>>;
 		if (parts.length === 1) {
-			subGroup[selectedItem.parentLogical!][parts[0]] = newPhysical;
+			subGroup[parentLogical][parts[0]] = newPhysical;
 		} else {
 			// Nested: archive.projects
-			const nested = subGroup[selectedItem.parentLogical!][parts[0]] as Record<string, string>;
+			const nested = subGroup[parentLogical][parts[0]] as Record<string, string>;
 			nested[parts[1]] = newPhysical;
 		}
 
 		// Rename physical directory
-		const parentDir = dirs[selectedItem.parentLogical!];
+		const parentDir = dirs[parentLogical];
 		const oldPath = join(targetPath, parentDir, oldPhysical.split('/').slice(1).join('/'));
 		const newPath = join(targetPath, parentDir, newPhysical);
 		if (existsSync(oldPath)) {
@@ -160,7 +161,7 @@ export default async function rename(args: string[]): Promise<RenameResult> {
 	// Print summary
 	log(green('✔'), bold('重命名完成'));
 	log('  ', `目录:  ${oldPhysical} → ${newPhysical}`);
-	log('  ', `配置:  lifeos.yaml 已更新`);
+	log('  ', '配置:  lifeos.yaml 已更新');
 	log('  ', `链接:  ${replaced} 个 wikilinks 已更新`);
 
 	return {
