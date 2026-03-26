@@ -1,0 +1,46 @@
+{
+  "name": "lifeos",
+  "version": "1.0.0",
+  "description": "LifeOS — AI-native knowledge OS runtime, CLI scaffold, and MCP memory server",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "lifeos": "bin/lifeos.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check src/",
+    "lint:fix": "biome check --fix src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@node-rs/jieba": "^2.0.1",
+    "better-sqlite3": "^11.0.0",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "lifeos",
+    "mcp",
+    "memory",
+    "knowledge-management",
+    "obsidian"
+  ],
+  "license": "MIT"
+}
