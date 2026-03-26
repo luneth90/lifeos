@@ -26,6 +26,9 @@ Thumbs.db
 # Test coverage
 coverage/
 
+# Integration test temp
+tmp/
+
 # npm package
 *.tgz
 .worktrees/
