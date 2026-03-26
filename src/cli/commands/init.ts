@@ -2,18 +2,13 @@ import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { stringify as stringifyYaml } from 'yaml';
-import { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS } from '../../config.js';
+import { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS, ZH_REFLECTION_SUBS, EN_REFLECTION_SUBS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { parseArgs } from '../utils/ui.js';
 import { bold, green, log } from '../utils/ui.js';
 import { assetsDir, ensureDir } from '../utils/assets.js';
 import { installTemplates, installSchema, installSkills } from '../utils/install-assets.js';
 import { VERSION } from '../utils/version.js';
-
-// ─── Reflection subdirectories ───────────────────────────────────────────────
-
-const ZH_REFLECTION_SUBS = ['周复盘', '月复盘', '季度复盘', '年度复盘', '项目复盘', '路径校准'];
-const EN_REFLECTION_SUBS = ['Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Projects', 'Alignment'];
 
 // ─── Language auto-detection ─────────────────────────────────────────────────
 

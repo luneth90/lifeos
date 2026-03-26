@@ -435,7 +435,17 @@ export function _resetDefaultInstance(): void {
 	_defaultInstance = null;
 }
 
+// ─── Reflection subdirectory names ───────────────────────────────────────────
+
+/** Reflection subdirectory names by language */
+const ZH_REFLECTION_SUBS: readonly string[] = [
+	'周复盘', '月复盘', '季度复盘', '年度复盘', '项目复盘', '路径校准',
+];
+const EN_REFLECTION_SUBS: readonly string[] = [
+	'Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Projects', 'Alignment',
+];
+
 // ─── Re-exports for CLI ──────────────────────────────────────────────────────
 
-export { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS };
+export { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS, ZH_REFLECTION_SUBS, EN_REFLECTION_SUBS };
 export type { LifeOSConfig };
