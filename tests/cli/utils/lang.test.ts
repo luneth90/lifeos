@@ -23,11 +23,11 @@ describe('resolveSkillFiles', () => {
 		});
 	});
 
-	describe('brainstorm/ (only SKILL.md, no language variants)', () => {
-		it('zh → includes original SKILL.md as-is', () => {
+	describe('brainstorm/ (has SKILL.zh.md + SKILL.en.md after bilingualization)', () => {
+		it('zh → maps SKILL.zh.md to SKILL.md', () => {
 			const map = resolveSkillFiles(join(skills, 'brainstorm'), 'zh');
 			expect(map.has('SKILL.md')).toBe(true);
-			expect(map.get('SKILL.md')).toContain('brainstorm/SKILL.md');
+			expect(map.get('SKILL.md')).toContain('SKILL.zh.md');
 		});
 	});
 
