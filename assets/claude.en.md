@@ -49,7 +49,6 @@ Skill file location: `.agents/skills/<skill-name>/SKILL.md`
 | `/spatial-ai-news` | Search recent week's Spatial AI developments, write to `{drafts}/SpatialAI-{date}.md` | "spatial AI news", "spatial AI weekly", "3D vision news" |
 | `/publish` | Research report/knowledge notes → Xiaohongshu long-form + condensed version (`{outputs}/`) | "publish", "output article", "write for Xiaohongshu", "convert to article", "make Xiaohongshu post" |
 | `/ppt` | Research report/knowledge notes → Marp slides + speaker notes + image prompts (`{outputs}/`) | "make PPT", "make presentation", "generate slides", "prepare talk" |
-| `/lifeos-init` | Full initialization: directory structure, templates, schema, plugins, memory system | "initialize LifeOS", "install LifeOS", "initialize memory system", "lifeos init" |
 
 **Template Routing:**
 

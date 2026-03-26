@@ -49,7 +49,6 @@
 | `/spatial-ai-news` | 搜索最近一周 Spatial AI 进展，写入 `{drafts}/SpatialAI-{日期}.md` | "空间智能资讯"、"spatial AI 周报"、"3D 视觉新闻" |
 | `/publish` | 研究报告/知识笔记 → 小红书长文版+精简版（`{outputs}/`） | "发布"、"输出文章"、"写小红书"、"转成文章"、"做成小红书" |
 | `/ppt` | 研究报告/知识笔记 → Marp 幻灯片+演讲稿+配图提示词（`{outputs}/`） | "做PPT"、"做汇报"、"生成幻灯片"、"准备演讲" |
-| `/lifeos-init` | 全量初始化：目录结构、模板、规范、插件、记忆系统 | "初始化 LifeOS"、"安装 LifeOS"、"初始化记忆系统"、"lifeos init" |
 
 **模板路由：**
 
