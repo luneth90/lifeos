@@ -258,29 +258,17 @@ describe('autoCaptureEvents', () => {
     expect(result.events[0].summary).toBe('有效的纠错');
   });
 
-  it('deduplicates by entry_hash — skips identical events', () => {
-    // Insert once
-    autoCaptureEvents(db, {
-      decisions: [{ summary: '使用 TDD 开发流程' }],
+  it('deduplicates across calls and within same batch', () => {
+    // Cross-call dedup
+    autoCaptureEvents(db, { decisions: [{ summary: '使用 TDD 开发流程' }] });
+    const crossCall = autoCaptureEvents(db, { decisions: [{ summary: '使用 TDD 开发流程' }] });
+    expect(crossCall.capturedCount).toBe(0);
+
+    // Within-batch dedup
+    const withinBatch = autoCaptureEvents(db, {
+      corrections: [{ summary: '回复使用中文' }, { summary: '回复使用中文' }],
     });
-
-    // Insert again with same summary
-    const result = autoCaptureEvents(db, {
-      decisions: [{ summary: '使用 TDD 开发流程' }],
-    });
-
-    expect(result.capturedCount).toBe(0);
-  });
-
-  it('deduplicates within same batch', () => {
-    const result = autoCaptureEvents(db, {
-      corrections: [
-        { summary: '回复使用中文' },
-        { summary: '回复使用中文' }, // duplicate
-      ],
-    });
-
-    expect(result.capturedCount).toBe(1);
+    expect(withinBatch.capturedCount).toBe(1);
   });
 
   it('assigns correct entry types for each bucket', () => {

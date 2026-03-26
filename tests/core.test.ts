@@ -112,23 +112,12 @@ describe('memoryLog', () => {
     ).toThrow('Invalid entry_type: invalid_type');
   });
 
-  it('throws for importance < 1', () => {
+  it.each([0, 6])('throws for importance=%d (out of 1-5 range)', (importance) => {
     expect(() =>
       memoryLog({
         dbPath: vault.dbPath,
         entryType: 'milestone',
-        importance: 0,
-        summary: '测试',
-      }),
-    ).toThrow('importance must be 1-5');
-  });
-
-  it('throws for importance > 5', () => {
-    expect(() =>
-      memoryLog({
-        dbPath: vault.dbPath,
-        entryType: 'milestone',
-        importance: 6,
+        importance,
         summary: '测试',
       }),
     ).toThrow('importance must be 1-5');
@@ -138,45 +127,21 @@ describe('memoryLog', () => {
 // ─── memoryQuery ──────────────────────────────────────────────────────────────
 
 describe('memoryQuery', () => {
-  it('returns results array (possibly empty)', () => {
-    // Startup first to initialize schema
+  it.each([
+    ['with query', { query: '知识管理' }],
+    ['with filters', { filters: { type: 'project' } }],
+    ['with no query and no filters', {}],
+  ] as const)('returns results array %s', (_label, opts) => {
     memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
     _resetDefaultInstance();
 
     const result = memoryQuery({
       dbPath: vault.dbPath,
       vaultRoot: vault.root,
-      query: '知识管理',
-    });
-
-    expect(result).toBeTruthy();
-    expect(Array.isArray(result.results)).toBe(true);
-  });
-
-  it('handles empty query with filters', () => {
-    memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
-    _resetDefaultInstance();
-
-    const result = memoryQuery({
-      dbPath: vault.dbPath,
-      vaultRoot: vault.root,
-      filters: { type: 'project' },
+      ...opts,
     });
 
     expect(Array.isArray(result.results)).toBe(true);
-  });
-
-  it('returns empty results when no query and no filters', () => {
-    memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
-    _resetDefaultInstance();
-
-    const result = memoryQuery({
-      dbPath: vault.dbPath,
-      vaultRoot: vault.root,
-    });
-
-    expect(Array.isArray(result.results)).toBe(true);
-    expect(result.results.length).toBe(0);
   });
 });
 

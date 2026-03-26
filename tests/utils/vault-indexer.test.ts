@@ -189,58 +189,26 @@ More text.
     expect(heads).toContain('Top Level');
   });
 
-  it('generates summary from first 500 chars of body', () => {
+  it('generates summary truncated to 500 chars, content_hash, search_hints, and default fields', () => {
     const longBody = 'A'.repeat(600);
-    const content = `---
-title: test
----
-
-${longBody}`;
-    const result = parseMarkdown(content, 'test.md');
-    expect(result).not.toBeNull();
-    expect(result!.summary.length).toBeLessThanOrEqual(500);
-  });
-
-  it('generates content_hash', () => {
-    const content = `---
-title: test
----
-body`;
-    const result = parseMarkdown(content, 'test.md');
-    expect(result).not.toBeNull();
-    expect(result!.contentHash).toMatch(/^[0-9a-f]{32}$/);
-  });
-
-  it('generates search_hints using segmenter', () => {
     const content = `---
 title: 线性代数笔记
 tags: [math, algebra]
 ---
 
-矩阵运算基础`;
+${longBody}`;
     const result = parseMarkdown(content, 'test.md');
     expect(result).not.toBeNull();
-    expect(result!.searchHints).toBeTruthy();
+    // summary truncation
+    expect(result!.summary.length).toBeLessThanOrEqual(500);
+    // content_hash is 32-char hex
+    expect(result!.contentHash).toMatch(/^[0-9a-f]{32}$/);
+    // search_hints from segmenter
     expect(typeof result!.searchHints).toBe('string');
-    // Should contain tokenized content
     expect(result!.searchHints.length).toBeGreaterThan(0);
-  });
-
-  it('sets backlinks to empty array', () => {
-    const content = `---
-title: test
----`;
-    const result = parseMarkdown(content, 'test.md');
-    expect(result).not.toBeNull();
+    // backlinks default to empty array
     expect(JSON.parse(result!.backlinks)).toEqual([]);
-  });
-
-  it('sets semanticSummary to null', () => {
-    const content = `---
-title: test
----`;
-    const result = parseMarkdown(content, 'test.md');
-    expect(result).not.toBeNull();
+    // semanticSummary default to null
     expect(result!.semanticSummary).toBeNull();
   });
 });

@@ -108,12 +108,8 @@ describe('initDb', () => {
     expect(row.version).toBe(1);
   });
 
-  it('is idempotent — calling initDb twice does not error', () => {
+  it('is idempotent — calling initDb twice does not error or duplicate rows', () => {
     expect(() => initDb(db)).not.toThrow();
-  });
-
-  it('does not duplicate schema_version rows on second init', () => {
-    initDb(db);
     const rows = db.prepare('SELECT version FROM schema_version').all();
     expect(rows).toHaveLength(1);
   });

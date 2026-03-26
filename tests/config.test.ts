@@ -53,12 +53,14 @@ describe('VaultConfig — zh preset (default)', () => {
     expect(cfg.vaultRoot).toBe(tmp.root);
   });
 
-  it('dirPath resolves logical name to absolute path', () => {
+  it.each([
+    ['drafts', '00_草稿'],
+    ['knowledge', '40_知识'],
+    ['system', '90_系统'],
+  ] as const)('dirPath(%s) resolves to absolute path', (name, expected) => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.dirPath('drafts')).toBe(join(tmp.root, '00_草稿'));
-    expect(cfg.dirPath('knowledge')).toBe(join(tmp.root, '40_知识'));
-    expect(cfg.dirPath('system')).toBe(join(tmp.root, '90_系统'));
+    expect(cfg.dirPath(name)).toBe(join(tmp.root, expected));
   });
 
   it('dirPath throws on unknown logical name', () => {
@@ -67,11 +69,13 @@ describe('VaultConfig — zh preset (default)', () => {
     expect(() => cfg.dirPath('nonexistent')).toThrow(/Unknown directory/);
   });
 
-  it('dirPrefix returns physical dir name with trailing slash', () => {
+  it('dirPrefix and subDirPrefix return physical names with trailing slash', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
     expect(cfg.dirPrefix('drafts')).toBe('00_草稿/');
     expect(cfg.dirPrefix('projects')).toBe('20_项目/');
+    expect(cfg.subDirPrefix('knowledge_notes')).toBe('40_知识/笔记/');
+    expect(cfg.subDirPrefix('memory')).toBe('90_系统/记忆/');
   });
 
   it('subDirPath resolves subdirectory to absolute path', () => {
@@ -89,22 +93,10 @@ describe('VaultConfig — zh preset (default)', () => {
     expect(() => cfg.subDirPath('nonexistent')).toThrow(/Unknown subdirectory/);
   });
 
-  it('subDirPrefix returns parent/sub with trailing slash', () => {
-    tmp = createTempDir();
-    const cfg = new VaultConfig(tmp.root);
-    expect(cfg.subDirPrefix('knowledge_notes')).toBe('40_知识/笔记/');
-    expect(cfg.subDirPrefix('memory')).toBe('90_系统/记忆/');
-  });
-
-  it('memoryDir returns correct path', () => {
+  it('memoryDir and dbPath resolve correctly', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
     expect(cfg.memoryDir()).toBe(join(tmp.root, '90_系统', '记忆'));
-  });
-
-  it('dbPath returns memory dir / db_name', () => {
-    tmp = createTempDir();
-    const cfg = new VaultConfig(tmp.root);
     expect(cfg.dbPath()).toBe(join(tmp.root, '90_系统', '记忆', 'memory.db'));
   });
 
@@ -204,25 +196,14 @@ describe('VaultConfig — path inference', () => {
     _resetDefaultInstance();
   });
 
-  it('inferDomainFromPath extracts domain from knowledge notes path', () => {
+  it.each([
+    ['40_知识/笔记/Math/LinearAlgebra/ch1.md', 'Math'],
+    ['40_知识/百科/CS/Recursion.md', 'CS'],
+    ['30_研究/SpatialAI/report.md', 'SpatialAI'],
+  ] as const)('inferDomainFromPath(%s) → %s', (path, expected) => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    const domain = cfg.inferDomainFromPath('40_知识/笔记/Math/LinearAlgebra/ch1.md');
-    expect(domain).toBe('Math');
-  });
-
-  it('inferDomainFromPath extracts domain from knowledge wiki path', () => {
-    tmp = createTempDir();
-    const cfg = new VaultConfig(tmp.root);
-    const domain = cfg.inferDomainFromPath('40_知识/百科/CS/Recursion.md');
-    expect(domain).toBe('CS');
-  });
-
-  it('inferDomainFromPath extracts domain from research path', () => {
-    tmp = createTempDir();
-    const cfg = new VaultConfig(tmp.root);
-    const domain = cfg.inferDomainFromPath('30_研究/SpatialAI/report.md');
-    expect(domain).toBe('SpatialAI');
+    expect(cfg.inferDomainFromPath(path)).toBe(expected);
   });
 
   it('inferDomainFromPath returns null for non-domain paths', () => {
@@ -232,22 +213,19 @@ describe('VaultConfig — path inference', () => {
     expect(cfg.inferDomainFromPath('10_日记/2025-01-01.md')).toBeNull();
   });
 
-  it('pathToBucket maps physical dir to bucket type', () => {
+  it.each([
+    ['10_日记/2025-01-01.md', 'daily'],
+    ['00_草稿/idea.md', 'draft'],
+    ['20_项目/my-project.md', 'project'],
+    ['30_研究/topic/report.md', 'research'],
+    ['40_知识/笔记/book.md', 'knowledge'],
+    ['70_资源/Books/book.pdf', 'resource'],
+    ['90_系统/记忆/memory.db', null],
+    ['unknown/file.md', null],
+  ] as const)('pathToBucket(%s) → %s', (path, expected) => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.pathToBucket('10_日记/2025-01-01.md')).toBe('daily');
-    expect(cfg.pathToBucket('00_草稿/idea.md')).toBe('draft');
-    expect(cfg.pathToBucket('20_项目/my-project.md')).toBe('project');
-    expect(cfg.pathToBucket('30_研究/topic/report.md')).toBe('research');
-    expect(cfg.pathToBucket('40_知识/笔记/book.md')).toBe('knowledge');
-    expect(cfg.pathToBucket('70_资源/Books/book.pdf')).toBe('resource');
-  });
-
-  it('pathToBucket returns null for unmapped paths', () => {
-    tmp = createTempDir();
-    const cfg = new VaultConfig(tmp.root);
-    expect(cfg.pathToBucket('90_系统/记忆/memory.db')).toBeNull();
-    expect(cfg.pathToBucket('unknown/file.md')).toBeNull();
+    expect(cfg.pathToBucket(path)).toBe(expected);
   });
 });
 

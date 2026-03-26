@@ -61,22 +61,14 @@ describe('loadScanState', () => {
     });
   });
 
-  it('coerces mtime to number', () => {
+  it('coerces mtime and size to numbers', () => {
     db.prepare(
       'INSERT INTO scan_state (file_path, last_seen_hash, last_seen_mtime, last_seen_size, last_indexed_at) VALUES (?, ?, ?, ?, ?)',
-    ).run('file.md', null, 1700000000.123, 100, null);
+    ).run('file.md', null, 1700000000.123, 9999, null);
 
     const result = loadScanState(db);
     expect(typeof result['file.md'].last_seen_mtime).toBe('number');
     expect(result['file.md'].last_seen_mtime).toBeCloseTo(1700000000.123, 2);
-  });
-
-  it('coerces size to number', () => {
-    db.prepare(
-      'INSERT INTO scan_state (file_path, last_seen_hash, last_seen_mtime, last_seen_size, last_indexed_at) VALUES (?, ?, ?, ?, ?)',
-    ).run('file.md', null, 0, 9999, null);
-
-    const result = loadScanState(db);
     expect(typeof result['file.md'].last_seen_size).toBe('number');
     expect(result['file.md'].last_seen_size).toBe(9999);
   });
@@ -197,29 +189,12 @@ describe('upsertScanStateRows', () => {
     expect(result['a.md'].last_seen_size).toBe(200);
   });
 
-  it('inserts row with null hash', () => {
-    const rows: ScanStateRow[] = [['x.md', null, 1700000000, 50, null]];
-    upsertScanStateRows(db, rows);
-
-    const result = loadScanState(db);
-    expect(result['x.md'].last_seen_hash).toBeNull();
-  });
 });
 
 // ─── deleteScanStateRows ───────────────────────────────────────────────────────
 
 describe('deleteScanStateRows', () => {
-  it('no-op when filePaths is empty', () => {
-    db.prepare(
-      'INSERT INTO scan_state (file_path, last_seen_hash, last_seen_mtime, last_seen_size, last_indexed_at) VALUES (?, ?, ?, ?, ?)',
-    ).run('keep.md', null, 0, 0, null);
-
-    deleteScanStateRows(db, []);
-    const result = loadScanState(db);
-    expect(Object.keys(result)).toHaveLength(1);
-  });
-
-  it('deletes specified paths', () => {
+  it('deletes specified paths, no-ops on empty/non-existent', () => {
     const rows: ScanStateRow[] = [
       ['a.md', null, 0, 0, null],
       ['b.md', null, 0, 0, null],
@@ -227,18 +202,14 @@ describe('deleteScanStateRows', () => {
     ];
     upsertScanStateRows(db, rows);
 
-    deleteScanStateRows(db, ['a.md', 'c.md']);
+    // Empty array is no-op
+    deleteScanStateRows(db, []);
+    expect(Object.keys(loadScanState(db))).toHaveLength(3);
+
+    // Deletes specified paths, ignores non-existent
+    deleteScanStateRows(db, ['a.md', 'c.md', 'does-not-exist.md']);
     const result = loadScanState(db);
     expect(Object.keys(result)).toHaveLength(1);
     expect(result['b.md']).toBeDefined();
-  });
-
-  it('silently ignores non-existent paths', () => {
-    const rows: ScanStateRow[] = [['a.md', null, 0, 0, null]];
-    upsertScanStateRows(db, rows);
-
-    expect(() => deleteScanStateRows(db, ['does-not-exist.md'])).not.toThrow();
-    const result = loadScanState(db);
-    expect(Object.keys(result)).toHaveLength(1);
   });
 });

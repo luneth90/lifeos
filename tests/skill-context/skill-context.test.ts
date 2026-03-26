@@ -18,35 +18,21 @@ function createInMemoryDb(): Database.Database {
 
 // ─── Profile configs ──────────────────────────────────────────────────────────
 
-describe('SeedProfileConfig — review_strict', () => {
-  it('has expected properties', () => {
-    expect(REVIEW_STRICT.name).toBe('review_strict');
-    expect(REVIEW_STRICT.loadTaskboard).toBe(false);
-    expect(REVIEW_STRICT.allowDomainTagFallback).toBe(false);
-    expect(REVIEW_STRICT.rankingBias['correction']).toBeGreaterThan(50);
-    expect(REVIEW_STRICT.vaultQueryLimit).toBeGreaterThan(0);
-    expect(REVIEW_STRICT.recentEventDays).toBeGreaterThan(0);
-  });
-});
-
-describe('SeedProfileConfig — ask_global', () => {
-  it('allows domain tag fallback', () => {
-    expect(ASK_GLOBAL.allowDomainTagFallback).toBe(true);
-    expect(ASK_GLOBAL.loadTaskboard).toBe(false);
-  });
-});
-
-describe('SeedProfileConfig — daily_global', () => {
-  it('loads taskboard and has project bias', () => {
-    expect(DAILY_GLOBAL.loadTaskboard).toBe(true);
-    expect(DAILY_GLOBAL.rankingBias['project']).toBeGreaterThan(0);
-  });
-});
-
-describe('SeedProfileConfig — knowledge_strict', () => {
-  it('heavily biases knowledge type', () => {
-    expect(KNOWLEDGE_STRICT.rankingBias['knowledge']).toBeGreaterThan(50);
-    expect(KNOWLEDGE_STRICT.allowDomainTagFallback).toBe(false);
+describe('SeedProfileConfig properties', () => {
+  it.each([
+    ['review_strict', REVIEW_STRICT, { loadTaskboard: false, allowDomainTagFallback: false, biasKey: 'correction', biasMin: 50 }],
+    ['ask_global', ASK_GLOBAL, { loadTaskboard: false, allowDomainTagFallback: true, biasKey: null, biasMin: 0 }],
+    ['daily_global', DAILY_GLOBAL, { loadTaskboard: true, allowDomainTagFallback: false, biasKey: 'project', biasMin: 0 }],
+    ['knowledge_strict', KNOWLEDGE_STRICT, { loadTaskboard: false, allowDomainTagFallback: false, biasKey: 'knowledge', biasMin: 50 }],
+  ] as const)('%s has expected properties', (name, profile, expected) => {
+    expect(profile.name).toBe(name);
+    expect(profile.loadTaskboard).toBe(expected.loadTaskboard);
+    expect(profile.allowDomainTagFallback).toBe(expected.allowDomainTagFallback);
+    if (expected.biasKey) {
+      expect(profile.rankingBias[expected.biasKey]).toBeGreaterThan(expected.biasMin);
+    }
+    expect(profile.vaultQueryLimit).toBeGreaterThan(0);
+    expect(profile.recentEventDays).toBeGreaterThan(0);
   });
 });
 

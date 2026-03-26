@@ -84,20 +84,16 @@ describe('buildTaskboardSections', () => {
     db.close();
   });
 
-  it('returns all expected section keys', () => {
-    const sections = buildTaskboardSections(db, '/tmp/vault');
-    expect(Object.keys(sections)).toEqual(
-      expect.arrayContaining(['focus', 'active-projects', 'reviews', 'decisions', 'update-log'])
-    );
-  });
-
-  it('focus section mentions active project when one exists', () => {
+  it('returns all expected section keys and focus mentions active project', () => {
     db.prepare(`
       INSERT INTO vault_index (file_path, title, type, status, modified_at)
       VALUES (?, ?, ?, ?, ?)
     `).run('20_项目/MyProject.md', 'My Project', 'project', 'active', new Date().toISOString());
 
     const sections = buildTaskboardSections(db, '/tmp/vault');
+    expect(Object.keys(sections)).toEqual(
+      expect.arrayContaining(['focus', 'active-projects', 'reviews', 'decisions', 'update-log'])
+    );
     expect(sections['focus']).toContain('My Project');
     expect(sections['active-projects']).toContain('My Project');
   });
@@ -138,14 +134,7 @@ describe('buildUserprofileSections', () => {
     db.close();
   });
 
-  it('returns all expected section keys', () => {
-    const sections = buildUserprofileSections(db, '/tmp/vault');
-    expect(Object.keys(sections)).toEqual(
-      expect.arrayContaining(['profile-summary', 'preferences', 'corrections', 'decisions', 'learning-progress'])
-    );
-  });
-
-  it('preferences section includes logged preference events', () => {
+  it('returns expected section keys and preferences include logged events', () => {
     logEvent(db, {
       entryType: 'preference',
       importance: 3,
@@ -153,6 +142,9 @@ describe('buildUserprofileSections', () => {
     });
 
     const sections = buildUserprofileSections(db, '/tmp/vault');
+    expect(Object.keys(sections)).toEqual(
+      expect.arrayContaining(['profile-summary', 'preferences', 'corrections', 'decisions', 'learning-progress'])
+    );
     expect(sections['preferences']).toContain('简洁中文');
   });
 

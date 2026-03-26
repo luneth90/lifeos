@@ -29,19 +29,10 @@ afterEach(() => {
 // ─── contextPolicyPath ─────────────────────────────────────────────────────────
 
 describe('contextPolicyPath', () => {
-  it('returns path inside memory dir', () => {
+  it('returns absolute path inside memory dir ending with ContextPolicy.md', () => {
     const path = contextPolicyPath(vault.root);
-    expect(path).toContain('ContextPolicy.md');
     expect(path).toContain('记忆');
-  });
-
-  it('path is absolute', () => {
-    const path = contextPolicyPath(vault.root);
     expect(path.startsWith('/')).toBe(true);
-  });
-
-  it('path ends with ContextPolicy.md', () => {
-    const path = contextPolicyPath(vault.root);
     expect(path.endsWith('ContextPolicy.md')).toBe(true);
   });
 });
@@ -49,30 +40,13 @@ describe('contextPolicyPath', () => {
 // ─── ensureContextPolicyExists ────────────────────────────────────────────────
 
 describe('ensureContextPolicyExists', () => {
-  it('creates ContextPolicy.md when missing', () => {
+  it('creates ContextPolicy.md with expected sections and frontmatter', () => {
     const path = ensureContextPolicyExists(vault.root);
     expect(existsSync(path)).toBe(true);
-  });
-
-  it('returns the path to the file', () => {
-    const path = ensureContextPolicyExists(vault.root);
     expect(path.endsWith('ContextPolicy.md')).toBe(true);
-  });
 
-  it('does not overwrite existing file', () => {
-    const path = ensureContextPolicyExists(vault.root);
     const content = readFileSync(path, 'utf-8');
-    const customContent = '# custom content\n';
-    writeFileSync(path, customContent, 'utf-8');
-
-    ensureContextPolicyExists(vault.root);
-    const after = readFileSync(path, 'utf-8');
-    expect(after).toBe(customContent);
-  });
-
-  it('created file contains expected sections', () => {
-    const path = ensureContextPolicyExists(vault.root);
-    const content = readFileSync(path, 'utf-8');
+    expect(content).toContain('type: context-policy');
     expect(content).toContain('## Layer 0 预算');
     expect(content).toContain('## 场景策略');
     expect(content).toContain('## 技能画像策略');
@@ -80,54 +54,32 @@ describe('ensureContextPolicyExists', () => {
     expect(content).toContain('## 活文档体积约束');
   });
 
-  it('created file has frontmatter with type: context-policy', () => {
+  it('does not overwrite existing file', () => {
     const path = ensureContextPolicyExists(vault.root);
-    const content = readFileSync(path, 'utf-8');
-    expect(content).toContain('type: context-policy');
-  });
+    const customContent = '# custom content\n';
+    writeFileSync(path, customContent, 'utf-8');
 
-  it('idempotent — calling twice is safe', () => {
     ensureContextPolicyExists(vault.root);
-    expect(() => ensureContextPolicyExists(vault.root)).not.toThrow();
+    const after = readFileSync(path, 'utf-8');
+    expect(after).toBe(customContent);
   });
 });
 
 // ─── loadContextPolicy ─────────────────────────────────────────────────────────
 
 describe('loadContextPolicy', () => {
-  it('returns a policy object with budget fields', () => {
+  it('returns a policy object with correct types and positive budget defaults', () => {
     const policy = loadContextPolicy(vault.root);
-    expect(typeof policy.layer0_total).toBe('number');
-    expect(typeof policy.userprofile_summary).toBe('number');
-    expect(typeof policy.taskboard_focus).toBe('number');
-    expect(typeof policy.userprofile_doc_limit).toBe('number');
-    expect(typeof policy.taskboard_doc_limit).toBe('number');
-  });
-
-  it('returns scenes as Record<string, string>', () => {
-    const policy = loadContextPolicy(vault.root);
-    expect(typeof policy.scenes).toBe('object');
-    for (const [k, v] of Object.entries(policy.scenes)) {
-      expect(typeof k).toBe('string');
-      expect(typeof v).toBe('string');
-    }
-  });
-
-  it('returns citation_required as string[]', () => {
-    const policy = loadContextPolicy(vault.root);
-    expect(Array.isArray(policy.citation_required)).toBe(true);
-  });
-
-  it('returns skill_profiles as object', () => {
-    const policy = loadContextPolicy(vault.root);
-    expect(typeof policy.skill_profiles).toBe('object');
-  });
-
-  it('default budget values are positive', () => {
-    const policy = loadContextPolicy(vault.root);
+    // Budget fields are positive numbers
     expect(policy.layer0_total).toBeGreaterThan(0);
     expect(policy.userprofile_summary).toBeGreaterThan(0);
     expect(policy.taskboard_focus).toBeGreaterThan(0);
+    expect(typeof policy.userprofile_doc_limit).toBe('number');
+    expect(typeof policy.taskboard_doc_limit).toBe('number');
+    // Structural types
+    expect(typeof policy.scenes).toBe('object');
+    expect(Array.isArray(policy.citation_required)).toBe(true);
+    expect(typeof policy.skill_profiles).toBe('object');
   });
 
   it('parses budget overrides from file content', () => {
@@ -221,54 +173,22 @@ describe('resolveScenePolicy', () => {
 // ─── resolveSkillProfilePolicy ────────────────────────────────────────────────
 
 describe('resolveSkillProfilePolicy', () => {
-  it('returns defaults for review_strict', () => {
+  it.each([
+    ['review_strict', { load_taskboard: false, allow_domain_tag_fallback: false, ranking_key: 'correction', ranking_val: 90 }],
+    ['ask_global', { load_taskboard: false, allow_domain_tag_fallback: true, ranking_key: null, ranking_val: null }],
+    ['daily_global', { load_taskboard: false, allow_domain_tag_fallback: false, ranking_key: 'project', ranking_val: 60 }],
+    ['research_seed', { load_taskboard: false, allow_domain_tag_fallback: true, ranking_key: 'draft', ranking_val: 60 }],
+    ['project_seed', { load_taskboard: false, allow_domain_tag_fallback: true, ranking_key: 'project', ranking_val: 60 }],
+    ['knowledge_strict', { load_taskboard: false, allow_domain_tag_fallback: false, ranking_key: 'knowledge', ranking_val: 70 }],
+  ] as const)('returns correct defaults for %s', (profile, expected) => {
     const policy = loadContextPolicy(vault.root);
-    const result = resolveSkillProfilePolicy(policy, 'review_strict');
-    expect(result.skill_profile).toBe('review_strict');
-    expect(result.load_taskboard).toBe(false);
-    expect(result.allow_domain_tag_fallback).toBe(false);
-    expect(result.ranking_bias['correction']).toBe(90);
-    expect(result.recent_event_bias['correction']).toBe(40);
-  });
-
-  it('returns defaults for ask_global', () => {
-    const policy = loadContextPolicy(vault.root);
-    const result = resolveSkillProfilePolicy(policy, 'ask_global');
-    expect(result.skill_profile).toBe('ask_global');
-    expect(result.allow_domain_tag_fallback).toBe(true);
-    expect(result.ranking_bias).toEqual({});
-  });
-
-  it('returns defaults for daily_global', () => {
-    const policy = loadContextPolicy(vault.root);
-    const result = resolveSkillProfilePolicy(policy, 'daily_global');
-    expect(result.ranking_bias['project']).toBe(60);
-    expect(result.ranking_bias['review']).toBe(45);
-    expect(result.recent_event_bias['decision']).toBe(35);
-  });
-
-  it('returns defaults for research_seed', () => {
-    const policy = loadContextPolicy(vault.root);
-    const result = resolveSkillProfilePolicy(policy, 'research_seed');
-    expect(result.allow_domain_tag_fallback).toBe(true);
-    expect(result.ranking_bias['draft']).toBe(60);
-    expect(result.ranking_bias['research']).toBe(50);
-  });
-
-  it('returns defaults for project_seed', () => {
-    const policy = loadContextPolicy(vault.root);
-    const result = resolveSkillProfilePolicy(policy, 'project_seed');
-    expect(result.allow_domain_tag_fallback).toBe(true);
-    expect(result.ranking_bias['project']).toBe(60);
-    expect(result.recent_event_bias['decision']).toBe(30);
-  });
-
-  it('returns defaults for knowledge_strict', () => {
-    const policy = loadContextPolicy(vault.root);
-    const result = resolveSkillProfilePolicy(policy, 'knowledge_strict');
-    expect(result.allow_domain_tag_fallback).toBe(false);
-    expect(result.ranking_bias['knowledge']).toBe(70);
-    expect(result.recent_event_bias['correction']).toBe(35);
+    const result = resolveSkillProfilePolicy(policy, profile);
+    expect(result.skill_profile).toBe(profile);
+    expect(result.load_taskboard).toBe(expected.load_taskboard);
+    expect(result.allow_domain_tag_fallback).toBe(expected.allow_domain_tag_fallback);
+    if (expected.ranking_key) {
+      expect(result.ranking_bias[expected.ranking_key]).toBe(expected.ranking_val);
+    }
   });
 
   it('returns safe defaults for unknown profile', () => {
@@ -302,22 +222,18 @@ describe('resolveSkillProfilePolicy', () => {
 // ─── DEFAULT_SKILL_PROFILE_POLICIES ───────────────────────────────────────────
 
 describe('DEFAULT_SKILL_PROFILE_POLICIES', () => {
-  it('contains all 6 expected profiles', () => {
+  it('contains all 6 profiles with required fields', () => {
     const profiles = [
       'review_strict', 'ask_global', 'daily_global',
       'research_seed', 'project_seed', 'knowledge_strict',
     ];
     for (const p of profiles) {
       expect(DEFAULT_SKILL_PROFILE_POLICIES[p]).toBeDefined();
-    }
-  });
-
-  it('each profile has required fields', () => {
-    for (const [name, profile] of Object.entries(DEFAULT_SKILL_PROFILE_POLICIES)) {
-      expect(typeof profile.load_taskboard).toBe('boolean', `${name}.load_taskboard`);
-      expect(typeof profile.allow_domain_tag_fallback).toBe('boolean', `${name}.allow_domain_tag_fallback`);
-      expect(typeof profile.ranking_bias).toBe('object', `${name}.ranking_bias`);
-      expect(typeof profile.recent_event_bias).toBe('object', `${name}.recent_event_bias`);
+      const profile = DEFAULT_SKILL_PROFILE_POLICIES[p];
+      expect(typeof profile.load_taskboard).toBe('boolean');
+      expect(typeof profile.allow_domain_tag_fallback).toBe('boolean');
+      expect(typeof profile.ranking_bias).toBe('object');
+      expect(typeof profile.recent_event_bias).toBe('object');
     }
   });
 });

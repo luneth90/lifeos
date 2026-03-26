@@ -66,17 +66,12 @@ content
 // ─── layer0: trimToBudget ─────────────────────────────────────────────────────
 
 describe('trimToBudget', () => {
-  it('returns text unchanged when within budget', () => {
-    const text = 'short text';
-    expect(trimToBudget(text, 1000)).toBe('short text');
-  });
-
-  it('returns empty string for zero budget', () => {
-    expect(trimToBudget('some text', 0)).toBe('');
-  });
-
-  it('returns empty string for blank input', () => {
-    expect(trimToBudget('   ', 100)).toBe('');
+  it.each([
+    ['short text', 1000, 'short text'],
+    ['some text', 0, ''],
+    ['   ', 100, ''],
+  ] as const)('returns expected result for input=%j budget=%d', (input, budget, expected) => {
+    expect(trimToBudget(input, budget)).toBe(expected);
   });
 
   it('truncates text exceeding budget with continuation marker', () => {
@@ -216,22 +211,16 @@ describe('queueFileForEnhance', () => {
     expect(row!['source']).toBe('startup_scan');
   });
 
-  it('does not downgrade priority if existing entry has higher priority', () => {
-    queueFileForEnhance(db, '20_项目/test.md', 10, 'initial');
-    queueFileForEnhance(db, '20_项目/test.md', 3, 'low_priority');
+  it.each([
+    ['upgrades priority when higher', [3, 9], 9],
+    ['does not downgrade priority when lower', [10, 3], 10],
+  ] as const)('%s', (_label, [first, second], expected) => {
+    queueFileForEnhance(db, '20_项目/test.md', first, 'first');
+    queueFileForEnhance(db, '20_项目/test.md', second, 'second');
     const row = db
       .prepare("SELECT priority FROM enhance_queue WHERE file_path = '20_项目/test.md'")
       .get() as { priority: number } | undefined;
-    expect(row!['priority']).toBe(10);
-  });
-
-  it('upgrades priority when new priority is higher', () => {
-    queueFileForEnhance(db, '20_项目/test.md', 3, 'low');
-    queueFileForEnhance(db, '20_项目/test.md', 9, 'high');
-    const row = db
-      .prepare("SELECT priority FROM enhance_queue WHERE file_path = '20_项目/test.md'")
-      .get() as { priority: number } | undefined;
-    expect(row!['priority']).toBe(9);
+    expect(row!['priority']).toBe(expected);
   });
 });
 
@@ -379,12 +368,7 @@ describe('needsMaintenance', () => {
   beforeEach(() => { db = createInMemoryDb(); });
   afterEach(() => { db.close(); });
 
-  it('returns false when no pruneable entries exist', () => {
-    expect(needsMaintenance(db)).toBe(false);
-  });
-
   it('returns true when old low-importance non-key entries exist', () => {
-    // Insert an old, low-importance, non-key entry
     const oldDate = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`
       INSERT INTO session_log
@@ -395,26 +379,19 @@ describe('needsMaintenance', () => {
     expect(needsMaintenance(db)).toBe(true);
   });
 
-  it('returns false when old entries are key types (decision/correction/preference)', () => {
-    const oldDate = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`
-      INSERT INTO session_log
-      (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
-      VALUES (?, 'test-session', ?, 'decision', 2, '一个决策', 'hash002', '[]')
-    `).run('evt-002', oldDate);
-
-    // decisions are in KEY_ENTRY_TYPES, so should not trigger maintenance
-    expect(needsMaintenance(db)).toBe(false);
-  });
-
-  it('returns false when old entries have importance >= 3', () => {
-    const oldDate = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`
-      INSERT INTO session_log
-      (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
-      VALUES (?, 'test-session', ?, 'skill_completion', 3, '高重要度事件', 'hash003', '[]')
-    `).run('evt-003', oldDate);
-
+  it.each([
+    ['no entries', null, null, null],
+    ['key type (decision)', 'decision', 2, 'hash002'],
+    ['high importance (>=3)', 'skill_completion', 3, 'hash003'],
+  ] as const)('returns false when %s', (_label, entryType, importance, hash) => {
+    if (entryType) {
+      const oldDate = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+      db.prepare(`
+        INSERT INTO session_log
+        (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
+        VALUES (?, 'test-session', ?, ?, ?, '测试事件', ?, '[]')
+      `).run(`evt-${hash}`, oldDate, entryType, importance, hash);
+    }
     expect(needsMaintenance(db)).toBe(false);
   });
 });
@@ -445,27 +422,17 @@ describe('pruneSessionLog', () => {
     expect(count['COUNT(*)']).toBe(0);
   });
 
-  it('preserves entries newer than 30 days', () => {
+  it.each([
+    ['recent entries (<30 days old)', 10, 'milestone', 'evt-2', 'h2'],
+    ['key entry types (correction)', 45, 'correction', 'evt-3', 'h3'],
+  ] as const)('preserves %s', (_label, daysOld, entryType, eventId, hash) => {
     const now = new Date();
-    const recent = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000).toISOString();
+    const ts = new Date(now.getTime() - daysOld * 24 * 60 * 60 * 1000).toISOString();
     db.prepare(`
       INSERT INTO session_log
       (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
-      VALUES ('evt-2', 'sess-1', ?, 'milestone', 1, '新里程碑', 'h2', '[]')
-    `).run(recent);
-
-    const result = pruneSessionLog(db, now);
-    expect(result.deleted).toBe(0);
-  });
-
-  it('preserves key entry types (decision/correction/preference)', () => {
-    const now = new Date();
-    const old45 = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`
-      INSERT INTO session_log
-      (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
-      VALUES ('evt-3', 'sess-1', ?, 'correction', 1, '纠错记录', 'h3', '[]')
-    `).run(old45);
+      VALUES (?, 'sess-1', ?, ?, 1, '保留条目', ?, '[]')
+    `).run(eventId, ts, entryType, hash);
 
     const result = pruneSessionLog(db, now);
     expect(result.deleted).toBe(0);

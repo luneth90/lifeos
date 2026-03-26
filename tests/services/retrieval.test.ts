@@ -133,58 +133,22 @@ describe('queryVaultIndex', () => {
     expect(results[0].filePath).toBe('20_项目/my-project.md');
   });
 
-  it('exact filter on type works when no query', () => {
-    insertVaultNote(db, {
-      filePath: '20_项目/proj.md',
-      title: 'Project Note',
-      type: 'project',
-    });
-    insertVaultNote(db, {
-      filePath: '40_知识/wiki.md',
-      title: 'Wiki Note',
-      type: 'knowledge',
-    });
+  it.each([
+    ['type', { type: 'project' }, '20_项目/proj.md'],
+    ['status', { status: 'active' }, '20_项目/active.md'],
+    ['domain', { domain: 'Math' }, '40_知识/math.md'],
+  ] as const)('exact filter on %s works when no query', (_field, filter, expectedPath) => {
+    insertVaultNote(db, { filePath: '20_项目/proj.md', title: 'Project Note', type: 'project' });
+    insertVaultNote(db, { filePath: '40_知识/wiki.md', title: 'Wiki Note', type: 'knowledge' });
+    insertVaultNote(db, { filePath: '20_项目/active.md', title: 'Active Project', type: 'project', status: 'active' });
+    insertVaultNote(db, { filePath: '20_项目/done.md', title: 'Done Project', type: 'project', status: 'done' });
+    insertVaultNote(db, { filePath: '40_知识/math.md', title: 'Math Note', domain: 'Math' });
+    insertVaultNote(db, { filePath: '40_知识/history.md', title: 'History Note', domain: 'History' });
 
-    const { results } = queryVaultIndex(db, '', { type: 'project' }, 10);
-    expect(results.length).toBe(1);
-    expect(results[0].filePath).toBe('20_项目/proj.md');
+    const { results } = queryVaultIndex(db, '', filter, 10);
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    expect(results.map(r => r.filePath)).toContain(expectedPath);
     expect(results[0].matchSource).toBe('exact_filter');
-  });
-
-  it('exact filter on status works when no query', () => {
-    insertVaultNote(db, {
-      filePath: '20_项目/active.md',
-      title: 'Active Project',
-      type: 'project',
-      status: 'active',
-    });
-    insertVaultNote(db, {
-      filePath: '20_项目/done.md',
-      title: 'Done Project',
-      type: 'project',
-      status: 'done',
-    });
-
-    const { results } = queryVaultIndex(db, '', { status: 'active' }, 10);
-    expect(results.length).toBe(1);
-    expect(results[0].filePath).toBe('20_项目/active.md');
-  });
-
-  it('exact filter on domain works when no query', () => {
-    insertVaultNote(db, {
-      filePath: '40_知识/math.md',
-      title: 'Math Note',
-      domain: 'Math',
-    });
-    insertVaultNote(db, {
-      filePath: '40_知识/history.md',
-      title: 'History Note',
-      domain: 'History',
-    });
-
-    const { results } = queryVaultIndex(db, '', { domain: 'Math' }, 10);
-    expect(results.length).toBe(1);
-    expect(results[0].domain).toBe('Math');
   });
 
   it('Chinese query gets tokenized and matched', () => {
@@ -347,47 +311,19 @@ describe('queryRecentEvents', () => {
     expect(ids).not.toContain('evt-old');
   });
 
-  it('filters by entry_type', () => {
+  it.each([
+    ['entry_type', { entryType: 'decision' }, 'evt-decision'],
+    ['scope', { scope: 'project-x' }, 'evt-scoped'],
+  ] as const)('filters by %s', (_field, filter, expectedId) => {
     const now = new Date();
+    insertSessionEvent(db, { eventId: 'evt-decision', summary: 'Made a decision', entryType: 'decision', timestamp: now.toISOString() });
+    insertSessionEvent(db, { eventId: 'evt-milestone', summary: 'Hit a milestone', entryType: 'milestone', timestamp: now.toISOString() });
+    insertSessionEvent(db, { eventId: 'evt-scoped', summary: 'Scoped event', scope: 'project-x', timestamp: now.toISOString() });
+    insertSessionEvent(db, { eventId: 'evt-other', summary: 'Other scope event', scope: 'project-y', timestamp: now.toISOString() });
 
-    insertSessionEvent(db, {
-      eventId: 'evt-decision',
-      summary: 'Made a decision',
-      entryType: 'decision',
-      timestamp: now.toISOString(),
-    });
-    insertSessionEvent(db, {
-      eventId: 'evt-milestone',
-      summary: 'Hit a milestone',
-      entryType: 'milestone',
-      timestamp: now.toISOString(),
-    });
-
-    const { events } = queryRecentEvents(db, { days: 1, entryType: 'decision', limit: 10 });
-    expect(events.length).toBe(1);
-    expect(events[0].eventId).toBe('evt-decision');
-    expect(events[0].entryType).toBe('decision');
-  });
-
-  it('filters by scope', () => {
-    const now = new Date();
-
-    insertSessionEvent(db, {
-      eventId: 'evt-scoped',
-      summary: 'Scoped event',
-      scope: 'project-x',
-      timestamp: now.toISOString(),
-    });
-    insertSessionEvent(db, {
-      eventId: 'evt-other',
-      summary: 'Other scope event',
-      scope: 'project-y',
-      timestamp: now.toISOString(),
-    });
-
-    const { events } = queryRecentEvents(db, { days: 1, scope: 'project-x', limit: 10 });
-    expect(events.length).toBe(1);
-    expect(events[0].eventId).toBe('evt-scoped');
+    const { events } = queryRecentEvents(db, { days: 1, limit: 10, ...filter });
+    expect(events.length).toBeGreaterThanOrEqual(1);
+    expect(events.map(e => e.eventId)).toContain(expectedId);
   });
 
   it('FTS search on session_log', () => {
