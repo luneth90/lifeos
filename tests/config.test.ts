@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { join } from 'path';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import {
   VaultConfig,
@@ -26,9 +26,6 @@ function createTempDir(): TempDir {
   };
 }
 
-function writeyaml(root: string, content: string): void {
-  writeFileSync(join(root, 'lifeos.yaml'), content, 'utf-8');
-}
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -141,7 +138,7 @@ describe('VaultConfig — zh preset (default)', () => {
   });
 });
 
-describe('VaultConfig — lifeos.yaml loading', () => {
+describe('VaultConfig — language selection', () => {
   let tmp: TempDir;
 
   afterEach(() => {
@@ -149,50 +146,18 @@ describe('VaultConfig — lifeos.yaml loading', () => {
     _resetDefaultInstance();
   });
 
-  it('loads and merges user lifeos.yaml over zh preset', () => {
+  it('uses en preset when language is en', () => {
     tmp = createTempDir();
-    writeyaml(tmp.root, `version: '1.0'\nlanguage: zh\ndirectories:\n  drafts: "Draft"\n`);
-    const cfg = new VaultConfig(tmp.root);
-    // User override applies
-    expect(cfg.dirPath('drafts')).toBe(join(tmp.root, 'Draft'));
-    // Preset values preserved
-    expect(cfg.dirPath('diary')).toBe(join(tmp.root, '10_日记'));
-  });
-
-  it('respects language: en in lifeos.yaml', () => {
-    tmp = createTempDir();
-    writeyaml(tmp.root, `version: '1.0'\nlanguage: en\n`);
-    const cfg = new VaultConfig(tmp.root);
+    const cfg = new VaultConfig(tmp.root, 'en');
     expect(cfg.rawConfig.language).toBe('en');
-    // en preset uses English folder names
     expect(cfg.dirPath('drafts')).toBe(join(tmp.root, '00_Drafts'));
   });
 
-  it('custom db_name overrides default', () => {
+  it('defaults to zh when no language specified', () => {
     tmp = createTempDir();
-    writeyaml(tmp.root, `memory:\n  db_name: custom.db\n`);
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.dbPath()).toBe(join(tmp.root, '90_系统', '记忆', 'custom.db'));
-  });
-});
-
-describe('VaultConfig — config object injection', () => {
-  let tmp: TempDir;
-
-  afterEach(() => {
-    tmp?.cleanup();
-    _resetDefaultInstance();
-  });
-
-  it('accepts config object directly (skips file loading)', () => {
-    tmp = createTempDir();
-    const cfg = new VaultConfig(tmp.root, {
-      language: 'zh',
-      directories: { drafts: 'MyDrafts' },
-    });
-    expect(cfg.dirPath('drafts')).toBe(join(tmp.root, 'MyDrafts'));
-    // Merged with preset — other dirs still exist
-    expect(cfg.dirPath('diary')).toBe(join(tmp.root, '10_日记'));
+    expect(cfg.rawConfig.language).toBe('zh');
+    expect(cfg.dirPath('drafts')).toBe(join(tmp.root, '00_草稿'));
   });
 });
 
