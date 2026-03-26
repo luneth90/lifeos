@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import Database from 'better-sqlite3';
@@ -10,7 +10,7 @@ export interface TempVault {
 }
 
 /**
- * Creates a temporary Vault directory with standard LifeOS zh directory structure.
+ * Creates a temporary Vault directory with standard LifeOS structure and lifeos.yaml.
  */
 export function createTempVault(): TempVault {
   const root = mkdtempSync(join(tmpdir(), 'lifeos-test-'));
@@ -25,6 +25,46 @@ export function createTempVault(): TempVault {
   for (const dir of dirs) {
     mkdirSync(join(root, dir), { recursive: true });
   }
+
+  // Write lifeos.yaml
+  const yamlContent = `version: '1.0'
+language: zh
+directories:
+  drafts: "00_草稿"
+  diary: "10_日记"
+  projects: "20_项目"
+  research: "30_研究"
+  knowledge: "40_知识"
+  outputs: "50_成果"
+  plans: "60_计划"
+  resources: "70_资源"
+  reflection: "80_复盘"
+  system: "90_系统"
+subdirectories:
+  knowledge_notes: "笔记"
+  knowledge_wiki: "百科"
+  templates: "模板"
+  schema: "规范"
+  memory: "记忆"
+  archive_projects: "归档/项目"
+  archive_drafts: "归档/草稿"
+  archive_plans: "归档/计划"
+memory:
+  db_name: memory.db
+  scan_prefixes:
+    - drafts
+    - diary
+    - projects
+    - research
+    - knowledge
+    - outputs
+    - plans
+    - resources
+    - reflection
+  excluded_prefixes:
+    - system
+`;
+  writeFileSync(join(root, 'lifeos.yaml'), yamlContent, 'utf-8');
 
   const dbPath = join(root, '90_系统', '记忆', 'memory.db');
 

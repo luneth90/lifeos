@@ -37,7 +37,7 @@ MCP Client (stdio)
 
 **Key patterns:**
 - DB instances are created per-call in `core.ts` (open → try/service → finally/close)
-- `VaultConfig` is a module-level singleton (`config.ts`) with zh/en presets for directory name resolution
+- `VaultConfig` is a module-level singleton (`config.ts`) resolving logical directory names to paths via `lifeos.yaml`
 - Vault supports Chinese (zh) and English (en) directory presets
 - Active docs use `<!-- BEGIN AUTO:marker -->` / `<!-- END AUTO:marker -->` blocks to preserve manual content while refreshing generated sections
 
@@ -54,4 +54,4 @@ SQLite via `better-sqlite3` with WAL mode. Key tables: `vault_index` (indexed ma
 
 ## Testing
 
-Tests use Vitest with `tests/setup.ts` providing fixtures: `createTempVault()` creates isolated vault directories, `createTestDb()` initializes an in-memory or temp SQLite DB, `writeTestNote()` creates markdown files with YAML frontmatter.
+Tests use Vitest with `tests/setup.ts` providing fixtures: `createTempVault()` creates isolated vault directories with `lifeos.yaml`, `createTestDb()` initializes an in-memory or temp SQLite DB, `writeTestNote()` creates markdown files with YAML frontmatter.

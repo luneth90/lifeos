@@ -14,6 +14,7 @@ describe('Test Infrastructure', () => {
   it('creates temp vault with standard structure', () => {
     vault = createTempVault();
     expect(existsSync(vault.root)).toBe(true);
+    expect(existsSync(join(vault.root, 'lifeos.yaml'))).toBe(true);
     expect(existsSync(join(vault.root, '00_草稿'))).toBe(true);
     expect(existsSync(join(vault.root, '90_系统/记忆'))).toBe(true);
   });

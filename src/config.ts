@@ -5,7 +5,9 @@
  * module-level singleton helpers.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -184,15 +186,71 @@ function loadPreset(language: string): LifeOSConfig {
 	return language === 'en' ? { ...EN_PRESET } : { ...ZH_PRESET };
 }
 
+/**
+ * Deep-merges override into base. Objects are merged recursively;
+ * all other types are overwritten.
+ */
+function deepMerge(
+	base: Record<string, unknown>,
+	override: Record<string, unknown>,
+): Record<string, unknown> {
+	const result: Record<string, unknown> = { ...base };
+	for (const [key, value] of Object.entries(override)) {
+		if (
+			key in result &&
+			typeof result[key] === 'object' &&
+			result[key] !== null &&
+			!Array.isArray(result[key]) &&
+			typeof value === 'object' &&
+			value !== null &&
+			!Array.isArray(value)
+		) {
+			result[key] = deepMerge(
+				result[key] as Record<string, unknown>,
+				value as Record<string, unknown>,
+			);
+		} else {
+			result[key] = value;
+		}
+	}
+	return result;
+}
+
 // ─── VaultConfig class ────────────────────────────────────────────────────────
 
 export class VaultConfig {
 	private readonly _vaultRoot: string;
 	private readonly _config: LifeOSConfig;
 
-	constructor(vaultRoot: string, language: string = 'zh') {
+	constructor(vaultRoot: string, config?: Record<string, unknown>) {
 		this._vaultRoot = resolve(vaultRoot);
-		this._config = loadPreset(language);
+		this._config = this._load(config);
+	}
+
+	private _load(config?: Record<string, unknown>): LifeOSConfig {
+		if (config !== undefined) {
+			const lang = (config.language as string | undefined) ?? 'zh';
+			const preset = loadPreset(lang);
+			return deepMerge(
+				preset as unknown as Record<string, unknown>,
+				config,
+			) as unknown as LifeOSConfig;
+		}
+
+		const yamlPath = join(this._vaultRoot, 'lifeos.yaml');
+		if (existsSync(yamlPath)) {
+			const raw = readFileSync(yamlPath, 'utf-8');
+			const userConfig: Record<string, unknown> = (parseYaml(raw) as Record<string, unknown>) ?? {};
+			const lang = (userConfig.language as string | undefined) ?? 'zh';
+			const preset = loadPreset(lang);
+			return deepMerge(
+				preset as unknown as Record<string, unknown>,
+				userConfig,
+			) as unknown as LifeOSConfig;
+		}
+
+		// No yaml file — detect from vault contents (default to zh)
+		return loadPreset('zh');
 	}
 
 	// ── Accessors ──────────────────────────────────────────────────────────────
@@ -365,8 +423,8 @@ export function getOrCreateVaultConfig(vaultRoot?: string): VaultConfig {
  * Convenience factory: create a VaultConfig from a vault root path.
  * Does NOT register it as the global singleton.
  */
-export function resolveConfig(vaultRoot: string, language?: string): VaultConfig {
-	return new VaultConfig(vaultRoot, language);
+export function resolveConfig(vaultRoot: string, config?: Record<string, unknown>): VaultConfig {
+	return new VaultConfig(vaultRoot, config);
 }
 
 /**
