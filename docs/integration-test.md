@@ -171,50 +171,6 @@ lifeos upgrade /tmp/test-zh
 - [ ] 输出 `⚠ Skipping modified: .agents/skills/knowledge/SKILL.md`
 - [ ] 文件内容仍为 "用户自定义内容"
 
-### 3.4 旧格式迁移（扁平 → 嵌套 subdirectories）
-
-```bash
-# 手动写入旧格式
-cat > /tmp/test-migrate/lifeos.yaml << 'EOF'
-version: "1.0"
-language: zh
-directories:
-  drafts: "00_草稿"
-  diary: "10_日记"
-  projects: "20_项目"
-  research: "30_研究"
-  knowledge: "40_知识"
-  outputs: "50_成果"
-  plans: "60_计划"
-  resources: "70_资源"
-  reflection: "80_复盘"
-  system: "90_系统"
-subdirectories:
-  knowledge_notes: "笔记"
-  knowledge_wiki: "百科"
-  templates: "模板"
-  schema: "规范"
-  memory: "记忆"
-  archive_projects: "归档/项目"
-  archive_drafts: "归档/草稿"
-  archive_plans: "归档/计划"
-memory:
-  db_name: memory.db
-  scan_prefixes: [drafts, diary, projects, research, knowledge, outputs, plans, resources, reflection]
-  excluded_prefixes: [system]
-  enhance_priority: { projects: 8, knowledge: 6 }
-  context_budgets: { layer0_total: 1200 }
-installed_versions:
-  assets: "0.9.0"
-EOF
-mkdir -p /tmp/test-migrate
-lifeos upgrade /tmp/test-migrate
-cat /tmp/test-migrate/lifeos.yaml
-```
-
-**验证：**
-- [ ] `subdirectories` 已自动转为嵌套格式（`knowledge.notes`、`system.templates` 等）
-
 ---
 
 ## 4. rename — 目录重命名
@@ -308,7 +264,7 @@ lifeos unknown        # 显示 "Unknown command" 错误
 ## 清理
 
 ```bash
-rm -rf /tmp/test-auto /tmp/test-zh /tmp/test-en /tmp/test-migrate /tmp/test-mcp /tmp/test-empty
+rm -rf /tmp/test-auto /tmp/test-zh /tmp/test-en /tmp/test-mcp /tmp/test-empty
 npm unlink -g lifeos    # 移除全局链接（如果使用了 npm link）
 ```
 
