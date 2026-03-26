@@ -433,3 +433,8 @@ export function resolveConfig(vaultRoot: string, config?: Record<string, unknown
 export function _resetDefaultInstance(): void {
 	_defaultInstance = null;
 }
+
+// ─── Re-exports for CLI ──────────────────────────────────────────────────────
+
+export { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS };
+export type { LifeOSConfig };
