@@ -271,9 +271,9 @@ export class VaultConfig {
 	subDirPath(parent: string, child: string): string {
 		const parentDir = this._config.directories[parent];
 		if (!parentDir) throw new Error(`Unknown directory: ${parent}`);
-		const group = (this._config.subdirectories as unknown as Record<string, Record<string, unknown>>)[
-			parent
-		];
+		const group = (
+			this._config.subdirectories as unknown as Record<string, Record<string, unknown>>
+		)[parent];
 		if (!group || typeof group[child] !== 'string') {
 			throw new Error(`Unknown subdirectory: ${parent}/${child}`);
 		}
@@ -284,9 +284,9 @@ export class VaultConfig {
 	subDirPrefix(parent: string, child: string): string {
 		const parentDir = this._config.directories[parent];
 		if (!parentDir) throw new Error(`Unknown directory: ${parent}`);
-		const group = (this._config.subdirectories as unknown as Record<string, Record<string, unknown>>)[
-			parent
-		];
+		const group = (
+			this._config.subdirectories as unknown as Record<string, Record<string, unknown>>
+		)[parent];
 		if (!group || typeof group[child] !== 'string') {
 			throw new Error(`Unknown subdirectory: ${parent}/${child}`);
 		}
@@ -427,10 +427,20 @@ export function _resetDefaultInstance(): void {
 
 /** Reflection subdirectory names by language */
 const ZH_REFLECTION_SUBS: readonly string[] = [
-	'周复盘', '月复盘', '季度复盘', '年度复盘', '项目复盘', '路径校准',
+	'周复盘',
+	'月复盘',
+	'季度复盘',
+	'年度复盘',
+	'项目复盘',
+	'路径校准',
 ];
 const EN_REFLECTION_SUBS: readonly string[] = [
-	'Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Projects', 'Alignment',
+	'Weekly',
+	'Monthly',
+	'Quarterly',
+	'Yearly',
+	'Projects',
+	'Alignment',
 ];
 
 // ─── Re-exports for CLI ──────────────────────────────────────────────────────

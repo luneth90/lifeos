@@ -102,7 +102,7 @@ export default async function rename(args: string[]): Promise<RenameResult> {
 			});
 
 			const numStr = await rl.question('\n? 选择要重命名的目录 [编号]: ');
-			const idx = parseInt(numStr, 10) - 1;
+			const idx = Number.parseInt(numStr, 10) - 1;
 			if (isNaN(idx) || idx < 0 || idx >= items.length) {
 				throw new Error('Invalid selection');
 			}

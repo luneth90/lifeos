@@ -3,10 +3,7 @@ import { join, relative } from 'node:path';
 
 const LANG_SUFFIX_RE = /^(.+)\.(zh|en)\.md$/;
 
-export function resolveSkillFiles(
-	skillDir: string,
-	lang: 'zh' | 'en',
-): Map<string, string> {
+export function resolveSkillFiles(skillDir: string, lang: 'zh' | 'en'): Map<string, string> {
 	const result = new Map<string, string>();
 	walk(skillDir, skillDir, lang, result);
 	return result;
