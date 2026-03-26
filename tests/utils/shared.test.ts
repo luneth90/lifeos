@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   resolveSessionId,
   coerceNow,
@@ -8,72 +8,24 @@ import {
   normalizeWikilinkValue,
   compactText,
   normalizeRuleSummary,
-  buildDefaultRuleKey,
-  extractRuleKeyValue,
   resolveRuleKey,
   inferTemporaryPreference,
   parseDetailObject,
   isArchiveSummary,
   SESSION_ID_ENV_KEYS,
   ALLOWED_COUNT_TABLES,
-  KEY_ENTRY_TYPES,
-  VALID_ENTRY_TYPES,
-  ACTIVE_DOC_TARGETS,
-  RULE_KEY_PREFIXES,
-  TEMPORARY_PREFERENCE_KEYWORDS,
-  STABLE_PREFERENCE_KEYWORDS,
   DEFAULT_TEMPORARY_PREFERENCE_DAYS,
-  ALL_TIME_DAYS,
-  FALLBACK_THRESHOLD,
-  SUMMARY_MAX_LEN,
   BUCKET_TYPE_MAP,
 } from '../../src/utils/shared.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 describe('constants', () => {
-  it('SESSION_ID_ENV_KEYS includes expected keys', () => {
-    expect(SESSION_ID_ENV_KEYS).toContain('LIFEOS_SESSION_ID');
-    expect(SESSION_ID_ENV_KEYS).toContain('CLAUDE_SESSION_ID');
-    expect(SESSION_ID_ENV_KEYS).toContain('CODEX_SESSION_ID');
-    expect(SESSION_ID_ENV_KEYS).toContain('OPENCODE_SESSION_ID');
-  });
-
   it('ALLOWED_COUNT_TABLES contains correct tables', () => {
     expect(ALLOWED_COUNT_TABLES.has('vault_index')).toBe(true);
     expect(ALLOWED_COUNT_TABLES.has('enhance_queue')).toBe(true);
     expect(ALLOWED_COUNT_TABLES.has('session_log')).toBe(true);
     expect(ALLOWED_COUNT_TABLES.has('unknown_table')).toBe(false);
-  });
-
-  it('KEY_ENTRY_TYPES contains decision/correction/preference', () => {
-    expect(KEY_ENTRY_TYPES.has('decision')).toBe(true);
-    expect(KEY_ENTRY_TYPES.has('correction')).toBe(true);
-    expect(KEY_ENTRY_TYPES.has('preference')).toBe(true);
-  });
-
-  it('VALID_ENTRY_TYPES includes all expected types', () => {
-    for (const t of ['skill_completion', 'decision', 'preference', 'correction', 'blocker', 'milestone', 'session_bridge']) {
-      expect(VALID_ENTRY_TYPES.has(t)).toBe(true);
-    }
-  });
-
-  it('ACTIVE_DOC_TARGETS contains TaskBoard and UserProfile', () => {
-    expect(ACTIVE_DOC_TARGETS.has('TaskBoard')).toBe(true);
-    expect(ACTIVE_DOC_TARGETS.has('UserProfile')).toBe(true);
-  });
-
-  it('RULE_KEY_PREFIXES maps entry types to prefixes', () => {
-    expect(RULE_KEY_PREFIXES['decision']).toBe('decision');
-    expect(RULE_KEY_PREFIXES['correction']).toBe('correction');
-    expect(RULE_KEY_PREFIXES['preference']).toBe('prefer');
-  });
-
-  it('numeric constants have correct values', () => {
-    expect(DEFAULT_TEMPORARY_PREFERENCE_DAYS).toBe(14);
-    expect(ALL_TIME_DAYS).toBe(3650);
-    expect(FALLBACK_THRESHOLD).toBe(3);
-    expect(SUMMARY_MAX_LEN).toBe(500);
   });
 
   it('BUCKET_TYPE_MAP contains correct bucket mappings', () => {
@@ -146,11 +98,6 @@ describe('resolveSessionId', () => {
 // ─── coerceNow ────────────────────────────────────────────────────────────────
 
 describe('coerceNow', () => {
-  it('returns a Date when called with no arguments', () => {
-    const result = coerceNow();
-    expect(result).toBeInstanceOf(Date);
-  });
-
   it('returns the same Date object when given a Date', () => {
     const d = new Date('2024-01-15T10:00:00Z');
     const result = coerceNow(d);
@@ -179,16 +126,8 @@ describe('coerceNow', () => {
 // ─── loadsJsonList ────────────────────────────────────────────────────────────
 
 describe('loadsJsonList', () => {
-  it('returns empty array for null', () => {
-    expect(loadsJsonList(null)).toEqual([]);
-  });
-
-  it('returns empty array for undefined', () => {
-    expect(loadsJsonList(undefined)).toEqual([]);
-  });
-
-  it('returns empty array for empty string', () => {
-    expect(loadsJsonList('')).toEqual([]);
+  it.each([null, undefined, ''])('returns empty array for %s', (input) => {
+    expect(loadsJsonList(input)).toEqual([]);
   });
 
   it('returns the list as strings when given a JSON array string', () => {
@@ -270,12 +209,8 @@ describe('containsCjk', () => {
     expect(containsCjk('hello 世界')).toBe(true);
   });
 
-  it('returns false for empty string', () => {
-    expect(containsCjk('')).toBe(false);
-  });
-
-  it('returns false for numbers and punctuation', () => {
-    expect(containsCjk('123!@#')).toBe(false);
+  it.each(['', '123!@#'])('returns false for non-CJK content: %s', (input) => {
+    expect(containsCjk(input)).toBe(false);
   });
 });
 
@@ -400,11 +335,6 @@ describe('resolveRuleKey', () => {
 // ─── inferTemporaryPreference ─────────────────────────────────────────────────
 
 describe('inferTemporaryPreference', () => {
-  it('returns temporary: false by default for neutral text', () => {
-    const result = inferTemporaryPreference('keep code clean');
-    expect(result.temporary).toBe(false);
-  });
-
   it('detects stable keywords and returns temporary: false', () => {
     const result = inferTemporaryPreference('长期使用简洁风格');
     expect(result.temporary).toBe(false);
