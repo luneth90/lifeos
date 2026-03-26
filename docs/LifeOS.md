@@ -65,7 +65,8 @@ lifeos/
 │   ├── templates/en/     # 英文模板
 │   ├── skills/           # 技能文件
 │   ├── schema/           # Frontmatter Schema
-│   └── claude.md         # CLAUDE.md 模板
+│   ├── claude.zh.md      # CLAUDE.md 中文模板
+│   └── claude.en.md      # CLAUDE.md 英文模板
 ├── bin/lifeos.js         # 入口：无参数→MCP，有子命令→CLI
 └── dist/                 # 编译输出
 ```
@@ -83,9 +84,9 @@ lifeos doctor       # 诊断检查
 
 | 策略 | 适用文件 | 行为 |
 |---|---|---|
-| **自动覆盖** | `lifeos` npm 包本身 | `npm update -g lifeos` |
-| **智能合并** | 技能文件 `.agents/skills/` | 对比版本号，展示 diff，用户确认后覆盖 |
-| **不触碰** | 模板、Schema（用户可能已自定义） | 仅提示有新版本可用 |
+| **自动覆盖** | 模板 `Templates/`、规范 `Schema/` | 始终更新到最新版 |
+| **智能合并** | 技能文件 `.agents/skills/` | 未修改→更新，已修改→跳过并警告 |
+| **不触碰** | `CLAUDE.md`、`lifeos.yaml` | 保留用户自定义 |
 
 ### 版本追踪
 
@@ -105,7 +106,7 @@ installed_versions:
 
 **交付物:**
 - `src/cli/` CLI 框架（命令路由、init、doctor）
-- `assets/` 目录：模板、技能、Schema、CLAUDE.md 打包
+- `assets/` 目录：模板、技能、Schema、claude.zh.md / claude.en.md 打包
 - `bin/lifeos.js` 改造：支持子命令分流
 - `init` 流程：语言选择 → 目录创建 → 资产复制 → lifeos.yaml 生成 → git init → MCP 注册
 
@@ -113,12 +114,12 @@ installed_versions:
 
 ### 阶段2: 模板和技能双语化
 
-> **目标:** 将 16 个模板和 13 个技能全部双语化，按语言打包到 `assets/` 中。
+> **目标:** 将 16 个模板和 9 个技能全部双语化，按语言打包到 `assets/` 中。
 
 **交付物:**
 - 16 × 2 双语模板（`assets/templates/zh/` + `assets/templates/en/`）
-- 13 个技能的中英文版本
-- CLAUDE.md 中英文版本
+- 9 个技能的中英文版本
+- claude.zh.md / claude.en.md 中英文版本
 - Schema 保持英文 key（机器读取，不需双语化）
 
 **备注:** 承接原 LifeOS-V1.0-开源项目的 Step 2 和 Step 3。
