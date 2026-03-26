@@ -104,20 +104,6 @@ export function coerceNow(now?: Date | string | null): Date {
 	throw new TypeError(`Unsupported time type: ${typeof now}`);
 }
 
-/**
- * Coerce a string to a Date, returning null on failure.
- */
-export function coerceDatetime(value: string | null | undefined): Date | null {
-	if (!value) return null;
-	try {
-		const d = new Date(value);
-		if (Number.isNaN(d.getTime())) return null;
-		return d;
-	} catch {
-		return null;
-	}
-}
-
 // ─── JSON / List helpers ──────────────────────────────────────────────────────
 
 /**
@@ -355,23 +341,6 @@ export function countRows(
 	if (whereSql) sql += ` WHERE ${whereSql}`;
 	const row = conn.prepare(sql).get(params) as { 'COUNT(*)': number } | undefined;
 	return row ? Number(row['COUNT(*)']) : 0;
-}
-
-// ─── Array helpers ────────────────────────────────────────────────────────────
-
-/**
- * Deduplicate an array of strings while preserving insertion order.
- */
-export function dedupePreserveOrder(values: string[] | null | undefined): string[] {
-	if (!values || values.length === 0) return [];
-	const seen = new Set<string>();
-	const result: string[] = [];
-	for (const value of values) {
-		if (seen.has(value)) continue;
-		seen.add(value);
-		result.push(value);
-	}
-	return result;
 }
 
 // ─── Archive helpers ──────────────────────────────────────────────────────────

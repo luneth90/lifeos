@@ -13,9 +13,7 @@ import {
   resolveRuleKey,
   inferTemporaryPreference,
   parseDetailObject,
-  dedupePreserveOrder,
   isArchiveSummary,
-  coerceDatetime,
   SESSION_ID_ENV_KEYS,
   ALLOWED_COUNT_TABLES,
   KEY_ENTRY_TYPES,
@@ -480,28 +478,6 @@ describe('parseDetailObject', () => {
   });
 });
 
-// ─── dedupePreserveOrder ──────────────────────────────────────────────────────
-
-describe('dedupePreserveOrder', () => {
-  it('returns empty array for empty input', () => {
-    expect(dedupePreserveOrder([])).toEqual([]);
-    expect(dedupePreserveOrder(null)).toEqual([]);
-    expect(dedupePreserveOrder(undefined)).toEqual([]);
-  });
-
-  it('deduplicates while preserving first occurrence order', () => {
-    expect(dedupePreserveOrder(['a', 'b', 'a', 'c', 'b'])).toEqual(['a', 'b', 'c']);
-  });
-
-  it('returns array unchanged when no duplicates', () => {
-    expect(dedupePreserveOrder(['x', 'y', 'z'])).toEqual(['x', 'y', 'z']);
-  });
-
-  it('handles single element', () => {
-    expect(dedupePreserveOrder(['only'])).toEqual(['only']);
-  });
-});
-
 // ─── isArchiveSummary ─────────────────────────────────────────────────────────
 
 describe('isArchiveSummary', () => {
@@ -522,26 +498,3 @@ describe('isArchiveSummary', () => {
   });
 });
 
-// ─── coerceDatetime ───────────────────────────────────────────────────────────
-
-describe('coerceDatetime', () => {
-  it('returns null for null input', () => {
-    expect(coerceDatetime(null)).toBeNull();
-    expect(coerceDatetime('')).toBeNull();
-  });
-
-  it('parses valid ISO string', () => {
-    const result = coerceDatetime('2024-01-15T10:00:00Z');
-    expect(result).toBeInstanceOf(Date);
-    expect(result!.toISOString()).toBe('2024-01-15T10:00:00.000Z');
-  });
-
-  it('parses date-only string', () => {
-    const result = coerceDatetime('2024-06-01');
-    expect(result).toBeInstanceOf(Date);
-  });
-
-  it('returns null for invalid date string', () => {
-    expect(coerceDatetime('not-a-date')).toBeNull();
-  });
-});
