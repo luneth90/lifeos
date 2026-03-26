@@ -130,10 +130,10 @@ export default async function init(args: string[]): Promise<void> {
 	}
 
 	// 8. Copy CLAUDE.md
-	const claudeSrc = join(assetsDir(), 'claude.md');
-	if (existsSync(claudeSrc)) {
-		copyFileSync(claudeSrc, join(targetPath, 'CLAUDE.md'));
-	}
+	const claudeLangSrc = join(assetsDir(), `claude.${lang}.md`);
+	const claudeFallback = join(assetsDir(), 'claude.zh.md');
+	const claudeSrc = existsSync(claudeLangSrc) ? claudeLangSrc : claudeFallback;
+	copyFileSync(claudeSrc, join(targetPath, 'CLAUDE.md'));
 
 	// 9. Git init
 	if (!existsSync(join(targetPath, '.git'))) {
