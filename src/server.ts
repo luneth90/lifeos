@@ -12,7 +12,7 @@ import * as core from './core.js';
 // ─── Server instance ──────────────────────────────────────────────────────────
 
 const server = new McpServer({
-	name: 'lifeos-memory',
+	name: 'lifeos',
 	version: '1.0.0',
 });
 

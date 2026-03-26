@@ -81,7 +81,7 @@ describe('memoryLog', () => {
       entryType: 'decision',
       importance: 4,
       summary: '决定使用 TypeScript 重写全部模块',
-      scope: 'lifeos-memory',
+      scope: 'lifeos',
     });
 
     expect(result.eventId).toBeTruthy();

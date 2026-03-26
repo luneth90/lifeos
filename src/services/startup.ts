@@ -78,7 +78,7 @@ export function runStartup(
 			try {
 				loadCustomDict(dictPath);
 			} catch (e) {
-				console.warn(`[lifeos-memory] Failed to load custom dict ${dictPath}:`, e);
+				console.warn(`[lifeos] Failed to load custom dict ${dictPath}:`, e);
 			}
 		}
 	}
@@ -94,7 +94,7 @@ export function runStartup(
 		const scanResult = fullScan(vaultRoot, dbPath);
 		scanIndexed = scanResult.indexed;
 	} catch (e) {
-		console.warn('[lifeos-memory] vault scan failed:', e);
+		console.warn('[lifeos] vault scan failed:', e);
 		scanIndexed = 0;
 	}
 

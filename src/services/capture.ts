@@ -367,7 +367,7 @@ export function notifyFileChanged(
         `).run(relPath, 5, now);
 			}
 		} catch (e) {
-			console.warn('[lifeos-memory] enhance queue update failed:', e);
+			console.warn('[lifeos] enhance queue update failed:', e);
 		}
 
 		return { action: 'indexed', filePath: relPath };

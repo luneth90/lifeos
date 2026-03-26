@@ -101,7 +101,7 @@ export function parseMarkdown(content: string, fileName: string): ParsedMarkdown
 	try {
 		fm = parseYaml(yamlText);
 	} catch (e) {
-		console.warn('[lifeos-memory] YAML parse failed:', e);
+		console.warn('[lifeos] YAML parse failed:', e);
 		return null;
 	}
 
