@@ -16,7 +16,35 @@ npm link               # 全局注册 lifeos 命令（可选，也可用 node bi
 
 ## 1. init — 创建新 Vault
 
-### 1.1 中文 Vault
+### 1.1 语言自动检测（不指定 --lang）
+
+```bash
+lifeos init /tmp/test-auto --no-mcp
+```
+
+**行为：** 通过 `Intl.DateTimeFormat().resolvedOptions().locale` 检测系统 locale：
+- locale 以 `zh` 开头 → 创建中文 vault
+- 其他（含 `en-US`、`en-GB` 等） → 创建英文 vault
+
+> **跨平台：** `Intl` API 在 macOS/Linux/Windows 的 Node.js 18+ 上均可用，读取操作系统的区域设置。
+
+**验证：**
+```bash
+# 先确认当前系统 locale
+node -e "console.log(Intl.DateTimeFormat().resolvedOptions().locale)"
+
+# 检查生成的 vault 语言
+grep 'language:' /tmp/test-auto/lifeos.yaml
+# 若系统 locale 为 zh-CN → language: zh，目录名为中文
+# 若系统 locale 为 en-US → language: en，目录名为英文
+ls /tmp/test-auto/
+```
+
+```bash
+rm -rf /tmp/test-auto
+```
+
+### 1.2 中文 Vault（显式指定）
 
 ```bash
 lifeos init /tmp/test-zh --lang zh --no-mcp
@@ -39,7 +67,7 @@ ls /tmp/test-zh/90_系统/模板/                    # 确认 8 个模板
 ls /tmp/test-zh/.agents/skills/                  # 确认 9 个技能
 ```
 
-### 1.2 英文 Vault
+### 1.3 英文 Vault
 
 ```bash
 lifeos init /tmp/test-en --lang en --no-mcp
@@ -55,7 +83,7 @@ cat /tmp/test-en/lifeos.yaml
 ls /tmp/test-en/90_System/Templates/
 ```
 
-### 1.3 重复 init 应报错
+### 1.4 重复 init 应报错
 
 ```bash
 lifeos init /tmp/test-zh    # 期望: Error "Vault already initialized"
@@ -280,7 +308,7 @@ lifeos unknown        # 显示 "Unknown command" 错误
 ## 清理
 
 ```bash
-rm -rf /tmp/test-zh /tmp/test-en /tmp/test-migrate /tmp/test-mcp /tmp/test-empty
+rm -rf /tmp/test-auto /tmp/test-zh /tmp/test-en /tmp/test-migrate /tmp/test-mcp /tmp/test-empty
 npm unlink -g lifeos    # 移除全局链接（如果使用了 npm link）
 ```
 
