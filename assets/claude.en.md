@@ -46,9 +46,6 @@ Skill file location: `.agents/skills/<skill-name>/SKILL.md`
 | `/knowledge` | Project files + books/papers + drafts → `{knowledge}/` | "analyze this chapter", "extract key concepts", "generate wiki", "knowledge notes" |
 | `/review` | Generate review files for user to answer, update status and project mastery dots after grading | "review", "quiz me", "test me", "check my understanding", "verify mastery" |
 | `/archive` | Archive completed projects and processed drafts | "archive", "clean up", "organize completed projects", "clear processed drafts" |
-| `/spatial-ai-news` | Search recent week's Spatial AI developments, write to `{drafts}/SpatialAI-{date}.md` | "spatial AI news", "spatial AI weekly", "3D vision news" |
-| `/publish` | Research report/knowledge notes → Xiaohongshu long-form + condensed version (`{outputs}/`) | "publish", "output article", "write for Xiaohongshu", "convert to article", "make Xiaohongshu post" |
-| `/ppt` | Research report/knowledge notes → Marp slides + speaker notes + image prompts (`{outputs}/`) | "make PPT", "make presentation", "generate slides", "prepare talk" |
 
 **Template Routing:**
 
@@ -76,7 +73,7 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 ### Trigger Conditions
 
 Memory tools are called **only in these scenarios**:
-- A LifeOS skill is being used (`/today`, `/knowledge`, `/review`, `/research`, `/project`, `/publish`, `/ppt`, `/archive`, `/brainstorm`, `/ask`, etc.)
+- A LifeOS skill is being used (`/today`, `/knowledge`, `/review`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, etc.)
 - The user explicitly requests Vault file operations (create/modify notes, project files, etc.)
 - The user explicitly requests a memory system query
 

@@ -26,10 +26,6 @@ aliases:
 
 **动机:** LifeOS-V1.0-开源项目已完成核心技术栈迁移（TypeScript + MCP SDK + @node-rs/jieba），但缺少面向终端用户的安装和升级体验。用户需要一条命令就能创建完整的 LifeOS 工作空间，后续还能无缝升级模板、技能和记忆系统。
 
-**前置依赖:**
-
-- [[90_系统/归档/项目/2026/LifeOS-V1.0-开源/LifeOS-V1.0-开源]] — 已完成，核心成果：配置基座、TS 平台迁移、分词引擎升级
-- [[90_系统/归档/项目/2026/LifeOS记忆系统/LifeOS记忆系统]] — 已完成，V0.5 记忆系统设计与实现
 
 **成功指标:**
 
@@ -49,7 +45,7 @@ aliases:
 **限制条件:**
 
 - 代码仓库: `~/code/node/lifeos`
-- V1.0 只深度支持 Claude Code + 一个备选 Agent 平台
+- V1.0 只深度支持 Claude Code + codex + OpenCode
 - MCP 工具接口向后兼容（只做加法，不做减法）
 
 ## 架构设计
@@ -170,6 +166,7 @@ installed_versions:
 3. **三档升级策略** — 自动覆盖运行时，智能合并技能，不触碰用户自定义文件
 4. **CLI 独立于 MCP** — init/upgrade/doctor 不依赖 Claude Code 或 MCP 协议，纯 Node.js CLI
 5. **MCP 工具接口向后兼容** — 已发布的工具签名只做加法
+6. **CLI init 取代 lifeos-init 技能** — 旧的 `/lifeos-init` 技能存在鸡生蛋问题（需要 MCP + 技能已加载才能执行初始化），且依赖 Python 环境（`setup.py`、`PyYAML`、`jieba`），与当前 TypeScript + Node.js 架构脱节。CLI `init` 命令纯 Node.js 实现，`npx` 直接执行，无前置依赖。技能中的完整性检查清单（目录结构、模板清单、Schema 检查）可作为 CLI 实现参考，技能本身在 CLI 完成后移除
 
 ## 风险与应对
 
@@ -180,16 +177,9 @@ installed_versions:
 | 用户自定义模板与升级冲突 | 升级覆盖用户修改 | 三档策略 + diff 展示 + 用户确认 |
 | CLI 需要在无 Claude Code 环境独立运行 | 不能依赖 MCP | CLI 子命令纯 Node.js 实现 |
 
-## 进展
-
-- 2026-03-26: [[2026-03-26]] - 项目创建，承接 [[90_系统/归档/项目/2026/LifeOS-V1.0-开源/LifeOS-V1.0-开源]] 的后续工作
 
 ## 参考资源
 
-**Vault 内资源（已有）:**
-
-- [[90_系统/归档/项目/2026/LifeOS-V1.0-开源/LifeOS-V1.0-开源]] — 前序项目，含完整设计文档
-- [[90_系统/归档/项目/2026/LifeOS-V1.0-开源/文档/设计_Step5_安装体验]] — 安装体验设计（部分可复用）
 
 **外部资源:**
 

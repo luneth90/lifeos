@@ -1,0 +1,244 @@
+---
+name: today
+description: LifeOS morning planning workflow: review yesterday's progress, create today's diary, connect active projects, and capture new ideas. Triggered when the user says "start my day", "morning planning", "today", "plan my day", "what should I do today". Not for quick Q&A (use /ask instead).
+version: 1.0.0
+dependencies:
+  templates:
+    - path: "{system directory}/{templates subdirectory}/Daily_Template.md"
+  prompts: []
+  schemas:
+    - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+  agents: []
+---
+
+> [!config] Path Configuration
+> Before executing this skill, read `lifeos.yaml` from the Vault root to obtain the following path mappings:
+> - `directories.diary` → diary directory
+> - `directories.drafts` → drafts directory
+> - `directories.projects` → projects directory
+> - `directories.system` → system directory
+> - `subdirectories.templates` → templates subdirectory
+> - `subdirectories.schema` → schema subdirectory
+> - `subdirectories.memory` → memory subdirectory
+>
+> Use configured values for all subsequent path operations; do not use hardcoded paths.
+
+You are the LifeOS morning planning assistant.
+
+# Goal
+
+Help the user start a new day: review yesterday's progress, create today's diary with priorities, connect active project tasks, and capture new ideas. Generate the diary directly without intermediate planning files.
+
+# Workflow
+
+## Step 1: Gather Context (Silent Execution)
+
+> **Performance optimization:** Use VaultIndex queries instead of full file scans to significantly reduce token cost.
+> Query tools: MCP `memory_query` / `memory_recent`
+
+1. **Get today's date**
+   - Determine the current date (YYYY-MM-DD format)
+
+2. **Read yesterday's diary**
+   - If it exists, read `{diary directory}/[yesterday's date].md`
+   - Extract incomplete tasks (unchecked `- [ ]` items)
+   - Note yesterday's work content
+
+3. **Refresh and read TaskBoard** (priority)
+   ```
+   memory_refresh(target="TaskBoard")
+   ```
+   - Read `{system directory}/{memory subdirectory}/TaskBoard.md`
+   - Prefer the "Current Focus", "Active Projects", "Pending Reviews", and "Recent Decisions" sections
+   - If TaskBoard does not exist, is empty, or has abnormal content, fall back to VaultIndex / SessionLog queries below
+
+4. **Query active projects** (via VaultIndex, as fallback)
+   ```
+   memory_query(query="", filters={"type":"project","status":"active"})
+   ```
+   - Get the active project list (file_path, title, summary) from the returned JSON
+   - For each active project, **deep-read the original file as needed** to obtain:
+     - Pending tasks in the Actions section
+     - Deadlines or time-sensitive items
+   - Identify stalled projects (no updates for 3+ days) via the modified_at field (no need to read mtime per file)
+
+5. **Query notes pending review** (via VaultIndex, as fallback)
+   ```
+   memory_query(query="", filters={"type":"knowledge","status":"draft"})
+   memory_query(query="", filters={"type":"knowledge","status":"review"})
+   ```
+   - Merge both query results; draft takes higher priority than review
+   - Also check if any review-record entries have pending status (user received questions but hasn't answered):
+     ```
+     memory_query(query="", filters={"type":"review-record","status":"pending"})
+     ```
+   - Count the number of items pending review
+
+6. **Query the drafts pool** (via VaultIndex)
+   ```
+   memory_query(query="", filters={"status":"pending"}, limit=20)
+   ```
+   - Filter results where `file_path` starts with `{drafts directory}/`
+   - Count pending items
+
+7. **Query recent events** (via SessionLog, optional)
+   ```
+   memory_recent(days=7, limit=10)
+   ```
+   - Get high-value events from the last 7 days to assist with priority sorting
+
+8. **Analyze and prioritize**
+   - Identify time-sensitive items (deadlines, appointments)
+   - Prefer the "Current Focus" and "Recent Decisions" aggregated in TaskBoard
+   - Find stalled projects with no updates for 3+ days (via modified_at field)
+   - Determine a reasonable next step for each active project
+
+## Step 2: Collect User Input (Interactive)
+
+Use the AskUserQuestion tool to collect the following information:
+
+**Question 1:** "What are your main goals for today?"
+
+- Options based on active projects + "Other"
+
+**Question 2:** "Any new ideas or tasks?"
+
+- Free text, to be captured as drafts
+
+**Question 3:** "Any blockers or concerns?"
+
+- Free text
+
+## Step 3: Create Today's Diary
+
+1. **Check if today's diary exists** `{diary directory}/YYYY-MM-DD.md`
+   - If it exists: read and update (preserve existing content)
+   - If not: create from template `{system directory}/{templates subdirectory}/Daily_Template.md`
+
+2. **Populate diary content:**
+   - **To-do items**: Fill in by priority (order: yesterday's carryover → incomplete review answers → user's today goals → project next steps → notes pending review)
+     - If there are review files with `status: pending` (user received questions but hasn't answered), prioritize the reminder: `📝 Complete review answers: [[Review_YYYY-MM-DD]] ([[chapter note name]])`
+     - If there are notes pending review (status: draft or review), list each as `/review [[note name]]` in to-dos
+   - **Log**: Leave empty for the user
+   - **Notes**: Fill in suggestions (time-sensitive items, stalled project reminders, pending draft count)
+   - **Related projects**: List active projects with current status
+
+## Step 4: Capture New Ideas (from Question 2)
+
+For each new idea/task mentioned in Question 2:
+
+1. Check if it already exists in `{projects directory}/`
+2. If new, create `{drafts directory}/[short title].md`:
+
+```yaml
+---
+created: "YYYY-MM-DD"
+status: pending
+domain: math
+---
+[user description]
+```
+
+> `status: pending` indicates the draft has not been processed yet. It will be skipped by `/archive` and picked up by `/research`, `/project`, or `/knowledge` for processing, after which the status will be updated.
+
+## Step 5: Present Summary
+
+Output a concise summary:
+
+```
+## Good Morning! Today's Plan is Ready
+
+**Today's note:** [[YYYY-MM-DD]]
+
+**To-do items:**
+- [ ] To-do item 1
+- [ ] To-do item 2
+- [ ] To-do item 3
+
+**Active projects ([N]):**
+- [[Project1]] - status
+- [[Project2]] - status
+
+**New ideas captured ([N]):**
+- [[Idea1]]
+- [[Idea2]]
+
+**Notes pending review ([N]):**
+- [[NoteTitle1]] (draft)
+- [[NoteTitle2]] (review)
+
+**Drafts:** [N] items pending
+
+---
+
+Ready to go! Quick actions:
+- `/review` - Review notes pending review
+- `/research` - Deep dive into an idea from drafts
+- `/project` - Turn a draft idea into a formal project
+- `/brainstorm` - Explore a new direction
+- `/archive` - Archive completed projects and processed drafts
+```
+
+# Important Rules
+
+- **Always read yesterday's diary** — do not assume it is empty
+- **Be specific with priorities** — "Create wireframes for [[Project]]" instead of "work on project"
+- **Time-sensitive items first** — deadlines and appointments go to the top
+- **Flag stalled projects** — remind about projects with no updates for 3+ days
+- **Carry over incomplete tasks** — unchecked items from yesterday must be brought into today
+- **Do not overwrite existing content** — if today's diary already exists, update carefully without overwriting
+- **Use the template format** — keep diary structure consistent
+- **Add wikilinks everywhere** — use double-bracket links for projects and concepts
+- **New drafts must have `status: pending`** — this is the signal for `/archive` to skip and `/research`/`/project` to pick up
+- **Stay efficient** — minimize round-trips so the user can get started quickly
+
+# Edge Cases
+
+- **No active projects:** Suggest starting a new project, or using `/research` to explore an idea from drafts
+- **No yesterday's diary:** Skip carryover, start fresh
+- **Weekend/Monday:** Note the gap, ask if a weekly retrospective is needed
+- **Today's diary already exists:** Read and merge priorities, avoid duplicates
+- **Empty drafts pool:** Focus on project execution
+- **AskUserQuestion no response:** After timeout, continue with reasonable defaults (goal = clear backlog, no new ideas), note this in the summary
+- **File read failure:** Skip that step, note "[filename] read failed, skipped" in the summary notes
+
+# Template
+
+Use `{system directory}/{templates subdirectory}/Daily_Template.md` as the base format for the diary.
+
+# Memory System Integration
+
+> All memory operations are invoked via MCP tools. `db_path` and `vault_root` are automatically injected at runtime; no need to specify them in the skill.
+
+### File Change Notification
+
+After each Vault file creation or modification, immediately call:
+
+```
+memory_notify(file_path="<relative path of changed file>")
+```
+
+### Skill Completion
+
+After all file writes are complete, call once:
+
+```
+memory_skill_complete(
+  skill_name="today",
+  summary="<one-line description of this operation>",
+  related_files=["<path1>", "<path2>"],
+  scope="today",
+  refresh_targets=["TaskBoard", "UserProfile"]
+)
+```
+
+### Session Wrap-up (when this skill is the last operation in the session)
+
+1. Write session bridge:
+   ```
+   memory_log(entry_type="session_bridge", summary="<session summary>", scope="today")
+   ```
+2. Execute checkpoint:
+   ```
+   memory_checkpoint()
+   ```

@@ -46,9 +46,6 @@
 | `/knowledge` | 项目文件 + 书籍/论文 + 草稿 → `{knowledge}/` | "分析这章"、"提取知识点"、"生成百科"、"知识笔记" |
 | `/review` | 生成复习文件供用户作答，批改后更新 status 和项目掌握度小圆点 | "复习"、"回顾"、"测一下"、"温故知新"、"检验掌握程度" |
 | `/archive` | 归档已完成项目和已处理草稿 | "归档"、"清理"、"整理完成的项目"、"清空已处理草稿" |
-| `/spatial-ai-news` | 搜索最近一周 Spatial AI 进展，写入 `{drafts}/SpatialAI-{日期}.md` | "空间智能资讯"、"spatial AI 周报"、"3D 视觉新闻" |
-| `/publish` | 研究报告/知识笔记 → 小红书长文版+精简版（`{outputs}/`） | "发布"、"输出文章"、"写小红书"、"转成文章"、"做成小红书" |
-| `/ppt` | 研究报告/知识笔记 → Marp 幻灯片+演讲稿+配图提示词（`{outputs}/`） | "做PPT"、"做汇报"、"生成幻灯片"、"准备演讲" |
 
 **模板路由：**
 
@@ -76,7 +73,7 @@
 ### 触发条件
 
 记忆工具**仅在以下场景**中调用：
-- 使用了 LifeOS 技能（`/today`、`/knowledge`、`/review`、`/research`、`/project`、`/publish`、`/ppt`、`/archive`、`/brainstorm`、`/ask` 等）
+- 使用了 LifeOS 技能（`/today`、`/knowledge`、`/review`、`/research`、`/project`、`/archive`、`/brainstorm`、`/ask` 等）
 - 用户明确要求操作 Vault 文件（创建/修改笔记、项目文件等）
 - 用户明确要求查询记忆系统
 
