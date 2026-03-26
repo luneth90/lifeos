@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { stringify as stringifyYaml } from 'yaml';
@@ -6,8 +6,8 @@ import { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { parseArgs } from '../utils/ui.js';
 import { bold, green, log } from '../utils/ui.js';
-import { assetsDir, copyDir, ensureDir } from '../utils/assets.js';
-import { resolveSkillFiles } from '../utils/lang.js';
+import { assetsDir, ensureDir } from '../utils/assets.js';
+import { installTemplates, installSchema, installSkills } from '../utils/install-assets.js';
 import { VERSION } from '../utils/version.js';
 
 // ─── Reflection subdirectories ───────────────────────────────────────────────
@@ -93,38 +93,13 @@ export default async function init(args: string[]): Promise<void> {
 	writeFileSync(yamlPath, stringifyYaml(yamlConfig), 'utf-8');
 
 	// 5. Copy templates
-	const templatesSrc = join(assetsDir(), 'templates', lang);
-	const templatesDest = join(targetPath, dirs.system, subdirs.templates);
-	if (existsSync(templatesSrc)) {
-		ensureDir(templatesDest);
-		copyDir(templatesSrc, templatesDest);
-	}
+	installTemplates(targetPath, preset);
 
 	// 6. Copy schema
-	const schemaSrc = join(assetsDir(), 'schema');
-	const schemaDest = join(targetPath, dirs.system, subdirs.schema);
-	if (existsSync(schemaSrc)) {
-		ensureDir(schemaDest);
-		copyDir(schemaSrc, schemaDest);
-	}
+	installSchema(targetPath, preset);
 
 	// 7. Copy skills
-	const skillsSrc = join(assetsDir(), 'skills');
-	const skillsDest = join(targetPath, '.agents', 'skills');
-	if (existsSync(skillsSrc)) {
-		for (const skillName of readdirSync(skillsSrc)) {
-			// Skip deprecated lifeos-init skill
-			if (skillName === 'lifeos-init') continue;
-
-			const skillSrcDir = join(skillsSrc, skillName);
-			const fileMap = resolveSkillFiles(skillSrcDir, lang);
-			for (const [destRelPath, srcPath] of fileMap) {
-				const destPath = join(skillsDest, skillName, destRelPath);
-				ensureDir(join(destPath, '..'));
-				copyFileSync(srcPath, destPath);
-			}
-		}
-	}
+	installSkills(targetPath, lang, 'overwrite');
 
 	// 8. Copy CLAUDE.md
 	const claudeLangSrc = join(assetsDir(), `claude.${lang}.md`);
