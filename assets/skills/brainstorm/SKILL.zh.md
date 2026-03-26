@@ -4,15 +4,31 @@ description: LifeOS 交互式头脑风暴：通过多轮对话探索和深化想
 version: 1.0.0
 dependencies:
   templates:
-    - path: 90_系统/模板/Wiki_Template.md
+    - path: "{系统目录}/{模板子目录}/Wiki_Template.md"
       when: "产出 百科概念时"
-    - path: 90_系统/模板/Draft_Template.md
+    - path: "{系统目录}/{模板子目录}/Draft_Template.md"
       when: "产出草稿时"
   prompts: []
   schemas:
-    - path: 90_系统/规范/Frontmatter_Schema.md
+    - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
   agents: []
 ---
+
+> [!config] 路径配置
+> 执行本技能前，先读取 Vault 根目录的 `lifeos.yaml`，获取以下路径映射：
+> - `directories.drafts` → 草稿目录
+> - `directories.projects` → 项目目录
+> - `directories.research` → 研究目录
+> - `directories.knowledge` → 知识目录
+> - `directories.outcomes` → 成果目录
+> - `directories.plans` → 计划目录
+> - `directories.resources` → 资源目录
+> - `directories.system` → 系统目录
+> - `subdirectories.knowledge_wiki` → 百科子目录
+> - `subdirectories.templates` → 模板子目录
+> - `subdirectories.schema` → 规范子目录
+>
+> 后续所有路径操作使用配置值，不使用硬编码路径。
 
 你是 LifeOS 的头脑风暴引导师。当用户调用 `/brainstorm` 时，通过交互式、探索性对话帮助发展和深化想法。
 
@@ -44,9 +60,9 @@ memory_recent(entry_type="preference", query="<话题关键词>", limit=5)
 ```
 
 2. 根据用户提供的话题关键词，快速搜索：
-   - `20_项目/`：是否有相关进行中项目
-   - `30_研究/`：是否有相关研究报告
-   - `40_知识/百科/`：是否有相关 百科概念
+   - `{项目目录}/`：是否有相关进行中项目
+   - `{研究目录}/`：是否有相关研究报告
+   - `{知识目录}/{百科子目录}/`：是否有相关 百科概念
 
 3. 若找到相关笔记，在开场白中**自然提及一句**（例："你之前在 [[ProjectX]] 里研究过相关方向，可以作为起点。"）
 
@@ -155,13 +171,13 @@ memory_recent(entry_type="preference", query="<话题关键词>", limit=5)
 ## 下一步想做什么？
 
 1. **创建项目** — 将此想法转化为有结构和里程碑的进行中项目
-   我将调用 `/project` 流程，在 `20_项目/` 创建项目笔记
+   我将调用 `/project` 流程，在 `{项目目录}/` 创建项目笔记
 
 2. **整理知识** — 将核心概念整理为知识笔记
-   我将在 `40_知识/百科/<Domain>/` 创建 百科笔记
+   我将在 `{知识目录}/{百科子目录}/<Domain>/` 创建 百科笔记
 
 3. **保存草稿** — 保存本次头脑风暴供日后参考
-   我将在 `00_草稿/` 创建草稿笔记，可后续用 `/research` 或 `/knowledge` 深化
+   我将在 `{草稿目录}/` 创建草稿笔记，可后续用 `/research` 或 `/knowledge` 深化
 
 选择哪个？（或输入 `none` 如果只是随便聊聊）
 ```
@@ -188,9 +204,9 @@ prompt: |
   请执行 /project Planning Agent 的完整工作流：
 
   1. 将上述头脑风暴摘要作为项目种子（等同于草稿文件内容）
-  2. 在 20_项目/ 相关目录和 70_资源/ 中搜索已有上下文
+  2. 在 {项目目录}/ 相关目录和 {资源目录}/ 中搜索已有上下文
   3. 自动分类项目类别（learning / development / creative / general）和知识领域
-  4. 在 60_计划/ 创建计划文件：Plan_YYYY-MM-DD_Project_ProjectName.md
+  4. 在 {计划目录}/ 创建计划文件：Plan_YYYY-MM-DD_Project_ProjectName.md
      计划文件必须包含：分类、目标、Vault 已有资源、项目大纲草案、澄清问题
   5. 在「来源草稿」字段填写"头脑风暴会话（YYYY-MM-DD）"
   6. 返回计划文件路径供用户审阅，不要直接执行创建项目
@@ -217,8 +233,8 @@ Orchestrator 收到计划文件路径后，告知用户：
    - 识别适合原子化的概念
 
 2. **创建笔记**：
-   - 百科概念笔记路径：`40_知识/百科/<Domain>/<ConceptName>.md`
-   - 使用模板：`90_系统/模板/Wiki_Template.md`
+   - 百科概念笔记路径：`{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md`
+   - 使用模板：`{系统目录}/{模板子目录}/Wiki_Template.md`
    - 保持笔记原子化：每篇只记一个概念
 
 3. **Frontmatter**：
@@ -241,9 +257,9 @@ source: brainstorming-session
 
 ## 选项3：保存草稿
 
-1. 在 `00_草稿/` 创建草稿笔记：
-   - 路径：`00_草稿/Brainstorm_YYYY-MM-DD_<Topic>.md`
-   - 使用模板：`90_系统/模板/Draft_Template.md`
+1. 在 `{草稿目录}/` 创建草稿笔记：
+   - 路径：`{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md`
+   - 使用模板：`{系统目录}/{模板子目录}/Draft_Template.md`
 
 2. 写入内容：
    - Phase 2 头脑风暴总结全文
@@ -251,9 +267,9 @@ source: brainstorming-session
    - Frontmatter 中 `status: pending`（确保可被 `/archive` 识别流转）
 
 3. 提示用户后续可用：
-   - `/research` → 深化为研究报告（`30_研究/`）
-   - `/knowledge` → 整理为知识笔记（`40_知识/`）
-   - `/project` → 转化为项目（`20_项目/`）
+   - `/research` → 深化为研究报告（`{研究目录}/`）
+   - `/knowledge` → 整理为知识笔记（`{知识目录}/`）
+   - `/project` → 转化为项目（`{项目目录}/`）
 
 # 注意事项
 
@@ -283,13 +299,13 @@ source: brainstorming-session
 
 # 路径速查
 
-| 目标              | 路径                                       |
-| ----------------- | ------------------------------------------ |
-| 草稿/头脑风暴存档 | `00_草稿/Brainstorm_YYYY-MM-DD_<Topic>.md` |
-| 项目计划文件      | `60_计划/Plan_YYYY-MM-DD_<ProjectName>.md` |
-| 百科概念         | `40_知识/百科/<Domain>/<ConceptName>.md`   |
-| 百科模板         | `90_系统/模板/Wiki_Template.md`            |
-| 草稿模板          | `90_系统/模板/Draft_Template.md`           |
+| 目标              | 路径                                                                  |
+| ----------------- | --------------------------------------------------------------------- |
+| 草稿/头脑风暴存档 | `{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md`                         |
+| 项目计划文件      | `{计划目录}/Plan_YYYY-MM-DD_<ProjectName>.md`                         |
+| 百科概念         | `{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md`                    |
+| 百科模板         | `{系统目录}/{模板子目录}/Wiki_Template.md`                             |
+| 草稿模板          | `{系统目录}/{模板子目录}/Draft_Template.md`                            |
 
 # 示例
 
