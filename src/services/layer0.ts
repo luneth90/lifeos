@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { getVaultConfig } from '../config.js';
+import { getVaultConfig, resolveConfig } from '../config.js';
 import type { ContextPolicy } from '../utils/context-policy.js';
 import { estimateTokens } from '../utils/shared.js';
 
@@ -68,8 +68,8 @@ export function buildLayer0Summary(
 	policy: ContextPolicy,
 	lastSessionBridge?: string | null,
 ): string {
-	const vc = getVaultConfig();
-	const memoryDir = vc ? vc.memoryDir() : join(vaultRoot, '90_系统', '记忆');
+	const vc = getVaultConfig() ?? resolveConfig(vaultRoot);
+	const memoryDir = vc.memoryDir();
 
 	const upPath = join(memoryDir, 'UserProfile.md');
 	const tbPath = join(memoryDir, 'TaskBoard.md');
