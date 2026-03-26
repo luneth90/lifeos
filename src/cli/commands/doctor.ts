@@ -1,21 +1,11 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { parseArgs, log, green, yellow, red, bold } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
-
-const EXPECTED_TEMPLATES = [
-	'Daily_Template.md',
-	'Draft_Template.md',
-	'Knowledge_Template.md',
-	'Project_Template.md',
-	'Research_Template.md',
-	'Retrospective_Template.md',
-	'Review_Template.md',
-	'Wiki_Template.md',
-];
+import { assetsDir } from '../utils/assets.js';
 
 export interface DoctorResult {
 	passed: boolean;
@@ -56,6 +46,11 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	const lang = config?.language === 'en' ? 'en' : 'zh';
 	const preset = lang === 'en' ? EN_PRESET : ZH_PRESET;
 
+	const templatesSrc = join(assetsDir(), 'templates', lang);
+	const expectedTemplates = existsSync(templatesSrc)
+		? readdirSync(templatesSrc).filter((f) => f.endsWith('.md'))
+		: [];
+
 	// 2. Top-level directories
 	for (const dirName of Object.values(preset.directories)) {
 		if (existsSync(join(targetPath, dirName))) {
@@ -83,7 +78,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 		preset.directories.system,
 		preset.subdirectories.templates,
 	);
-	for (const tpl of EXPECTED_TEMPLATES) {
+	for (const tpl of expectedTemplates) {
 		if (existsSync(join(tplDir, tpl))) {
 			check(`template: ${tpl}`, 'pass');
 		} else {

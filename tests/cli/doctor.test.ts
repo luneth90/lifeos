@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import initCommand from '../../src/cli/commands/init.js';
@@ -50,6 +50,68 @@ describe('lifeos doctor', () => {
 			expect(result.passed).toBe(false);
 			expect(result.checks[0].name).toBe('lifeos.yaml');
 			expect(result.checks[0].status).toBe('fail');
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('invalid YAML reports failure', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			writeFileSync(join(dir, 'lifeos.yaml'), '{{invalid yaml');
+			const result = await doctorCommand([dir]);
+			expect(result.passed).toBe(false);
+			expect(result.checks.some((c) => c.name === 'lifeos.yaml' && c.status === 'fail')).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('version mismatch reports warning', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const yamlPath = join(dir, 'lifeos.yaml');
+			const content = readFileSync(yamlPath, 'utf-8');
+			writeFileSync(yamlPath, content.replace(/assets: \S+/, 'assets: 0.0.1'));
+			const result = await doctorCommand([dir]);
+			expect(result.checks.some((c) => c.name === 'assets version' && c.status === 'warn')).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('missing template reports warning', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			unlinkSync(join(dir, '90_系统', '模板', 'Daily_Template.md'));
+			const result = await doctorCommand([dir]);
+			expect(result.checks.some((c) => c.name.includes('Daily_Template') && c.status === 'warn')).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('missing skills directory reports warning', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			rmSync(join(dir, '.agents'), { recursive: true });
+			const result = await doctorCommand([dir]);
+			expect(result.checks.some((c) => c.name === '.agents/skills/' && c.status === 'warn')).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('Node.js version check always present', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const result = await doctorCommand([dir]);
+			expect(result.checks.some((c) => c.name === 'Node.js >= 18')).toBe(true);
 		} finally {
 			cleanup();
 		}
