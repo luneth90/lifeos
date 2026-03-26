@@ -237,16 +237,92 @@ kill -0 $MCP_PID 2>/dev/null && echo "✓ MCP server running" || echo "✗ Faile
 kill $MCP_PID
 ```
 
-### 5.2 Claude Desktop 集成
+### 5.2 CLI 工具集成（Claude Code / Codex / OpenCode）
+
+#### 5.2.1 配置文件生成
 
 ```bash
-# 创建带 MCP 注册的 vault（需要已安装 Claude Desktop）
 lifeos init /tmp/test-mcp --lang zh
 ```
 
 **验证：**
-- [ ] 输出包含 `Claude Desktop →` 注册信息
-- [ ] `~/Library/Application Support/Claude/claude_desktop_config.json` 中包含 lifeos 条目
+- [ ] 输出包含 `Claude Code →`、`Codex →`、`OpenCode →` 三条注册信息
+- [ ] `.mcp.json` 存在且包含 `mcpServers.lifeos`
+- [ ] `.codex/config.toml` 存在且包含 `[mcp_servers.lifeos]`
+- [ ] `opencode.json` 存在且包含 `mcp.lifeos`
+
+```bash
+cat /tmp/test-mcp/.mcp.json
+cat /tmp/test-mcp/.codex/config.toml
+cat /tmp/test-mcp/opencode.json
+```
+
+#### 5.2.2 实际连通性测试
+
+> **注意：** `lifeos init` 注册的是 `npx -y lifeos`，未发布到 npm 时无法连通。
+> 下面用本地路径覆写配置来验证各 CLI 能否真正连接 MCP Server。
+
+```bash
+LIFEOS_DIR="$(cd "$(dirname "$0")/../.." && pwd)"    # 调整为实际项目路径
+
+# 覆写为本地路径
+cat > /tmp/test-mcp/.mcp.json <<EOF
+{
+  "mcpServers": {
+    "lifeos": {
+      "command": "node",
+      "args": ["$LIFEOS_DIR/dist/server.js"],
+      "env": { "VAULT_ROOT": "/tmp/test-mcp" }
+    }
+  }
+}
+EOF
+
+cat > /tmp/test-mcp/.codex/config.toml <<EOF
+[mcp_servers.lifeos]
+command = "node"
+args = ["$LIFEOS_DIR/dist/server.js"]
+
+[mcp_servers.lifeos.env]
+VAULT_ROOT = "/tmp/test-mcp"
+EOF
+
+cat > /tmp/test-mcp/opencode.json <<EOF
+{
+  "mcp": {
+    "lifeos": {
+      "type": "local",
+      "command": ["node", "$LIFEOS_DIR/dist/server.js"],
+      "environment": { "VAULT_ROOT": "/tmp/test-mcp" }
+    }
+  }
+}
+EOF
+```
+
+**Claude Code：**
+```bash
+cd /tmp/test-mcp && claude mcp list
+```
+- [ ] 输出 `lifeos: ... ✓ Connected`
+
+**Codex：**
+```bash
+cd /tmp/test-mcp && codex mcp list
+```
+- [ ] 输出包含 `lifeos` 条目且 status 为 `enabled`
+
+> **已知限制：** Codex `mcp list` 仅读取全局 `~/.codex/config.toml`，项目级 `.codex/config.toml` 需要 trusted project 才会生效。可用 `-c` 覆盖验证格式正确性：
+> ```bash
+> codex mcp list -c 'mcp_servers.lifeos.command="node"' \
+>   -c "mcp_servers.lifeos.args=[\"$LIFEOS_DIR/dist/server.js\"]"
+> ```
+
+**OpenCode：**
+```bash
+cd /tmp/test-mcp && opencode mcp list
+```
+- [ ] 输出 `✓ lifeos connected`
 
 ---
 

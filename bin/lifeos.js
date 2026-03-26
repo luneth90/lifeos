@@ -3,8 +3,20 @@
 const cmd = process.argv[2];
 const CLI_COMMANDS = ['init', 'upgrade', 'doctor', 'rename', 'help', '--help', '-h', '--version', '-V'];
 
-if (cmd && CLI_COMMANDS.includes(cmd)) {
-	import('../dist/cli/index.js').then(m => m.run(process.argv.slice(2)));
-} else {
+if (!cmd) {
 	import('../dist/server.js');
+} else if (CLI_COMMANDS.includes(cmd)) {
+	import('../dist/cli/index.js')
+		.then(m => m.run(process.argv.slice(2)))
+		.catch(handleError);
+} else {
+	import('../dist/cli/index.js')
+		.then(m => m.run(process.argv.slice(2)))
+		.catch(handleError);
+}
+
+function handleError(err) {
+	const msg = err instanceof Error ? err.message : String(err);
+	console.error(`\x1b[31m✗\x1b[0m ${msg}`);
+	process.exit(1);
 }

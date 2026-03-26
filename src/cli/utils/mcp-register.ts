@@ -1,5 +1,4 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir, platform } from 'node:os';
 import { dirname, join } from 'node:path';
 import { dim, green, log, yellow } from './ui.js';
 
@@ -16,42 +15,35 @@ export async function registerMcp(vaultRoot: string): Promise<void> {
 
 	const registered: string[] = [];
 
-	// Claude Desktop
-	const claudeDesktopPath = getClaudeDesktopConfigPath();
-	if (claudeDesktopPath) {
-		mergeJsonConfig(claudeDesktopPath, 'lifeos', entry);
-		registered.push(`Claude Desktop → ${dim(claudeDesktopPath)}`);
-	}
+	// Claude Code — project-level .mcp.json
+	const claudeCodePath = join(vaultRoot, '.mcp.json');
+	mergeJsonConfig(claudeCodePath, 'mcpServers', 'lifeos', { ...entry });
+	registered.push(`Claude Code → ${dim(claudeCodePath)}`);
 
-	// Cursor (project-level .cursor/mcp.json)
-	const cursorPath = join(vaultRoot, '.cursor', 'mcp.json');
-	mergeJsonConfig(cursorPath, 'lifeos', entry);
-	registered.push(`Cursor → ${dim(cursorPath)}`);
+	// Codex — project-level .codex/config.toml
+	const codexPath = join(vaultRoot, '.codex', 'config.toml');
+	mergeCodexToml(codexPath, 'lifeos', entry);
+	registered.push(`Codex → ${dim(codexPath)}`);
 
-	if (registered.length === 0) {
-		log('⚠', yellow('No AI platform config detected. Register MCP server manually.'));
-	} else {
-		for (const r of registered) {
-			log(green('✔'), r);
-		}
+	// OpenCode — project-level opencode.json
+	const opencodePath = join(vaultRoot, 'opencode.json');
+	mergeJsonConfig(opencodePath, 'mcp', 'lifeos', {
+		type: 'local',
+		command: [entry.command, ...entry.args],
+	});
+	registered.push(`OpenCode → ${dim(opencodePath)}`);
+
+	for (const r of registered) {
+		log(green('✔'), r);
 	}
 }
 
-function getClaudeDesktopConfigPath(): string | null {
-	const p = platform();
-	let configDir: string;
-	if (p === 'darwin') {
-		configDir = join(homedir(), 'Library', 'Application Support', 'Claude');
-	} else if (p === 'win32') {
-		configDir = join(process.env.APPDATA ?? homedir(), 'Claude');
-	} else {
-		configDir = join(homedir(), '.config', 'Claude');
-	}
-	// Only register if the Claude directory exists (meaning Claude Desktop is installed)
-	return existsSync(configDir) ? join(configDir, 'claude_desktop_config.json') : null;
-}
-
-function mergeJsonConfig(filePath: string, serverName: string, entry: McpServerEntry): void {
+function mergeJsonConfig(
+	filePath: string,
+	sectionKey: string,
+	serverName: string,
+	entry: Record<string, unknown>,
+): void {
 	let config: Record<string, unknown> = {};
 	if (existsSync(filePath)) {
 		try {
@@ -63,7 +55,32 @@ function mergeJsonConfig(filePath: string, serverName: string, entry: McpServerE
 	} else {
 		mkdirSync(dirname(filePath), { recursive: true });
 	}
-	if (!config.mcpServers) config.mcpServers = {};
-	(config.mcpServers as Record<string, unknown>)[serverName] = entry;
+	if (!config[sectionKey]) config[sectionKey] = {};
+	(config[sectionKey] as Record<string, unknown>)[serverName] = entry;
 	writeFileSync(filePath, `${JSON.stringify(config, null, 2)}\n`);
+}
+
+function mergeCodexToml(filePath: string, serverName: string, entry: McpServerEntry): void {
+	let existing = '';
+	if (existsSync(filePath)) {
+		existing = readFileSync(filePath, 'utf-8');
+	} else {
+		mkdirSync(dirname(filePath), { recursive: true });
+	}
+
+	// Remove existing section for this server if present
+	const sectionHeader = `[mcp_servers.${serverName}]`;
+	if (existing.includes(sectionHeader)) {
+		// Remove from section header to next section or end of file
+		existing = existing.replace(
+			new RegExp(`\\[mcp_servers\\.${serverName}\\][\\s\\S]*?(?=\\n\\[|$)`),
+			'',
+		);
+	}
+
+	const argsStr = entry.args.map((a) => `"${a}"`).join(', ');
+	const section = `${sectionHeader}\ncommand = "${entry.command}"\nargs = [${argsStr}]\n`;
+
+	const content = existing.trim() ? `${existing.trim()}\n\n${section}` : section;
+	writeFileSync(filePath, content);
 }
