@@ -151,6 +151,16 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(content.length).toBeGreaterThan(0);
 	});
 
+	test('copies AGENTS.md to vault root', async () => {
+		await init([dir, '--lang', lang, '--no-mcp']);
+
+		const agentsPath = join(dir, 'AGENTS.md');
+		expect(existsSync(agentsPath)).toBe(true);
+
+		const content = readFileSync(agentsPath, 'utf-8');
+		expect(content.length).toBeGreaterThan(0);
+	});
+
 	test('creates .gitignore', async () => {
 		await init([dir, '--lang', lang, '--no-mcp']);
 

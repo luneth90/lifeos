@@ -1,13 +1,13 @@
+import { execSync } from 'node:child_process';
 import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { execSync } from 'node:child_process';
 import { stringify as stringifyYaml } from 'yaml';
-import { ZH_PRESET, EN_PRESET, ZH_REFLECTION_SUBS, EN_REFLECTION_SUBS } from '../../config.js';
+import { EN_PRESET, EN_REFLECTION_SUBS, ZH_PRESET, ZH_REFLECTION_SUBS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
+import { assetsDir, ensureDir } from '../utils/assets.js';
+import { installSchema, installSkills, installTemplates } from '../utils/install-assets.js';
 import { parseArgs } from '../utils/ui.js';
 import { bold, green, log } from '../utils/ui.js';
-import { assetsDir, ensureDir } from '../utils/assets.js';
-import { installTemplates, installSchema, installSkills } from '../utils/install-assets.js';
 import { VERSION } from '../utils/version.js';
 
 // ─── Language auto-detection ─────────────────────────────────────────────────
@@ -110,6 +110,12 @@ export default async function init(args: string[]): Promise<void> {
 	const claudeFallback = join(assetsDir(), 'claude.zh.md');
 	const claudeSrc = existsSync(claudeLangSrc) ? claudeLangSrc : claudeFallback;
 	copyFileSync(claudeSrc, join(targetPath, 'CLAUDE.md'));
+
+	// 8b. Copy AGENTS.md (for Codex / OpenCode)
+	const agentsLangSrc = join(assetsDir(), `agents.${lang}.md`);
+	const agentsFallback = join(assetsDir(), 'agents.zh.md');
+	const agentsSrc = existsSync(agentsLangSrc) ? agentsLangSrc : agentsFallback;
+	copyFileSync(agentsSrc, join(targetPath, 'AGENTS.md'));
 
 	// 9. Git init
 	if (!existsSync(join(targetPath, '.git'))) {

@@ -1,11 +1,11 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { ZH_PRESET, EN_PRESET } from '../../config.js';
+import { EN_PRESET, ZH_PRESET } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
-import { parseArgs, log, green, yellow, red, bold } from '../utils/ui.js';
-import { VERSION } from '../utils/version.js';
 import { assetsDir } from '../utils/assets.js';
+import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
+import { VERSION } from '../utils/version.js';
 
 export interface DoctorResult {
 	passed: boolean;
@@ -20,8 +20,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	function check(name: string, status: 'pass' | 'warn' | 'fail', detail?: string) {
 		result.checks.push({ name, status, detail });
 		if (status === 'fail') result.passed = false;
-		const icon =
-			status === 'pass' ? green('✓') : status === 'warn' ? yellow('⚠') : red('✗');
+		const icon = status === 'pass' ? green('✓') : status === 'warn' ? yellow('⚠') : red('✗');
 		const msg = detail ? `${name}: ${detail}` : name;
 		log(icon, msg);
 	}
@@ -120,8 +119,12 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	const claudeExists = existsSync(join(targetPath, 'CLAUDE.md'));
 	check('CLAUDE.md', claudeExists ? 'pass' : 'warn', claudeExists ? undefined : 'missing');
 
+	// 7b. AGENTS.md
+	const agentsExists = existsSync(join(targetPath, 'AGENTS.md'));
+	check('AGENTS.md', agentsExists ? 'pass' : 'warn', agentsExists ? undefined : 'missing');
+
 	// 8. Node.js version
-	const nodeVersion = parseInt(process.version.slice(1), 10);
+	const nodeVersion = Number.parseInt(process.version.slice(1), 10);
 	check('Node.js >= 18', nodeVersion >= 18 ? 'pass' : 'warn', process.version);
 
 	// 9. Version check
@@ -129,11 +132,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	if (installedVersion === VERSION) {
 		check('assets version', 'pass', `v${VERSION}`);
 	} else if (installedVersion) {
-		check(
-			'assets version',
-			'warn',
-			`installed: v${installedVersion}, current: v${VERSION}`,
-		);
+		check('assets version', 'warn', `installed: v${installedVersion}, current: v${VERSION}`);
 	} else {
 		check('assets version', 'warn', 'no installed_versions in lifeos.yaml');
 	}

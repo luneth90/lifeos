@@ -146,6 +146,22 @@ describe('lifeos upgrade', () => {
 		expect(afterUpgrade).toBe('MY CUSTOM CLAUDE INSTRUCTIONS');
 	});
 
+	test('does not touch AGENTS.md (Tier 3)', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		// Modify AGENTS.md
+		const agentsPath = join(dir, 'AGENTS.md');
+		writeFileSync(agentsPath, 'MY CUSTOM AGENTS INSTRUCTIONS', 'utf-8');
+
+		patchVersion(dir, '0.0.1');
+
+		await upgrade([dir]);
+
+		// AGENTS.md should keep user's modifications
+		const afterUpgrade = readFileSync(agentsPath, 'utf-8');
+		expect(afterUpgrade).toBe('MY CUSTOM AGENTS INSTRUCTIONS');
+	});
+
 	test('updates installed_versions in lifeos.yaml', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 

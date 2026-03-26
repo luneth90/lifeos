@@ -59,6 +59,7 @@ lifeos init /tmp/test-zh --lang zh --no-mcp
 - [ ] 规范文件已复制到 `90_系统/规范/`
 - [ ] 技能文件已复制到 `.agents/skills/`（9 个技能目录）
 - [ ] `CLAUDE.md` 已复制到根目录
+- [ ] `AGENTS.md` 已复制到根目录
 - [ ] `.git` 和 `.gitignore` 已创建
 
 ```bash
@@ -77,6 +78,7 @@ lifeos init /tmp/test-en --lang en --no-mcp
 - [ ] 目录名为英文（`00_Drafts`、`10_Diary` 等）
 - [ ] `lifeos.yaml` 中 `language: en`
 - [ ] 模板和技能均为英文版
+- [ ] `CLAUDE.md` 和 `AGENTS.md` 均为英文版
 
 ```bash
 cat /tmp/test-en/lifeos.yaml
@@ -337,6 +339,468 @@ lifeos unknown        # 显示 "Unknown command" 错误
 
 ---
 
+## 7. 资产启用验证 — 技能、模板、CLAUDE.md、AGENTS.md
+
+> 验证 `lifeos init` 生成的资产不仅存在，而且能被各 AI 编码工具**真正识别和加载**。
+> 本节所有测试均可由 agent 自动化执行。
+
+### 前置：使用 5.2.2 中覆写为本地路径的 `/tmp/test-mcp` vault。
+
+---
+
+### 7.1 结构验证（无需外部工具）
+
+#### 7.1.1 技能结构
+
+```bash
+# 确认 9 个技能目录
+test $(ls -d /tmp/test-mcp/.agents/skills/*/ | wc -l) -eq 9 && echo "✓ 9 skills" || echo "✗ skill count mismatch"
+
+# 每个技能目录都有 SKILL.md
+for skill in /tmp/test-mcp/.agents/skills/*/; do
+  name=$(basename "$skill")
+  if [ -f "$skill/SKILL.md" ]; then
+    echo "✓ $name/SKILL.md exists"
+  else
+    echo "✗ $name/SKILL.md missing"
+  fi
+done
+```
+
+**验证：**
+- [ ] 9 个技能目录：ask, archive, brainstorm, knowledge, project, read-pdf, research, review, today
+- [ ] 每个目录下都有 `SKILL.md`
+
+#### 7.1.2 技能 frontmatter 有效性
+
+```bash
+# 检查每个 SKILL.md 的 YAML frontmatter 包含必需字段
+for skill in /tmp/test-mcp/.agents/skills/*/SKILL.md; do
+  name=$(basename "$(dirname "$skill")")
+  # 提取 frontmatter（两个 --- 之间的内容）
+  fm=$(sed -n '/^---$/,/^---$/p' "$skill" | head -20)
+  has_name=$(echo "$fm" | grep -c '^name:')
+  has_desc=$(echo "$fm" | grep -c '^description:')
+  has_ver=$(echo "$fm" | grep -c '^version:')
+  if [ "$has_name" -ge 1 ] && [ "$has_desc" -ge 1 ] && [ "$has_ver" -ge 1 ]; then
+    echo "✓ $name: frontmatter valid (name, description, version)"
+  else
+    echo "✗ $name: frontmatter missing fields (name=$has_name desc=$has_desc ver=$has_ver)"
+  fi
+done
+```
+
+**验证：**
+- [ ] 所有 9 个技能的 frontmatter 都包含 `name`、`description`、`version` 字段
+
+#### 7.1.3 技能引用交叉验证
+
+```bash
+# CLAUDE.md 技能表中列出的技能 ↔ 实际技能目录
+# 注意：read-pdf 只通过 MCP 触发，不在 CLAUDE.md 技能表中
+CLAUDE_SKILLS=$(grep -oP '(?<=`/)\w+(?=`)' /tmp/test-mcp/CLAUDE.md | sort -u)
+DIR_SKILLS=$(ls /tmp/test-mcp/.agents/skills/ | sort)
+
+echo "CLAUDE.md 中引用的技能："
+echo "$CLAUDE_SKILLS"
+echo ""
+echo "实际技能目录："
+echo "$DIR_SKILLS"
+echo ""
+
+# 检查 CLAUDE.md 中每个技能是否有对应目录
+for s in $CLAUDE_SKILLS; do
+  if [ -d "/tmp/test-mcp/.agents/skills/$s" ]; then
+    echo "✓ /$s → .agents/skills/$s/"
+  else
+    echo "✗ /$s 在 CLAUDE.md 中引用但目录不存在"
+  fi
+done
+```
+
+**验证：**
+- [ ] CLAUDE.md 技能表中的 8 个技能（today, project, research, ask, brainstorm, knowledge, review, archive）都有对应的 `.agents/skills/` 目录
+- [ ] `read-pdf` 目录存在但不在技能表中（仅通过 MCP 触发，属于正常情况）
+
+#### 7.1.4 模板结构验证
+
+```bash
+LANG=$(grep 'language:' /tmp/test-mcp/lifeos.yaml | awk '{print $2}')
+
+# 确认 8 个模板文件
+TPL_DIR=$([ "$LANG" = "en" ] && echo "90_System/Templates" || echo "90_系统/模板")
+TPL_COUNT=$(ls /tmp/test-mcp/$TPL_DIR/*.md 2>/dev/null | wc -l)
+test "$TPL_COUNT" -eq 8 && echo "✓ 8 templates" || echo "✗ template count: $TPL_COUNT"
+
+# 每个模板有 frontmatter 且包含 title 和 type
+for tpl in /tmp/test-mcp/$TPL_DIR/*.md; do
+  name=$(basename "$tpl")
+  fm=$(sed -n '/^---$/,/^---$/p' "$tpl" | head -10)
+  has_title=$(echo "$fm" | grep -c 'title:')
+  has_type=$(echo "$fm" | grep -c 'type:')
+  if [ "$has_title" -ge 1 ] && [ "$has_type" -ge 1 ]; then
+    echo "✓ $name: frontmatter valid"
+  else
+    echo "✗ $name: missing title=$has_title type=$has_type"
+  fi
+done
+```
+
+**验证：**
+- [ ] 8 个模板文件存在
+- [ ] 每个模板的 frontmatter 包含 `title` 和 `type`
+
+#### 7.1.5 模板路由交叉验证
+
+```bash
+# CLAUDE.md 模板路由表中的模板名 ↔ 实际模板文件
+CLAUDE_TEMPLATES=$(grep -oP '\w+_Template\.md' /tmp/test-mcp/CLAUDE.md | sort -u)
+ACTUAL_TEMPLATES=$(ls /tmp/test-mcp/$TPL_DIR/*.md | xargs -I{} basename {} | sort)
+
+for t in $CLAUDE_TEMPLATES; do
+  if echo "$ACTUAL_TEMPLATES" | grep -q "^${t}$"; then
+    echo "✓ $t"
+  else
+    echo "✗ $t 在 CLAUDE.md 路由表中但文件不存在"
+  fi
+done
+```
+
+**验证：**
+- [ ] CLAUDE.md 模板路由表中的 8 个模板名与实际文件一一对应
+
+#### 7.1.6 CLAUDE.md 与 AGENTS.md 一致性
+
+```bash
+# AGENTS.md 应与 CLAUDE.md 内容一致
+if diff -q /tmp/test-mcp/CLAUDE.md /tmp/test-mcp/AGENTS.md > /dev/null 2>&1; then
+  echo "✓ CLAUDE.md 和 AGENTS.md 内容一致"
+else
+  echo "✗ CLAUDE.md 和 AGENTS.md 内容不一致"
+  diff /tmp/test-mcp/CLAUDE.md /tmp/test-mcp/AGENTS.md | head -20
+fi
+```
+
+**验证：**
+- [ ] `CLAUDE.md` 和 `AGENTS.md` 内容完全一致
+
+#### 7.1.7 Frontmatter Schema 覆盖验证
+
+```bash
+SCHEMA_DIR=$([ "$LANG" = "en" ] && echo "90_System/Schema" || echo "90_系统/规范")
+SCHEMA_FILE="/tmp/test-mcp/$SCHEMA_DIR/Frontmatter_Schema.md"
+
+# 提取 Schema 中定义的 type 枚举
+SCHEMA_TYPES=$(grep -oP '(?<=`)\w+(?=`)' "$SCHEMA_FILE" | head -20)
+echo "Schema 定义的 type: $SCHEMA_TYPES"
+
+# 提取所有模板中使用的 type 值
+for tpl in /tmp/test-mcp/$TPL_DIR/*.md; do
+  name=$(basename "$tpl")
+  ttype=$(sed -n '/^---$/,/^---$/p' "$tpl" | grep '^type:' | awk '{print $2}')
+  echo "  $name → type: $ttype"
+done
+```
+
+**验证：**
+- [ ] 所有模板中的 `type` 值都在 Frontmatter_Schema.md 的枚举范围内
+
+---
+
+### 7.2 CLI 识别验证（需要安装对应工具）
+
+> 以下测试需要对应的 CLI 工具已安装。跳过未安装的工具。
+
+#### 7.2.1 Claude Code
+
+```bash
+cd /tmp/test-mcp
+
+# 验证 MCP Server 连接
+claude mcp list
+```
+
+**验证：**
+- [ ] 输出包含 `lifeos: ... connected`（或类似的连接成功标识）
+- [ ] Claude Code 会自动加载 vault 根目录的 `CLAUDE.md` 和 `.agents/skills/`
+
+#### 7.2.2 Codex
+
+```bash
+cd /tmp/test-mcp
+LIFEOS_DIR="$(cd "$(dirname "$0")/../.." && pwd)"    # 调整为实际项目路径
+
+# Codex 项目级配置需要 -c 覆盖验证
+codex mcp list \
+  -c 'mcp_servers.lifeos.command="node"' \
+  -c "mcp_servers.lifeos.args=[\"$LIFEOS_DIR/dist/server.js\"]"
+```
+
+**验证：**
+- [ ] 输出包含 `lifeos` 条目
+- [ ] Codex 会自动加载 vault 根目录的 `AGENTS.md`
+
+> **已知限制：** Codex `mcp list` 读取全局 `~/.codex/config.toml`，项目级 `.codex/config.toml` 需要 trusted project 才生效，因此必须用 `-c` 参数覆盖测试。
+
+#### 7.2.3 OpenCode
+
+```bash
+cd /tmp/test-mcp && opencode mcp list
+```
+
+**验证：**
+- [ ] 输出包含 `lifeos` 且状态为 connected
+- [ ] OpenCode 会自动加载 vault 根目录的 `AGENTS.md`
+
+---
+
+### 7.3 功能冒烟测试（端到端 MCP 调用）
+
+> 通过 JSON-RPC over stdio 直接与 MCP Server 交互，验证完整链路可用。
+
+#### 7.3.1 MCP 协议握手
+
+```bash
+LIFEOS_DIR="$(cd "$(dirname "$0")/../.." && pwd)"    # 调整为实际项目路径
+
+# 发送 initialize + tools/list 请求
+{
+  echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"integration-test","version":"0.1"}}}'
+  echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+  echo '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+} | VAULT_ROOT=/tmp/test-mcp node "$LIFEOS_DIR/dist/server.js" 2>/dev/null | head -5
+```
+
+**验证：**
+- [ ] 第一条响应包含 `"result"` 和 `"serverInfo"`（initialize 成功）
+- [ ] 第二条响应包含 `"tools"` 数组，列出 LifeOS 提供的所有 MCP 工具
+
+#### 7.3.2 调用 memory_startup 工具
+
+```bash
+{
+  echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"integration-test","version":"0.1"}}}'
+  echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+  echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_startup","arguments":{}}}'
+} | VAULT_ROOT=/tmp/test-mcp node "$LIFEOS_DIR/dist/server.js" 2>/dev/null | head -10
+```
+
+**验证：**
+- [ ] 响应包含 `"result"` 和 `"content"`（工具调用成功）
+- [ ] 不包含 `"error"`
+- [ ] 返回内容包含 Layer 0 摘要或空 vault 提示
+
+#### 7.3.3 通过 CLI 工具调用（可选）
+
+如果 CLI 工具已安装，可进一步验证通过 CLI 间接调用 MCP 工具：
+
+**Claude Code：**
+```bash
+cd /tmp/test-mcp
+# 在 Claude Code 会话中触发 memory_startup（交互式，需人工观察）
+claude "调用 memory_startup 工具"
+```
+
+**Codex：**
+```bash
+cd /tmp/test-mcp
+codex "调用 memory_startup 工具"
+```
+
+- [ ] Agent 成功调用 `memory_startup` 并返回结果
+- [ ] Agent 能识别 CLAUDE.md / AGENTS.md 中定义的技能和规则
+
+---
+
+## 8. 技能功能验证 — 9 个技能产出正确性
+
+> 验证每个技能执行后在正确目录生成了正确文件，且 frontmatter 符合 Schema 规范。
+> 由 agent 自动执行：发出技能触发指令 → 检查 vault 变化。
+>
+> **前置条件：** 使用 5.2.2 中覆写为本地路径的 `/tmp/test-mcp` vault，MCP 已连通。
+> agent 需在 vault 目录下运行，并能通过 MCP 调用 LifeOS 工具。
+
+### Frontmatter 通用验证规则
+
+每个产出文件的 frontmatter 必须满足以下条件（依据 `Frontmatter_Schema.md`）：
+
+1. 以 `---` 开头和结尾，无重复 key
+2. `created` 格式为 `"YYYY-MM-DD"`（不使用 `date`）
+3. `type` 值属于 Schema 枚举：`project | project-doc | knowledge | wiki | draft | note | research | review | content | system | review-record`
+4. `status` 值与对应 `type` 的枚举一致（如 draft 的 status 应为 `pending`）
+5. frontmatter 结束的 `---` 后不留空行
+6. 不使用 emoji 作为枚举值
+
+以下简写 `[FM]` 表示对产出文件执行上述通用验证。
+
+---
+
+### 8.1 `/today` — 晨间规划
+
+**触发指令：**
+> "开始今天的规划"
+
+**验证：**
+- [ ] `{diary}/YYYY-MM-DD.md` 已创建（以当天日期命名）
+- [ ] [FM] `type: note`，`created` 为当天日期
+- [ ] 文件内容使用了 `Daily_Template.md` 模板结构（包含日程/任务/回顾等段落）
+- [ ] 如果对话中捕获了新想法，`{drafts}/` 下有对应 `.md` 文件
+  - [ ] [FM] `type: draft`，`status: pending`
+
+---
+
+### 8.2 `/project` — 创建项目
+
+**触发指令：**
+> "创建一个新项目：学习线性代数，category 为 learning，domain 为 Math"
+
+**验证：**
+- [ ] `{plans}/Plan_YYYY-MM-DD_*.md` 计划文件已创建
+- [ ] `{projects}/<ProjectName>/<ProjectName>.md` 项目主文件已创建
+  - [ ] [FM] `type: project`，`status: active`，`category: learning`，`domain: "[[Math]]"`
+  - [ ] 文件内容使用了 `Project_Template.md` 模板结构
+
+---
+
+### 8.3 `/research` — 深度研究
+
+**触发指令：**
+> "帮我深度研究 Transformer 注意力机制的最新进展"
+
+**验证：**
+- [ ] `{plans}/Plan_YYYY-MM-DD_*.md` 研究计划文件已创建
+- [ ] `{research}/<Topic>.md` 或 `{research}/<Domain>/<Topic>.md` 研究报告已创建
+  - [ ] [FM] `type: research`，`created` 为当天日期
+  - [ ] 文件内容包含研究报告的结构化段落
+
+---
+
+### 8.4 `/ask` — 快速问答
+
+**触发指令：**
+> "快速问一下：什么是 CAP 定理？"
+
+**验证：**
+- [ ] **不产生任何新文件**（`/ask` 是纯对话技能）
+- [ ] agent 直接回答了问题
+- [ ] MCP 调用中包含 `memory_skill_complete`（记录问答事件）
+
+---
+
+### 8.5 `/brainstorm` — 头脑风暴
+
+**触发指令（保存为草稿路径）：**
+> "帮我头脑风暴一下：如何用 AI 辅助代码审查。最后保存为草稿。"
+
+**验证：**
+- [ ] `{drafts}/Brainstorm_YYYY-MM-DD_*.md` 或 `{drafts}/<Topic>.md` 草稿文件已创建
+  - [ ] [FM] `type: draft`，`status: pending`，`created` 为当天日期
+
+**可选路径（保存为 wiki）：**
+> "帮我探索'强化学习'这个概念。最后保存为百科。"
+
+- [ ] `{knowledge}/{wiki}/<Domain>/<ConceptName>.md` 百科文件已创建
+  - [ ] [FM] `type: wiki`，`created` 为当天日期
+  - [ ] 文件内容使用了 `Wiki_Template.md` 模板结构
+
+---
+
+### 8.6 `/knowledge` — 知识整理
+
+**前置准备：** 在 `{projects}/` 下需要有一个学习类项目文件，或提供原始资料路径。
+
+**触发指令：**
+> "把以下内容整理为知识笔记，domain 为 Math，关联项目 [[学习线性代数]]：
+> （粘贴一段关于矩阵乘法的内容）"
+
+**验证：**
+- [ ] `{knowledge}/{notes}/<Domain>/<BookOrTopic>/<Chapter>/<Chapter>.md` 知识笔记已创建
+  - [ ] [FM] `type: knowledge`，`status: draft`，`domain: "[[Math]]"`
+  - [ ] 文件内容使用了 `Knowledge_Template.md` 模板结构
+- [ ] 如果提取了独立概念，`{knowledge}/{wiki}/<Domain>/<ConceptName>.md` 百科条目已创建
+  - [ ] [FM] `type: wiki`
+
+---
+
+### 8.7 `/review` — 知识复习
+
+**前置准备：** 需要 8.6 中已创建的知识笔记（`status: draft`）。
+
+**触发指令：**
+> "复习一下刚才整理的矩阵乘法知识笔记"
+
+**验证（出题阶段）：**
+- [ ] `{knowledge}/{notes}/<Domain>/<Book>/<Chapter>/Review_YYYY-MM-DD.md` 复习文件已创建
+  - [ ] [FM] `type: review-record`，包含 `note`（关联笔记 wikilink）、`mode`（quiz/feynman/blindspot）
+
+**验证（批改阶段 — 回答问题后）：**
+- [ ] 复习文件 frontmatter 更新：`score`（如 `"4/5"`）、`result`（`pass` 或 `fail`）
+- [ ] 如果 pass，关联知识笔记的 `status` 从 `draft` 升级为 `review`
+- [ ] 如果关联项目文件存在，对应章节的掌握度小圆点已更新（🔴→🟡 或 🟡→🟢）
+
+---
+
+### 8.8 `/archive` — 归档
+
+**前置准备：** 需要至少一个满足归档条件的文件：
+- 一个 `status: done` 的项目，或
+- 一个 `status: researched | projected | knowledged` 的草稿
+
+**触发指令：**
+> "归档已完成的项目和已处理的草稿"
+
+**验证：**
+- [ ] 已完成项目移动到 `{system}/{archive_projects}/<YYYY>/` 目录
+  - [ ] [FM] 新增 `archived: "YYYY-MM-DD"` 字段
+- [ ] 已处理草稿移动到 `{system}/{archive_drafts}/<YYYY>/<MM>/` 目录
+  - [ ] [FM] 新增 `archived: "YYYY-MM-DD"` 字段
+- [ ] `status: pending` 的草稿**未被归档**（仍在 `{drafts}/` 中）
+
+---
+
+### 8.9 `/read-pdf` — PDF 提取
+
+**前置准备：** 准备一个测试用 PDF 文件（如 `/tmp/test.pdf`）。
+
+**触发指令：**
+> "读取 /tmp/test.pdf 的内容"
+
+**验证：**
+- [ ] 技能正常执行，无报错
+- [ ] 提取结果以 JSON 格式返回（包含文本内容）
+- [ ] **不产生 vault 内永久文件**（中间结果在 `/tmp/`）
+
+---
+
+### 8.10 技能依赖链集成测试
+
+> 按顺序执行多个技能，验证上下游数据流转正确。
+
+**执行顺序：**
+
+```
+/today → /research → /project → /knowledge → /review → /archive
+```
+
+1. `/today`：创建今日日记
+2. `/research`：深度研究一个主题（如"Rust 所有权模型"），产出研究报告
+3. `/project`：基于研究成果创建学习项目（如"学习 Rust 基础"）
+4. `/knowledge`：为该项目整理一章知识笔记
+5. `/review`：复习该笔记并批改通过
+6. 手动将项目 `status` 改为 `done`，将研究源草稿 `status` 改为 `researched`
+7. `/archive`：归档已完成项目和已处理草稿
+
+**全链路验证：**
+- [ ] 日记文件存在于 `{diary}/`
+- [ ] 研究计划在 `{plans}/`，研究报告在 `{research}/`，frontmatter 含 `type: research`
+- [ ] 项目文件曾存在于 `{projects}/`，归档后在 `{system}/{archive_projects}/<YYYY>/`
+- [ ] 知识笔记在 `{knowledge}/{notes}/` 下，`status` 已从 `draft` 升级
+- [ ] 复习记录在知识笔记同目录下，`result: pass`
+- [ ] 归档后项目目录已移走，frontmatter 含 `archived` 字段
+- [ ] 所有产出文件的 frontmatter 均符合 Frontmatter_Schema.md
+
+---
+
 ## 清理
 
 ```bash
@@ -358,6 +822,8 @@ node bin/lifeos.js init /tmp/smoke-zh --lang zh --no-mcp
 node bin/lifeos.js doctor /tmp/smoke-zh
 node bin/lifeos.js rename /tmp/smoke-zh --logical drafts --name 00_Inbox
 grep 'drafts: 00_Inbox' /tmp/smoke-zh/lifeos.yaml && echo "✓ rename OK"
+test -f /tmp/smoke-zh/AGENTS.md && echo "✓ AGENTS.md OK" || echo "✗ AGENTS.md missing"
+diff -q /tmp/smoke-zh/CLAUDE.md /tmp/smoke-zh/AGENTS.md && echo "✓ CLAUDE=AGENTS OK"
 node bin/lifeos.js --version
 rm -rf /tmp/smoke-zh
 ```
