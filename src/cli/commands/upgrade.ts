@@ -6,27 +6,6 @@ import { installTemplates, installSchema, installSkills } from '../utils/install
 import { bold, green, log, parseArgs } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 
-function migrateSubdirectories(config: Record<string, unknown>): void {
-	const subs = config.subdirectories as Record<string, unknown> | undefined;
-	if (!subs) return;
-	// Detect old flat format: has knowledge_notes key
-	if (typeof subs.knowledge_notes === 'string') {
-		config.subdirectories = {
-			knowledge: { notes: subs.knowledge_notes, wiki: subs.knowledge_wiki },
-			system: {
-				templates: subs.templates,
-				schema: subs.schema,
-				memory: subs.memory,
-				archive: {
-					projects: subs.archive_projects,
-					drafts: subs.archive_drafts,
-					plans: subs.archive_plans,
-				},
-			},
-		};
-	}
-}
-
 export interface UpgradeResult {
 	updated: string[];
 	skipped: string[];
@@ -46,10 +25,7 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	}
 
 	const yamlContent = readFileSync(yamlPath, 'utf-8');
-	const config = parseYaml(yamlContent) as LifeOSConfig & {
-		installed_versions?: { cli?: string; assets?: string };
-	};
-	migrateSubdirectories(config as unknown as Record<string, unknown>);
+	const config = parseYaml(yamlContent) as LifeOSConfig;
 
 	const result: UpgradeResult = { updated: [], skipped: [], unchanged: [] };
 
