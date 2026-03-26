@@ -13,6 +13,10 @@ export async function run(args: string[]): Promise<void> {
 			await (await import('./commands/doctor.js')).default(args.slice(1));
 			return;
 		}
+		case 'rename': {
+			await (await import('./commands/rename.js')).default(args.slice(1));
+			return;
+		}
 		case 'help':
 		case '--help':
 		case '-h':
@@ -34,6 +38,7 @@ Usage:
   lifeos init [path] [options] Create a new LifeOS vault
   lifeos upgrade               Upgrade assets to latest version
   lifeos doctor [path]         Check vault health
+  lifeos rename [path]         Rename a vault directory
 
 Options (init):
   --lang, -l <zh|en>   Language preset (default: auto-detect)
