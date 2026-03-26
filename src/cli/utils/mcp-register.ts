@@ -54,7 +54,12 @@ function getClaudeDesktopConfigPath(): string | null {
 function mergeJsonConfig(filePath: string, serverName: string, entry: McpServerEntry): void {
 	let config: Record<string, unknown> = {};
 	if (existsSync(filePath)) {
-		config = JSON.parse(readFileSync(filePath, 'utf-8'));
+		try {
+			config = JSON.parse(readFileSync(filePath, 'utf-8'));
+		} catch {
+			log(yellow('⚠'), `Malformed JSON in ${filePath}, creating fresh config`);
+			config = {};
+		}
 	} else {
 		mkdirSync(dirname(filePath), { recursive: true });
 	}

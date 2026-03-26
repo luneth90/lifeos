@@ -34,16 +34,12 @@ export function parseArgs(
 				// If next arg exists and doesn't look like a flag, treat as value
 				const next = args[i + 1];
 				if (next !== undefined && !next.startsWith('-')) {
-					// Check if this is a boolean-only flag (no default string value)
-					if (spec && spec.default === undefined) {
-						// Could be a value flag or boolean — peek to decide
-						result.flags[name] = next;
-						i++;
-					} else if (spec && spec.default !== undefined) {
+					if (spec) {
+						// Known flag — consume next arg as value
 						result.flags[name] = next;
 						i++;
 					} else {
-						// Unknown flag with a next non-flag arg: treat as boolean
+						// Unknown flag — treat as boolean
 						result.flags[name] = true;
 					}
 				} else {
