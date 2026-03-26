@@ -14,14 +14,17 @@ directories:
   system: "90_系统"
 
 subdirectories:
-  knowledge_notes: "笔记"
-  knowledge_wiki: "百科"
-  templates: "模板"
-  schema: "规范"
-  memory: "记忆"
-  archive_projects: "归档/项目"
-  archive_drafts: "归档/草稿"
-  archive_plans: "归档/计划"
+  knowledge:
+    notes: "笔记"
+    wiki: "百科"
+  system:
+    templates: "模板"
+    schema: "规范"
+    memory: "记忆"
+    archive:
+      projects: "归档/项目"
+      drafts: "归档/草稿"
+      plans: "归档/计划"
 
 memory:
   db_name: memory.db
