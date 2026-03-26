@@ -150,7 +150,8 @@ export default async function init(args: string[]): Promise<void> {
 
 	// 10. MCP registration
 	if (!noMcp) {
-		log('ℹ', 'MCP registration will be available in a future release.');
+		const { registerMcp } = await import('../utils/mcp-register.js');
+		await registerMcp(targetPath);
 	}
 
 	// 11. Print summary
