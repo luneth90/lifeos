@@ -1,99 +1,117 @@
 # LifeOS
 
-AI 原生知识操作系统 — Obsidian + AI Agent 驱动的终身学习工作空间。
+AI-native Knowledge OS — an Obsidian + AI Agent powered workspace for lifelong learning.
 
-## 是什么
+## What is it
 
-LifeOS 是一套基于 Obsidian Vault 的知识管理系统，通过 AI Agent 技能自动化知识的捕获、组织、复习和输出。它不是一个 App，而是你「生活在里面」的工作空间。
+LifeOS is a knowledge management system built on Obsidian Vault. AI Agent skills automate the capture, organization, review, and output of knowledge. It's not an app — it's a workspace you live in.
 
-**核心组件：**
+**Core components:**
 
-- **MCP Server** — 记忆系统，为 AI Agent 提供 Vault 索引、会话记忆、上下文组装
-- **CLI 脚手架** — `npx lifeos init` 一键创建工作空间
-- **技能系统** — 10 个 Agent 技能覆盖日记、项目、研究、知识整理、复习等工作流
-- **模板 + 规范** — 16 个结构化模板 + Frontmatter 规范，确保笔记一致性
+- **MCP Server** — Memory system providing vault indexing, session memory, and context assembly for AI agents
+- **CLI scaffold** — `npx lifeos init` to bootstrap a complete workspace
+- **Skill system** — 9 Agent skills covering diary, projects, research, knowledge curation, review, and more
+- **Templates + Schema** — 8 structured templates + Frontmatter schema for consistent notes
 
-## 快速开始
+## Quick Start
 
 ```bash
-# 创建新的 LifeOS 工作空间（中文）
+# Create a new LifeOS workspace (auto-detects language from system locale)
 npx lifeos init ./my-vault
 
-# 或创建英文版
-npx lifeos init ./my-vault --lang en
+# Or specify language explicitly
+npx lifeos init ./my-vault --lang zh   # Chinese
+npx lifeos init ./my-vault --lang en   # English
 
-# 用 Obsidian 打开，然后用 Claude Code 开始工作
+# Skip MCP registration (config files only)
+npx lifeos init ./my-vault --no-mcp
+
+# Open with Obsidian, then start working with your AI coding assistant
 ```
 
-安装完成后，MCP server 自动注册到 Claude Desktop 和 Cursor。在 Vault 目录下启动 AI 编程助手即可使用所有技能。
+After init, MCP server configs are automatically registered for:
 
-## CLI 命令
+| Tool | Config file |
+|---|---|
+| **Claude Code** | `.mcp.json` |
+| **Codex** | `.codex/config.toml` |
+| **OpenCode** | `opencode.json` |
+
+Launch any of these tools in the vault directory to use all skills.
+
+## CLI Commands
 
 ```bash
-lifeos init [path] [--lang zh|en]   # 创建新 Vault（默认中文）
-lifeos upgrade [path]                # 升级资产文件（模板、技能、规范）
-lifeos doctor [path]                 # 检查 Vault 健康状态
-lifeos --help                        # 查看帮助
-lifeos --version                     # 查看版本
+lifeos init [path] [--lang zh|en] [--no-mcp]  # Create new vault
+lifeos upgrade [path]                           # Upgrade assets (templates, skills, schema)
+lifeos doctor [path]                            # Health check
+lifeos rename [path] --logical <name> --name <new>  # Rename a directory
+lifeos --help                                   # Show help
+lifeos --version                                # Show version
 ```
 
 ### init
 
-创建完整的 LifeOS 工作空间：
+Creates a complete LifeOS workspace:
 
-- 10 个顶层目录 + 子目录
-- 8 个 Markdown 模板
-- Frontmatter 规范
-- 10 个 AI 技能（按语言自动切换）
-- `CLAUDE.md` Agent 行为规范
-- `lifeos.yaml` 配置文件
-- Git 初始化 + `.gitignore`
-- MCP server 自动注册
+- 10 top-level directories + nested subdirectories
+- 8 Markdown templates
+- Frontmatter schema
+- 9 AI skills (language-aware)
+- `CLAUDE.md` agent behavior spec
+- `lifeos.yaml` config
+- Git init + `.gitignore`
+- MCP server registration (Claude Code / Codex / OpenCode)
 
 ### upgrade
 
-三档升级策略：
+Three-tier upgrade strategy:
 
-| 策略 | 适用文件 | 行为 |
+| Strategy | Files | Behavior |
 |---|---|---|
-| **自动覆盖** | 模板、规范 | 始终更新到最新版 |
-| **智能合并** | 技能文件 | 未修改→更新，已修改→跳过并警告 |
-| **不触碰** | `CLAUDE.md`、`lifeos.yaml` | 保留用户自定义 |
+| **Overwrite** | Templates, schema | Always update to latest |
+| **Smart merge** | Skill files | Unmodified → update; modified → skip with warning |
+| **Hands off** | `CLAUDE.md`, `lifeos.yaml` | Preserve user customizations |
 
 ### doctor
 
-检查 Vault 完整性：目录结构、模板、规范、技能、配置文件、Node.js 版本、资产版本。
+Checks vault integrity: directory structure, templates, schema, skills, config, Node.js version, asset version.
 
-## 技能一览
+### rename
 
-| 技能 | 功能 |
+Renames a logical directory (e.g. `drafts`) to a new physical name, updates `lifeos.yaml`, and batch-replaces all wikilinks across the vault.
+
+## Skills
+
+| Skill | Description |
 |---|---|
-| `/today` | 晨间规划：回顾昨日、规划今日 |
-| `/project` | 想法 → 结构化项目 |
-| `/research` | 主题 → 深度研究报告 |
-| `/knowledge` | 书籍/论文 → 知识笔记 |
-| `/review` | 生成复习题、批改、追踪掌握度 |
-| `/ask` | 快速问答 |
-| `/brainstorm` | 交互式头脑风暴 |
-| `/archive` | 归档已完成的项目和草稿 |
+| `/today` | Morning planning: review yesterday, plan today |
+| `/project` | Idea → structured project |
+| `/research` | Topic → deep research report |
+| `/knowledge` | Book/paper → knowledge note |
+| `/review` | Generate quizzes, grade, track mastery |
+| `/read-pdf` | PDF → structured notes |
+| `/ask` | Quick Q&A |
+| `/brainstorm` | Interactive brainstorming |
+| `/archive` | Archive completed projects and drafts |
 
-## 技术栈
+## Tech Stack
 
 - **Runtime:** TypeScript + Node.js 18+
-- **Database:** SQLite + FTS5（全文搜索）
-- **Segmentation:** @node-rs/jieba（中文分词）
+- **Database:** SQLite + FTS5 (full-text search)
+- **Segmentation:** @node-rs/jieba (Chinese tokenization)
 - **Protocol:** MCP (Model Context Protocol)
-- **Vault:** Obsidian（纯 Markdown + Frontmatter）
+- **Vault:** Obsidian (plain Markdown + Frontmatter)
 
-## 开发
+## Development
 
 ```bash
 git clone git@github.com:luneth90/lifeos.git
 cd lifeos
 npm install
-npm run build    # 编译 TypeScript
-npm test         # 运行测试
-npm run dev      # 开发模式（热重载）
+npm run build    # Compile TypeScript
+npm test         # Run tests (431 tests)
+npm run dev      # Dev mode (hot reload)
 ```
 
 ## License
