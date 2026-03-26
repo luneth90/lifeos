@@ -69,7 +69,7 @@ export function buildLayer0Summary(
 	lastSessionBridge?: string | null,
 ): string {
 	const vc = getVaultConfig();
-	const memoryDir = vc ? vc.memoryDir() : join(vaultRoot, '90_系统', 'Memory');
+	const memoryDir = vc ? vc.memoryDir() : join(vaultRoot, '90_系统', '记忆');
 
 	const upPath = join(memoryDir, 'UserProfile.md');
 	const tbPath = join(memoryDir, 'TaskBoard.md');

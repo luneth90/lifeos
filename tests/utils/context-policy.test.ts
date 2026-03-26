@@ -32,7 +32,7 @@ describe('contextPolicyPath', () => {
   it('returns path inside memory dir', () => {
     const path = contextPolicyPath(vault.root);
     expect(path).toContain('ContextPolicy.md');
-    expect(path).toContain('Memory');
+    expect(path).toContain('记忆');
   });
 
   it('path is absolute', () => {

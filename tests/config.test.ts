@@ -77,9 +77,9 @@ describe('VaultConfig — zh preset (default)', () => {
   it('subDirPath resolves subdirectory to absolute path', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.subDirPath('knowledge_notes')).toBe(join(tmp.root, '40_知识', 'Notes'));
-    expect(cfg.subDirPath('knowledge_wiki')).toBe(join(tmp.root, '40_知识', 'Wiki'));
-    expect(cfg.subDirPath('memory')).toBe(join(tmp.root, '90_系统', 'Memory'));
+    expect(cfg.subDirPath('knowledge_notes')).toBe(join(tmp.root, '40_知识', '笔记'));
+    expect(cfg.subDirPath('knowledge_wiki')).toBe(join(tmp.root, '40_知识', '百科'));
+    expect(cfg.subDirPath('memory')).toBe(join(tmp.root, '90_系统', '记忆'));
     expect(cfg.subDirPath('templates')).toBe(join(tmp.root, '90_系统', '模板'));
   });
 
@@ -92,20 +92,20 @@ describe('VaultConfig — zh preset (default)', () => {
   it('subDirPrefix returns parent/sub with trailing slash', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.subDirPrefix('knowledge_notes')).toBe('40_知识/Notes/');
-    expect(cfg.subDirPrefix('memory')).toBe('90_系统/Memory/');
+    expect(cfg.subDirPrefix('knowledge_notes')).toBe('40_知识/笔记/');
+    expect(cfg.subDirPrefix('memory')).toBe('90_系统/记忆/');
   });
 
   it('memoryDir returns correct path', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.memoryDir()).toBe(join(tmp.root, '90_系统', 'Memory'));
+    expect(cfg.memoryDir()).toBe(join(tmp.root, '90_系统', '记忆'));
   });
 
   it('dbPath returns memory dir / db_name', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.dbPath()).toBe(join(tmp.root, '90_系统', 'Memory', 'memory.db'));
+    expect(cfg.dbPath()).toBe(join(tmp.root, '90_系统', '记忆', 'memory.db'));
   });
 
   it('scanPrefixes returns physical dir names with slash', () => {
@@ -172,7 +172,7 @@ describe('VaultConfig — lifeos.yaml loading', () => {
     tmp = createTempDir();
     writeyaml(tmp.root, `memory:\n  db_name: custom.db\n`);
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.dbPath()).toBe(join(tmp.root, '90_系统', 'Memory', 'custom.db'));
+    expect(cfg.dbPath()).toBe(join(tmp.root, '90_系统', '记忆', 'custom.db'));
   });
 });
 
@@ -207,14 +207,14 @@ describe('VaultConfig — path inference', () => {
   it('inferDomainFromPath extracts domain from knowledge notes path', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    const domain = cfg.inferDomainFromPath('40_知识/Notes/Math/LinearAlgebra/ch1.md');
+    const domain = cfg.inferDomainFromPath('40_知识/笔记/Math/LinearAlgebra/ch1.md');
     expect(domain).toBe('Math');
   });
 
   it('inferDomainFromPath extracts domain from knowledge wiki path', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    const domain = cfg.inferDomainFromPath('40_知识/Wiki/CS/Recursion.md');
+    const domain = cfg.inferDomainFromPath('40_知识/百科/CS/Recursion.md');
     expect(domain).toBe('CS');
   });
 
@@ -239,14 +239,14 @@ describe('VaultConfig — path inference', () => {
     expect(cfg.pathToBucket('00_草稿/idea.md')).toBe('draft');
     expect(cfg.pathToBucket('20_项目/my-project.md')).toBe('project');
     expect(cfg.pathToBucket('30_研究/topic/report.md')).toBe('research');
-    expect(cfg.pathToBucket('40_知识/Notes/book.md')).toBe('knowledge');
+    expect(cfg.pathToBucket('40_知识/笔记/book.md')).toBe('knowledge');
     expect(cfg.pathToBucket('70_资源/Books/book.pdf')).toBe('resource');
   });
 
   it('pathToBucket returns null for unmapped paths', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.pathToBucket('90_系统/Memory/memory.db')).toBeNull();
+    expect(cfg.pathToBucket('90_系统/记忆/memory.db')).toBeNull();
     expect(cfg.pathToBucket('unknown/file.md')).toBeNull();
   });
 });

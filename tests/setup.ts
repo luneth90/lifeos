@@ -19,8 +19,8 @@ export function createTempVault(): TempVault {
   const dirs = [
     '00_草稿', '10_日记', '20_项目', '30_研究', '40_知识',
     '50_成果', '60_计划', '70_资源', '80_复盘', '90_系统',
-    '90_系统/Memory', '90_系统/模板', '90_系统/Schema',
-    '40_知识/Notes', '40_知识/Wiki',
+    '90_系统/记忆', '90_系统/模板', '90_系统/规范',
+    '40_知识/笔记', '40_知识/百科',
   ];
   for (const dir of dirs) {
     mkdirSync(join(root, dir), { recursive: true });
@@ -41,11 +41,11 @@ directories:
   reflection: "80_复盘"
   system: "90_系统"
 subdirectories:
-  knowledge_notes: "Notes"
-  knowledge_wiki: "Wiki"
+  knowledge_notes: "笔记"
+  knowledge_wiki: "百科"
   templates: "模板"
-  schema: "Schema"
-  memory: "Memory"
+  schema: "规范"
+  memory: "记忆"
   archive_projects: "归档/项目"
   archive_drafts: "归档/草稿"
   archive_plans: "归档/计划"
@@ -66,7 +66,7 @@ memory:
 `;
   writeFileSync(join(root, 'lifeos.yaml'), yamlContent, 'utf-8');
 
-  const dbPath = join(root, '90_系统', 'Memory', 'memory.db');
+  const dbPath = join(root, '90_系统', '记忆', 'memory.db');
 
   return {
     root,

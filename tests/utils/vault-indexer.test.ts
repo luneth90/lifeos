@@ -44,13 +44,13 @@ describe('shouldIndex()', () => {
     const config = new VaultConfig(vault.root);
     expect(shouldIndex('00_草稿/note.md', config)).toBe(true);
     expect(shouldIndex('20_项目/my-project.md', config)).toBe(true);
-    expect(shouldIndex('40_知识/Notes/Math/algebra.md', config)).toBe(true);
+    expect(shouldIndex('40_知识/笔记/Math/algebra.md', config)).toBe(true);
   });
 
   it('returns false for .md files under excluded_prefixes', () => {
     const config = new VaultConfig(vault.root);
     expect(shouldIndex('90_系统/模板/Daily_Template.md', config)).toBe(false);
-    expect(shouldIndex('90_系统/Schema/Frontmatter_Schema.md', config)).toBe(false);
+    expect(shouldIndex('90_系统/规范/Frontmatter_Schema.md', config)).toBe(false);
   });
 
   it('returns false for .md files not matching any prefix', () => {
@@ -251,7 +251,7 @@ describe('fullScan()', () => {
   it('scans and indexes markdown files in included directories', () => {
     writeTestNote(vault.root, '00_草稿/note1.md', { title: 'Note 1', type: 'draft', status: 'pending' }, 'Draft content');
     writeTestNote(vault.root, '20_项目/project1.md', { title: 'Project 1', type: 'project', status: 'active' }, 'Project content');
-    writeTestNote(vault.root, '40_知识/Notes/Math/algebra.md', { title: 'Algebra', type: 'note', status: 'draft' }, 'Knowledge content');
+    writeTestNote(vault.root, '40_知识/笔记/Math/algebra.md', { title: 'Algebra', type: 'note', status: 'draft' }, 'Knowledge content');
 
     const result = fullScan(vault.root, vault.dbPath);
 
@@ -264,7 +264,7 @@ describe('fullScan()', () => {
     const paths = rows.map(r => r.file_path);
     expect(paths).toContain('00_草稿/note1.md');
     expect(paths).toContain('20_项目/project1.md');
-    expect(paths).toContain('40_知识/Notes/Math/algebra.md');
+    expect(paths).toContain('40_知识/笔记/Math/algebra.md');
   });
 
   it('skips files in excluded directories', () => {

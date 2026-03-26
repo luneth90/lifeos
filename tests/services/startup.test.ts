@@ -117,7 +117,7 @@ describe('buildLayer0Summary', () => {
   });
 
   it('includes UserProfile section when AUTO block exists', () => {
-    const memoryDir = join(vault.root, '90_系统', 'Memory');
+    const memoryDir = join(vault.root, '90_系统', '记忆');
     writeFileSync(
       join(memoryDir, 'UserProfile.md'),
       `# UserProfile\n<!-- BEGIN AUTO:profile-summary -->\n用户偏好：简洁风格\n<!-- END AUTO:profile-summary -->`,
@@ -130,7 +130,7 @@ describe('buildLayer0Summary', () => {
   });
 
   it('includes TaskBoard section when AUTO block exists', () => {
-    const memoryDir = join(vault.root, '90_系统', 'Memory');
+    const memoryDir = join(vault.root, '90_系统', '记忆');
     writeFileSync(
       join(memoryDir, 'TaskBoard.md'),
       `# TaskBoard\n<!-- BEGIN AUTO:focus -->\n当前焦点：完成测试套件\n<!-- END AUTO:focus -->`,
@@ -337,7 +337,7 @@ describe('matchEnhancePriority', () => {
 
   it('returns matching priority for known prefix', () => {
     expect(matchEnhancePriority('20_项目/my-project.md', priorityMap)).toBe(8);
-    expect(matchEnhancePriority('40_知识/Notes/Math/algebra.md', priorityMap)).toBe(6);
+    expect(matchEnhancePriority('40_知识/笔记/Math/algebra.md', priorityMap)).toBe(6);
   });
 
   it('returns null for unmatched path', () => {
@@ -357,7 +357,7 @@ describe('enqueueChangedPathsForEnhance', () => {
     const priorityMap = { '20_项目/': 8, '40_知识/': 6 };
     const paths = [
       '20_项目/project-a.md',
-      '40_知识/Notes/concept.md',
+      '40_知识/笔记/concept.md',
       '00_草稿/ignored.md',
     ];
     const count = enqueueChangedPathsForEnhance(db, paths, priorityMap);

@@ -72,11 +72,11 @@ const ZH_PRESET: LifeOSConfig = {
 		system: '90_系统',
 	},
 	subdirectories: {
-		knowledge_notes: 'Notes',
-		knowledge_wiki: 'Wiki',
+		knowledge_notes: '笔记',
+		knowledge_wiki: '百科',
 		templates: '模板',
-		schema: 'Schema',
-		memory: 'Memory',
+		schema: '规范',
+		memory: '记忆',
 		archive_projects: '归档/项目',
 		archive_drafts: '归档/草稿',
 		archive_plans: '归档/计划',
@@ -354,10 +354,10 @@ export class VaultConfig {
 		const parts = relPath.split('/');
 		const knowledgeDir = this._config.directories.knowledge ?? '';
 		const researchDir = this._config.directories.research ?? '';
-		const notesSub = this._config.subdirectories.knowledge_notes ?? 'Notes';
-		const wikiSub = this._config.subdirectories.knowledge_wiki ?? 'Wiki';
+		const notesSub = this._config.subdirectories.knowledge_notes ?? '笔记';
+		const wikiSub = this._config.subdirectories.knowledge_wiki ?? '百科';
 
-		// 40_知识/Notes/<Domain>/... or 40_知识/Wiki/<Domain>/...
+		// 40_知识/笔记/<Domain>/... or 40_知识/百科/<Domain>/...
 		if (
 			parts.length >= 4 &&
 			parts[0] === knowledgeDir &&
