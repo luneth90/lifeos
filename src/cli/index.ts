@@ -8,8 +8,10 @@ export async function run(args: string[]): Promise<void> {
 	switch (cmd) {
 		case 'init':
 			return (await import('./commands/init.js')).default(args.slice(1));
-		case 'upgrade':
-			return (await import('./commands/upgrade.js')).default(args.slice(1));
+		case 'upgrade': {
+			await (await import('./commands/upgrade.js')).default(args.slice(1));
+			return;
+		}
 		case 'doctor': {
 			await (await import('./commands/doctor.js')).default(args.slice(1));
 			return;
