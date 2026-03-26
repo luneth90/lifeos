@@ -51,6 +51,7 @@ interface LifeOSConfig {
 	directories: DirectoriesConfig;
 	subdirectories: SubdirectoriesConfig;
 	memory: MemoryConfig;
+	installed_versions?: { cli?: string; assets?: string };
 	[key: string]: unknown;
 }
 

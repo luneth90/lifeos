@@ -1,14 +1,11 @@
 import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { LifeOSConfig } from '../../config.js';
 import { assetsDir, ensureDir } from '../utils/assets.js';
 import { resolveSkillFiles } from '../utils/lang.js';
 import { bold, green, log, parseArgs, yellow } from '../utils/ui.js';
-
-const require = createRequire(import.meta.url);
-const VERSION: string = require('../../../package.json').version;
+import { VERSION } from '../utils/version.js';
 
 export interface UpgradeResult {
 	updated: string[];

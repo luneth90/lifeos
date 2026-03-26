@@ -1,12 +1,10 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS } from '../../config.js';
+import type { LifeOSConfig } from '../../config.js';
 import { parseArgs, log, green, yellow, red, bold } from '../utils/ui.js';
-
-const require = createRequire(import.meta.url);
-const VERSION: string = require('../../../package.json').version;
+import { VERSION } from '../utils/version.js';
 
 const EXPECTED_TEMPLATES = [
 	'Daily_Template.md',
@@ -119,8 +117,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	check('Node.js >= 18', nodeVersion >= 18 ? 'pass' : 'warn', process.version);
 
 	// 9. Version check
-	const installedVersion = (config as Record<string, Record<string, string>>)
-		?.installed_versions?.assets;
+	const installedVersion = (config as LifeOSConfig)?.installed_versions?.assets;
 	if (installedVersion === VERSION) {
 		check('assets version', 'pass', `v${VERSION}`);
 	} else if (installedVersion) {

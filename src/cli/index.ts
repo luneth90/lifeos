@@ -1,7 +1,4 @@
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const { version: VERSION } = require('../../package.json');
+import { VERSION } from './utils/version.js';
 
 export async function run(args: string[]): Promise<void> {
 	const cmd = args[0];

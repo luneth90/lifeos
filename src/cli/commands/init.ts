@@ -1,5 +1,4 @@
 import { copyFileSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { stringify as stringifyYaml } from 'yaml';
@@ -9,9 +8,7 @@ import { parseArgs } from '../utils/ui.js';
 import { bold, green, log } from '../utils/ui.js';
 import { assetsDir, copyDir, ensureDir } from '../utils/assets.js';
 import { resolveSkillFiles } from '../utils/lang.js';
-
-const require = createRequire(import.meta.url);
-const VERSION: string = require('../../../package.json').version;
+import { VERSION } from '../utils/version.js';
 
 // ─── Reflection subdirectories ───────────────────────────────────────────────
 
