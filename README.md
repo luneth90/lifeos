@@ -1,5 +1,7 @@
 # LifeOS
 
+[中文](./README.zh-CN.md) | English
+
 AI-native Knowledge OS — an Obsidian + AI Agent powered workspace for lifelong learning.
 
 ## What is it
