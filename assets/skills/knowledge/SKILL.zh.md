@@ -12,19 +12,19 @@ dependencies:
   agents: []
 ---
 
-> [!config] 路径配置
-> 执行本技能前，先读取 Vault 根目录的 `lifeos.yaml`，获取以下路径映射：
-> - `directories.drafts` → 草稿目录
-> - `directories.projects` → 项目目录
-> - `directories.knowledge` → 知识目录
-> - `directories.resources` → 资源目录
-> - `directories.system` → 系统目录
-> - `subdirectories.knowledge.notes` → 笔记子目录
-> - `subdirectories.knowledge.wiki` → 百科子目录
-> - `subdirectories.system.templates` → 模板子目录
-> - `subdirectories.system.schema` → 规范子目录
->
-> 后续所有路径操作使用配置值，不使用硬编码路径。
+> [!config]
+> 本技能中的路径引用使用逻辑名（如 `{知识目录}`）。
+> Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
+> 路径映射：
+> - `{草稿目录}` → directories.drafts
+> - `{项目目录}` → directories.projects
+> - `{知识目录}` → directories.knowledge
+> - `{资源目录}` → directories.resources
+> - `{系统目录}` → directories.system
+> - `{笔记子目录}` → subdirectories.knowledge.notes
+> - `{百科子目录}` → subdirectories.knowledge.wiki
+> - `{模板子目录}` → subdirectories.system.templates
+> - `{规范子目录}` → subdirectories.system.schema
 
 你是 LifeOS 的知识蒸馏专家。
 
@@ -195,7 +195,7 @@ memory_recent(query="<章节或主题关键词>", limit=5)
 
 # 记忆系统集成
 
-> 所有记忆操作通过 MCP 工具调用，`db_path` 和 `vault_root` 由运行时自动注入，技能中无需指定。
+> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
 ### 前置查询（阶段0）
 
@@ -204,29 +204,3 @@ memory_query(query="<项目名或章节关键词>", filters={"type": "project"},
 memory_query(query="<章节关键词>", filters={"type": "knowledge"}, limit=5)
 memory_recent(query="<章节或主题关键词>", limit=5)
 ```
-
-### 文件变更通知
-
-每次创建主笔记或百科后，立即调用：
-
-```
-memory_notify(file_path="<主笔记相对路径>")
-memory_notify(file_path="<百科相对路径>")
-```
-
-### 技能完成
-
-```
-memory_skill_complete(
-  skill_name="knowledge",
-  summary="完成《章节名称》知识整理",
-  related_files=["<主笔记相对路径>", "<百科相对路径>"],
-  scope="knowledge",
-  refresh_targets=["TaskBoard", "UserProfile"]
-)
-```
-
-### 会话收尾（本技能为会话最后一个操作时）
-
-1. `memory_log(entry_type="session_bridge", summary="<本次会话摘要>", scope="knowledge")`
-2. `memory_checkpoint()`

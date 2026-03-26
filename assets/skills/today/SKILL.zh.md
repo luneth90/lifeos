@@ -11,17 +11,17 @@ dependencies:
   agents: []
 ---
 
-> [!config] 路径配置
-> 执行本技能前，先读取 Vault 根目录的 `lifeos.yaml`，获取以下路径映射：
-> - `directories.diary` → 日记目录
-> - `directories.drafts` → 草稿目录
-> - `directories.projects` → 项目目录
-> - `directories.system` → 系统目录
-> - `subdirectories.system.templates` → 模板子目录
-> - `subdirectories.system.schema` → 规范子目录
-> - `subdirectories.system.memory` → 记忆子目录
->
-> 后续所有路径操作使用配置值，不使用硬编码路径。
+> [!config]
+> 本技能中的路径引用使用逻辑名（如 `{日记目录}`）。
+> Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
+> 路径映射：
+> - `{日记目录}` → directories.diary
+> - `{草稿目录}` → directories.drafts
+> - `{项目目录}` → directories.projects
+> - `{系统目录}` → directories.system
+> - `{模板子目录}` → subdirectories.system.templates
+> - `{规范子目录}` → subdirectories.system.schema
+> - `{记忆子目录}` → subdirectories.system.memory
 
 你是 LifeOS 的晨间规划助手。
 
@@ -208,37 +208,4 @@ domain: math
 
 # 记忆系统集成
 
-> 所有记忆操作通过 MCP 工具调用，`db_path` 和 `vault_root` 由运行时自动注入，技能中无需指定。
-
-### 文件变更通知
-
-每次创建或修改 Vault 文件后，立即调用：
-
-```
-memory_notify(file_path="<变更文件相对路径>")
-```
-
-### 技能完成
-
-全部文件写入完成后，调用一次：
-
-```
-memory_skill_complete(
-  skill_name="today",
-  summary="<一句话描述本次操作>",
-  related_files=["<路径1>", "<路径2>"],
-  scope="today",
-  refresh_targets=["TaskBoard", "UserProfile"]
-)
-```
-
-### 会话收尾（本技能为会话最后一个操作时）
-
-1. 写入会话桥接：
-   ```
-   memory_log(entry_type="session_bridge", summary="<本次会话摘要>", scope="today")
-   ```
-2. 执行检查点：
-   ```
-   memory_checkpoint()
-   ```
+> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。本技能无特有的前置查询（上下文收集已在步骤一中定义）。

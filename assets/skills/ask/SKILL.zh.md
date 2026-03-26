@@ -9,13 +9,13 @@ dependencies:
   agents: []
 ---
 
-> [!config] 路径配置
-> 执行本技能前，先读取 Vault 根目录的 `lifeos.yaml`，获取以下路径映射：
-> - `directories.research` → 研究目录
-> - `directories.knowledge` → 知识目录
-> - `subdirectories.knowledge.wiki` → 百科子目录
->
-> 后续所有路径操作使用配置值，不使用硬编码路径。
+> [!config]
+> 本技能中的路径引用使用逻辑名（如 `{研究目录}`）。
+> Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
+> 路径映射：
+> - `{研究目录}` → directories.research
+> - `{知识目录}` → directories.knowledge
+> - `{百科子目录}` → subdirectories.knowledge.wiki
 
 你是 LifeOS 的快速问答助手。当用户调用 `/ask` 时，高效直接地回答问题 — 不创建计划、不调用子 Agent、不创建多余文件。
 
@@ -101,8 +101,9 @@ memory_recent(entry_type="skill_completion", query="<章节或主题关键词>",
 
 # 记忆系统集成
 
+> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
+
 > `/ask` 虽然不产出文件，但用户的提问是学习轨迹的重要数据入口，应记录到记忆系统中完善用户知识画像。
-> 所有记忆操作通过 MCP 工具调用，`db_path` 和 `vault_root` 由运行时自动注入，技能中无需指定。
 
 ### 前置查询（仅限三类问题，见步骤一）
 
@@ -111,21 +112,3 @@ memory_recent(entry_type="preference", query="<问题关键词>", limit=5)
 memory_recent(entry_type="decision", query="<问题关键词>", limit=5)
 memory_recent(entry_type="skill_completion", query="<章节或主题关键词>", limit=5)
 ```
-
-### 技能完成
-
-每次回答完成后，调用一次记录问答事件：
-
-```
-memory_skill_complete(
-  skill_name="ask",
-  summary="回答关于「<问题主题>」的提问",
-  scope="ask",
-  refresh_targets=["UserProfile"]
-)
-```
-
-### 会话收尾（本技能为会话最后一个操作时）
-
-1. `memory_log(entry_type="session_bridge", summary="<本次会话摘要>", scope="ask")`
-2. `memory_checkpoint()`

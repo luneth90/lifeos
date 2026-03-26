@@ -14,21 +14,19 @@ dependencies:
   agents: []
 ---
 
-> [!config] 路径配置
-> 执行本技能前，先读取 Vault 根目录的 `lifeos.yaml`，获取以下路径映射：
-> - `directories.drafts` → 草稿目录
-> - `directories.projects` → 项目目录
-> - `directories.research` → 研究目录
-> - `directories.knowledge` → 知识目录
-> - `directories.outcomes` → 成果目录
-> - `directories.plans` → 计划目录
-> - `directories.resources` → 资源目录
-> - `directories.system` → 系统目录
-> - `subdirectories.knowledge.wiki` → 百科子目录
-> - `subdirectories.system.templates` → 模板子目录
-> - `subdirectories.system.schema` → 规范子目录
->
-> 后续所有路径操作使用配置值，不使用硬编码路径。
+> [!config]
+> 本技能中的路径引用使用逻辑名（如 `{草稿目录}`）。
+> Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
+> 路径映射：
+> - `{草稿目录}` → directories.drafts
+> - `{项目目录}` → directories.projects
+> - `{研究目录}` → directories.research
+> - `{知识目录}` → directories.knowledge
+> - `{百科子目录}` → subdirectories.knowledge.wiki
+> - `{计划目录}` → directories.plans
+> - `{系统目录}` → directories.system
+> - `{模板子目录}` → subdirectories.system.templates
+> - `{规范子目录}` → subdirectories.system.schema
 
 你是 LifeOS 的头脑风暴引导师。当用户调用 `/brainstorm` 时，通过交互式、探索性对话帮助发展和深化想法。
 
@@ -190,29 +188,12 @@ memory_log(entry_type="decision", summary="<本次头脑风暴形成的方向性
 
 ## 选项1：创建项目
 
-调用 sub-agent 执行 `/project` 规划阶段，将头脑风暴摘要作为项目种子传入：
+调用 `/project` 的规划阶段，将头脑风暴摘要作为项目种子：
 
-```
-subagent_type: "general-purpose"
-description: "Plan project from brainstorm"
-prompt: |
-  用户希望基于头脑风暴会话创建一个项目。
-
-  头脑风暴摘要：
-  [插入 Phase 2 总结全文]
-
-  请执行 /project Planning Agent 的完整工作流：
-
-  1. 将上述头脑风暴摘要作为项目种子（等同于草稿文件内容）
-  2. 在 {项目目录}/ 相关目录和 {资源目录}/ 中搜索已有上下文
-  3. 自动分类项目类别（learning / development / creative / general）和知识领域
-  4. 在 {计划目录}/ 创建计划文件：Plan_YYYY-MM-DD_Project_ProjectName.md
-     计划文件必须包含：分类、目标、Vault 已有资源、项目大纲草案、澄清问题
-  5. 在「来源草稿」字段填写"头脑风暴会话（YYYY-MM-DD）"
-  6. 返回计划文件路径供用户审阅，不要直接执行创建项目
-
-  注意：只完成 Planning 阶段，等待用户确认后再执行创建。
-```
+1. 读取 `project/references/planning-agent-prompt.md` 的完整内容作为 Task prompt
+2. 将 Phase 2 总结全文注入到 prompt 中 `[用户输入的想法或草稿]` 占位符处
+3. 在计划文件的「来源草稿」字段填写"头脑风暴会话（YYYY-MM-DD）"
+4. Planning Agent 只完成规划阶段，返回计划文件路径
 
 Orchestrator 收到计划文件路径后，告知用户：
 
@@ -329,37 +310,11 @@ source: brainstorming-session
 
 # 记忆系统集成
 
-> 所有记忆操作通过 MCP 工具调用，`db_path` 和 `vault_root` 由运行时自动注入，技能中无需指定。
+> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
-### 文件变更通知
-
-每次创建或修改 Vault 文件后，立即调用：
+### 前置查询
 
 ```
-memory_notify(file_path="<变更文件相对路径>")
+memory_recent(entry_type="decision", query="<话题关键词>", limit=5)
+memory_recent(entry_type="preference", query="<话题关键词>", limit=5)
 ```
-
-### 技能完成
-
-全部文件写入完成后，调用一次：
-
-```
-memory_skill_complete(
-  skill_name="brainstorm",
-  summary="<一句话描述本次操作>",
-  related_files=["<路径1>", "<路径2>"],
-  scope="brainstorm",
-  refresh_targets=["TaskBoard", "UserProfile"]
-)
-```
-
-### 会话收尾（本技能为会话最后一个操作时）
-
-1. 写入会话桥接：
-   ```
-   memory_log(entry_type="session_bridge", summary="<本次会话摘要>", scope="brainstorm")
-   ```
-2. 执行检查点：
-   ```
-   memory_checkpoint()
-   ```

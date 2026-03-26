@@ -19,13 +19,9 @@ dependencies:
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
 > 路径映射：
 > - `{草稿目录}` → directories.drafts
-> - `{日记目录}` → directories.diary
 > - `{项目目录}` → directories.projects
-> - `{研究目录}` → directories.research
-> - `{知识目录}` → directories.knowledge
-> - `{成果目录}` → directories.outputs
-> - `{计划目录}` → directories.plans
 > - `{资源目录}` → directories.resources
+> - `{计划目录}` → directories.plans
 > - `{系统目录}` → directories.system
 > - `{模板子目录}` → subdirectories.system.templates
 > - `{规范子目录}` → subdirectories.system.schema
@@ -37,21 +33,7 @@ dependencies:
 
 # 阶段0：记忆前置检查（必须）
 
-启动 Planning Agent 前，先做一次最小记忆检查，确认不是重复项目，也不要遗漏已有草稿和决策：
-
-1. 查是否已有同主题项目
-2. 查是否命中过去草稿，以及草稿 `status`
-3. 查最近相关决策，避免和既有方向冲突
-
-通过 MCP 工具查询：
-
-```
-memory_query(query="<主题关键词>", filters={"type": "project"}, limit=5)
-memory_query(query="<主题关键词>", limit=10)
-memory_recent(entry_type="decision", query="<主题关键词>", limit=5)
-```
-
-若命中 `{草稿目录}/` 文件，继续读取其 frontmatter，确认是否仍为 `status: pending`。
+按 `_shared/dual-agent-orchestrator.zh.md` 阶段0 执行，实体类型 `filters.type = "project"`。
 
 # 工作流概述
 
@@ -63,12 +45,9 @@ memory_recent(entry_type="decision", query="<主题关键词>", limit=5)
 
 # 你作为 Orchestrator 的职责
 
-1. `/project` 被调用 → 立即启动 Planning Agent
-2. Planning Agent 创建计划文件并返回路径
-3. 用中文通知用户查看计划
-4. 用户确认后，**仅传入计划文件路径**，启动 Execution Agent
-5. 汇报执行结果
-6. 若项目类别为 `development`，检查生成结果是否遵守“单主项目 + 文档目录”规范；若不符合，要求立即修正后再交付
+按 `_shared/dual-agent-orchestrator.zh.md` 的标准编排流程执行，以下为项目技能的额外职责：
+
+- 若项目类别为 `development`，检查生成结果是否遵守”单主项目 + 文档目录”规范；若不符合，要求立即修正后再交付
 
 # 输入上下文
 
@@ -107,11 +86,7 @@ memory_recent(entry_type="decision", query="<主题关键词>", limit=5)
 
 # 阶段1：启动 Planning Agent
 
-用户调用 `/project` 时，立即用 Task 工具启动 Planning Agent。
-
-**完整 prompt 见：** `project/references/planning-agent-prompt.md`
-
-> 读取该文件的完整内容作为 Task 的 prompt 参数，将 `[user's idea/draft note]` 替换为用户实际输入。
+按 `_shared/dual-agent-orchestrator.zh.md` 阶段1 执行。占位符 `[user's idea/draft note]` 替换为用户实际输入。
 
 Planning Agent 返回后，用中文通知用户：
 
@@ -128,11 +103,9 @@ Planning Agent 返回后，用中文通知用户：
 
 # 阶段2：启动 Execution Agent（用户确认后）
 
-用 Task 启动干净上下文的 Execution Agent。
+按 `_shared/dual-agent-orchestrator.zh.md` 阶段3 执行。
 
-**完整 prompt 见：** `project/references/execution-agent-prompt.md`
-
-> 读取该文件的完整内容作为 Task 的 prompt 参数，将 `[plan file path]` 替换为实际路径。
+若项目类别为 `development`，在 Execution Agent 返回后验证生成结果是否符合"开发类项目目录规范"；若不符合，要求立即修正后再交付。
 
 # 边界情况
 
@@ -151,7 +124,7 @@ Planning Agent 返回后，用中文通知用户：
 
 # 记忆系统集成
 
-> 所有记忆操作通过 MCP 工具调用，`db_path` 和 `vault_root` 由运行时自动注入，技能中无需指定。
+> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
 ### 前置查询（阶段0，启动 Planning Agent 前）
 
@@ -160,28 +133,3 @@ memory_query(query="<主题关键词>", filters={"type": "project"}, limit=5)
 memory_query(query="<主题关键词>", limit=10)
 memory_recent(entry_type="decision", query="<主题关键词>", limit=5)
 ```
-
-### 文件变更通知
-
-Execution Agent 创建项目文件后，Orchestrator 立即调用：
-
-```
-memory_notify(file_path="<项目文件相对路径>")
-```
-
-### 技能完成
-
-```
-memory_skill_complete(
-  skill_name="project",
-  summary="创建项目《项目名称》",
-  related_files=["<项目文件相对路径>"],
-  scope="project",
-  refresh_targets=["TaskBoard", "UserProfile"]
-)
-```
-
-### 会话收尾（本技能为会话最后一个操作时）
-
-1. `memory_log(entry_type="session_bridge", summary="<本次会话摘要>", scope="project")`
-2. `memory_checkpoint()`

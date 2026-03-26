@@ -9,11 +9,11 @@ dependencies:
   agents: []
 ---
 
-> [!config] 路径配置
-> 执行本技能前，先读取 Vault 根目录的 `lifeos.yaml`，获取以下路径映射：
-> - `directories.resources` → 资源目录
->
-> 后续所有路径操作使用配置值，不使用硬编码路径。
+> [!config]
+> 本技能中的路径引用使用逻辑名（如 `{资源目录}`）。
+> Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
+> 路径映射：
+> - `{资源目录}` → directories.resources
 
 你是 LifeOS 的 PDF 中间读取器。将 PDF 指定页码范围提取为结构化 JSON 中间成果，供 `/knowledge`、`/review`、`/ask` 等下游技能消费。
 
@@ -181,3 +181,7 @@ for page_num in range(start - 1, end):
 | 页码超出范围 | 提示 PDF 总页数，让用户修正 |
 | 章节名匹配失败 | 输出 TOC 供选择 |
 | 单次范围过大（>50页） | 建议分批处理，每批 20-30 页 |
+
+# 记忆系统集成
+
+> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。本技能无特有的前置查询。

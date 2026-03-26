@@ -11,17 +11,17 @@ dependencies:
   agents: []
 ---
 
-> [!config] 路径配置
-> 执行本技能前，先读取 Vault 根目录的 `lifeos.yaml`，获取以下路径映射：
-> - `directories.diary` → 日记目录
-> - `directories.projects` → 项目目录
-> - `directories.knowledge` → 知识目录
-> - `directories.system` → 系统目录
-> - `subdirectories.knowledge.notes` → 笔记子目录
-> - `subdirectories.system.templates` → 模板子目录
-> - `subdirectories.system.schema` → 规范子目录
->
-> 后续所有路径操作使用配置值，不使用硬编码路径。
+> [!config]
+> 本技能中的路径引用使用逻辑名（如 `{知识目录}`）。
+> Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
+> 路径映射：
+> - `{日记目录}` → directories.diary
+> - `{项目目录}` → directories.projects
+> - `{知识目录}` → directories.knowledge
+> - `{系统目录}` → directories.system
+> - `{笔记子目录}` → subdirectories.knowledge.notes
+> - `{模板子目录}` → subdirectories.system.templates
+> - `{规范子目录}` → subdirectories.system.schema
 
 你是 LifeOS 的复习教练。
 
@@ -305,7 +305,7 @@ memory_recent(entry_type="correction", query="<章节主题或原书约定关键
 
 # 记忆系统集成
 
-> 所有记忆操作通过 MCP 工具调用，`db_path` 和 `vault_root` 由运行时自动注入，技能中无需指定。
+> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
 ### 前置查询（阶段0）
 
@@ -316,16 +316,9 @@ memory_recent(entry_type=”skill_completion”, query=”<章节名称> 复习 
 memory_recent(entry_type=”correction”, query=”<章节主题或原书约定关键词>”, limit=5)
 ```
 
-### 文件变更通知
-
-创建复习文件或更新笔记 status 后，立即调用：
-
-```
-memory_notify(file_path=”<复习文件相对路径>”)
-memory_notify(file_path=”<章节笔记相对路径>”)
-```
-
 ### 技能完成（两个触发点）
+
+> 与通用协议不同，`/review` 需要调用两次 `memory_skill_complete`，分别对应不同阶段：
 
 **1. 复习文件生成后：**
 
@@ -351,8 +344,3 @@ memory_skill_complete(
   refresh_targets=[“TaskBoard”, “UserProfile”]
 )
 ```
-
-### 会话收尾（本技能为会话最后一个操作时）
-
-1. `memory_log(entry_type=”session_bridge”, summary=”<本次会话摘要>”, scope=”review”)`
-2. `memory_checkpoint()`
