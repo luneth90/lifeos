@@ -10,8 +10,10 @@ export async function run(args: string[]): Promise<void> {
 			return (await import('./commands/init.js')).default(args.slice(1));
 		case 'upgrade':
 			return (await import('./commands/upgrade.js')).default(args.slice(1));
-		case 'doctor':
-			return (await import('./commands/doctor.js')).default(args.slice(1));
+		case 'doctor': {
+			await (await import('./commands/doctor.js')).default(args.slice(1));
+			return;
+		}
 		case 'help':
 		case '--help':
 		case '-h':
