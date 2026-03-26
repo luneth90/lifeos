@@ -16,8 +16,8 @@ dependencies:
 > - `directories.projects` → 项目目录
 > - `directories.resources` → 资源目录
 > - `directories.system` → 系统目录
-> - `subdirectories.archive_projects` → 归档项目子目录
-> - `subdirectories.archive_drafts` → 归档草稿子目录
+> - `subdirectories.system.archive.projects` → 归档项目子目录
+> - `subdirectories.system.archive.drafts` → 归档草稿子目录
 >
 > 后续所有路径操作使用配置值，不使用硬编码路径。
 

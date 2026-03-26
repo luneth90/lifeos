@@ -74,23 +74,23 @@ describe('VaultConfig — zh preset (default)', () => {
     const cfg = new VaultConfig(tmp.root);
     expect(cfg.dirPrefix('drafts')).toBe('00_草稿/');
     expect(cfg.dirPrefix('projects')).toBe('20_项目/');
-    expect(cfg.subDirPrefix('knowledge_notes')).toBe('40_知识/笔记/');
-    expect(cfg.subDirPrefix('memory')).toBe('90_系统/记忆/');
+    expect(cfg.subDirPrefix('knowledge', 'notes')).toBe('40_知识/笔记/');
+    expect(cfg.subDirPrefix('system', 'memory')).toBe('90_系统/记忆/');
   });
 
   it('subDirPath resolves subdirectory to absolute path', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    expect(cfg.subDirPath('knowledge_notes')).toBe(join(tmp.root, '40_知识', '笔记'));
-    expect(cfg.subDirPath('knowledge_wiki')).toBe(join(tmp.root, '40_知识', '百科'));
-    expect(cfg.subDirPath('memory')).toBe(join(tmp.root, '90_系统', '记忆'));
-    expect(cfg.subDirPath('templates')).toBe(join(tmp.root, '90_系统', '模板'));
+    expect(cfg.subDirPath('knowledge', 'notes')).toBe(join(tmp.root, '40_知识', '笔记'));
+    expect(cfg.subDirPath('knowledge', 'wiki')).toBe(join(tmp.root, '40_知识', '百科'));
+    expect(cfg.subDirPath('system', 'memory')).toBe(join(tmp.root, '90_系统', '记忆'));
+    expect(cfg.subDirPath('system', 'templates')).toBe(join(tmp.root, '90_系统', '模板'));
   });
 
   it('subDirPath throws on unknown subdirectory', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
-    expect(() => cfg.subDirPath('nonexistent')).toThrow(/Unknown subdirectory/);
+    expect(() => cfg.subDirPath('system', 'nonexistent')).toThrow(/Unknown subdirectory/);
   });
 
   it('memoryDir and dbPath resolve correctly', () => {

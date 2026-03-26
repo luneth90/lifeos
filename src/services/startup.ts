@@ -73,7 +73,7 @@ export function runStartup(
 	// 4. Load custom dictionary (before scan so tokens use updated segmenter)
 	const config = getVaultConfig();
 	if (config) {
-		const dictPath = join(config.subDirPath('memory'), 'custom_dict.txt');
+		const dictPath = join(config.subDirPath('system', 'memory'), 'custom_dict.txt');
 		if (existsSync(dictPath)) {
 			try {
 				loadCustomDict(dictPath);

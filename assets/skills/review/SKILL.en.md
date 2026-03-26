@@ -17,9 +17,9 @@ dependencies:
 > - `directories.projects` → projects directory
 > - `directories.knowledge` → knowledge directory
 > - `directories.system` → system directory
-> - `subdirectories.knowledge_notes` → notes subdirectory
-> - `subdirectories.templates` → templates subdirectory
-> - `subdirectories.schema` → schema subdirectory
+> - `subdirectories.knowledge.notes` → notes subdirectory
+> - `subdirectories.system.templates` → templates subdirectory
+> - `subdirectories.system.schema` → schema subdirectory
 >
 > All subsequent path operations use configured values — no hardcoded paths.
 

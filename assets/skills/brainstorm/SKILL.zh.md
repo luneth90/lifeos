@@ -24,9 +24,9 @@ dependencies:
 > - `directories.plans` → 计划目录
 > - `directories.resources` → 资源目录
 > - `directories.system` → 系统目录
-> - `subdirectories.knowledge_wiki` → 百科子目录
-> - `subdirectories.templates` → 模板子目录
-> - `subdirectories.schema` → 规范子目录
+> - `subdirectories.knowledge.wiki` → 百科子目录
+> - `subdirectories.system.templates` → 模板子目录
+> - `subdirectories.system.schema` → 规范子目录
 >
 > 后续所有路径操作使用配置值，不使用硬编码路径。
 

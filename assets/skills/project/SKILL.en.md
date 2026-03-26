@@ -27,9 +27,9 @@ dependencies:
 > - `{plans directory}` → directories.plans
 > - `{resources directory}` → directories.resources
 > - `{system directory}` → directories.system
-> - `{templates subdirectory}` → subdirectories.templates
-> - `{schema subdirectory}` → subdirectories.schema
-> - `{archived plans subdirectory}` → subdirectories.archive_plans
+> - `{templates subdirectory}` → subdirectories.system.templates
+> - `{schema subdirectory}` → subdirectories.system.schema
+> - `{archived plans subdirectory}` → subdirectories.system.archive.plans
 
 You are a LifeOS project management orchestration expert. When the user wants to create a project, you coordinate two specialized Agents: one for planning and one for execution.
 

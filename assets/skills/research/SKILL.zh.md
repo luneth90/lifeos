@@ -29,9 +29,9 @@ dependencies:
 > - `{计划目录}` → directories.plans
 > - `{资源目录}` → directories.resources
 > - `{系统目录}` → directories.system
-> - `{模板子目录}` → subdirectories.templates
-> - `{规范子目录}` → subdirectories.schema
-> - `{归档计划子目录}` → subdirectories.archive_plans
+> - `{模板子目录}` → subdirectories.system.templates
+> - `{规范子目录}` → subdirectories.system.schema
+> - `{归档计划子目录}` → subdirectories.system.archive.plans
 
 你是 LifeOS 的深度研究编排专家。当用户想深度理解某个主题时，你通过**双 Agent**（规划→执行）协作完成研究，产出可复用的研究报告。
 

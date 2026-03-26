@@ -16,8 +16,8 @@ dependencies:
 > - `directories.projects` → projects directory
 > - `directories.resources` → resources directory
 > - `directories.system` → system directory
-> - `subdirectories.archive_projects` → archived projects subdirectory
-> - `subdirectories.archive_drafts` → archived drafts subdirectory
+> - `subdirectories.system.archive.projects` → archived projects subdirectory
+> - `subdirectories.system.archive.drafts` → archived drafts subdirectory
 >
 > Use configured values for all subsequent path operations; do not use hardcoded paths.
 

@@ -20,7 +20,7 @@ describe('installTemplates', () => {
 
 			// Paths should use the zh system/templates dirs
 			const systemDir = ZH_PRESET.directories.system;
-			const templatesSubdir = ZH_PRESET.subdirectories.templates;
+			const templatesSubdir = ZH_PRESET.subdirectories.system.templates;
 			for (const p of paths) {
 				expect(p).toMatch(`${systemDir}/${templatesSubdir}/`);
 			}

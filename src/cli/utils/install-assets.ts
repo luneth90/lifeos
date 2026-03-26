@@ -20,7 +20,7 @@ const SKIP_SKILLS = new Set(['lifeos-init']);
 export function installTemplates(targetPath: string, config: LifeOSConfig): string[] {
 	const lang = config.language === 'en' ? 'en' : 'zh';
 	const src = join(assetsDir(), 'templates', lang);
-	const dest = join(targetPath, config.directories.system, config.subdirectories.templates);
+	const dest = join(targetPath, config.directories.system, config.subdirectories.system.templates);
 	if (!existsSync(src)) return [];
 
 	ensureDir(dest);
@@ -28,7 +28,7 @@ export function installTemplates(targetPath: string, config: LifeOSConfig): stri
 
 	return readdirSync(src)
 		.filter((f) => !f.startsWith('.'))
-		.map((f) => `${config.directories.system}/${config.subdirectories.templates}/${f}`);
+		.map((f) => `${config.directories.system}/${config.subdirectories.system.templates}/${f}`);
 }
 
 /**
@@ -37,7 +37,7 @@ export function installTemplates(targetPath: string, config: LifeOSConfig): stri
  */
 export function installSchema(targetPath: string, config: LifeOSConfig): string[] {
 	const src = join(assetsDir(), 'schema');
-	const dest = join(targetPath, config.directories.system, config.subdirectories.schema);
+	const dest = join(targetPath, config.directories.system, config.subdirectories.system.schema);
 	if (!existsSync(src)) return [];
 
 	ensureDir(dest);
@@ -45,7 +45,7 @@ export function installSchema(targetPath: string, config: LifeOSConfig): string[
 
 	return readdirSync(src)
 		.filter((f) => !f.startsWith('.'))
-		.map((f) => `${config.directories.system}/${config.subdirectories.schema}/${f}`);
+		.map((f) => `${config.directories.system}/${config.subdirectories.system.schema}/${f}`);
 }
 
 /**

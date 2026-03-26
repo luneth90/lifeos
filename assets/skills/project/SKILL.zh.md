@@ -27,9 +27,9 @@ dependencies:
 > - `{计划目录}` → directories.plans
 > - `{资源目录}` → directories.resources
 > - `{系统目录}` → directories.system
-> - `{模板子目录}` → subdirectories.templates
-> - `{规范子目录}` → subdirectories.schema
-> - `{归档计划子目录}` → subdirectories.archive_plans
+> - `{模板子目录}` → subdirectories.system.templates
+> - `{规范子目录}` → subdirectories.system.schema
+> - `{归档计划子目录}` → subdirectories.system.archive.plans
 
 你是 LifeOS 的项目管理编排专家。当用户想创建项目时，你协调两个专业 Agent：一个负责规划，一个负责执行。
 

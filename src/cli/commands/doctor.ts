@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS } from '../../config.js';
+import { ZH_PRESET, EN_PRESET } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { parseArgs, log, green, yellow, red, bold } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
@@ -61,14 +61,27 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	}
 
 	// 3. Subdirectories
-	for (const [logicalName, subDirName] of Object.entries(preset.subdirectories)) {
-		const parentLogical = SUBDIR_PARENTS[logicalName];
+	for (const [parentLogical, group] of Object.entries(preset.subdirectories)) {
 		const parentDir = preset.directories[parentLogical];
-		const fullPath = join(targetPath, parentDir, subDirName);
-		if (existsSync(fullPath)) {
-			check(`subdirectory: ${parentDir}/${subDirName}`, 'pass');
-		} else {
-			check(`subdirectory: ${parentDir}/${subDirName}`, 'warn', 'missing');
+		if (!parentDir) continue;
+		for (const [, subValue] of Object.entries(group as Record<string, unknown>)) {
+			if (typeof subValue === 'string') {
+				const fullPath = join(targetPath, parentDir, subValue);
+				if (existsSync(fullPath)) {
+					check(`subdirectory: ${parentDir}/${subValue}`, 'pass');
+				} else {
+					check(`subdirectory: ${parentDir}/${subValue}`, 'warn', 'missing');
+				}
+			} else if (typeof subValue === 'object' && subValue !== null) {
+				for (const [, nestedValue] of Object.entries(subValue as Record<string, string>)) {
+					const fullPath = join(targetPath, parentDir, nestedValue);
+					if (existsSync(fullPath)) {
+						check(`subdirectory: ${parentDir}/${nestedValue}`, 'pass');
+					} else {
+						check(`subdirectory: ${parentDir}/${nestedValue}`, 'warn', 'missing');
+					}
+				}
+			}
 		}
 	}
 
@@ -76,7 +89,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	const tplDir = join(
 		targetPath,
 		preset.directories.system,
-		preset.subdirectories.templates,
+		preset.subdirectories.system.templates,
 	);
 	for (const tpl of expectedTemplates) {
 		if (existsSync(join(tplDir, tpl))) {
@@ -90,7 +103,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	const schemaPath = join(
 		targetPath,
 		preset.directories.system,
-		preset.subdirectories.schema,
+		preset.subdirectories.system.schema,
 		'Frontmatter_Schema.md',
 	);
 	check(

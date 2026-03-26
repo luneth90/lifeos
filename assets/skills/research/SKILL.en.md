@@ -29,9 +29,9 @@ dependencies:
 > - `{plans directory}` → directories.plans
 > - `{resources directory}` → directories.resources
 > - `{system directory}` → directories.system
-> - `{templates subdirectory}` → subdirectories.templates
-> - `{schema subdirectory}` → subdirectories.schema
-> - `{archived plans subdirectory}` → subdirectories.archive_plans
+> - `{templates subdirectory}` → subdirectories.system.templates
+> - `{schema subdirectory}` → subdirectories.system.schema
+> - `{archived plans subdirectory}` → subdirectories.system.archive.plans
 
 You are a LifeOS deep research orchestration expert. When the user wants to deeply understand a topic, you coordinate a **dual Agent** (planning → execution) collaboration to produce a reusable research report.
 

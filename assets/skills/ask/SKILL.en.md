@@ -13,7 +13,7 @@ dependencies:
 > Before executing this skill, read `lifeos.yaml` from the Vault root to obtain the following path mappings:
 > - `directories.research` → research directory
 > - `directories.knowledge` → knowledge directory
-> - `subdirectories.knowledge_wiki` → wiki subdirectory
+> - `subdirectories.knowledge.wiki` → wiki subdirectory
 >
 > Use configured values for all subsequent path operations; do not use hardcoded paths.
 

@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import { stringify as stringifyYaml } from 'yaml';
-import { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS, ZH_REFLECTION_SUBS, EN_REFLECTION_SUBS } from '../../config.js';
+import { ZH_PRESET, EN_PRESET, ZH_REFLECTION_SUBS, EN_REFLECTION_SUBS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { parseArgs } from '../utils/ui.js';
 import { bold, green, log } from '../utils/ui.js';
@@ -64,10 +64,19 @@ export default async function init(args: string[]): Promise<void> {
 	}
 
 	// Subdirectories
-	for (const [logicalName, subDirName] of Object.entries(subdirs)) {
-		const parentLogical = SUBDIR_PARENTS[logicalName];
+	for (const [parentLogical, group] of Object.entries(subdirs)) {
 		const parentDir = dirs[parentLogical];
-		ensureDir(join(targetPath, parentDir, subDirName));
+		if (!parentDir) continue;
+		for (const [, subValue] of Object.entries(group as Record<string, unknown>)) {
+			if (typeof subValue === 'string') {
+				ensureDir(join(targetPath, parentDir, subValue));
+			} else if (typeof subValue === 'object' && subValue !== null) {
+				// nested group like archive: { projects, drafts, plans }
+				for (const [, nestedValue] of Object.entries(subValue as Record<string, string>)) {
+					ensureDir(join(targetPath, parentDir, nestedValue));
+				}
+			}
+		}
 	}
 
 	// Reflection subdirectories

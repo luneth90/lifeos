@@ -26,15 +26,13 @@ interface DirectoriesConfig {
 }
 
 interface SubdirectoriesConfig {
-	knowledge_notes: string;
-	knowledge_wiki: string;
-	templates: string;
-	schema: string;
-	memory: string;
-	archive_projects: string;
-	archive_drafts: string;
-	archive_plans: string;
-	[key: string]: string;
+	knowledge: { notes: string; wiki: string };
+	system: {
+		templates: string;
+		schema: string;
+		memory: string;
+		archive: { projects: string; drafts: string; plans: string };
+	};
 }
 
 interface MemoryConfig {
@@ -73,14 +71,13 @@ const ZH_PRESET: LifeOSConfig = {
 		system: '90_系统',
 	},
 	subdirectories: {
-		knowledge_notes: '笔记',
-		knowledge_wiki: '百科',
-		templates: '模板',
-		schema: '规范',
-		memory: '记忆',
-		archive_projects: '归档/项目',
-		archive_drafts: '归档/草稿',
-		archive_plans: '归档/计划',
+		knowledge: { notes: '笔记', wiki: '百科' },
+		system: {
+			templates: '模板',
+			schema: '规范',
+			memory: '记忆',
+			archive: { projects: '归档/项目', drafts: '归档/草稿', plans: '归档/计划' },
+		},
 	},
 	memory: {
 		db_name: 'memory.db',
@@ -123,14 +120,13 @@ const EN_PRESET: LifeOSConfig = {
 		system: '90_System',
 	},
 	subdirectories: {
-		knowledge_notes: 'Notes',
-		knowledge_wiki: 'Wiki',
-		templates: 'Templates',
-		schema: 'Schema',
-		memory: 'Memory',
-		archive_projects: 'Archive/Projects',
-		archive_drafts: 'Archive/Drafts',
-		archive_plans: 'Archive/Plans',
+		knowledge: { notes: 'Notes', wiki: 'Wiki' },
+		system: {
+			templates: 'Templates',
+			schema: 'Schema',
+			memory: 'Memory',
+			archive: { projects: 'Archive/Projects', drafts: 'Archive/Drafts', plans: 'Archive/Plans' },
+		},
 	},
 	memory: {
 		db_name: 'memory.db',
@@ -158,18 +154,6 @@ const EN_PRESET: LifeOSConfig = {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-/** Maps subdirectory logical name → parent directory logical name */
-const SUBDIR_PARENTS: Record<string, string> = {
-	knowledge_notes: 'knowledge',
-	knowledge_wiki: 'knowledge',
-	templates: 'system',
-	schema: 'system',
-	memory: 'system',
-	archive_projects: 'system',
-	archive_drafts: 'system',
-	archive_plans: 'system',
-};
 
 /** Maps directory logical name → document bucket type */
 const LOGICAL_TO_BUCKET: Record<string, string> = {
@@ -285,24 +269,29 @@ export class VaultConfig {
 	}
 
 	/** Resolve a logical subdirectory name to an absolute filesystem path. */
-	subDirPath(logicalName: string): string {
-		const subdirs = this._config.subdirectories;
-		if (!(logicalName in subdirs)) {
-			throw new Error(`Unknown subdirectory: ${logicalName}`);
+	subDirPath(parent: string, child: string): string {
+		const parentDir = this._config.directories[parent];
+		if (!parentDir) throw new Error(`Unknown directory: ${parent}`);
+		const group = (this._config.subdirectories as unknown as Record<string, Record<string, unknown>>)[
+			parent
+		];
+		if (!group || typeof group[child] !== 'string') {
+			throw new Error(`Unknown subdirectory: ${parent}/${child}`);
 		}
-		const parentLogical = SUBDIR_PARENTS[logicalName];
-		return join(this.dirPath(parentLogical), subdirs[logicalName]);
+		return join(this._vaultRoot, parentDir, group[child] as string);
 	}
 
 	/** Returns the relative prefix for a subdirectory (parent/sub/). */
-	subDirPrefix(logicalName: string): string {
-		const subdirs = this._config.subdirectories;
-		if (!(logicalName in subdirs)) {
-			throw new Error(`Unknown subdirectory: ${logicalName}`);
+	subDirPrefix(parent: string, child: string): string {
+		const parentDir = this._config.directories[parent];
+		if (!parentDir) throw new Error(`Unknown directory: ${parent}`);
+		const group = (this._config.subdirectories as unknown as Record<string, Record<string, unknown>>)[
+			parent
+		];
+		if (!group || typeof group[child] !== 'string') {
+			throw new Error(`Unknown subdirectory: ${parent}/${child}`);
 		}
-		const parentLogical = SUBDIR_PARENTS[logicalName];
-		const parentDir = this._config.directories[parentLogical];
-		return `${parentDir}/${subdirs[logicalName]}/`;
+		return `${parentDir}/${group[child] as string}/`;
 	}
 
 	// ── Memory helpers ─────────────────────────────────────────────────────────
@@ -321,7 +310,7 @@ export class VaultConfig {
 
 	/** Absolute path to the memory subdirectory. */
 	memoryDir(): string {
-		return this.subDirPath('memory');
+		return this.subDirPath('system', 'memory');
 	}
 
 	/** Absolute path to the SQLite database file. */
@@ -355,8 +344,8 @@ export class VaultConfig {
 		const parts = relPath.split('/');
 		const knowledgeDir = this._config.directories.knowledge ?? '';
 		const researchDir = this._config.directories.research ?? '';
-		const notesSub = this._config.subdirectories.knowledge_notes ?? '笔记';
-		const wikiSub = this._config.subdirectories.knowledge_wiki ?? '百科';
+		const notesSub = this._config.subdirectories.knowledge?.notes ?? '笔记';
+		const wikiSub = this._config.subdirectories.knowledge?.wiki ?? '百科';
 
 		// 40_知识/笔记/<Domain>/... or 40_知识/百科/<Domain>/...
 		if (
@@ -447,5 +436,5 @@ const EN_REFLECTION_SUBS: readonly string[] = [
 
 // ─── Re-exports for CLI ──────────────────────────────────────────────────────
 
-export { ZH_PRESET, EN_PRESET, SUBDIR_PARENTS, ZH_REFLECTION_SUBS, EN_REFLECTION_SUBS };
+export { ZH_PRESET, EN_PRESET, ZH_REFLECTION_SUBS, EN_REFLECTION_SUBS };
 export type { LifeOSConfig };

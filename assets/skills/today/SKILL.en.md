@@ -17,9 +17,9 @@ dependencies:
 > - `directories.drafts` → drafts directory
 > - `directories.projects` → projects directory
 > - `directories.system` → system directory
-> - `subdirectories.templates` → templates subdirectory
-> - `subdirectories.schema` → schema subdirectory
-> - `subdirectories.memory` → memory subdirectory
+> - `subdirectories.system.templates` → templates subdirectory
+> - `subdirectories.system.schema` → schema subdirectory
+> - `subdirectories.system.memory` → memory subdirectory
 >
 > Use configured values for all subsequent path operations; do not use hardcoded paths.
 

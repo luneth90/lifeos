@@ -17,9 +17,9 @@ dependencies:
 > - `directories.drafts` → 草稿目录
 > - `directories.projects` → 项目目录
 > - `directories.system` → 系统目录
-> - `subdirectories.templates` → 模板子目录
-> - `subdirectories.schema` → 规范子目录
-> - `subdirectories.memory` → 记忆子目录
+> - `subdirectories.system.templates` → 模板子目录
+> - `subdirectories.system.schema` → 规范子目录
+> - `subdirectories.system.memory` → 记忆子目录
 >
 > 后续所有路径操作使用配置值，不使用硬编码路径。
 

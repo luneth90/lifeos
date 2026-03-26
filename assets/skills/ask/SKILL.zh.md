@@ -13,7 +13,7 @@ dependencies:
 > 执行本技能前，先读取 Vault 根目录的 `lifeos.yaml`，获取以下路径映射：
 > - `directories.research` → 研究目录
 > - `directories.knowledge` → 知识目录
-> - `subdirectories.knowledge_wiki` → 百科子目录
+> - `subdirectories.knowledge.wiki` → 百科子目录
 >
 > 后续所有路径操作使用配置值，不使用硬编码路径。
 
