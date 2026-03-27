@@ -8,9 +8,17 @@ Obsidian + AI Agent — your lifelong learning system.
 
 LifeOS helps you grow scattered ideas into structured knowledge and truly master it, from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.
 
+> **Why the memory system matters**
+>
+> The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
+>
+> 1. **Cross-session continuity**: session bridges and active-document context persist, so agents do not depend only on the current conversation.
+> 2. **Project-scoped and skill-bound**: the memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, and `archive`, and keeps accumulating preferences, decisions, and context.
+> 3. **More controllable than global memory**: compared with a memory model that mixes cross-directory content and global conversations together, a project-scoped, skill-bound memory system reduces irrelevant noise and keeps retrieval and follow-up decisions closer to the current LifeOS workflow.
+
 **Core components:**
 
-- **MCP Server** — Memory system providing vault indexing, session memory, and context assembly for AI agents
+- **Memory system** — Project-scoped and skill-bound, providing vault indexing, session memory, and context assembly for AI agents
 - **CLI scaffold** — `npx lifeos init` to bootstrap a complete workspace
 - **Skill system** — 9 Agent skills covering diary, projects, research, knowledge curation, review, and more
 - **Templates + Schema** — 8 structured templates + Frontmatter schema for consistent notes
@@ -27,6 +35,8 @@ LifeOS helps you grow scattered ideas into structured knowledge and truly master
 
 ## Quick Start
 
+Before starting, make sure Obsidian and at least one of Claude Code / Codex / OpenCode CLI are installed locally.
+
 ```bash
 # Create a new LifeOS workspace (auto-detects language from system locale)
 npx lifeos init ./my-vault
@@ -34,11 +44,6 @@ npx lifeos init ./my-vault
 # Or specify language explicitly
 npx lifeos init ./my-vault --lang zh   # Chinese
 npx lifeos init ./my-vault --lang en   # English
-
-# Skip MCP registration (create directories/files only)
-npx lifeos init ./my-vault --no-mcp
-
-# Open with Obsidian, then start working with your AI coding assistant
 ```
 
 After init, MCP server configs are automatically registered for:
