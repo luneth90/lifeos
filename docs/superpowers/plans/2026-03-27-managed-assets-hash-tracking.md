@@ -20,14 +20,14 @@
   Assert that `lifeos.yaml` contains `managed_assets` entries after initialization.
 
 - [ ] **Step 2: Run test to verify it fails**
-  Run: `npx vitest run tests/cli/init.test.ts`
+  Run: `npm test -- tests/cli/init.test.ts`
   Expected: FAIL on missing `managed_assets`
 
 - [ ] **Step 3: Write the failing upgrade tests**
   Cover auto-upgrade for unchanged tracked files and conservative skip when metadata is absent.
 
 - [ ] **Step 4: Run test to verify it fails**
-  Run: `npx vitest run tests/cli/upgrade.test.ts`
+  Run: `npm test -- tests/cli/upgrade.test.ts`
   Expected: FAIL on new managed-assets expectations
 
 ### Task 2: Implement Managed Asset Metadata
@@ -50,7 +50,7 @@
   Write managed metadata back into `lifeos.yaml` after sync completes.
 
 - [ ] **Step 4: Run focused tests**
-  Run: `npx vitest run tests/cli/init.test.ts tests/cli/upgrade.test.ts`
+  Run: `npm test -- tests/cli/init.test.ts tests/cli/upgrade.test.ts`
   Expected: PASS
 
 ### Task 3: Verify Regression Surface

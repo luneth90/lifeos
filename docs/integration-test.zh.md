@@ -261,7 +261,7 @@ cat tmp/test-mcp/opencode.json
 
 #### 5.2.2 实际连通性测试
 
-> **注意：** `lifeos init` 注册的是 `npx -y lifeos`，未发布到 npm 时无法连通。
+> **注意：** `lifeos init` 注册的是全局 `lifeos --vault-root ...` 命令；在本地源码测试时，需要先全局安装或执行 `npm link`。
 > 下面用本地路径覆写配置来验证各 CLI 能否真正连接 MCP Server。
 
 ```bash

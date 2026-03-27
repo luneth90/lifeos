@@ -10,7 +10,7 @@ npm run dev          # Dev mode with file watching (tsx watch)
 npm start            # Production server (node dist/server.js)
 npm test             # Run all tests (vitest run)
 npm run test:watch   # Tests in watch mode
-npx vitest run tests/services/capture.test.ts  # Run a single test file
+npm test -- tests/services/capture.test.ts  # Run a single test file
 npm run lint         # Check with Biome
 npm run lint:fix     # Auto-fix lint issues
 npm run typecheck    # Type check without emitting

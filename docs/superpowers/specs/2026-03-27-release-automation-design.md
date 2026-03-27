@@ -8,7 +8,7 @@ Add a low-maintenance release path for the `lifeos` npm CLI package. Pushing a `
 
 ## Constraints
 
-- The package is distributed primarily through npm and `npx lifeos`.
+- The package is distributed primarily through npm and the globally installed `lifeos` CLI.
 - The repository already has CI but no release workflow.
 - Core release rules should live in local scripts, not only in workflow YAML.
 - GitHub Release should provide source snapshots plus an uploaded `npm pack` tarball.

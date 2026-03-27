@@ -373,25 +373,19 @@ describe('lifeos upgrade', () => {
 		const claudeConfig = parseYaml(readFileSync(join(dir, '.mcp.json'), 'utf-8')) as {
 			mcpServers?: Record<string, { command?: string; args?: string[] }>;
 		};
-		expect(claudeConfig.mcpServers?.lifeos?.command).toBe('npx');
-		expect(claudeConfig.mcpServers?.lifeos?.args).toEqual(['-y', 'lifeos', '--vault-root', dir]);
+		expect(claudeConfig.mcpServers?.lifeos?.command).toBe('lifeos');
+		expect(claudeConfig.mcpServers?.lifeos?.args).toEqual(['--vault-root', dir]);
 
 		const codexConfig = readFileSync(join(dir, '.codex', 'config.toml'), 'utf-8');
 		expect(codexConfig).toContain('[mcp_servers.lifeos]');
-		expect(codexConfig).toContain('command = "npx"');
+		expect(codexConfig).toContain('command = "lifeos"');
 		expect(codexConfig).toContain(`"--vault-root", "${dir}"`);
 
 		const openCodeConfig = parseYaml(readFileSync(join(dir, 'opencode.json'), 'utf-8')) as {
 			mcp?: Record<string, { type?: string; command?: string[] }>;
 		};
 		expect(openCodeConfig.mcp?.lifeos?.type).toBe('local');
-		expect(openCodeConfig.mcp?.lifeos?.command).toEqual([
-			'npx',
-			'-y',
-			'lifeos',
-			'--vault-root',
-			dir,
-		]);
+		expect(openCodeConfig.mcp?.lifeos?.command).toEqual(['lifeos', '--vault-root', dir]);
 	});
 
 	test('fills missing lifeos MCP fields without overwriting existing values', async () => {
@@ -402,7 +396,7 @@ describe('lifeos upgrade', () => {
 			JSON.stringify(
 				{
 					mcpServers: {
-						lifeos: { command: 'custom-npx' },
+						lifeos: { command: 'custom-command' },
 						existing: { command: 'keep-me', args: ['foo'] },
 					},
 				},
@@ -416,7 +410,7 @@ describe('lifeos upgrade', () => {
 			join(dir, '.codex', 'config.toml'),
 			[
 				'[mcp_servers.lifeos]',
-				'command = "custom-npx"',
+				'command = "custom-command"',
 				'',
 				'[mcp_servers.existing]',
 				'command = "keep-me"',
@@ -445,27 +439,21 @@ describe('lifeos upgrade', () => {
 		const claudeConfig = parseYaml(readFileSync(join(dir, '.mcp.json'), 'utf-8')) as {
 			mcpServers?: Record<string, { command?: string; args?: string[] }>;
 		};
-		expect(claudeConfig.mcpServers?.lifeos?.command).toBe('custom-npx');
-		expect(claudeConfig.mcpServers?.lifeos?.args).toEqual(['-y', 'lifeos', '--vault-root', dir]);
+		expect(claudeConfig.mcpServers?.lifeos?.command).toBe('custom-command');
+		expect(claudeConfig.mcpServers?.lifeos?.args).toEqual(['--vault-root', dir]);
 		expect(claudeConfig.mcpServers?.existing).toEqual({ command: 'keep-me', args: ['foo'] });
 
 		const codexConfig = readFileSync(join(dir, '.codex', 'config.toml'), 'utf-8');
 		expect(codexConfig).toContain('[mcp_servers.lifeos]');
-		expect(codexConfig).toContain('command = "custom-npx"');
-		expect(codexConfig).toContain(`args = ["-y", "lifeos", "--vault-root", "${dir}"]`);
+		expect(codexConfig).toContain('command = "custom-command"');
+		expect(codexConfig).toContain(`args = ["--vault-root", "${dir}"]`);
 		expect(codexConfig).toContain('[mcp_servers.existing]');
 
 		const openCodeConfig = parseYaml(readFileSync(join(dir, 'opencode.json'), 'utf-8')) as {
 			mcp?: Record<string, { type?: string; command?: string[] }>;
 		};
 		expect(openCodeConfig.mcp?.lifeos?.type).toBe('remote');
-		expect(openCodeConfig.mcp?.lifeos?.command).toEqual([
-			'npx',
-			'-y',
-			'lifeos',
-			'--vault-root',
-			dir,
-		]);
+		expect(openCodeConfig.mcp?.lifeos?.command).toEqual(['lifeos', '--vault-root', dir]);
 		expect(openCodeConfig.mcp?.existing).toEqual({ type: 'local', command: ['keep-me'] });
 	});
 });

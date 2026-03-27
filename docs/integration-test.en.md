@@ -261,7 +261,7 @@ cat tmp/test-mcp/opencode.json
 
 #### 5.2.2 Actual Connectivity Test
 
-> **Note:** `lifeos init` registers `npx -y lifeos`, which won't work before npm publish.
+> **Note:** `lifeos init` registers the global `lifeos --vault-root ...` command; when testing from local source, install globally first or run `npm link`.
 > Override with local paths below to verify each CLI can actually connect to the MCP Server.
 
 ```bash

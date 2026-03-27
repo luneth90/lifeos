@@ -22,8 +22,8 @@ npm test                     # 确认测试通过
 npm link                     # 全局注册 lifeos 命令
 ```
 
-> **关键：** `npm link` 会将本地构建注册为全局包，之后 `npx lifeos`、`lifeos` 命令均解析到本地构建产物。
-> 这样 `lifeos init` 生成的 `.mcp.json`（默认使用 `npx -y lifeos`）无需手动覆写即可直接工作。
+> **关键：** `npm link` 会将本地构建注册为全局包，之后 `lifeos` 命令会解析到本地构建产物。
+> 这样 `lifeos init` 生成的 `.mcp.json`（默认使用 `lifeos --vault-root ...`）无需手动覆写即可直接工作。
 
 **验证注册成功：**
 ```bash

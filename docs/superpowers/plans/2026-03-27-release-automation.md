@@ -20,14 +20,14 @@
   Cover matching tag, missing tag, invalid tag format, and mismatched tag behavior.
 
 - [ ] **Step 2: Run test to verify it fails**
-  Run: `npx vitest run tests/scripts/release/check-version.test.ts`
+  Run: `npm test -- tests/scripts/release/check-version.test.ts`
   Expected: FAIL because the release helper does not exist yet.
 
 - [ ] **Step 3: Write the failing pack-helper tests**
   Cover parsing the tarball name from `npm pack` output and rejecting empty output.
 
 - [ ] **Step 4: Run test to verify it fails**
-  Run: `npx vitest run tests/scripts/release/pack.test.ts`
+  Run: `npm test -- tests/scripts/release/pack.test.ts`
   Expected: FAIL because the pack helper does not exist yet.
 
 ### Task 2: Implement Local Release Helpers
@@ -40,14 +40,14 @@
   Read `package.json`, normalize the tag, validate `vX.Y.Z`, and fail on mismatch.
 
 - [ ] **Step 2: Run version-check tests**
-  Run: `npx vitest run tests/scripts/release/check-version.test.ts`
+  Run: `npm test -- tests/scripts/release/check-version.test.ts`
   Expected: PASS
 
 - [ ] **Step 3: Implement minimal pack helper**
   Run `npm pack`, parse the generated tarball filename, and print it for workflow use.
 
 - [ ] **Step 4: Run pack-helper tests**
-  Run: `npx vitest run tests/scripts/release/pack.test.ts`
+  Run: `npm test -- tests/scripts/release/pack.test.ts`
   Expected: PASS
 
 ### Task 3: Wire Scripts Into Package Scripts And Workflow

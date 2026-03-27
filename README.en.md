@@ -17,7 +17,7 @@ LifeOS helps you grow scattered ideas into structured knowledge and truly master
 **Core components:**
 
 - **Memory system** — Project-scoped and skill-bound, providing vault indexing, session memory, and context assembly for AI agents
-- **CLI scaffold** — `npx lifeos init` to bootstrap a complete workspace
+- **CLI scaffold** — install globally, then use `lifeos init` to bootstrap a complete workspace
 - **Skill system** — 9 Agent skills covering diary, projects, research, knowledge curation, review, and more
 - **Templates + Schema** — 8 structured templates + Frontmatter schema for consistent notes
 
@@ -36,12 +36,15 @@ LifeOS helps you grow scattered ideas into structured knowledge and truly master
 Before starting, make sure Obsidian and at least one of Claude Code / Codex / OpenCode CLI are installed locally.
 
 ```bash
-# Create a new LifeOS workspace (auto-detects language from system locale)
-npx lifeos init ./my-vault
+# Step 1: install the CLI globally
+npm install -g lifeos
+
+# Step 2: create a new LifeOS workspace (auto-detects language from system locale)
+lifeos init ./my-vault
 
 # Or specify language explicitly
-npx lifeos init ./my-vault --lang zh   # Chinese
-npx lifeos init ./my-vault --lang en   # English
+lifeos init ./my-vault --lang zh   # Chinese
+lifeos init ./my-vault --lang en   # English
 ```
 
 After init, MCP server configs are automatically registered for:
@@ -57,12 +60,12 @@ Launch any of these tools in the vault directory to use all skills.
 ## CLI Commands
 
 ```bash
-npx lifeos init [path] [--lang zh|en] [--no-mcp]       # Create a new vault
-npx lifeos upgrade [path] [--lang zh|en]               # Upgrade and restore assets/scaffold
-npx lifeos doctor [path]                               # Health check
-npx lifeos rename [path]                               # Interactive directory rename
-npx lifeos --help                                      # Show help
-npx lifeos --version                                   # Show version
+lifeos init [path] [--lang zh|en] [--no-mcp]           # Create a new vault
+lifeos upgrade [path] [--lang zh|en]                   # Upgrade and restore assets/scaffold
+lifeos doctor [path]                                   # Health check
+lifeos rename [path]                                   # Interactive directory rename
+lifeos --help                                          # Show help
+lifeos --version                                       # Show version
 ```
 
 ### init
@@ -92,7 +95,7 @@ Checks vault integrity: directory structure, templates, schema, skills, config, 
 
 ### rename: Directory Customization
 
-No extra flags are required. Run `npx lifeos rename [path]` and the CLI will show the directories available in the current vault, then guide you step by step to choose one and enter a new name. It updates `lifeos.yaml`, renames the actual directory, and batch-replaces related wikilinks across the vault.
+No extra flags are required. Run `lifeos rename [path]` and the CLI will show the directories available in the current vault, then guide you step by step to choose one and enter a new name. It updates `lifeos.yaml`, renames the actual directory, and batch-replaces related wikilinks across the vault.
 
 This means LifeOS does not lock you into fixed directory names. You can freely adapt directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
 

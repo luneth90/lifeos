@@ -11,8 +11,8 @@ type MergeMode = 'replace' | 'merge-missing';
 
 export async function registerMcp(vaultRoot: string, mode: MergeMode = 'replace'): Promise<void> {
 	const entry: McpServerEntry = {
-		command: 'npx',
-		args: ['-y', 'lifeos', '--vault-root', vaultRoot],
+		command: 'lifeos',
+		args: ['--vault-root', vaultRoot],
 	};
 
 	const registered: string[] = [];
