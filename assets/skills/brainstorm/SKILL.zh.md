@@ -239,7 +239,4 @@ memory_log(entry_type="decision", summary="<本次头脑风暴形成的方向性
 
 ### 前置查询
 
-```
-memory_recent(entry_type="decision", query="<话题关键词>", limit=5)
-memory_recent(entry_type="preference", query="<话题关键词>", limit=5)
-```
+见阶段 0 中的查询代码。

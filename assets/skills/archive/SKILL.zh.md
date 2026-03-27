@@ -201,14 +201,9 @@ memory_query(query="", filters={"status":"knowledged"}, limit=50)
 
 > 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
-### 前置查询（步骤零）
+### 前置查询
 
-```
-memory_query(query="", filters={"type":"project","status":"done"})
-memory_query(query="", filters={"status":"researched"}, limit=50)
-memory_query(query="", filters={"status":"projected"}, limit=50)
-memory_query(query="", filters={"status":"knowledged"}, limit=50)
-```
+见步骤零中的查询代码。
 
 # 后续建议
 

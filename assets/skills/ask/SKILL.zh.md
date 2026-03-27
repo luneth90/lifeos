@@ -159,10 +159,6 @@ tags: [ask]
 
 > `/ask` 默认不产出文件，但用户要求保存时会创建草稿。用户的提问是学习轨迹的重要数据入口，应记录到记忆系统中完善用户知识画像。
 
-### 前置查询（仅限三类问题，见步骤一）
+### 前置查询
 
-```
-memory_recent(entry_type="preference", query="<问题关键词>", limit=5)
-memory_recent(entry_type="decision", query="<问题关键词>", limit=5)
-memory_recent(entry_type="skill_completion", query="<章节或主题关键词>", limit=5)
-```
+见步骤一中的查询代码（仅限三类问题）。

@@ -197,10 +197,6 @@ memory_recent(query="<章节或主题关键词>", limit=5)
 
 > 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
-### 前置查询（阶段0）
+### 前置查询
 
-```
-memory_query(query="<项目名或章节关键词>", filters={"type": "project"}, limit=5)
-memory_query(query="<章节关键词>", filters={"type": "knowledge"}, limit=5)
-memory_recent(query="<章节或主题关键词>", limit=5)
-```
+见阶段 0 中的查询代码。

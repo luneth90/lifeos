@@ -224,14 +224,9 @@ memory_recent(entry_type="correction", query="<章节主题或原书约定关键
 
 > 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
-### 前置查询（阶段0）
+### 前置查询
 
-```
-memory_query(query=”<章节名称>”, filters={“type”: “knowledge”, “status”: “draft”}, limit=5)
-memory_query(query=”<章节名称>”, filters={“type”: “knowledge”, “status”: “review”}, limit=5)
-memory_recent(entry_type=”skill_completion”, query=”<章节名称> 复习 批改”, limit=5)
-memory_recent(entry_type=”correction”, query=”<章节主题或原书约定关键词>”, limit=5)
-```
+见阶段 0 中的查询代码。
 
 ### 技能完成（两个触发点）
 
