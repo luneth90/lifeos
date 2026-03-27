@@ -17,10 +17,14 @@ subdirectories:
   knowledge:
     notes: "笔记"
     wiki: "百科"
+  resources:
+    books: "书籍"
+    literature: "文献"
   system:
     templates: "模板"
     schema: "规范"
     memory: "记忆"
+    prompts: "提示词"
     archive:
       projects: "归档/项目"
       drafts: "归档/草稿"

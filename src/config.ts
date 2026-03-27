@@ -26,10 +26,12 @@ interface DirectoriesConfig {
 
 interface SubdirectoriesConfig {
 	knowledge: { notes: string; wiki: string };
+	resources: { books: string; literature: string };
 	system: {
 		templates: string;
 		schema: string;
 		memory: string;
+		prompts: string;
 		archive: { projects: string; drafts: string; plans: string };
 	};
 }
@@ -71,10 +73,12 @@ const ZH_PRESET: LifeOSConfig = {
 	},
 	subdirectories: {
 		knowledge: { notes: '笔记', wiki: '百科' },
+		resources: { books: '书籍', literature: '文献' },
 		system: {
 			templates: '模板',
 			schema: '规范',
 			memory: '记忆',
+			prompts: '提示词',
 			archive: { projects: '归档/项目', drafts: '归档/草稿', plans: '归档/计划' },
 		},
 	},
@@ -120,10 +124,12 @@ const EN_PRESET: LifeOSConfig = {
 	},
 	subdirectories: {
 		knowledge: { notes: 'Notes', wiki: 'Wiki' },
+		resources: { books: 'Books', literature: 'Literature' },
 		system: {
 			templates: 'Templates',
 			schema: 'Schema',
 			memory: 'Memory',
+			prompts: 'Prompts',
 			archive: { projects: 'Archive/Projects', drafts: 'Archive/Drafts', plans: 'Archive/Plans' },
 		},
 	},
@@ -432,7 +438,6 @@ const ZH_REFLECTION_SUBS: readonly string[] = [
 	'季度复盘',
 	'年度复盘',
 	'项目复盘',
-	'路径校准',
 ];
 const EN_REFLECTION_SUBS: readonly string[] = [
 	'Weekly',
@@ -440,7 +445,6 @@ const EN_REFLECTION_SUBS: readonly string[] = [
 	'Quarterly',
 	'Yearly',
 	'Projects',
-	'Alignment',
 ];
 
 // ─── Re-exports for CLI ──────────────────────────────────────────────────────

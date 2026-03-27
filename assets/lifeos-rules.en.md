@@ -25,11 +25,11 @@ You are the user's lifelong learning partner. Through **LifeOS**, help the user 
   - Stores articles, tutorials, talk scripts, solutions, presentation outlines, demo materials, and other deliverables
   - Primarily receives staged expressions from `{projects}` and `{knowledge}`, does not store raw materials
 - **plans** (default `60_Plans`): Execution plan files for `/research` and `/project` (archived to `{system}/{archive_plans}/` upon completion)
-- **resources** (default `70_Resources`): Raw materials (`Books/`, `Papers/`, `Courses/`, `Links/`)
+- **resources** (default `70_Resources`): Raw materials (`Books/`, `Literature/`)
 - **reflection** (default `80_Reflection`): Periodic reviews and system calibration
   - `Weekly/`, `Monthly/`, `Quarterly/`, `Yearly/`, `Projects/`
   - Focus on priority correction, methodology reflection, rhythm calibration; does not replace `{diary}` daily records
-- **system** (default `90_System`): `Templates/`, `Schema/`, `Archive/Projects/YYYY/`, `Archive/Drafts/YYYY/MM/`, `Archive/Plans/`
+- **system** (default `90_System`): `Templates/`, `Schema/`, `Prompts/`, `Archive/Projects/YYYY/`, `Archive/Drafts/YYYY/MM/`, `Archive/Plans/`
 
 ---
 

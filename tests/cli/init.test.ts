@@ -19,7 +19,7 @@ const ZH_DIRS = {
 	templates: '模板',
 	schema: '规范',
 	memory: '记忆',
-	reflectionSubs: ['周复盘', '月复盘', '季度复盘', '年度复盘', '项目复盘', '路径校准'],
+	reflectionSubs: ['周复盘', '月复盘', '季度复盘', '年度复盘', '项目复盘'],
 	topLevel: [
 		'00_草稿',
 		'10_日记',
@@ -44,7 +44,7 @@ const EN_DIRS = {
 	templates: 'Templates',
 	schema: 'Schema',
 	memory: 'Memory',
-	reflectionSubs: ['Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Projects', 'Alignment'],
+	reflectionSubs: ['Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Projects'],
 	topLevel: [
 		'00_Drafts',
 		'10_Diary',
