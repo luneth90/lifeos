@@ -121,9 +121,15 @@ Please choose:
 
 After user confirmation, for each item to archive:
 
-1. **Read the file's full content and metadata**
+1. **Determine the source path and destination path first**
+   - Compute the destination path from the archive rule and ensure the destination parent directory exists
+   - **Do not** read the full document into context just to archive it; only read the destination file after the move if a frontmatter update is needed
 
-2. **Move to the archive directory:**
+2. **Use a native move/rename primitive for the archival move:**
+   - Prefer a filesystem-level move / rename primitive, or the equivalent native Vault/platform move capability
+   - On Windows, use the equivalent native command or API instead of assuming Unix `mv`
+   - **Never** simulate a move by writing a new file and then deleting the original file; that wastes tokens and is more likely to damage metadata or links
+   - Folder projects must be moved as whole directories, not rebuilt file-by-file
 
    **Project archival:**
    - Single-file project → `{system directory}/{archived projects subdirectory}/YYYY/ProjectName.md`
@@ -143,7 +149,7 @@ After user confirmation, for each item to archive:
    - Keep the original filename unchanged and organize by year/month
    - Only archive diary entries older than the most recent 7 days
 
-3. **Update frontmatter:**
+3. **After the move, update frontmatter in place at the destination:**
    - Add `archived: "YYYY-MM-DD"`
    - For plan files, update `status: done` to `status: archived`
    - Keep other fields unchanged
@@ -198,6 +204,7 @@ After user confirmation, for each item to archive:
 - **Only archive completed plans** — only plans with `status: done` can be archived; plans with `status: active` are never archived
 - **Only archive diary entries older than the most recent 7 days** — `{diary directory}/` always keeps the most recent 7 days, including today
 - **Never delete** — only move, never destroy content
+- **Must use native move/rename semantics** — archival must call a real move / rename capability; do not simulate it with “write new file + delete old file”
 - **Organize by archive rule** — projects by completion year, drafts and diary entries by archival year and month, plans in `{archived plans subdirectory}`
 - **Confirm before archiving** — let the user review the list before execution
 - **Update frontmatter** — write the `archived` date; for plans also set `status: archived`

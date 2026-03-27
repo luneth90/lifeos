@@ -64,11 +64,15 @@ describe('assetsDir', () => {
 		expect(archiveZh).toContain('{归档计划子目录}');
 		expect(archiveZh).toContain('{归档日记子目录}');
 		expect(archiveZh).toContain('最近 7 天');
+		expect(archiveZh).toContain('底层文件系统 move / rename 原语');
+		expect(archiveZh).toContain('写入新文件，再删除原文件');
 		expect(archiveZh).toContain('status: done');
 		expect(archiveEn).toContain('{plans directory}');
 		expect(archiveEn).toContain('{archived plans subdirectory}');
 		expect(archiveEn).toContain('{archived diary subdirectory}');
 		expect(archiveEn).toContain('most recent 7 days');
+		expect(archiveEn).toContain('filesystem-level move / rename primitive');
+		expect(archiveEn).toContain('writing a new file and then deleting the original file');
 		expect(archiveEn).toContain('status: done');
 		expect(rulesZh).toContain('归档/日记/YYYY/MM/');
 		expect(rulesEn).toContain('Archive/Diary/YYYY/MM/');
