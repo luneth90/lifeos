@@ -52,13 +52,12 @@ describe('lifeos upgrade', () => {
 		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
 	});
 
-	test('overwrites templates (Tier 1)', async () => {
+	test('skips modified templates during upgrade', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 
 		// Modify a template file
 		const templatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
 		expect(existsSync(templatePath)).toBe(true);
-		const original = readFileSync(templatePath, 'utf-8');
 		writeFileSync(templatePath, 'USER MODIFIED CONTENT', 'utf-8');
 
 		// Patch version so upgrade proceeds
@@ -66,22 +65,20 @@ describe('lifeos upgrade', () => {
 
 		const result = await upgrade([dir]);
 
-		// Template should be overwritten with original
+		// Template should be preserved
 		const afterUpgrade = readFileSync(templatePath, 'utf-8');
-		expect(afterUpgrade).toBe(original);
-		expect(afterUpgrade).not.toBe('USER MODIFIED CONTENT');
+		expect(afterUpgrade).toBe('USER MODIFIED CONTENT');
 
-		// Should appear in updated list
-		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
+		// Should appear in skipped list
+		expect(result.skipped).toContain('90_系统/模板/Daily_Template.md');
 	});
 
-	test('overwrites schema (Tier 1)', async () => {
+	test('skips modified schema during upgrade', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 
 		// Modify a schema file
 		const schemaPath = join(dir, '90_系统', '规范', 'Frontmatter_Schema.md');
 		expect(existsSync(schemaPath)).toBe(true);
-		const original = readFileSync(schemaPath, 'utf-8');
 		writeFileSync(schemaPath, 'USER MODIFIED SCHEMA', 'utf-8');
 
 		patchVersion(dir, '0.0.1');
@@ -89,9 +86,23 @@ describe('lifeos upgrade', () => {
 		const result = await upgrade([dir]);
 
 		const afterUpgrade = readFileSync(schemaPath, 'utf-8');
-		expect(afterUpgrade).toBe(original);
-		expect(afterUpgrade).not.toBe('USER MODIFIED SCHEMA');
-		expect(result.updated).toContain('90_系统/规范/Frontmatter_Schema.md');
+		expect(afterUpgrade).toBe('USER MODIFIED SCHEMA');
+		expect(result.skipped).toContain('90_系统/规范/Frontmatter_Schema.md');
+	});
+
+	test('skips modified prompts during upgrade', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		const promptPath = join(dir, '90_系统', '提示词', 'AI_LLMResearch_Prompt.md');
+		expect(existsSync(promptPath)).toBe(true);
+		writeFileSync(promptPath, 'USER MODIFIED PROMPT', 'utf-8');
+
+		patchVersion(dir, '0.0.1');
+
+		const result = await upgrade([dir]);
+
+		expect(readFileSync(promptPath, 'utf-8')).toBe('USER MODIFIED PROMPT');
+		expect(result.skipped).toContain('90_系统/提示词/AI_LLMResearch_Prompt.md');
 	});
 
 	test('skips modified skill files (Tier 2)', async () => {
@@ -178,20 +189,19 @@ describe('lifeos upgrade', () => {
 		expect(versions.cli).toBe('1.0.0');
 	});
 
-	test('en: overwrites English templates', async () => {
+	test('en: skips modified English templates', async () => {
 		await init([dir, '--lang', 'en', '--no-mcp']);
 
 		const templatePath = join(dir, '90_System', 'Templates', 'Daily_Template.md');
 		expect(existsSync(templatePath)).toBe(true);
-		const original = readFileSync(templatePath, 'utf-8');
 		writeFileSync(templatePath, 'MODIFIED', 'utf-8');
 
 		patchVersion(dir, '0.0.1');
 
 		const result = await upgrade([dir]);
 
-		expect(readFileSync(templatePath, 'utf-8')).toBe(original);
-		expect(result.updated).toContain('90_System/Templates/Daily_Template.md');
+		expect(readFileSync(templatePath, 'utf-8')).toBe('MODIFIED');
+		expect(result.skipped).toContain('90_System/Templates/Daily_Template.md');
 	});
 
 	test('reports unchanged skill files', async () => {

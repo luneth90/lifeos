@@ -79,10 +79,9 @@ Creates a complete LifeOS workspace:
 
 Upgrades and re-syncs an initialized vault:
 
-- **Always update**: templates, schema, prompts
-- **Smart merge**: update unmodified skill files, skip modified ones with a warning
+- **Smart merge**: update unmodified templates, schema files, built-in prompts, and skill files; skip modified ones with a warning
 - **Restore missing scaffold**: bring back missing directories and managed files such as the memory directory, `.claude/skills`, `CLAUDE.md`, `AGENTS.md`, `.gitignore`, `.git`, and MCP config entries
-- **Preserve user changes when possible**: existing user-customized files are not force-overwritten
+- **Preserve user changes**: built-in files already customized by the user are not force-overwritten
 
 ### doctor
 

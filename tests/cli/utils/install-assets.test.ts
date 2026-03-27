@@ -2,7 +2,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ZH_PRESET } from '../../../src/config.js';
-import { installTemplates, installSchema, installSkills } from '../../../src/cli/utils/install-assets.js';
+import {
+	installPrompts,
+	installSchema,
+	installSkills,
+	installTemplates,
+} from '../../../src/cli/utils/install-assets.js';
 
 function makeTmpDir() {
 	const dir = mkdtempSync(join(tmpdir(), 'lifeos-install-assets-'));
@@ -13,15 +18,17 @@ describe('installTemplates', () => {
 	test('copies zh templates and returns paths', () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {
-			const paths = installTemplates(dir, ZH_PRESET);
+			const result = installTemplates(dir, ZH_PRESET, 'overwrite');
 
 			// Should return at least one path
-			expect(paths.length).toBeGreaterThan(0);
+			expect(result.updated.length).toBeGreaterThan(0);
+			expect(result.skipped).toHaveLength(0);
+			expect(result.unchanged).toHaveLength(0);
 
 			// Paths should use the zh system/templates dirs
 			const systemDir = ZH_PRESET.directories.system;
 			const templatesSubdir = ZH_PRESET.subdirectories.system.templates;
-			for (const p of paths) {
+			for (const p of result.updated) {
 				expect(p).toMatch(`${systemDir}/${templatesSubdir}/`);
 			}
 
@@ -29,6 +36,61 @@ describe('installTemplates', () => {
 			const templatesDir = join(dir, systemDir, templatesSubdir);
 			expect(existsSync(templatesDir)).toBe(true);
 			expect(existsSync(join(templatesDir, 'Daily_Template.md'))).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('smart-merge mode skips user-modified templates', () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			installTemplates(dir, ZH_PRESET, 'overwrite');
+
+			const templatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
+			writeFileSync(templatePath, 'USER CUSTOMIZED TEMPLATE', 'utf-8');
+
+			const result = installTemplates(dir, ZH_PRESET, 'smart-merge');
+
+			expect(result.skipped).toContain('90_系统/模板/Daily_Template.md');
+			expect(readFileSync(templatePath, 'utf-8')).toBe('USER CUSTOMIZED TEMPLATE');
+		} finally {
+			cleanup();
+		}
+	});
+});
+
+describe('installSchema', () => {
+	test('smart-merge mode skips user-modified schema files', () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			installSchema(dir, ZH_PRESET, 'overwrite');
+
+			const schemaPath = join(dir, '90_系统', '规范', 'Frontmatter_Schema.md');
+			writeFileSync(schemaPath, 'USER CUSTOMIZED SCHEMA', 'utf-8');
+
+			const result = installSchema(dir, ZH_PRESET, 'smart-merge');
+
+			expect(result.skipped).toContain('90_系统/规范/Frontmatter_Schema.md');
+			expect(readFileSync(schemaPath, 'utf-8')).toBe('USER CUSTOMIZED SCHEMA');
+		} finally {
+			cleanup();
+		}
+	});
+});
+
+describe('installPrompts', () => {
+	test('smart-merge mode skips user-modified prompt files', () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			installPrompts(dir, ZH_PRESET, 'overwrite');
+
+			const promptPath = join(dir, '90_系统', '提示词', 'AI_LLMResearch_Prompt.md');
+			writeFileSync(promptPath, 'USER CUSTOMIZED PROMPT', 'utf-8');
+
+			const result = installPrompts(dir, ZH_PRESET, 'smart-merge');
+
+			expect(result.skipped).toContain('90_系统/提示词/AI_LLMResearch_Prompt.md');
+			expect(readFileSync(promptPath, 'utf-8')).toBe('USER CUSTOMIZED PROMPT');
 		} finally {
 			cleanup();
 		}

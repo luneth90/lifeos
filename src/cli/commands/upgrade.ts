@@ -52,6 +52,7 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	// 4. Reuse the same vault sync path as init, but in conservative upgrade mode.
 	const syncResult = await syncVault(targetPath, config, {
 		lang,
+		assetMode: 'smart-merge',
 		skillMode: 'smart-merge',
 		ensureMcp: true,
 	});

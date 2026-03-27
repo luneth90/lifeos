@@ -5,6 +5,7 @@ import { EN_REFLECTION_SUBS, ZH_REFLECTION_SUBS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { assetsDir, ensureDir } from './assets.js';
 import {
+	type InstallMode,
 	type InstallResult,
 	installPrompts,
 	installSchema,
@@ -26,7 +27,8 @@ const isWindows = process.platform === 'win32';
 
 interface SyncVaultOptions {
 	lang: 'zh' | 'en';
-	skillMode: 'overwrite' | 'smart-merge';
+	assetMode: InstallMode;
+	skillMode: InstallMode;
 	ensureMcp: boolean;
 }
 
@@ -39,9 +41,20 @@ export async function syncVault(
 	ensureDirectoryStructure(targetPath, config, options.lang);
 
 	const result: InstallResult = { updated: [], skipped: [], unchanged: [] };
-	result.updated.push(...installTemplates(targetPath, config));
-	result.updated.push(...installSchema(targetPath, config));
-	result.updated.push(...installPrompts(targetPath, config));
+	const templateResult = installTemplates(targetPath, config, options.assetMode);
+	result.updated.push(...templateResult.updated);
+	result.skipped.push(...templateResult.skipped);
+	result.unchanged.push(...templateResult.unchanged);
+
+	const schemaResult = installSchema(targetPath, config, options.assetMode);
+	result.updated.push(...schemaResult.updated);
+	result.skipped.push(...schemaResult.skipped);
+	result.unchanged.push(...schemaResult.unchanged);
+
+	const promptResult = installPrompts(targetPath, config, options.assetMode);
+	result.updated.push(...promptResult.updated);
+	result.skipped.push(...promptResult.skipped);
+	result.unchanged.push(...promptResult.unchanged);
 
 	const skillResult = installSkills(targetPath, options.lang, options.skillMode);
 	result.updated.push(...skillResult.updated);

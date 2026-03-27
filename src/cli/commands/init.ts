@@ -142,6 +142,7 @@ export default async function init(args: string[]): Promise<void> {
 	// 5. Sync vault scaffold
 	await syncVault(targetPath, preset, {
 		lang,
+		assetMode: 'overwrite',
 		skillMode: 'overwrite',
 		ensureMcp: !noMcp,
 	});

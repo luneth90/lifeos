@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LifeOSConfig } from '../../config.js';
-import { assetsDir, copyDir, ensureDir } from './assets.js';
+import { assetsDir, ensureDir } from './assets.js';
 import { resolveSkillFiles } from './lang.js';
 import { log, yellow } from './ui.js';
 
@@ -11,65 +11,118 @@ export interface InstallResult {
 	unchanged: string[];
 }
 
+export type InstallMode = 'overwrite' | 'smart-merge';
+
+function syncAssetFiles(
+	entries: Array<{ srcPath: string; destPath: string; displayPath: string }>,
+	mode: InstallMode,
+): InstallResult {
+	const result: InstallResult = { updated: [], skipped: [], unchanged: [] };
+
+	for (const entry of entries) {
+		ensureDir(join(entry.destPath, '..'));
+
+		if (mode === 'overwrite' || !existsSync(entry.destPath)) {
+			copyFileSync(entry.srcPath, entry.destPath);
+			result.updated.push(entry.displayPath);
+			continue;
+		}
+
+		const existing = readFileSync(entry.destPath, 'utf-8');
+		const incoming = readFileSync(entry.srcPath, 'utf-8');
+		if (existing === incoming) {
+			result.unchanged.push(entry.displayPath);
+			continue;
+		}
+
+		result.skipped.push(entry.displayPath);
+		log(yellow('⚠'), `Skipping modified: ${entry.displayPath}`);
+	}
+
+	return result;
+}
+
 /**
  * Copy language-specific templates from assets to vault.
- * Always overwrites existing files (Tier 1).
+ * Supports overwrite for init and smart-merge for upgrade.
  */
-export function installTemplates(targetPath: string, config: LifeOSConfig): string[] {
+export function installTemplates(
+	targetPath: string,
+	config: LifeOSConfig,
+	mode: InstallMode,
+): InstallResult {
 	const lang = config.language === 'en' ? 'en' : 'zh';
 	const src = join(assetsDir(), 'templates', lang);
 	const dest = join(targetPath, config.directories.system, config.subdirectories.system.templates);
-	if (!existsSync(src)) return [];
+	if (!existsSync(src)) return { updated: [], skipped: [], unchanged: [] };
 
 	ensureDir(dest);
-	copyDir(src, dest);
-
-	return readdirSync(src)
+	const entries = readdirSync(src)
 		.filter((f) => !f.startsWith('.'))
-		.map((f) => `${config.directories.system}/${config.subdirectories.system.templates}/${f}`);
+		.map((f) => ({
+			srcPath: join(src, f),
+			destPath: join(dest, f),
+			displayPath: `${config.directories.system}/${config.subdirectories.system.templates}/${f}`,
+		}));
+
+	return syncAssetFiles(entries, mode);
 }
 
 /**
  * Copy schema files from assets to vault.
- * Always overwrites existing files (Tier 1).
+ * Supports overwrite for init and smart-merge for upgrade.
  */
-export function installSchema(targetPath: string, config: LifeOSConfig): string[] {
+export function installSchema(
+	targetPath: string,
+	config: LifeOSConfig,
+	mode: InstallMode,
+): InstallResult {
 	const src = join(assetsDir(), 'schema');
 	const dest = join(targetPath, config.directories.system, config.subdirectories.system.schema);
-	if (!existsSync(src)) return [];
+	if (!existsSync(src)) return { updated: [], skipped: [], unchanged: [] };
 
 	ensureDir(dest);
-	copyDir(src, dest);
-
-	return readdirSync(src)
+	const entries = readdirSync(src)
 		.filter((f) => !f.startsWith('.'))
-		.map((f) => `${config.directories.system}/${config.subdirectories.system.schema}/${f}`);
+		.map((f) => ({
+			srcPath: join(src, f),
+			destPath: join(dest, f),
+			displayPath: `${config.directories.system}/${config.subdirectories.system.schema}/${f}`,
+		}));
+
+	return syncAssetFiles(entries, mode);
 }
 
 /**
  * Copy language-specific prompt files from assets to vault.
  * Files are named `Foo_Prompt.zh.md` / `Foo_Prompt.en.md`;
  * only the matching language is copied, with the lang suffix stripped.
- * Always overwrites existing files (Tier 1).
+ * Supports overwrite for init and smart-merge for upgrade.
  */
-export function installPrompts(targetPath: string, config: LifeOSConfig): string[] {
+export function installPrompts(
+	targetPath: string,
+	config: LifeOSConfig,
+	mode: InstallMode,
+): InstallResult {
 	const lang = config.language === 'en' ? 'en' : 'zh';
 	const suffix = `.${lang}.md`;
 	const src = join(assetsDir(), 'prompts');
 	const dest = join(targetPath, config.directories.system, config.subdirectories.system.prompts);
-	if (!existsSync(src)) return [];
+	if (!existsSync(src)) return { updated: [], skipped: [], unchanged: [] };
 
 	ensureDir(dest);
-	const copied: string[] = [];
+	const entries = readdirSync(src)
+		.filter((file) => file.endsWith(suffix))
+		.map((file) => {
+			const destName = file.replace(suffix, '.md');
+			return {
+				srcPath: join(src, file),
+				destPath: join(dest, destName),
+				displayPath: `${config.directories.system}/${config.subdirectories.system.prompts}/${destName}`,
+			};
+		});
 
-	for (const file of readdirSync(src)) {
-		if (!file.endsWith(suffix)) continue;
-		const destName = file.replace(suffix, '.md');
-		copyFileSync(join(src, file), join(dest, destName));
-		copied.push(`${config.directories.system}/${config.subdirectories.system.prompts}/${destName}`);
-	}
-
-	return copied;
+	return syncAssetFiles(entries, mode);
 }
 
 /**
@@ -82,12 +135,13 @@ export function installPrompts(targetPath: string, config: LifeOSConfig): string
 export function installSkills(
 	targetPath: string,
 	lang: 'zh' | 'en',
-	mode: 'overwrite' | 'smart-merge',
+	mode: InstallMode,
 ): InstallResult {
-	const result: InstallResult = { updated: [], skipped: [], unchanged: [] };
 	const skillsSrc = join(assetsDir(), 'skills');
 	const skillsDest = join(targetPath, '.agents', 'skills');
-	if (!existsSync(skillsSrc)) return result;
+	if (!existsSync(skillsSrc)) return { updated: [], skipped: [], unchanged: [] };
+
+	const entries: Array<{ srcPath: string; destPath: string; displayPath: string }> = [];
 
 	for (const skillName of readdirSync(skillsSrc)) {
 		const skillSrcDir = join(skillsSrc, skillName);
@@ -96,30 +150,9 @@ export function installSkills(
 		for (const [destRelPath, srcPath] of fileMap) {
 			const destPath = join(skillsDest, skillName, destRelPath);
 			const displayPath = `.agents/skills/${skillName}/${destRelPath}`;
-
-			if (mode === 'overwrite') {
-				ensureDir(join(destPath, '..'));
-				copyFileSync(srcPath, destPath);
-				result.updated.push(displayPath);
-			} else {
-				// smart-merge
-				if (!existsSync(destPath)) {
-					ensureDir(join(destPath, '..'));
-					copyFileSync(srcPath, destPath);
-					result.updated.push(displayPath);
-				} else {
-					const existing = readFileSync(destPath, 'utf-8');
-					const incoming = readFileSync(srcPath, 'utf-8');
-					if (existing === incoming) {
-						result.unchanged.push(displayPath);
-					} else {
-						result.skipped.push(displayPath);
-						log(yellow('⚠'), `Skipping modified: ${displayPath}`);
-					}
-				}
-			}
+			entries.push({ srcPath, destPath, displayPath });
 		}
 	}
 
-	return result;
+	return syncAssetFiles(entries, mode);
 }
