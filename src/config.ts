@@ -44,6 +44,11 @@ interface MemoryConfig {
 	context_budgets: Record<string, number>;
 }
 
+interface ManagedAssetRecord {
+	version: string;
+	sha256: string;
+}
+
 interface LifeOSConfig {
 	version?: string;
 	language: string;
@@ -51,6 +56,7 @@ interface LifeOSConfig {
 	subdirectories: SubdirectoriesConfig;
 	memory: MemoryConfig;
 	installed_versions?: { cli?: string; assets?: string };
+	managed_assets?: Record<string, ManagedAssetRecord>;
 	[key: string]: unknown;
 }
 
@@ -460,4 +466,4 @@ const EN_REFLECTION_SUBS: readonly string[] = [
 // ─── Re-exports for CLI ──────────────────────────────────────────────────────
 
 export { ZH_PRESET, EN_PRESET, ZH_REFLECTION_SUBS, EN_REFLECTION_SUBS };
-export type { LifeOSConfig };
+export type { LifeOSConfig, ManagedAssetRecord };

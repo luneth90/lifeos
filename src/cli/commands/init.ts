@@ -130,7 +130,7 @@ export default async function init(args: string[]): Promise<void> {
 	ensureDir(targetPath);
 
 	// 4. Generate lifeos.yaml
-	const yamlConfig = {
+	const yamlConfig: LifeOSConfig = {
 		...preset,
 		installed_versions: {
 			cli: VERSION,
@@ -140,12 +140,16 @@ export default async function init(args: string[]): Promise<void> {
 	writeFileSync(yamlPath, stringifyYaml(yamlConfig), 'utf-8');
 
 	// 5. Sync vault scaffold
-	await syncVault(targetPath, preset, {
+	const syncResult = await syncVault(targetPath, yamlConfig, {
 		lang,
 		assetMode: 'overwrite',
 		skillMode: 'overwrite',
 		ensureMcp: !noMcp,
+		assetVersion: VERSION,
 	});
+
+	yamlConfig.managed_assets = syncResult.managedAssets ?? {};
+	writeFileSync(yamlPath, stringifyYaml(yamlConfig), 'utf-8');
 
 	// 6. Print summary
 	log(green('✔'), bold('LifeOS vault initialized'));

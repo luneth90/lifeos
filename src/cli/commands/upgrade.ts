@@ -55,6 +55,7 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 		assetMode: 'smart-merge',
 		skillMode: 'smart-merge',
 		ensureMcp: true,
+		assetVersion: VERSION,
 	});
 	result.updated.push(...syncResult.updated);
 	result.skipped.push(...syncResult.skipped);
@@ -64,6 +65,7 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	if (!config.installed_versions) {
 		config.installed_versions = {};
 	}
+	config.managed_assets = syncResult.managedAssets ?? config.managed_assets ?? {};
 	config.installed_versions.cli = VERSION;
 	config.installed_versions.assets = VERSION;
 	writeFileSync(yamlPath, stringifyYaml(config), 'utf-8');

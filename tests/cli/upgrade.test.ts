@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,16 +12,30 @@ function makeTmpDir() {
 }
 
 function patchVersion(vaultDir: string, version: string) {
-	const yamlPath = join(vaultDir, 'lifeos.yaml');
-	const content = readFileSync(yamlPath, 'utf-8');
-	const config = parseYaml(content) as Record<string, Record<string, string>>;
-	config.installed_versions.assets = version;
-	writeFileSync(yamlPath, stringifyYaml(config), 'utf-8');
+	updateYamlConfig(vaultDir, (config) => {
+		const versions = (config.installed_versions as Record<string, string> | undefined) ?? {};
+		versions.assets = version;
+		config.installed_versions = versions;
+	});
 }
 
 function readYamlConfig(vaultDir: string) {
 	const yamlPath = join(vaultDir, 'lifeos.yaml');
 	return parseYaml(readFileSync(yamlPath, 'utf-8')) as Record<string, unknown>;
+}
+
+function updateYamlConfig(
+	vaultDir: string,
+	mutate: (config: Record<string, unknown>) => void,
+) {
+	const yamlPath = join(vaultDir, 'lifeos.yaml');
+	const config = readYamlConfig(vaultDir);
+	mutate(config);
+	writeFileSync(yamlPath, stringifyYaml(config), 'utf-8');
+}
+
+function sha256(content: string) {
+	return createHash('sha256').update(content).digest('hex');
 }
 
 describe('lifeos upgrade', () => {
@@ -85,6 +100,40 @@ describe('lifeos upgrade', () => {
 		expect(result.skipped).toContain('90_系统/模板/Daily_Template.md');
 	});
 
+	test('upgrades tracked unchanged templates when managed hash matches current content', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		const templatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
+		const latestTemplate = readFileSync(templatePath, 'utf-8');
+		const previousTemplate = 'OLDER MANAGED TEMPLATE CONTENT';
+		writeFileSync(templatePath, previousTemplate, 'utf-8');
+
+		updateYamlConfig(dir, (config) => {
+			const versions = (config.installed_versions as Record<string, string> | undefined) ?? {};
+			versions.assets = '0.0.1';
+			config.installed_versions = versions;
+			config.managed_assets = {
+				...(config.managed_assets as Record<string, unknown> | undefined),
+				'90_系统/模板/Daily_Template.md': {
+					version: '0.0.1',
+					sha256: sha256(previousTemplate),
+				},
+			};
+		});
+
+		const result = await upgrade([dir]);
+		const config = readYamlConfig(dir) as {
+			managed_assets?: Record<string, { version?: string; sha256?: string }>;
+		};
+
+		expect(readFileSync(templatePath, 'utf-8')).toBe(latestTemplate);
+		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
+		expect(config.managed_assets?.['90_系统/模板/Daily_Template.md']).toEqual({
+			version: '1.0.0',
+			sha256: sha256(latestTemplate),
+		});
+	});
+
 	test('skips modified schema during upgrade', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 
@@ -115,6 +164,25 @@ describe('lifeos upgrade', () => {
 
 		expect(readFileSync(promptPath, 'utf-8')).toBe('USER MODIFIED PROMPT');
 		expect(result.skipped).toContain('90_系统/提示词/AI_LLMResearch_Prompt.md');
+	});
+
+	test('skips differing templates conservatively when managed hash metadata is missing', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		const templatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
+		writeFileSync(templatePath, 'LEGACY TEMPLATE WITHOUT MANIFEST', 'utf-8');
+
+		updateYamlConfig(dir, (config) => {
+			const versions = (config.installed_versions as Record<string, string> | undefined) ?? {};
+			versions.assets = '0.0.1';
+			config.installed_versions = versions;
+			delete config.managed_assets;
+		});
+
+		const result = await upgrade([dir]);
+
+		expect(readFileSync(templatePath, 'utf-8')).toBe('LEGACY TEMPLATE WITHOUT MANIFEST');
+		expect(result.skipped).toContain('90_系统/模板/Daily_Template.md');
 	});
 
 	test('skips modified skill files (Tier 2)', async () => {

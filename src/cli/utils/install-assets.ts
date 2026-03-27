@@ -3,35 +3,85 @@ import { join } from 'node:path';
 import type { LifeOSConfig } from '../../config.js';
 import { assetsDir, ensureDir } from './assets.js';
 import { resolveSkillFiles } from './lang.js';
+import {
+	type ManagedAssetsMap,
+	buildManagedAssetRecord,
+	isManagedAssetRecord,
+	sha256Content,
+} from './managed-assets.js';
 import { log, yellow } from './ui.js';
 
 export interface InstallResult {
 	updated: string[];
 	skipped: string[];
 	unchanged: string[];
+	managedAssets?: ManagedAssetsMap;
 }
 
 export type InstallMode = 'overwrite' | 'smart-merge';
 
+interface ManagedAssetContext {
+	managedAssets: ManagedAssetsMap;
+	version: string;
+}
+
 function syncAssetFiles(
 	entries: Array<{ srcPath: string; destPath: string; displayPath: string }>,
 	mode: InstallMode,
+	managedAssetContext?: ManagedAssetContext,
 ): InstallResult {
-	const result: InstallResult = { updated: [], skipped: [], unchanged: [] };
+	const nextManagedAssets = managedAssetContext
+		? { ...managedAssetContext.managedAssets }
+		: undefined;
+	const result: InstallResult = {
+		updated: [],
+		skipped: [],
+		unchanged: [],
+		managedAssets: nextManagedAssets,
+	};
 
 	for (const entry of entries) {
 		ensureDir(join(entry.destPath, '..'));
+		const incoming = readFileSync(entry.srcPath, 'utf-8');
 
 		if (mode === 'overwrite' || !existsSync(entry.destPath)) {
 			copyFileSync(entry.srcPath, entry.destPath);
 			result.updated.push(entry.displayPath);
+			if (nextManagedAssets && managedAssetContext) {
+				nextManagedAssets[entry.displayPath] = buildManagedAssetRecord(
+					incoming,
+					managedAssetContext.version,
+				);
+			}
 			continue;
 		}
 
 		const existing = readFileSync(entry.destPath, 'utf-8');
-		const incoming = readFileSync(entry.srcPath, 'utf-8');
 		if (existing === incoming) {
 			result.unchanged.push(entry.displayPath);
+			if (nextManagedAssets && managedAssetContext) {
+				nextManagedAssets[entry.displayPath] = buildManagedAssetRecord(
+					incoming,
+					managedAssetContext.version,
+				);
+			}
+			continue;
+		}
+
+		const previousRecord = nextManagedAssets?.[entry.displayPath];
+		if (
+			mode === 'smart-merge' &&
+			managedAssetContext &&
+			nextManagedAssets &&
+			isManagedAssetRecord(previousRecord) &&
+			sha256Content(existing) === previousRecord.sha256
+		) {
+			copyFileSync(entry.srcPath, entry.destPath);
+			result.updated.push(entry.displayPath);
+			nextManagedAssets[entry.displayPath] = buildManagedAssetRecord(
+				incoming,
+				managedAssetContext.version,
+			);
 			continue;
 		}
 
@@ -50,6 +100,7 @@ export function installTemplates(
 	targetPath: string,
 	config: LifeOSConfig,
 	mode: InstallMode,
+	managedAssetContext?: ManagedAssetContext,
 ): InstallResult {
 	const lang = config.language === 'en' ? 'en' : 'zh';
 	const src = join(assetsDir(), 'templates', lang);
@@ -65,7 +116,7 @@ export function installTemplates(
 			displayPath: `${config.directories.system}/${config.subdirectories.system.templates}/${f}`,
 		}));
 
-	return syncAssetFiles(entries, mode);
+	return syncAssetFiles(entries, mode, managedAssetContext);
 }
 
 /**
@@ -76,6 +127,7 @@ export function installSchema(
 	targetPath: string,
 	config: LifeOSConfig,
 	mode: InstallMode,
+	managedAssetContext?: ManagedAssetContext,
 ): InstallResult {
 	const src = join(assetsDir(), 'schema');
 	const dest = join(targetPath, config.directories.system, config.subdirectories.system.schema);
@@ -90,7 +142,7 @@ export function installSchema(
 			displayPath: `${config.directories.system}/${config.subdirectories.system.schema}/${f}`,
 		}));
 
-	return syncAssetFiles(entries, mode);
+	return syncAssetFiles(entries, mode, managedAssetContext);
 }
 
 /**
@@ -103,6 +155,7 @@ export function installPrompts(
 	targetPath: string,
 	config: LifeOSConfig,
 	mode: InstallMode,
+	managedAssetContext?: ManagedAssetContext,
 ): InstallResult {
 	const lang = config.language === 'en' ? 'en' : 'zh';
 	const suffix = `.${lang}.md`;
@@ -122,7 +175,7 @@ export function installPrompts(
 			};
 		});
 
-	return syncAssetFiles(entries, mode);
+	return syncAssetFiles(entries, mode, managedAssetContext);
 }
 
 /**
@@ -136,6 +189,7 @@ export function installSkills(
 	targetPath: string,
 	lang: 'zh' | 'en',
 	mode: InstallMode,
+	managedAssetContext?: ManagedAssetContext,
 ): InstallResult {
 	const skillsSrc = join(assetsDir(), 'skills');
 	const skillsDest = join(targetPath, '.agents', 'skills');
@@ -154,5 +208,5 @@ export function installSkills(
 		}
 	}
 
-	return syncAssetFiles(entries, mode);
+	return syncAssetFiles(entries, mode, managedAssetContext);
 }

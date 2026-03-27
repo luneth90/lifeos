@@ -12,6 +12,7 @@ import {
 	installSkills,
 	installTemplates,
 } from './install-assets.js';
+import { cloneManagedAssets } from './managed-assets.js';
 import { registerMcp } from './mcp-register.js';
 
 const GITIGNORE = `# LifeOS
@@ -30,6 +31,7 @@ interface SyncVaultOptions {
 	assetMode: InstallMode;
 	skillMode: InstallMode;
 	ensureMcp: boolean;
+	assetVersion: string;
 }
 
 export async function syncVault(
@@ -40,26 +42,43 @@ export async function syncVault(
 	ensureDir(targetPath);
 	ensureDirectoryStructure(targetPath, config, options.lang);
 
+	let managedAssets = cloneManagedAssets(config.managed_assets);
 	const result: InstallResult = { updated: [], skipped: [], unchanged: [] };
-	const templateResult = installTemplates(targetPath, config, options.assetMode);
+	const templateResult = installTemplates(targetPath, config, options.assetMode, {
+		managedAssets,
+		version: options.assetVersion,
+	});
 	result.updated.push(...templateResult.updated);
 	result.skipped.push(...templateResult.skipped);
 	result.unchanged.push(...templateResult.unchanged);
+	managedAssets = templateResult.managedAssets ?? managedAssets;
 
-	const schemaResult = installSchema(targetPath, config, options.assetMode);
+	const schemaResult = installSchema(targetPath, config, options.assetMode, {
+		managedAssets,
+		version: options.assetVersion,
+	});
 	result.updated.push(...schemaResult.updated);
 	result.skipped.push(...schemaResult.skipped);
 	result.unchanged.push(...schemaResult.unchanged);
+	managedAssets = schemaResult.managedAssets ?? managedAssets;
 
-	const promptResult = installPrompts(targetPath, config, options.assetMode);
+	const promptResult = installPrompts(targetPath, config, options.assetMode, {
+		managedAssets,
+		version: options.assetVersion,
+	});
 	result.updated.push(...promptResult.updated);
 	result.skipped.push(...promptResult.skipped);
 	result.unchanged.push(...promptResult.unchanged);
+	managedAssets = promptResult.managedAssets ?? managedAssets;
 
-	const skillResult = installSkills(targetPath, options.lang, options.skillMode);
+	const skillResult = installSkills(targetPath, options.lang, options.skillMode, {
+		managedAssets,
+		version: options.assetVersion,
+	});
 	result.updated.push(...skillResult.updated);
 	result.skipped.push(...skillResult.skipped);
 	result.unchanged.push(...skillResult.unchanged);
+	managedAssets = skillResult.managedAssets ?? managedAssets;
 
 	ensureClaudeSkillsLink(targetPath);
 	ensureRulesFiles(targetPath, options.lang);
@@ -70,6 +89,7 @@ export async function syncVault(
 		await registerMcp(targetPath, 'merge-missing');
 	}
 
+	result.managedAssets = managedAssets;
 	return result;
 }
 

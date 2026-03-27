@@ -21,6 +21,9 @@
     "lint": "biome check src/",
     "lint:fix": "biome check --fix src/",
     "typecheck": "tsc --noEmit",
+    "release:check-version": "node scripts/release/check-version.mjs",
+    "release:verify": "npm run typecheck && npm run lint && npm test && npm run build",
+    "release:pack": "node scripts/release/pack.mjs",
     "prepublishOnly": "npm run build && npm run test"
   },
   "dependencies": {

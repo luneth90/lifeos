@@ -116,6 +116,26 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(versions.assets).toBe('1.0.0');
 	});
 
+	test('records managed asset hashes in lifeos.yaml', async () => {
+		await init([dir, '--lang', lang, '--no-mcp']);
+
+		const config = parseYaml(readFileSync(join(dir, 'lifeos.yaml'), 'utf-8')) as {
+			managed_assets?: Record<string, { version?: string; sha256?: string }>;
+		};
+		const managedAssets = config.managed_assets;
+
+		expect(managedAssets).toBeDefined();
+		expect(managedAssets?.[`${d.system}/${d.templates}/Daily_Template.md`]).toMatchObject({
+			version: '1.0.0',
+		});
+		expect(managedAssets?.[`${d.system}/${d.templates}/Daily_Template.md`]?.sha256).toMatch(
+			/^[0-9a-f]{64}$/,
+		);
+		expect(managedAssets?.['.agents/skills/today/SKILL.md']).toMatchObject({
+			version: '1.0.0',
+		});
+	});
+
 	test('copies templates to system directory', async () => {
 		await init([dir, '--lang', lang, '--no-mcp']);
 

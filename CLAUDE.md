@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 LifeOS Memory System — an MCP server providing persistent knowledge management and session memory for AI assistants. It indexes an Obsidian-compatible vault of markdown files, maintains a session event log, and assembles contextual summaries for skill execution. Exposes 11 tools over MCP stdio transport.
