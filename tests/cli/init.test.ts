@@ -19,6 +19,7 @@ const ZH_DIRS = {
 	templates: '模板',
 	schema: '规范',
 	memory: '记忆',
+	archiveDiary: '归档/日记',
 	reflectionSubs: ['周复盘', '月复盘', '季度复盘', '年度复盘', '项目复盘'],
 	topLevel: [
 		'00_草稿',
@@ -44,6 +45,7 @@ const EN_DIRS = {
 	templates: 'Templates',
 	schema: 'Schema',
 	memory: 'Memory',
+	archiveDiary: 'Archive/Diary',
 	reflectionSubs: ['Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Projects'],
 	topLevel: [
 		'00_Drafts',
@@ -88,6 +90,7 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(existsSync(join(dir, d.system, d.templates))).toBe(true);
 		expect(existsSync(join(dir, d.system, d.schema))).toBe(true);
 		expect(existsSync(join(dir, d.system, d.memory))).toBe(true);
+		expect(existsSync(join(dir, d.system, d.archiveDiary))).toBe(true);
 
 		// Reflection subdirectories
 		for (const sub of d.reflectionSubs) {

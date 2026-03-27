@@ -108,7 +108,7 @@ This means LifeOS does not lock you into fixed directory names. You can freely a
 | `/read-pdf` | PDF -> structured notes |
 | `/ask` | Quick Q&A |
 | `/brainstorm` | Interactive brainstorming |
-| `/archive` | Archive completed projects, processed drafts, and completed plans |
+| `/archive` | Archive completed projects, processed drafts, completed plans, and diary entries older than the most recent 7 days |
 
 ## Custom Expert Prompts
 

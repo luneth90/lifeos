@@ -45,6 +45,9 @@ describe('VaultConfig — zh preset (default)', () => {
     const cfg = new VaultConfig(tmp.root);
     expect(cfg.rawConfig.language).toBe('zh');
     expect(cfg.rawConfig.directories.drafts).toBe('00_草稿');
+    expect((cfg.rawConfig.subdirectories.system.archive as Record<string, string>).diary).toBe(
+      '归档/日记',
+    );
   });
 
   it('vaultRoot returns the absolute path', () => {
@@ -158,6 +161,9 @@ describe('VaultConfig — lifeos.yaml loading', () => {
     expect(cfg.rawConfig.language).toBe('en');
     // en preset uses English folder names
     expect(cfg.dirPath('drafts')).toBe(join(tmp.root, '00_Drafts'));
+    expect((cfg.rawConfig.subdirectories.system.archive as Record<string, string>).diary).toBe(
+      'Archive/Diary',
+    );
   });
 
   it('custom db_name overrides default', () => {

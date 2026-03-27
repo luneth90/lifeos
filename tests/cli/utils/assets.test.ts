@@ -15,11 +15,14 @@ describe('assetsDir', () => {
 
 	test('documents plan lifecycle and plan statuses across schema and skills', () => {
 		const dir = assetsDir();
+		const lifeosYaml = readFileSync(join(dir, 'lifeos.yaml'), 'utf-8');
 		const schema = readFileSync(join(dir, 'schema', 'Frontmatter_Schema.md'), 'utf-8');
 		const lifecycleZh = readFileSync(join(dir, 'skills', '_shared', 'lifecycle.zh.md'), 'utf-8');
 		const lifecycleEn = readFileSync(join(dir, 'skills', '_shared', 'lifecycle.en.md'), 'utf-8');
 		const archiveZh = readFileSync(join(dir, 'skills', 'archive', 'SKILL.zh.md'), 'utf-8');
 		const archiveEn = readFileSync(join(dir, 'skills', 'archive', 'SKILL.en.md'), 'utf-8');
+		const rulesZh = readFileSync(join(dir, 'lifeos-rules.zh.md'), 'utf-8');
+		const rulesEn = readFileSync(join(dir, 'lifeos-rules.en.md'), 'utf-8');
 		const projectPlanZh = readFileSync(
 			join(dir, 'skills', 'project', 'references', 'planning-agent-prompt.zh.md'),
 			'utf-8',
@@ -56,12 +59,19 @@ describe('assetsDir', () => {
 		expect(researchExecZh).toContain('将计划文件的 frontmatter 中 `status` 更新为 `done`');
 		expect(researchExecZh).not.toContain('将计划文件从 `{计划目录}/` 移动到');
 
+		expect(lifeosYaml).toContain('diary: "归档/日记"');
 		expect(archiveZh).toContain('{计划目录}');
 		expect(archiveZh).toContain('{归档计划子目录}');
+		expect(archiveZh).toContain('{归档日记子目录}');
+		expect(archiveZh).toContain('最近 7 天');
 		expect(archiveZh).toContain('status: done');
 		expect(archiveEn).toContain('{plans directory}');
 		expect(archiveEn).toContain('{archived plans subdirectory}');
+		expect(archiveEn).toContain('{archived diary subdirectory}');
+		expect(archiveEn).toContain('most recent 7 days');
 		expect(archiveEn).toContain('status: done');
+		expect(rulesZh).toContain('归档/日记/YYYY/MM/');
+		expect(rulesEn).toContain('Archive/Diary/YYYY/MM/');
 	});
 });
 

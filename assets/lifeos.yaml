@@ -29,6 +29,7 @@ subdirectories:
       projects: "归档/项目"
       drafts: "归档/草稿"
       plans: "归档/计划"
+      diary: "归档/日记"
 
 memory:
   db_name: memory.db

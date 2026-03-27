@@ -1,6 +1,6 @@
 ---
 name: archive
-description: "Scan and archive completed projects (status:done), consumed drafts (status:researched/projected/knowledged), and completed plans (status: done), moving them into the unified archive structure and updating frontmatter. Never touches pending drafts or active plans. Use this skill when the user wants to clean up the Vault, archive completed work, tidy up, or says '/archive'."
+description: "Scan and archive completed projects (status:done), consumed drafts (status:researched/projected/knowledged), completed plans (status: done), and diary entries older than the most recent 7 days, moving them into the unified archive structure and updating frontmatter. Never touches pending drafts, active plans, or the most recent 7 days of diary entries. Use this skill when the user wants to clean up the Vault, archive completed work, tidy up, or says '/archive'."
 version: 1.0.0
 dependencies:
   templates: []
@@ -22,12 +22,13 @@ dependencies:
 > - `{archived projects subdirectory}` → subdirectories.system.archive.projects
 > - `{archived drafts subdirectory}` → subdirectories.system.archive.drafts
 > - `{archived plans subdirectory}` → subdirectories.system.archive.plans
+> - `{archived diary subdirectory}` → subdirectories.system.archive.diary
 
 You are LifeOS's archive manager, helping users keep the Vault's active space tidy. You only archive completed work, never touch content still being processed, and always require user confirmation before archiving.
 
 # Goal
 
-Help the user archive completed projects, processed drafts, and completed plans, keeping the active workspace tidy while fully preserving historical records.
+Help the user archive completed projects, processed drafts, completed plans, and diary entries older than the most recent 7 days, keeping the active workspace tidy while fully preserving historical records.
 
 # Workflow
 
@@ -45,6 +46,8 @@ memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 
 Use the query results as the candidate list; confirm each candidate file individually in Step 1.
 
+Diary archival does not depend on `status`. In Step 1, determine diary candidates directly from `{diary directory}/YYYY-MM-DD.md` filenames and whether they fall outside the most recent 7 days.
+
 ## Step 1: Identify Archivable Content (Silent Scan)
 
 1. **Scan completed projects:**
@@ -61,7 +64,14 @@ Use the query results as the candidate list; confirm each candidate file individ
    - Find all plan files with `status: done` in `{plans directory}/`
    - **Do not archive** plans with `status: active` (still in execution or review)
 
-4. **Present summary:**
+4. **Scan diary entries to archive:**
+   - Find all diary files in `{diary directory}/` matching the `YYYY-MM-DD.md` naming pattern
+   - Keep the most recent 7 days (including today) in `{diary directory}/`
+   - Add older diary files to the archival list, targeting `{system directory}/{archived diary subdirectory}/YYYY/MM/`
+   - **Do not archive** the most recent 7 days of diary entries
+   - **Skip** files that do not match `YYYY-MM-DD.md`, and mention them in the summary
+
+5. **Present summary:**
 
 ```
 ## Content to Archive
@@ -79,17 +89,32 @@ Use the query results as the candidate list; confirm each candidate file individ
 - [[Plan_2026-03-27_Project_LifeOS]] - status: done, waiting for `{archived plans subdirectory}`
 - [[Plan_2026-03-27_Research_Agents]] - status: done, waiting for `{archived plans subdirectory}`
 
-**Skipped (still pending):**
+**Diary entries to archive ([N]):**
+- [[2026-03-18]] - older than the most recent 7 days, waiting for `{archived diary subdirectory}/2026/03/`
+- [[2026-03-19]] - older than the most recent 7 days, waiting for `{archived diary subdirectory}/2026/03/`
+
+**Kept in `{diary directory}` (most recent 7 days):**
+- [[2026-03-21]]
+- [[2026-03-22]]
+- [[2026-03-23]]
+- [[2026-03-24]]
+- [[2026-03-25]]
+- [[2026-03-26]]
+- [[2026-03-27]]
+
+**Skipped (still pending / not archivable):**
 - [[Draft4]] (pending) - can be processed with /research, /project, or /knowledge
 - [[Plan_2026-03-28_Project_X]] (active) - plan is still in execution or under review
+- [[Scratch.md]] - filename does not follow the diary naming rule
 
 Please choose:
 1. Archive all
 2. Archive projects only
 3. Archive drafts only
 4. Archive plans only
-5. Select specific items
-6. Cancel
+5. Archive diary only
+6. Select specific items
+7. Cancel
 ```
 
 ## Step 2: Execute Archival
@@ -112,6 +137,11 @@ After user confirmation, for each item to archive:
    **Plan archival:**
    - Move to `{system directory}/{archived plans subdirectory}/Plan_YYYY-MM-DD_Type_Name.md`
    - Keep the original filename unchanged and store all archived plans in the shared plans archive directory
+
+   **Diary archival:**
+   - Move to `{system directory}/{archived diary subdirectory}/YYYY/MM/YYYY-MM-DD.md`
+   - Keep the original filename unchanged and organize by year/month
+   - Only archive diary entries older than the most recent 7 days
 
 3. **Update frontmatter:**
    - Add `archived: "YYYY-MM-DD"`
@@ -143,13 +173,19 @@ After user confirmation, for each item to archive:
 - Plan_2026-03-27_Project_LifeOS.md → archived/plans/ (status: archived)
 - Plan_2026-03-27_Research_Agents.md → archived/plans/ (status: archived)
 
+**Archived [N] diary entries to `{system directory}/{archived diary subdirectory}/YYYY/MM/`:**
+- 2026-03-18.md → archived/diary/2026/03/
+- 2026-03-19.md → archived/diary/2026/03/
+
 **Vault status:**
 - Active projects: [N]
 - Pending drafts (pending): [N]
 - Active/review plans (`active`): [N]
+- Diary entries kept in `{diary directory}` (most recent 7 days): [N]
 - Archived projects (total): [N]
 - Archived drafts (total): [N]
 - Archived plans (total): [N]
+- Archived diary entries (total): [N]
 
 **Suggestions:**
 - [ ] Check on-hold projects to see if they need archiving
@@ -160,8 +196,9 @@ After user confirmation, for each item to archive:
 
 - **Only archive processed drafts** — drafts with `status: pending` are never archived
 - **Only archive completed plans** — only plans with `status: done` can be archived; plans with `status: active` are never archived
+- **Only archive diary entries older than the most recent 7 days** — `{diary directory}/` always keeps the most recent 7 days, including today
 - **Never delete** — only move, never destroy content
-- **Organize by archive rule** — projects by completion year, drafts by archival year and month, plans in `{archived plans subdirectory}`
+- **Organize by archive rule** — projects by completion year, drafts and diary entries by archival year and month, plans in `{archived plans subdirectory}`
 - **Confirm before archiving** — let the user review the list before execution
 - **Update frontmatter** — write the `archived` date; for plans also set `status: archived`
 - **Log in diary** — append archival actions to today's diary
@@ -170,6 +207,8 @@ After user confirmation, for each item to archive:
 
 - **Nothing to archive:** Inform the user the vault is tidy; suggest using `/research`, `/project`, or `/knowledge` to process pending drafts
 - **Plan still active:** Skip it and tell the user the plan is not complete yet, so it cannot be archived
+- **Fewer than 7 days of diary entries:** Do not archive any diary entries; explain that the diary directory is still within the retention window
+- **Diary filename does not match `YYYY-MM-DD.md`:** Skip the file and mention it in the summary to avoid archiving non-standard files by mistake
 - **Folder project with mixed statuses:** Ask the user whether to archive the entire folder or only specific files
 - **Large project with resources:** Confirm whether to also archive associated resources in `{resources directory}/`
 - **Recently completed project:** Remind the user they may want to do a project retrospective before archiving
@@ -196,6 +235,14 @@ After user confirmation, for each item to archive:
 │   └── 2025/
 │       └── 12/
 │           └── old-capture.md
+├── {archived diary subdirectory}/
+│   ├── 2026/
+│   │   └── 03/
+│   │       ├── 2026-03-18.md
+│   │       └── 2026-03-19.md
+│   └── 2025/
+│       └── 12/
+│           └── 2025-12-31.md
 └── {archived plans subdirectory}/
     ├── Plan_2026-03-27_Project_LifeOS.md
     └── Plan_2026-03-27_Research_Agents.md
@@ -205,6 +252,7 @@ After user confirmation, for each item to archive:
 
 - **Project archival:** Organized by completion year (structured work with deliverables)
 - **Draft archival:** Organized by archival year and month (digested fragmentary ideas)
+- **Diary archival:** Organized by archival year and month (daily records older than the most recent 7 days)
 - **Plan archival:** Stored in `{archived plans subdirectory}` as completed process artifacts
 
 # Additional Features

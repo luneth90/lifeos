@@ -52,6 +52,18 @@ describe('lifeos upgrade', () => {
 		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
 	});
 
+	test('same version: restores missing diary archive directory', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		const archiveDiaryDir = join(dir, '90_系统', '归档', '日记');
+		rmSync(archiveDiaryDir, { recursive: true, force: true });
+		expect(existsSync(archiveDiaryDir)).toBe(false);
+
+		await upgrade([dir]);
+
+		expect(existsSync(archiveDiaryDir)).toBe(true);
+	});
+
 	test('skips modified templates during upgrade', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 
@@ -245,12 +257,18 @@ describe('lifeos upgrade', () => {
 		expect((config.subdirectories as { system?: { templates?: string } }).system?.templates).toBe(
 			'模板',
 		);
+		expect(
+			(
+				config.subdirectories as { system?: { archive?: Record<string, string> } }
+			).system?.archive?.diary,
+		).toBe('归档/日记');
 	});
 
 	test('restores missing init-managed directories and files', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 
 		rmSync(join(dir, '90_系统', '记忆'), { recursive: true, force: true });
+		rmSync(join(dir, '90_系统', '归档', '日记'), { recursive: true, force: true });
 		rmSync(join(dir, '.claude'), { recursive: true, force: true });
 		rmSync(join(dir, 'CLAUDE.md'), { force: true });
 		rmSync(join(dir, 'AGENTS.md'), { force: true });
@@ -259,6 +277,7 @@ describe('lifeos upgrade', () => {
 		await upgrade([dir]);
 
 		expect(existsSync(join(dir, '90_系统', '记忆'))).toBe(true);
+		expect(existsSync(join(dir, '90_系统', '归档', '日记'))).toBe(true);
 		expect(existsSync(join(dir, '.claude', 'skills'))).toBe(true);
 		expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true);
 		expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true);

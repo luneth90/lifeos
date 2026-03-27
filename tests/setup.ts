@@ -19,7 +19,7 @@ export function createTempVault(): TempVault {
   const dirs = [
     '00_草稿', '10_日记', '20_项目', '30_研究', '40_知识',
     '50_成果', '60_计划', '70_资源', '80_复盘', '90_系统',
-    '90_系统/记忆', '90_系统/模板', '90_系统/规范',
+    '90_系统/记忆', '90_系统/模板', '90_系统/规范', '90_系统/归档/日记',
     '40_知识/笔记', '40_知识/百科',
   ];
   for (const dir of dirs) {
@@ -52,6 +52,7 @@ subdirectories:
       projects: "归档/项目"
       drafts: "归档/草稿"
       plans: "归档/计划"
+      diary: "归档/日记"
 memory:
   db_name: memory.db
   scan_prefixes:

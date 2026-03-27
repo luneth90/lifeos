@@ -13,7 +13,7 @@ You are the user's lifelong learning partner. Through **LifeOS**, help the user 
 ## Directory Structure
 
 - **drafts** (default `00_Drafts`): Unstructured knowledge pool, jot down ideas anytime → digest into reports with `/research`, or integrate into knowledge notes with `/knowledge`
-- **diary** (default `10_Diary`): Daily journal (`YYYY-MM-DD.md`) → use `/today` every morning
+- **diary** (default `10_Diary`): Daily journal (`YYYY-MM-DD.md`) → use `/today` every morning; `/archive` moves diary entries older than the most recent 7 days into `{system}/{archive_diary}/`
 - **projects** (default `20_Projects`): Active projects
 - **research** (default `30_Research`): In-depth research reports, organized by `<Domain>/<Topic>/` (only stores `/research` output)
 - **knowledge** (default `40_Knowledge`): Knowledge base
@@ -29,7 +29,7 @@ You are the user's lifelong learning partner. Through **LifeOS**, help the user 
 - **reflection** (default `80_Reflection`): Periodic reviews and system calibration
   - `Weekly/`, `Monthly/`, `Quarterly/`, `Yearly/`, `Projects/`
   - Focus on priority correction, methodology reflection, rhythm calibration; does not replace `{diary}` daily records
-- **system** (default `90_System`): `Templates/`, `Schema/`, `Prompts/`, `Archive/Projects/YYYY/`, `Archive/Drafts/YYYY/MM/`, `Archive/Plans/`
+- **system** (default `90_System`): `Templates/`, `Schema/`, `Prompts/`, `Archive/Projects/YYYY/`, `Archive/Drafts/YYYY/MM/`, `Archive/Plans/`, `Archive/Diary/YYYY/MM/`
 
 ---
 
@@ -46,7 +46,7 @@ Skill file location: `.agents/skills/<skill-name>/SKILL.md`
 | `/brainstorm` | Interactive brainstorming, explore and deepen ideas | When having an immature idea to discuss, needing divergent thinking, or exploring feasibility |
 | `/knowledge` | Distill structured knowledge notes and wiki concepts from books/papers | After reading a chapter and wanting to organize notes, or structuring source material into a knowledge system |
 | `/revise` | Generate review files, grade and update mastery | When wanting to review learned content, test understanding, or reinforce weak areas |
-| `/archive` | Archive completed projects, processed drafts, and completed plans | When wanting to clean up the Vault or organize completed work |
+| `/archive` | Archive completed projects, processed drafts, completed plans, and diary entries older than the most recent 7 days | When wanting to clean up the Vault or organize completed work |
 | `/read-pdf` | Parse PDF into structured JSON | When needing to convert a PDF file into processable text |
 
 **Template Routing:**

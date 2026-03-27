@@ -32,7 +32,7 @@ interface SubdirectoriesConfig {
 		schema: string;
 		memory: string;
 		prompts: string;
-		archive: { projects: string; drafts: string; plans: string };
+		archive: { projects: string; drafts: string; plans: string; diary: string };
 	};
 }
 
@@ -79,7 +79,12 @@ const ZH_PRESET: LifeOSConfig = {
 			schema: '规范',
 			memory: '记忆',
 			prompts: '提示词',
-			archive: { projects: '归档/项目', drafts: '归档/草稿', plans: '归档/计划' },
+			archive: {
+				projects: '归档/项目',
+				drafts: '归档/草稿',
+				plans: '归档/计划',
+				diary: '归档/日记',
+			},
 		},
 	},
 	memory: {
@@ -130,7 +135,12 @@ const EN_PRESET: LifeOSConfig = {
 			schema: 'Schema',
 			memory: 'Memory',
 			prompts: 'Prompts',
-			archive: { projects: 'Archive/Projects', drafts: 'Archive/Drafts', plans: 'Archive/Plans' },
+			archive: {
+				projects: 'Archive/Projects',
+				drafts: 'Archive/Drafts',
+				plans: 'Archive/Plans',
+				diary: 'Archive/Diary',
+			},
 		},
 	},
 	memory: {
