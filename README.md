@@ -22,7 +22,6 @@ LifeOS is a knowledge management system built on Obsidian Vault. AI Agent skills
 | **Node.js 18+** | Required | Runtime for MCP server and CLI |
 | **Git** | Required | Version control for vault data (including memory DB) |
 | **Python 3** | Required | PDF extraction (`/read-pdf` skill) |
-| **PyMuPDF + Pillow** | Required | `pip install PyMuPDF Pillow` |
 
 `lifeos init` will check all prerequisites before creating the workspace.
 

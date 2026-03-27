@@ -96,24 +96,6 @@ function checkPrerequisites(): { results: PrereqResult[]; pythonCmd: string | nu
 		hint: 'https://www.python.org/  (required by /read-pdf skill)',
 	});
 
-	// PyMuPDF — use the resolved python command with platform-safe quoting
-	if (pythonCmd) {
-		const importCmd = `${pythonCmd} -c "import fitz; print(fitz.version)"`;
-		const pymupdf = checkCommand(importCmd, '');
-		results.push({
-			name: 'PyMuPDF',
-			ok: pymupdf !== null,
-			version: pymupdf ?? undefined,
-			hint: 'pip install PyMuPDF Pillow  (required by /read-pdf skill)',
-		});
-	} else {
-		results.push({
-			name: 'PyMuPDF',
-			ok: false,
-			hint: 'pip install PyMuPDF Pillow  (install Python 3 first)',
-		});
-	}
-
 	return { results, pythonCmd };
 }
 
