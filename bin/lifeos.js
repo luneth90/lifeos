@@ -2,8 +2,10 @@
 
 const cmd = process.argv[2];
 const CLI_COMMANDS = ['init', 'upgrade', 'doctor', 'rename', 'help', '--help', '-h', '--version', '-V'];
+const SERVER_FLAGS = ['--vault-root'];
 
-if (!cmd) {
+if (!cmd || SERVER_FLAGS.includes(cmd)) {
+	// No subcommand or server flags → start MCP server
 	import('../dist/server.js');
 } else if (CLI_COMMANDS.includes(cmd)) {
 	import('../dist/cli/index.js')

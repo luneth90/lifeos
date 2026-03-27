@@ -36,7 +36,7 @@ which lifeos                 # 应指向全局 node_modules 的 symlink
 ## 2. 初始化测试 Vault
 
 ```bash
-lifeos init /tmp/lifeos-manual-test --lang zh
+lifeos init tmp/lifeos-manual-test --lang zh
 ```
 
 **预期输出：**
@@ -48,10 +48,10 @@ lifeos init /tmp/lifeos-manual-test --lang zh
 
 **验证：**
 ```bash
-ls /tmp/lifeos-manual-test/
-cat /tmp/lifeos-manual-test/lifeos.yaml
-cat /tmp/lifeos-manual-test/.mcp.json
-ls -la /tmp/lifeos-manual-test/.claude/skills   # 确认是 symlink
+ls tmp/lifeos-manual-test/
+cat tmp/lifeos-manual-test/lifeos.yaml
+cat tmp/lifeos-manual-test/.mcp.json
+ls -la tmp/lifeos-manual-test/.claude/skills   # 确认是 symlink
 ```
 
 ---
@@ -59,7 +59,7 @@ ls -la /tmp/lifeos-manual-test/.claude/skills   # 确认是 symlink
 ## 3. 启动 Claude Code
 
 ```bash
-cd /tmp/lifeos-manual-test
+cd tmp/lifeos-manual-test
 claude
 ```
 
@@ -77,7 +77,7 @@ claude
 
 **预期：**
 - [ ] 返回 Layer 0 摘要（首次使用时内容较少）
-- [ ] `/tmp/lifeos-manual-test/memory.db` 已创建
+- [ ] `tmp/lifeos-manual-test/memory.db` 已创建
 - [ ] 无报错
 
 ### 4.2 memory_log — 记录事件
@@ -102,7 +102,7 @@ claude
 
 ```bash
 # 在另一个终端中执行
-cat > /tmp/lifeos-manual-test/00_草稿/测试笔记.md <<'EOF'
+cat > tmp/lifeos-manual-test/00_草稿/测试笔记.md <<'EOF'
 ---
 title: 量子计算入门笔记
 type: note
@@ -140,7 +140,7 @@ EOF
 - [ ] 返回刷新结果
 - [ ] 检查 vault 中 TaskBoard.md 的 AUTO 区块已更新：
   ```bash
-  cat /tmp/lifeos-manual-test/90_系统/记忆/TaskBoard.md
+  cat tmp/lifeos-manual-test/90_系统/记忆/TaskBoard.md
   ```
 
 > 对 Claude 说：调用 memory_refresh 刷新 UserProfile
@@ -148,7 +148,7 @@ EOF
 **预期：**
 - [ ] UserProfile.md 的 AUTO 区块已更新：
   ```bash
-  cat /tmp/lifeos-manual-test/90_系统/记忆/UserProfile.md
+  cat tmp/lifeos-manual-test/90_系统/记忆/UserProfile.md
   ```
 
 ### 4.7 memory_citations — 获取来源引用
@@ -211,19 +211,19 @@ EOF
 
 ```bash
 # 检查数据库文件
-ls -la /tmp/lifeos-manual-test/memory.db
+ls -la tmp/lifeos-manual-test/memory.db
 
 # 查看表结构
-sqlite3 /tmp/lifeos-manual-test/memory.db ".tables"
+sqlite3 tmp/lifeos-manual-test/memory.db ".tables"
 
 # 查看会话日志
-sqlite3 /tmp/lifeos-manual-test/memory.db "SELECT id, type, title, substr(body, 1, 60) FROM session_log ORDER BY created_at DESC LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/memory.db "SELECT id, type, title, substr(body, 1, 60) FROM session_log ORDER BY created_at DESC LIMIT 10;"
 
 # 查看 vault 索引
-sqlite3 /tmp/lifeos-manual-test/memory.db "SELECT path, title, type, status FROM vault_index LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/memory.db "SELECT path, title, type, status FROM vault_index LIMIT 10;"
 
 # 查看活跃文档条目
-sqlite3 /tmp/lifeos-manual-test/memory.db "SELECT slot, key, substr(value, 1, 60) FROM memory_items LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/memory.db "SELECT slot, key, substr(value, 1, 60) FROM memory_items LIMIT 10;"
 ```
 
 **验证：**
@@ -239,7 +239,7 @@ sqlite3 /tmp/lifeos-manual-test/memory.db "SELECT slot, key, substr(value, 1, 60
 重新进入 Claude Code，验证数据跨会话保持：
 
 ```bash
-cd /tmp/lifeos-manual-test
+cd tmp/lifeos-manual-test
 claude
 ```
 
@@ -254,7 +254,7 @@ claude
 ## 清理
 
 ```bash
-rm -rf /tmp/lifeos-manual-test
+rm -rf tmp/lifeos-manual-test
 ```
 
 ---

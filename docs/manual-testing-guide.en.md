@@ -36,7 +36,7 @@ which lifeos                 # Should point to global node_modules symlink
 ## 2. Initialize Test Vault
 
 ```bash
-lifeos init /tmp/lifeos-manual-test --lang en
+lifeos init tmp/lifeos-manual-test --lang en
 ```
 
 **Expected output:**
@@ -48,10 +48,10 @@ lifeos init /tmp/lifeos-manual-test --lang en
 
 **Verify:**
 ```bash
-ls /tmp/lifeos-manual-test/
-cat /tmp/lifeos-manual-test/lifeos.yaml
-cat /tmp/lifeos-manual-test/.mcp.json
-ls -la /tmp/lifeos-manual-test/.claude/skills   # Confirm symlink
+ls tmp/lifeos-manual-test/
+cat tmp/lifeos-manual-test/lifeos.yaml
+cat tmp/lifeos-manual-test/.mcp.json
+ls -la tmp/lifeos-manual-test/.claude/skills   # Confirm symlink
 ```
 
 ---
@@ -59,7 +59,7 @@ ls -la /tmp/lifeos-manual-test/.claude/skills   # Confirm symlink
 ## 3. Launch Claude Code
 
 ```bash
-cd /tmp/lifeos-manual-test
+cd tmp/lifeos-manual-test
 claude
 ```
 
@@ -77,7 +77,7 @@ Run the following tests inside the Claude Code session. Simply tell Claude which
 
 **Expected:**
 - [ ] Returns Layer 0 summary (minimal content on first use)
-- [ ] `/tmp/lifeos-manual-test/memory.db` created
+- [ ] `tmp/lifeos-manual-test/memory.db` created
 - [ ] No errors
 
 ### 4.2 memory_log — Log an Event
@@ -102,7 +102,7 @@ First create a test note for searching:
 
 ```bash
 # Run in a separate terminal
-cat > /tmp/lifeos-manual-test/00_Drafts/test-note.md <<'EOF'
+cat > tmp/lifeos-manual-test/00_Drafts/test-note.md <<'EOF'
 ---
 title: Introduction to Quantum Computing
 type: note
@@ -140,7 +140,7 @@ EOF
 - [ ] Returns refresh result
 - [ ] Check TaskBoard.md AUTO sections updated:
   ```bash
-  cat /tmp/lifeos-manual-test/90_System/Memory/TaskBoard.md
+  cat tmp/lifeos-manual-test/90_System/Memory/TaskBoard.md
   ```
 
 > Tell Claude: Call memory_refresh to refresh UserProfile
@@ -148,7 +148,7 @@ EOF
 **Expected:**
 - [ ] UserProfile.md AUTO sections updated:
   ```bash
-  cat /tmp/lifeos-manual-test/90_System/Memory/UserProfile.md
+  cat tmp/lifeos-manual-test/90_System/Memory/UserProfile.md
   ```
 
 ### 4.7 memory_citations — Get Source Citations
@@ -211,19 +211,19 @@ After exiting Claude Code, check database state:
 
 ```bash
 # Check database file
-ls -la /tmp/lifeos-manual-test/memory.db
+ls -la tmp/lifeos-manual-test/memory.db
 
 # View table structure
-sqlite3 /tmp/lifeos-manual-test/memory.db ".tables"
+sqlite3 tmp/lifeos-manual-test/memory.db ".tables"
 
 # View session log
-sqlite3 /tmp/lifeos-manual-test/memory.db "SELECT id, type, title, substr(body, 1, 60) FROM session_log ORDER BY created_at DESC LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/memory.db "SELECT id, type, title, substr(body, 1, 60) FROM session_log ORDER BY created_at DESC LIMIT 10;"
 
 # View vault index
-sqlite3 /tmp/lifeos-manual-test/memory.db "SELECT path, title, type, status FROM vault_index LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/memory.db "SELECT path, title, type, status FROM vault_index LIMIT 10;"
 
 # View active document entries
-sqlite3 /tmp/lifeos-manual-test/memory.db "SELECT slot, key, substr(value, 1, 60) FROM memory_items LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/memory.db "SELECT slot, key, substr(value, 1, 60) FROM memory_items LIMIT 10;"
 ```
 
 **Verify:**
@@ -239,7 +239,7 @@ sqlite3 /tmp/lifeos-manual-test/memory.db "SELECT slot, key, substr(value, 1, 60
 Re-enter Claude Code and verify data persists across sessions:
 
 ```bash
-cd /tmp/lifeos-manual-test
+cd tmp/lifeos-manual-test
 claude
 ```
 
@@ -254,7 +254,7 @@ claude
 ## Cleanup
 
 ```bash
-rm -rf /tmp/lifeos-manual-test
+rm -rf tmp/lifeos-manual-test
 ```
 
 ---
