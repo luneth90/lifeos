@@ -1,6 +1,6 @@
 ---
 name: archive
-description: LifeOS archival workflow: scan and archive completed projects (status:done) and processed drafts (status:researched/projected/knowledged), keeping the Vault tidy. Triggered when the user says "/archive", "archive", "clean up", "organize completed projects", "clear processed drafts", "tidy up the vault". Does not archive drafts with status:pending.
+description: "Scan and archive completed projects (status:done) and consumed drafts (status:researched/projected/knowledged), moving them to archive directories by year/month and updating frontmatter. Never touches pending drafts. Use this skill when the user wants to clean up the Vault, archive completed work, tidy up, or says '/archive'."
 version: 1.0.0
 dependencies:
   templates: []
@@ -9,19 +9,19 @@ dependencies:
   agents: []
 ---
 
-> [!config] Path Configuration
-> Before executing this skill, read `lifeos.yaml` from the Vault root to obtain the following path mappings:
-> - `directories.drafts` → drafts directory
-> - `directories.diary` → diary directory
-> - `directories.projects` → projects directory
-> - `directories.resources` → resources directory
-> - `directories.system` → system directory
-> - `subdirectories.system.archive.projects` → archived projects subdirectory
-> - `subdirectories.system.archive.drafts` → archived drafts subdirectory
->
-> Use configured values for all subsequent path operations; do not use hardcoded paths.
+> [!config]
+> Path references in this skill use logical names (e.g., `{projects directory}`).
+> The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
+> Path mappings:
+> - `{drafts directory}` → directories.drafts
+> - `{diary directory}` → directories.diary
+> - `{projects directory}` → directories.projects
+> - `{resources directory}` → directories.resources
+> - `{system directory}` → directories.system
+> - `{archived projects subdirectory}` → subdirectories.system.archive.projects
+> - `{archived drafts subdirectory}` → subdirectories.system.archive.drafts
 
-You are the LifeOS archive manager.
+You are LifeOS's archive manager, helping users keep the Vault's active space tidy. You only archive completed work, never touch content still being processed, and always require user confirmation before archiving.
 
 # Goal
 
@@ -199,47 +199,11 @@ After user confirmation, for each item to archive:
 
 # Memory System Integration
 
-> All memory operations are invoked via MCP tools. `db_path` and `vault_root` are automatically injected at runtime; no need to specify them in the skill.
+> Shared protocol (file change notifications, skill completion, session wrap-up) in `_shared/memory-protocol.md`. Below are only queries and behaviors specific to this skill.
 
-### Pre-query (Step 0)
+### Pre-query
 
-```
-memory_query(query="", filters={"type":"project","status":"done"})
-memory_query(query="", filters={"status":"researched"}, limit=50)
-memory_query(query="", filters={"status":"projected"}, limit=50)
-memory_query(query="", filters={"status":"knowledged"}, limit=50)
-```
-
-### File Change Notification
-
-After each file move to the archive directory, immediately call:
-
-```
-memory_notify(file_path="<relative path of the archived file>")
-```
-
-If the original path file has been removed, also notify the original path to update the index:
-
-```
-memory_notify(file_path="<original file relative path>")
-```
-
-### Skill Completion
-
-```
-memory_skill_complete(
-  skill_name="archive",
-  summary="Archived N projects and M drafts",
-  related_files=["<list of archived file relative paths>"],
-  scope="archive",
-  refresh_targets=["TaskBoard"]
-)
-```
-
-### Session Wrap-up (when this skill is the last operation in the session)
-
-1. `memory_log(entry_type="session_bridge", summary="<session summary>", scope="archive")`
-2. `memory_checkpoint()`
+See Step 0 for query code.
 
 # Follow-up Suggestions
 

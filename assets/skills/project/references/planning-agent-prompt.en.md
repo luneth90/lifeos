@@ -7,7 +7,7 @@ parent_skill: project
 
 # Project Planning Agent Instructions
 
-> Path references in this prompt use logical names. The Orchestrator resolves actual paths from lifeos.yaml and injects them into the context.
+> Path logical names (e.g., `{projects directory}`, `{drafts directory}`) are resolved by the Orchestrator from `lifeos.yaml` and injected into context. See the main skill file `project/SKILL.md` for the mapping.
 
 > This file is read by the `project/SKILL.md` Orchestrator and used as the complete prompt for the Task tool.
 > Replace `[user's idea/draft note]` with the user's actual input when using.

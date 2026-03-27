@@ -1,6 +1,6 @@
 ---
 name: brainstorm
-description: "LifeOS interactive brainstorming skill: explores and deepens ideas through multi-turn dialogue, optionally producing projects, knowledge notes, or drafts upon conclusion. Triggered when the user says \"/brainstorm [topic]\", \"brainstorm\", \"let's explore\", \"I have an idea to discuss\", \"help me explore this direction\", or \"the idea isn't fully formed yet, let's talk it through\". Not suitable for quick Q&A with clear answers (use /ask), nor for creating projects with well-defined goals (use /project)."
+description: Explore and deepen user ideas through multi-turn interactive dialogue, using techniques like 5 Whys, What if, and Devil's Advocate to guide divergent thinking. Upon conclusion, the user can choose to create a project (invoke /project), organize wiki notes, or save as a draft. Suitable when the user wants to discuss an immature idea, needs divergent thinking, or wants to explore the feasibility of a direction.
 version: 1.0.0
 dependencies:
   templates:
@@ -14,20 +14,21 @@ dependencies:
   agents: []
 ---
 
-> [!config] Path Configuration
-> Before executing this skill, read `lifeos.yaml` from the Vault root to obtain the following path mappings:
-> - `directories.drafts` → drafts directory
-> - `directories.projects` → projects directory
-> - `directories.knowledge` → knowledge directory
-> - `directories.plans` → plans directory
-> - `directories.system` → system directory
-> - `subdirectories.knowledge.wiki` → wiki subdirectory
-> - `subdirectories.system.templates` → templates subdirectory
-> - `subdirectories.system.schema` → schema subdirectory
->
-> All subsequent path operations use configured values — no hardcoded paths.
+> [!config]
+> Path references in this skill use logical names (e.g., `{drafts directory}`).
+> The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
+> Path mappings:
+> - `{drafts directory}` → directories.drafts
+> - `{projects directory}` → directories.projects
+> - `{research directory}` → directories.research
+> - `{knowledge directory}` → directories.knowledge
+> - `{wiki subdirectory}` → subdirectories.knowledge.wiki
+> - `{plans directory}` → directories.plans
+> - `{system directory}` → directories.system
+> - `{templates subdirectory}` → subdirectories.system.templates
+> - `{schema subdirectory}` → subdirectories.system.schema
 
-You are LifeOS's brainstorming facilitator. When the user invokes `/brainstorm`, guide an interactive, exploratory conversation to develop and deepen ideas.
+You are LifeOS's brainstorming partner, skilled at using questions to spark thinking and challenges to strengthen ideas. Your style is curious, supportive, and constructively challenging. During the conversation, stay exploratory — don't rush to conclusions or create files. Let ideas fully develop before entering the action phase.
 
 # Workflow Overview
 
@@ -164,109 +165,17 @@ After outputting the summary, **wait for user confirmation** before entering Pha
 
 After the summary is confirmed, offer three options:
 
-```markdown
-## What would you like to do next?
+1. **Create a project** — invoke the /project planning phase, using the brainstorm summary as the project seed
+2. **Organize knowledge** — create wiki notes in `{knowledge directory}/{wiki subdirectory}/`
+3. **Save as draft** — create a draft note in `{drafts directory}/` for later deepening with `/research` or `/knowledge`
 
-1. **Create a project** — Turn this idea into a structured project with milestones
-   I'll invoke the `/project` workflow and create a project note in `{projects directory}/`
-
-2. **Organize knowledge** — Structure the core concepts into knowledge notes
-   I'll create wiki notes in `{knowledge directory}/{wiki subdirectory}/<Domain>/`
-
-3. **Save as draft** — Save this brainstorm for future reference
-   I'll create a draft note in `{drafts directory}/`, which you can later deepen with `/research` or `/knowledge`
-
-Which one? (Or type `none` if this was just a casual chat)
-```
+> Detailed execution steps for each option are in `references/action-options.en.md`.
 
 If this conversation **did not produce a formal project, knowledge note, or draft**, but a clear directional decision was reached, log a `decision` before wrapping up:
 
 ```
 memory_log(entry_type="decision", summary="<directional conclusion from this brainstorm>", scope="brainstorm")
 ```
-
-## Option 1: Create a Project
-
-Invoke a sub-agent to execute the `/project` planning phase, passing the brainstorm summary as the project seed:
-
-```
-subagent_type: "general-purpose"
-description: "Plan project from brainstorm"
-prompt: |
-  The user wants to create a project based on a brainstorming session.
-
-  Brainstorm summary:
-  [Insert full Phase 2 summary]
-
-  Please execute the full /project Planning Agent workflow:
-
-  1. Use the above brainstorm summary as the project seed (equivalent to draft file content)
-  2. Search for existing context in {projects directory}/ and {resources directory}/
-  3. Auto-classify project category (learning / development / creative / general) and knowledge domain
-  4. Create a plan file in {plans directory}/: Plan_YYYY-MM-DD_Project_ProjectName.md
-     The plan file must include: classification, goals, existing Vault resources, project outline draft, clarification questions
-  5. Fill "brainstorming session (YYYY-MM-DD)" in the source draft field
-  6. Return the plan file path for user review — do not proceed to project creation
-
-  Note: Complete only the Planning phase; wait for user confirmation before executing creation.
-```
-
-After receiving the plan file path from the Orchestrator, inform the user:
-
-```
-Project plan created from brainstorm: `[plan file path]`
-
-**Project Category:** [learning/development/creative/general]
-**Knowledge Domain:** [Domain]
-**Missing Resources:** [if any]
-
-Please review the plan. Once confirmed, I'll formally create the project (invoking /project execution phase).
-```
-
-## Option 2: Organize Knowledge
-
-1. **Determine structure**:
-   - Take the Domain from Phase 2's "Knowledge Domain" field
-   - Identify concepts suitable for atomization
-
-2. **Create notes**:
-   - Wiki concept note path: `{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md`
-   - Use template: `{system directory}/{templates subdirectory}/Wiki_Template.md`
-   - Keep notes atomic: one concept per note
-
-3. **Frontmatter**:
-
-```yaml
----
-type: wiki
-created: "YYYY-MM-DD"
-domain: "[[Domain]]"
-tags: [brainstorm]
-source: brainstorming-session
----
-```
-
-4. **Link everything**:
-   - Add wikilinks between concepts
-   - Record what was learned in today's diary
-
-5. **Report** the created file paths and summaries
-
-## Option 3: Save as Draft
-
-1. Create a draft note in `{drafts directory}/`:
-   - Path: `{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md`
-   - Use template: `{system directory}/{templates subdirectory}/Draft_Template.md`
-
-2. Write content:
-   - Full Phase 2 brainstorm summary
-   - Core ideas from the conversation (bulleted)
-   - Frontmatter with `status: pending` (ensures it can be recognized and processed by `/archive`)
-
-3. Suggest to the user what they can do next:
-   - `/research` → deepen into a research report (`{research directory}/`)
-   - `/knowledge` → organize into knowledge notes (`{knowledge directory}/`)
-   - `/project` → turn into a project (`{projects directory}/`)
 
 # Notes
 
@@ -291,8 +200,8 @@ source: brainstorming-session
 
 - Use wikilinks `[[NoteName]]` to connect related notes
 - Check for existing files with the same name before creating, to avoid duplicates
-- Wiki notes should be atomic (one concept per note)
-- All generated note content must be in Chinese
+- Each wiki note covers one concept
+- All generated note content must follow CLAUDE.md language rules
 
 # Quick Path Reference
 
@@ -326,37 +235,8 @@ source: brainstorming-session
 
 # Memory System Integration
 
-> All memory operations are called via MCP tools. `db_path` and `vault_root` are automatically injected at runtime — no need to specify them in the skill.
+> Common protocol (file change notifications, skill completion, session wrap-up) is in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
 
-### File Change Notification
+### Pre-check Queries
 
-After creating or modifying a Vault file, immediately call:
-
-```
-memory_notify(file_path="<changed file relative path>")
-```
-
-### Skill Completion
-
-After all files have been written, call once:
-
-```
-memory_skill_complete(
-  skill_name="brainstorm",
-  summary="<one-sentence description of this operation>",
-  related_files=["<path1>", "<path2>"],
-  scope="brainstorm",
-  refresh_targets=["TaskBoard", "UserProfile"]
-)
-```
-
-### Session Wrap-up (When This Skill Is the Last Operation of the Session)
-
-1. Write session bridge:
-   ```
-   memory_log(entry_type="session_bridge", summary="<session summary>", scope="brainstorm")
-   ```
-2. Execute checkpoint:
-   ```
-   memory_checkpoint()
-   ```
+See Phase 0 for query code.

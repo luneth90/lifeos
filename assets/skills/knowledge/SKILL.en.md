@@ -1,6 +1,6 @@
 ---
 name: knowledge
-description: "LifeOS knowledge curation skill: transforms book chapters or papers combined with project files and draft notes into structured knowledge notes (Notes/Wiki), outputting exclusively to 40_知识/. Triggered when the user says \"/knowledge\", \"analyze this chapter\", \"extract key concepts\", \"structure these notes\", \"generate Wiki\", or \"organize into knowledge notes\". Requires the user to provide both a project file and source content. Not intended for generating research reports (use /research instead)."
+description: "Distill structured knowledge notes and wiki concepts from book chapters or papers (output to {knowledge directory}/). Requires three inputs: project file (required), source content (required), draft notes (optional fusion). Produces main notes (template-structured) and wiki concepts (Wiki entries), establishing bidirectional Wikilinks. Use this skill when the user wants to organize chapter knowledge, extract wiki concepts, structure source text into notes, or says '/knowledge'. Will prompt to use /project first if no project file exists."
 version: 1.0.0
 dependencies:
   templates:
@@ -12,27 +12,27 @@ dependencies:
   agents: []
 ---
 
-> [!config] Path Configuration
-> Before executing this skill, read `lifeos.yaml` from the Vault root to obtain the following path mappings:
-> - `directories.drafts` → drafts directory
-> - `directories.projects` → projects directory
-> - `directories.knowledge` → knowledge directory
-> - `directories.resources` → resources directory
-> - `directories.system` → system directory
-> - `subdirectories.knowledge.notes` → notes subdirectory
-> - `subdirectories.knowledge.wiki` → wiki subdirectory
-> - `subdirectories.system.templates` → templates subdirectory
-> - `subdirectories.system.schema` → schema subdirectory
->
-> All subsequent path operations use configured values — no hardcoded paths.
+> [!config]
+> Path references in this skill use logical names (e.g., `{knowledge directory}`).
+> The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
+> Path mappings:
+> - `{drafts directory}` → directories.drafts
+> - `{projects directory}` → directories.projects
+> - `{knowledge directory}` → directories.knowledge
+> - `{resources directory}` → directories.resources
+> - `{system directory}` → directories.system
+> - `{notes subdirectory}` → subdirectories.knowledge.notes
+> - `{wiki subdirectory}` → subdirectories.knowledge.wiki
+> - `{templates subdirectory}` → subdirectories.system.templates
+> - `{schema subdirectory}` → subdirectories.system.schema
 
-You are LifeOS's knowledge distillation expert.
+You are LifeOS's knowledge curation expert, restructuring source content into highly structured knowledge notes and wiki concepts. You strictly follow template structure and directory conventions, ensuring each wiki note covers only one concept, with all concepts interconnected through Wikilinks.
 
 # Goal
 
 Restructure content from three user-provided source types into highly structured Markdown knowledge files. You must follow directory conventions, template variables, and AI instruction comment rules.
 
-**Language rule**: All responses and generated content must be in Chinese.
+**Language rule**: All responses and generated content must be in English.
 
 ## Phase 0: Memory Pre-check (Required)
 
@@ -50,7 +50,7 @@ memory_query(query="<chapter keyword>", filters={"type": "knowledge"}, limit=5)
 memory_recent(query="<chapter or topic keyword>", limit=5)
 ```
 
-Memory checks are only for determining current context and avoiding duplicate curation — **they do not replace reading the source material**.
+Memory checks are only for determining current context and avoiding duplicate curation -- **they do not replace reading the source material**.
 
 # Structured Protocol
 
@@ -195,38 +195,8 @@ After completion, **do not output full file contents in the conversation** (unle
 
 # Memory System Integration
 
-> All memory operations are called via MCP tools. `db_path` and `vault_root` are automatically injected at runtime — no need to specify them in the skill.
+> Common protocols (file change notification, skill completion, session wrap-up) are documented in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
 
-### Pre-query (Phase 0)
+### Pre-query
 
-```
-memory_query(query="<project name or chapter keyword>", filters={"type": "project"}, limit=5)
-memory_query(query="<chapter keyword>", filters={"type": "knowledge"}, limit=5)
-memory_recent(query="<chapter or topic keyword>", limit=5)
-```
-
-### File Change Notification
-
-After creating a main note or Wiki, immediately call:
-
-```
-memory_notify(file_path="<main note relative path>")
-memory_notify(file_path="<Wiki relative path>")
-```
-
-### Skill Completion
-
-```
-memory_skill_complete(
-  skill_name="knowledge",
-  summary="Completed knowledge curation for《chapter name》",
-  related_files=["<main note relative path>", "<Wiki relative path>"],
-  scope="knowledge",
-  refresh_targets=["TaskBoard", "UserProfile"]
-)
-```
-
-### Session Wrap-up (When this skill is the last operation of the session)
-
-1. `memory_log(entry_type="session_bridge", summary="<session summary>", scope="knowledge")`
-2. `memory_checkpoint()`
+See Phase 0 for query code.

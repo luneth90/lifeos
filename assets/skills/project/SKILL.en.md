@@ -1,6 +1,6 @@
 ---
 name: project
-description: LifeOS project creation workflow (dual Agent): transforms ideas, drafts, or resources into structured project files, outputting to 20_Projects/. Supports four types — learning/development/creative/general. Triggered when the user says "/project [idea]", "create project", "start a new project", "turn this idea into a project", "I want to learn...", "help me plan studying this book". Not suitable for quick Q&A (use /ask) or research tasks (use /research).
+description: "Transform ideas, drafts, or learning resources into structured project files (output to {projects directory}/). Uses dual-Agent workflow: Planning Agent generates a plan file for user review, then Execution Agent creates the formal project after confirmation. Supports four project types: learning (chapter-based planning), development (single main project + docs directory), creative (milestone-based), general. Use this skill when the user wants to create a project, plan a book's study, formalize a draft idea, or says '/project'."
 version: 1.2.0
 dependencies:
   templates:
@@ -17,41 +17,23 @@ dependencies:
 > [!config]
 > Path references in this skill use logical names (e.g., `{projects directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
-> Path mapping:
+> Path mappings:
 > - `{drafts directory}` → directories.drafts
-> - `{diary directory}` → directories.diary
 > - `{projects directory}` → directories.projects
-> - `{research directory}` → directories.research
-> - `{knowledge directory}` → directories.knowledge
-> - `{outputs directory}` → directories.outputs
-> - `{plans directory}` → directories.plans
 > - `{resources directory}` → directories.resources
+> - `{plans directory}` → directories.plans
 > - `{system directory}` → directories.system
 > - `{templates subdirectory}` → subdirectories.system.templates
 > - `{schema subdirectory}` → subdirectories.system.schema
 > - `{archived plans subdirectory}` → subdirectories.system.archive.plans
 
-You are a LifeOS project management orchestration expert. When the user wants to create a project, you coordinate two specialized Agents: one for planning and one for execution.
+You are LifeOS's project creation orchestrator, responsible for coordinating the Planning Agent and Execution Agent to transform user ideas into structured projects. You ensure each project has clear classification, reasonable chapter planning, correct directory structure, and only execute creation after user confirms the plan.
 
 **Language rule**: All responses and generated files must be in English.
 
 # Phase 0: Memory Pre-check (Required)
 
-Before launching the Planning Agent, perform a minimal memory check to confirm this isn't a duplicate project and to avoid missing existing drafts and decisions:
-
-1. Check whether a project on the same topic already exists
-2. Check whether any past drafts match, and their `status`
-3. Check recent related decisions to avoid conflicting with existing directions
-
-Query via MCP tools:
-
-```
-memory_query(query="<topic keywords>", filters={"type": "project"}, limit=5)
-memory_query(query="<topic keywords>", limit=10)
-memory_recent(entry_type="decision", query="<topic keywords>", limit=5)
-```
-
-If a file in `{drafts directory}/` is matched, read its frontmatter to confirm whether it is still `status: pending`.
+Follow `_shared/dual-agent-orchestrator.en.md` Phase 0, with entity type `filters.type = "project"`.
 
 # Workflow Overview
 
@@ -63,12 +45,9 @@ If a file in `{drafts directory}/` is matched, read its frontmatter to confirm w
 
 # Your Responsibilities as Orchestrator
 
-1. `/project` is invoked → immediately launch Planning Agent
-2. Planning Agent creates a plan file and returns its path
-3. Notify the user in English to review the plan
-4. After user confirmation, launch Execution Agent **passing only the plan file path**
-5. Report execution results
-6. If the project category is `development`, verify the output follows the "single main project + docs directory" convention; if not, require immediate correction before delivery
+Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.en.md`. The following are additional responsibilities specific to the project skill:
+
+- If the project category is `development`, verify the output follows the "single main project + docs directory" convention; if not, require immediate correction before delivery
 
 # Input Context
 
@@ -107,11 +86,7 @@ Even if only the main project file is created initially with no supporting docum
 
 # Phase 1: Launch Planning Agent
 
-When the user invokes `/project`, immediately launch the Planning Agent using the Task tool.
-
-**Full prompt at:** `project/references/planning-agent-prompt.md`
-
-> Read the complete content of that file as the Task's prompt parameter, replacing `[user's idea/draft note]` with the user's actual input.
+Follow `_shared/dual-agent-orchestrator.en.md` Phase 1. Replace the placeholder `[user's idea/draft note]` with the user's actual input.
 
 After the Planning Agent returns, notify the user in English:
 
@@ -128,11 +103,9 @@ Please review and modify as needed. Once confirmed, I'll generate the formal pro
 
 # Phase 2: Launch Execution Agent (After User Confirmation)
 
-Launch the Execution Agent with a clean context using the Task tool.
+Follow `_shared/dual-agent-orchestrator.en.md` Phase 3.
 
-**Full prompt at:** `project/references/execution-agent-prompt.md`
-
-> Read the complete content of that file as the Task's prompt parameter, replacing `[plan file path]` with the actual path.
+If the project category is `development`, after the Execution Agent returns, verify the output follows the "Development Project Directory Convention"; if not, require immediate correction before delivery.
 
 # Edge Cases
 
@@ -151,37 +124,8 @@ When adding new documents to a development project later, continue placing them 
 
 # Memory System Integration
 
-> All memory operations are called via MCP tools. `db_path` and `vault_root` are injected automatically at runtime; no need to specify them in the skill.
+> Common protocols (file change notification, skill completion, session wrap-up) are documented in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
 
-### Pre-query (Phase 0, before launching Planning Agent)
+### Pre-query
 
-```
-memory_query(query="<topic keywords>", filters={"type": "project"}, limit=5)
-memory_query(query="<topic keywords>", limit=10)
-memory_recent(entry_type="decision", query="<topic keywords>", limit=5)
-```
-
-### File Change Notification
-
-After the Execution Agent creates the project file, the Orchestrator immediately calls:
-
-```
-memory_notify(file_path="<project file relative path>")
-```
-
-### Skill Completion
-
-```
-memory_skill_complete(
-  skill_name="project",
-  summary="Created project «Project Name»",
-  related_files=["<project file relative path>"],
-  scope="project",
-  refresh_targets=["TaskBoard", "UserProfile"]
-)
-```
-
-### Session Wrap-up (When this skill is the last operation in the session)
-
-1. `memory_log(entry_type="session_bridge", summary="<session summary>", scope="project")`
-2. `memory_checkpoint()`
+See Phase 0 for query code.

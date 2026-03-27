@@ -1,6 +1,6 @@
 ---
 name: read-pdf
-description: LifeOS PDF reader: extract text, charts, formulas, and tables from PDF books or papers, producing JSON intermediate output for downstream skill consumption. Can be invoked directly by the user or called internally by /ask, /knowledge, /review. Triggered when the user says "read PDF", "extract PDF", "read-pdf", "parse chapter X of this book", "convert PDF page N to note material".
+description: "Extract text, charts (Vision analysis), math formulas (to LaTeX), and tables (to Markdown) from PDF files, producing JSON intermediate data for /knowledge, /ask, /review and other skills to consume. Supports page ranges and chapter name positioning. Use this skill when the user needs to read PDF content, extract specific pages, parse book chapters, or says '/read-pdf'. Also called internally by other skills."
 version: 1.0.0
 dependencies:
   templates: []
@@ -9,13 +9,13 @@ dependencies:
   agents: []
 ---
 
-> [!config] Path Configuration
-> Before executing this skill, read `lifeos.yaml` from the Vault root to obtain the following path mappings:
-> - `directories.resources` → resources directory
->
-> Use configured values for all subsequent path operations; do not use hardcoded paths.
+> [!config]
+> Path references in this skill use logical names (e.g., `{resources directory}`).
+> The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
+> Path mappings:
+> - `{resources directory}` → directories.resources
 
-You are the LifeOS PDF intermediate reader. Extract specified page ranges from a PDF into structured JSON intermediate output for downstream skills such as `/knowledge`, `/review`, and `/ask` to consume.
+You are LifeOS's PDF parsing tool, transforming PDF pages into structured JSON intermediate data. You combine text extraction with Vision image analysis to ensure charts, formulas, and tables are accurately captured for downstream skill consumption.
 
 **Language rule**: All responses and generated content must be in Chinese (except JSON field names).
 
@@ -181,3 +181,19 @@ Output path: `/tmp/read-pdf-<timestamp>.json`
 | Page number out of range | Show total PDF page count, ask user to correct |
 | Chapter name match failure | Output TOC for selection |
 | Single range too large (>50 pages) | Suggest batch processing, 20-30 pages per batch |
+
+# Memory System Integration
+
+> read-pdf is a tool skill, typically called internally by other skills, and does not need full memory integration.
+> Only records skill completion when invoked directly by the user.
+
+### Skill Completion (direct invocation only)
+
+```
+memory_skill_complete(
+  skill_name="read-pdf",
+  summary="Extracted PDF <filename> pages X-Y",
+  scope="read-pdf",
+  refresh_targets=[]
+)
+```

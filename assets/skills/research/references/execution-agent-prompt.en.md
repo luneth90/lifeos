@@ -7,7 +7,7 @@ parent_skill: research
 
 # Research Execution Agent Instructions
 
-> Path references in this prompt use logical names. The Orchestrator resolves actual paths from lifeos.yaml and injects them into the context.
+> Path logical names (e.g., `{research directory}`, `{drafts directory}`) are resolved by the Orchestrator from `lifeos.yaml` and injected into context. See the main skill file `research/SKILL.md` for the mapping.
 
 > This file is read by the `research/SKILL.md` Orchestrator after the user confirms the plan, and used as the complete prompt for the Task tool.
 > Replace `[plan file path]` with the actual plan file path when using.

@@ -1,6 +1,6 @@
 ---
 name: today
-description: LifeOS morning planning workflow: review yesterday's progress, create today's diary, connect active projects, and capture new ideas. Triggered when the user says "start my day", "morning planning", "today", "plan my day", "what should I do today". Not for quick Q&A (use /ask instead).
+description: "Daily planning entry point: review yesterday's progress and incomplete tasks, scan active projects and notes pending review, collect the user's goals and new ideas for today, and generate today's diary file. Automatically suggests follow-up skills (/review, /research, /project, etc.)."
 version: 1.0.0
 dependencies:
   templates:
@@ -11,19 +11,19 @@ dependencies:
   agents: []
 ---
 
-> [!config] Path Configuration
-> Before executing this skill, read `lifeos.yaml` from the Vault root to obtain the following path mappings:
-> - `directories.diary` → diary directory
-> - `directories.drafts` → drafts directory
-> - `directories.projects` → projects directory
-> - `directories.system` → system directory
-> - `subdirectories.system.templates` → templates subdirectory
-> - `subdirectories.system.schema` → schema subdirectory
-> - `subdirectories.system.memory` → memory subdirectory
->
-> Use configured values for all subsequent path operations; do not use hardcoded paths.
+> [!config]
+> Path references in this skill use logical names (e.g., `{diary directory}`).
+> The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
+> Path mappings:
+> - `{diary directory}` → directories.diary
+> - `{drafts directory}` → directories.drafts
+> - `{projects directory}` → directories.projects
+> - `{system directory}` → directories.system
+> - `{templates subdirectory}` → subdirectories.system.templates
+> - `{schema subdirectory}` → subdirectories.system.schema
+> - `{memory subdirectory}` → subdirectories.system.memory
 
-You are the LifeOS morning planning assistant.
+You are LifeOS's daily planning assistant, helping users quickly get into work mode. You automatically scan yesterday's leftovers, active projects, notes pending review, and the drafts pool, then synthesize this information into an actionable daily plan that reduces the user's decision burden.
 
 # Goal
 
@@ -208,37 +208,4 @@ Use `{system directory}/{templates subdirectory}/Daily_Template.md` as the base 
 
 # Memory System Integration
 
-> All memory operations are invoked via MCP tools. `db_path` and `vault_root` are automatically injected at runtime; no need to specify them in the skill.
-
-### File Change Notification
-
-After each Vault file creation or modification, immediately call:
-
-```
-memory_notify(file_path="<relative path of changed file>")
-```
-
-### Skill Completion
-
-After all file writes are complete, call once:
-
-```
-memory_skill_complete(
-  skill_name="today",
-  summary="<one-line description of this operation>",
-  related_files=["<path1>", "<path2>"],
-  scope="today",
-  refresh_targets=["TaskBoard", "UserProfile"]
-)
-```
-
-### Session Wrap-up (when this skill is the last operation in the session)
-
-1. Write session bridge:
-   ```
-   memory_log(entry_type="session_bridge", summary="<session summary>", scope="today")
-   ```
-2. Execute checkpoint:
-   ```
-   memory_checkpoint()
-   ```
+> Common protocol (file change notifications, skill completion, session wrap-up) is in `_shared/memory-protocol.md`. This skill has no skill-specific pre-check queries (context gathering is already defined in Step 1).
