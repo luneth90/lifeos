@@ -145,6 +145,8 @@ export default async function init(args: string[]): Promise<void> {
 		assetMode: 'overwrite',
 		skillMode: 'overwrite',
 		ensureMcp: !noMcp,
+		mcpMode: 'replace',
+		rulesMode: 'preserve',
 		assetVersion: VERSION,
 	});
 

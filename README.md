@@ -60,7 +60,7 @@ lifeos init ./my-vault --lang en   # 英文
 
 ```bash
 lifeos init [path] [--lang zh|en] [--no-mcp]           # 创建新 Vault
-lifeos upgrade [path] [--lang zh|en]                   # 升级并补齐资产与脚手架
+lifeos upgrade [path] [--lang zh|en] [--override]      # 升级并补齐资产与脚手架
 lifeos doctor [path]                                   # 健康检查
 lifeos rename [path]                                   # 交互式重命名目录
 lifeos --help                                          # 查看帮助
@@ -87,6 +87,7 @@ lifeos --version                                       # 查看版本
 - **智能合并**：模板、规范、内置提示词、技能文件未修改则更新，已修改则跳过并警告
 - **缺失补全**：缺失的目录和脚手架文件会补回，例如记忆目录、`.claude/skills`、`CLAUDE.md`、`AGENTS.md`、`.gitignore`、`.git`、MCP 配置
 - **保留用户修改**：已存在且被用户改过的内置文件不会被强制覆盖
+- **`--override` 强制刷新受管内容**：覆盖模板、规范、提示词、技能、`CLAUDE.md`、`AGENTS.md` 以及 MCP 配置，但不会删除用户笔记、资源、`memory.db`、记忆系统数据，也不会改写 `lifeos.yaml` 里的目录和记忆配置
 
 ### doctor
 

@@ -13,6 +13,7 @@ import {
 	installTemplates,
 } from './install-assets.js';
 import { cloneManagedAssets } from './managed-assets.js';
+import type { MergeMode } from './mcp-register.js';
 import { registerMcp } from './mcp-register.js';
 
 const GITIGNORE = `# LifeOS
@@ -31,6 +32,8 @@ interface SyncVaultOptions {
 	assetMode: InstallMode;
 	skillMode: InstallMode;
 	ensureMcp: boolean;
+	mcpMode: MergeMode;
+	rulesMode: 'preserve' | 'overwrite';
 	assetVersion: string;
 }
 
@@ -81,12 +84,12 @@ export async function syncVault(
 	managedAssets = skillResult.managedAssets ?? managedAssets;
 
 	ensureClaudeSkillsLink(targetPath);
-	ensureRulesFiles(targetPath, options.lang);
+	ensureRulesFiles(targetPath, options.lang, options.rulesMode);
 	ensureGitRepository(targetPath);
 	ensureGitignore(targetPath);
 
 	if (options.ensureMcp) {
-		await registerMcp(targetPath, 'merge-missing');
+		await registerMcp(targetPath, options.mcpMode);
 	}
 
 	result.managedAssets = managedAssets;
@@ -137,18 +140,22 @@ function ensureClaudeSkillsLink(targetPath: string): void {
 	}
 }
 
-function ensureRulesFiles(targetPath: string, lang: 'zh' | 'en'): void {
+function ensureRulesFiles(
+	targetPath: string,
+	lang: 'zh' | 'en',
+	mode: 'preserve' | 'overwrite',
+): void {
 	const rulesLangSrc = join(assetsDir(), `lifeos-rules.${lang}.md`);
 	const rulesFallback = join(assetsDir(), 'lifeos-rules.zh.md');
 	const rulesSrc = existsSync(rulesLangSrc) ? rulesLangSrc : rulesFallback;
 
 	const claudePath = join(targetPath, 'CLAUDE.md');
-	if (!existsSync(claudePath)) {
+	if (mode === 'overwrite' || !existsSync(claudePath)) {
 		copyFileSync(rulesSrc, claudePath);
 	}
 
 	const agentsPath = join(targetPath, 'AGENTS.md');
-	if (!existsSync(agentsPath)) {
+	if (mode === 'overwrite' || !existsSync(agentsPath)) {
 		copyFileSync(rulesSrc, agentsPath);
 	}
 }

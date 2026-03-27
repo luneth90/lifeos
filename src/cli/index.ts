@@ -42,6 +42,7 @@ Usage:
 
 Options (init / upgrade):
   --lang, -l <zh|en>   Language preset (default: auto-detect / from config)
+  --override           Force-refresh managed assets and managed config files
 
 Options (global):
   --help, -h           Show this help

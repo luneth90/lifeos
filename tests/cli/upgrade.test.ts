@@ -100,6 +100,22 @@ describe('lifeos upgrade', () => {
 		expect(result.skipped).toContain('90_系统/模板/Daily_Template.md');
 	});
 
+	test('override overwrites modified templates during upgrade', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		const templatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
+		const latestTemplate = readFileSync(templatePath, 'utf-8');
+		writeFileSync(templatePath, 'USER MODIFIED CONTENT', 'utf-8');
+
+		patchVersion(dir, '0.0.1');
+
+		const result = await upgrade([dir, '--override']);
+
+		expect(readFileSync(templatePath, 'utf-8')).toBe(latestTemplate);
+		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
+		expect(result.skipped).not.toContain('90_系统/模板/Daily_Template.md');
+	});
+
 	test('upgrades tracked unchanged templates when managed hash matches current content', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 
@@ -203,6 +219,22 @@ describe('lifeos upgrade', () => {
 		expect(result.skipped).toContain('.agents/skills/today/SKILL.md');
 	});
 
+	test('override overwrites modified skill files', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		const skillPath = join(dir, '.agents', 'skills', 'today', 'SKILL.md');
+		const latestSkill = readFileSync(skillPath, 'utf-8');
+		writeFileSync(skillPath, 'USER CUSTOMIZED SKILL', 'utf-8');
+
+		patchVersion(dir, '0.0.1');
+
+		const result = await upgrade([dir, '--override']);
+
+		expect(readFileSync(skillPath, 'utf-8')).toBe(latestSkill);
+		expect(result.updated).toContain('.agents/skills/today/SKILL.md');
+		expect(result.skipped).not.toContain('.agents/skills/today/SKILL.md');
+	});
+
 	test('copies new skill files (Tier 2)', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 
@@ -254,6 +286,25 @@ describe('lifeos upgrade', () => {
 		// AGENTS.md should keep user's modifications
 		const afterUpgrade = readFileSync(agentsPath, 'utf-8');
 		expect(afterUpgrade).toBe('MY CUSTOM AGENTS INSTRUCTIONS');
+	});
+
+	test('override overwrites rules files', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		const claudePath = join(dir, 'CLAUDE.md');
+		const agentsPath = join(dir, 'AGENTS.md');
+		const originalClaude = readFileSync(claudePath, 'utf-8');
+		const originalAgents = readFileSync(agentsPath, 'utf-8');
+
+		writeFileSync(claudePath, 'MY CUSTOM CLAUDE INSTRUCTIONS', 'utf-8');
+		writeFileSync(agentsPath, 'MY CUSTOM AGENTS INSTRUCTIONS', 'utf-8');
+
+		patchVersion(dir, '0.0.1');
+
+		await upgrade([dir, '--override']);
+
+		expect(readFileSync(claudePath, 'utf-8')).toBe(originalClaude);
+		expect(readFileSync(agentsPath, 'utf-8')).toBe(originalAgents);
 	});
 
 	test('updates installed_versions in lifeos.yaml', async () => {
@@ -455,6 +506,132 @@ describe('lifeos upgrade', () => {
 		expect(openCodeConfig.mcp?.lifeos?.type).toBe('remote');
 		expect(openCodeConfig.mcp?.lifeos?.command).toEqual(['lifeos', '--vault-root', dir]);
 		expect(openCodeConfig.mcp?.existing).toEqual({ type: 'local', command: ['keep-me'] });
+	});
+
+	test('override replaces existing lifeos MCP config entries', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		writeFileSync(
+			join(dir, '.mcp.json'),
+			JSON.stringify(
+				{
+					mcpServers: {
+						lifeos: { command: 'custom-command', args: ['--foo'] },
+						existing: { command: 'keep-me', args: ['foo'] },
+					},
+				},
+				null,
+				2,
+			),
+			'utf-8',
+		);
+		ensureDirForTest(join(dir, '.codex'));
+		writeFileSync(
+			join(dir, '.codex', 'config.toml'),
+			[
+				'[mcp_servers.lifeos]',
+				'command = "custom-command"',
+				'args = ["--foo"]',
+				'',
+				'[mcp_servers.existing]',
+				'command = "keep-me"',
+				'args = ["foo"]',
+				'',
+			].join('\n'),
+			'utf-8',
+		);
+		writeFileSync(
+			join(dir, 'opencode.json'),
+			JSON.stringify(
+				{
+					mcp: {
+						lifeos: { type: 'remote', command: ['custom-command', '--foo'] },
+						existing: { type: 'local', command: ['keep-me'] },
+					},
+				},
+				null,
+				2,
+			),
+			'utf-8',
+		);
+
+		await upgrade([dir, '--override']);
+
+		const claudeConfig = parseYaml(readFileSync(join(dir, '.mcp.json'), 'utf-8')) as {
+			mcpServers?: Record<string, { command?: string; args?: string[] }>;
+		};
+		expect(claudeConfig.mcpServers?.lifeos).toEqual({
+			command: 'lifeos',
+			args: ['--vault-root', dir],
+		});
+		expect(claudeConfig.mcpServers?.existing).toEqual({ command: 'keep-me', args: ['foo'] });
+
+		const codexConfig = readFileSync(join(dir, '.codex', 'config.toml'), 'utf-8');
+		expect(codexConfig).toContain('[mcp_servers.lifeos]');
+		expect(codexConfig).toContain('command = "lifeos"');
+		expect(codexConfig).toContain(`args = ["--vault-root", "${dir}"]`);
+		expect(codexConfig).toContain('[mcp_servers.existing]');
+		expect(codexConfig).toContain('command = "keep-me"');
+
+		const openCodeConfig = parseYaml(readFileSync(join(dir, 'opencode.json'), 'utf-8')) as {
+			mcp?: Record<string, { type?: string; command?: string[] }>;
+		};
+		expect(openCodeConfig.mcp?.lifeos).toEqual({
+			type: 'local',
+			command: ['lifeos', '--vault-root', dir],
+		});
+		expect(openCodeConfig.mcp?.existing).toEqual({ type: 'local', command: ['keep-me'] });
+	});
+
+	test('override preserves custom config and user-generated data', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		updateYamlConfig(dir, (config) => {
+			config.directories = {
+				...(config.directories as Record<string, unknown>),
+				knowledge: '40_CustomKnowledge',
+				system: '99_CustomSystem',
+			};
+			config.subdirectories = {
+				...(config.subdirectories as Record<string, unknown>),
+				knowledge: {
+					...((config.subdirectories as { knowledge?: Record<string, string> }).knowledge ?? {}),
+					notes: 'MyNotes',
+					wiki: 'MyWiki',
+				},
+				system: {
+					...(
+						(config.subdirectories as {
+							system?: Record<string, string | Record<string, string>>;
+						}).system ?? {}
+					),
+					templates: 'MyTemplates',
+				},
+			};
+		});
+
+		const userNotePath = join(dir, '40_CustomKnowledge', 'MyNotes', 'user-note.md');
+		ensureDirForTest(join(dir, '40_CustomKnowledge', 'MyNotes'));
+		writeFileSync(userNotePath, '# user note\n', 'utf-8');
+
+		const memoryDbPath = join(dir, 'memory.db');
+		writeFileSync(memoryDbPath, 'sqlite-placeholder', 'utf-8');
+
+		await upgrade([dir, '--override']);
+
+		const config = readYamlConfig(dir) as {
+			directories: { knowledge: string; system: string };
+			subdirectories: {
+				knowledge: { notes: string; wiki: string };
+				system: { templates: string };
+			};
+		};
+		expect(config.directories.knowledge).toBe('40_CustomKnowledge');
+		expect(config.directories.system).toBe('99_CustomSystem');
+		expect(config.subdirectories.knowledge.notes).toBe('MyNotes');
+		expect(config.subdirectories.system.templates).toBe('MyTemplates');
+		expect(readFileSync(userNotePath, 'utf-8')).toBe('# user note\n');
+		expect(readFileSync(memoryDbPath, 'utf-8')).toBe('sqlite-placeholder');
 	});
 });
 

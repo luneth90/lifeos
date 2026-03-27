@@ -7,7 +7,7 @@ interface McpServerEntry {
 	args: string[];
 }
 
-type MergeMode = 'replace' | 'merge-missing';
+export type MergeMode = 'replace' | 'merge-missing';
 
 export async function registerMcp(vaultRoot: string, mode: MergeMode = 'replace'): Promise<void> {
 	const entry: McpServerEntry = {

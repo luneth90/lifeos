@@ -16,6 +16,7 @@ export interface UpgradeResult {
 export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	const { positionals, flags } = parseArgs(args, {
 		lang: { alias: 'l' },
+		override: {},
 	});
 
 	// 1. Parse args
@@ -32,6 +33,7 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	const config = resolveConfig(targetPath, rawConfig).rawConfig as LifeOSConfig;
 
 	const result: UpgradeResult = { updated: [], skipped: [], unchanged: [] };
+	const override = flags.override === true;
 
 	// 3. Version check
 	const installedAssets = config.installed_versions?.assets ?? '0.0.0';
@@ -52,9 +54,11 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	// 4. Reuse the same vault sync path as init, but in conservative upgrade mode.
 	const syncResult = await syncVault(targetPath, config, {
 		lang,
-		assetMode: 'smart-merge',
-		skillMode: 'smart-merge',
+		assetMode: override ? 'overwrite' : 'smart-merge',
+		skillMode: override ? 'overwrite' : 'smart-merge',
 		ensureMcp: true,
+		mcpMode: override ? 'replace' : 'merge-missing',
+		rulesMode: override ? 'overwrite' : 'preserve',
 		assetVersion: VERSION,
 	});
 	result.updated.push(...syncResult.updated);

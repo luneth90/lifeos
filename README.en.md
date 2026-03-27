@@ -61,7 +61,7 @@ Launch any of these tools in the vault directory to use all skills.
 
 ```bash
 lifeos init [path] [--lang zh|en] [--no-mcp]           # Create a new vault
-lifeos upgrade [path] [--lang zh|en]                   # Upgrade and restore assets/scaffold
+lifeos upgrade [path] [--lang zh|en] [--override]      # Upgrade and restore assets/scaffold
 lifeos doctor [path]                                   # Health check
 lifeos rename [path]                                   # Interactive directory rename
 lifeos --help                                          # Show help
@@ -88,6 +88,7 @@ Upgrades and re-syncs an initialized vault:
 - **Smart merge**: update unmodified templates, schema files, built-in prompts, and skill files; skip modified ones with a warning
 - **Restore missing scaffold**: bring back missing directories and managed files such as the memory directory, `.claude/skills`, `CLAUDE.md`, `AGENTS.md`, `.gitignore`, `.git`, and MCP config entries
 - **Preserve user changes**: built-in files already customized by the user are not force-overwritten
+- **`--override` force-refreshes managed content**: overwrite templates, schema, prompts, skills, `CLAUDE.md`, `AGENTS.md`, and MCP config entries without deleting user notes, resources, `memory.db`, memory-system data, or custom directory/memory settings in `lifeos.yaml`
 
 ### doctor
 
