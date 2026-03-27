@@ -1,7 +1,7 @@
 ---
 name: research
 description: "Conduct deep research on a specified topic or draft, producing structured research reports to {research directory}/. Uses dual-Agent workflow: Planning Agent scans local drafts, matches expert personas, generates research plan; Execution Agent combines local drafts with WebSearch external sources to write the report. Supports topic mode (direct topic) and file mode (draft as anchor). Use this skill when the user wants to deeply understand a topic, needs systematic research, wants to expand a draft into a full report, or says '/research'."
-version: 1.1.0
+version: 1.0.0
 dependencies:
   templates: []
   prompts:
