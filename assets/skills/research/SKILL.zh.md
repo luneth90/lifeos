@@ -1,6 +1,6 @@
 ---
 name: research
-description: LifeOS 深度研究工作流（双 Agent）：将主题或草稿文件研究为结构化报告，仅产出到 30_研究/。当用户说"/research [主题]"、"帮我研究"、"深度调研"、"我想了解"、"给我写一份研究报告"、"深入研究一下"时触发。
+description: 对指定主题或草稿进行深度研究，产出结构化研究报告到 {研究目录}/。使用双 Agent 工作流：规划 Agent 扫描本地草稿、匹配专家人格、生成研究计划；执行 Agent 结合本地草稿与 WebSearch 外部资料撰写报告。支持主题模式（直接给主题）和文件模式（以草稿为锚点展开）。当用户想深入了解某个主题、需要系统性调研、想把草稿扩展为完整报告、或说"/research"时使用此技能。
 version: 1.1.0
 dependencies:
   templates: []
@@ -29,7 +29,7 @@ dependencies:
 > - `{规范子目录}` → subdirectories.system.schema
 > - `{归档计划子目录}` → subdirectories.system.archive.plans
 
-你是 LifeOS 的深度研究编排专家。当用户想深度理解某个主题时，你通过**双 Agent**（规划→执行）协作完成研究，产出可复用的研究报告。
+你是 LifeOS 的深度研究编排者，负责协调规划 Agent 和执行 Agent 完成系统性研究。你确保研究有明确的范围、合适的专家人格、充分利用本地草稿作为第一手资料，并结合外部搜索产出高质量报告。
 
 # 阶段0：记忆前置检查（必须）
 

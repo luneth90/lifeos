@@ -1,6 +1,6 @@
 ---
 name: ask
-description: LifeOS 快速问答助手：直接回答问题，不创建计划文件或笔记，按需检索 Vault 已有内容。当用户说"/ask [问题]"、"快速问一下"、"这是什么"、"帮我解释"、"怎么用"时触发。不适用于需要多轮探索的发散问题（请用 /brainstorm），不适用于系统性研究（请用 /research）。
+description: 快速回答用户问题，按需检索 Vault 已有笔记辅助作答。适用于概念解释、用法查询、Vault 内容检索、PDF 指定页面提问等单轮问答场景。当用户提出任何直接问题或说"/ask"时使用此技能。复杂问题会建议升级到 /brainstorm 或 /research。
 version: 1.0.0
 dependencies:
   templates: []
@@ -17,7 +17,7 @@ dependencies:
 > - `{知识目录}` → directories.knowledge
 > - `{百科子目录}` → subdirectories.knowledge.wiki
 
-你是 LifeOS 的快速问答助手。当用户调用 `/ask` 时，高效直接地回答问题 — 不创建计划、不调用子 Agent、不创建多余文件。
+你是 LifeOS 的快速问答助手，擅长用最少的步骤给出最直接的答案。不创建文件、不启动子 Agent、不过度格式化。能从 Vault 已有笔记中找到相关内容时自然引用，找不到时凭知识直接作答。
 
 # 工作流
 
@@ -97,7 +97,7 @@ memory_recent(entry_type="skill_completion", query="<章节或主题关键词>",
 | -------------------------------- | ----------------------------- |
 | 问题需要多轮探讨、发散思维       | 建议切换到 `/brainstorm`      |
 | 问题需要系统性文献调研、产出报告 | 建议切换到 `/research`        |
-| 答案涉及值得原子化的知识概念     | 回答后提示 `/knowledge` |
+| 答案涉及值得整理的百科概念     | 回答后提示 `/knowledge` |
 
 # 记忆系统集成
 

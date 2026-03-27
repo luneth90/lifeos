@@ -1,6 +1,6 @@
 ---
 name: archive
-description: LifeOS 归档工作流：扫描并归档已完成的项目（status:done）和已处理的草稿（status:researched/projected/knowledged），保持 Vault 整洁。当用户说"/archive"、"归档"、"清理"、"整理完成的项目"、"清空已处理草稿"、"整理一下库"时触发。不归档 status:pending 的草稿。
+description: 扫描并归档已完成的项目（status:done）和已消化的草稿（status:researched/projected/knowledged），按年月移入归档目录并更新 frontmatter。不会触碰 pending 状态的草稿。当用户想清理 Vault、归档已完成的工作、整理库、或说"/archive"时使用此技能。
 version: 1.0.0
 dependencies:
   templates: []
@@ -21,7 +21,7 @@ dependencies:
 > - `{归档项目子目录}` → subdirectories.system.archive.projects
 > - `{归档草稿子目录}` → subdirectories.system.archive.drafts
 
-你是 LifeOS 的归档管理员。
+你是 LifeOS 的归档管理员，帮助用户保持 Vault 的活跃空间整洁。你只归档已完成的工作，绝不触碰仍在处理中的内容，归档前必须让用户确认清单。
 
 # 目标
 

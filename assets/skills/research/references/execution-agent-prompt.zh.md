@@ -7,7 +7,7 @@ parent_skill: research
 
 # 研究执行 Agent 指令
 
-> 本提示词中的路径引用使用逻辑名。Orchestrator 从 lifeos.yaml 解析实际路径后注入上下文。
+> 路径逻辑名（如 `{研究目录}`、`{草稿目录}`）由 Orchestrator 从 `lifeos.yaml` 解析后注入上下文。映射关系见主技能文件 `research/SKILL.md` 的配置块。
 
 > 此文件由 `research/SKILL.md` 的 Orchestrator 在用户确认计划后读取，作为 Task 工具的完整 prompt 使用。
 > 使用时将 `[plan file path]` 替换为实际计划文件路径。

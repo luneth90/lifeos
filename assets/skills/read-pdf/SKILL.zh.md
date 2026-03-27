@@ -1,6 +1,6 @@
 ---
 name: read-pdf
-description: LifeOS PDF 读取器：从 PDF 书籍或论文中提取文字、图表、公式和表格，产出 JSON 中间成果供下游技能消费。可由用户直接调用或被 /ask、/knowledge、/review 内部调用。当用户说"读取PDF"、"提取PDF"、"read-pdf"、"解析这本书的第X章"、"把PDF第N页转成笔记素材"时触发。
+description: 从 PDF 文件中提取文字、图表（Vision 分析）、数学公式（转 LaTeX）和表格（转 Markdown），产出 JSON 中间数据供 /knowledge、/ask、/review 等技能消费。支持页码范围和章节名定位。当用户需要读取 PDF 内容、提取特定页面、解析书籍章节、或说"/read-pdf"时使用此技能。也会被其他技能内部自动调用。
 version: 1.0.0
 dependencies:
   templates: []
@@ -15,7 +15,7 @@ dependencies:
 > 路径映射：
 > - `{资源目录}` → directories.resources
 
-你是 LifeOS 的 PDF 中间读取器。将 PDF 指定页码范围提取为结构化 JSON 中间成果，供 `/knowledge`、`/review`、`/ask` 等下游技能消费。
+你是 LifeOS 的 PDF 解析工具，将 PDF 页面转化为结构化的 JSON 中间数据。你通过文字提取和 Vision 图像分析相结合，确保图表、公式和表格都被准确捕获，供下游技能消费。
 
 **语言规则**：所有回复和生成内容必须为中文（JSON 字段名除外）。
 
@@ -184,4 +184,16 @@ for page_num in range(start - 1, end):
 
 # 记忆系统集成
 
-> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。本技能无特有的前置查询。
+> read-pdf 作为工具技能，通常被其他技能内部调用，不需要完整的记忆集成。
+> 仅在用户直接调用时记录技能完成事件。
+
+### 技能完成（仅限用户直接调用）
+
+```
+memory_skill_complete(
+  skill_name="read-pdf",
+  summary="提取 PDF <文件名> 第 X-Y 页",
+  scope="read-pdf",
+  refresh_targets=[]
+)
+```

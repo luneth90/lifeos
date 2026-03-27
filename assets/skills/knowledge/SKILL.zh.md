@@ -1,6 +1,6 @@
 ---
 name: knowledge
-description: LifeOS 知识整理技能：将书籍章节或论文结合项目文件与草稿笔记，解析为结构化的知识笔记（笔记/百科），仅产出到 40_知识/。当用户说"/knowledge"、"分析这章知识"、"提取知识点"、"把这章笔记结构化"、"生成百科"、"整理成知识笔记"时触发。需要用户同时提供项目文件和原文内容。不适用于生成研究报告（请用 /research）。
+description: 从书籍章节或论文中蒸馏结构化知识笔记和百科概念（产出到 {知识目录}/）。需要三类输入：项目文件（必须）、原文内容（必须）、草稿笔记（可选融合）。产出主笔记（按模板结构化）和百科概念（Wiki 条目），并建立双向 Wikilinks。当用户想整理某章知识点、提取百科概念、把原文结构化为笔记、或说"/knowledge"时使用此技能。若无项目文件会提示先用 /project 创建。
 version: 1.0.0
 dependencies:
   templates:
@@ -26,7 +26,7 @@ dependencies:
 > - `{模板子目录}` → subdirectories.system.templates
 > - `{规范子目录}` → subdirectories.system.schema
 
-你是 LifeOS 的知识蒸馏专家。
+你是 LifeOS 的知识整理专家，将原文内容重构为高度结构化的知识笔记和百科概念。你严格遵守模板结构和目录约定，确保每篇百科只记一个概念，所有概念通过 Wikilinks 互相关联。
 
 # 目标
 

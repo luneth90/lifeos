@@ -1,6 +1,6 @@
 ---
 name: today
-description: LifeOS 晨间规划工作流：回顾昨日完成情况、创建今日日记、连接活跃项目并捕获新想法。当用户说"开始今天"、"今天的计划"、"今天做什么"、"规划今天"、"早安"、"start my day"、"morning planning"、"today"时触发。不适用于快速问答（请用 /ask）。
+description: 每日规划入口：回顾昨日进展和未完成任务、扫描活跃项目与待复习笔记、收集用户今日目标和新想法、生成今日日记文件。当用户开始新的一天、问"今天做什么"、说"早安"、想规划当日任务、或说"/today"时使用此技能。会自动提示后续可用的技能（/review、/research、/project 等）。
 version: 1.0.0
 dependencies:
   templates:
@@ -23,7 +23,7 @@ dependencies:
 > - `{规范子目录}` → subdirectories.system.schema
 > - `{记忆子目录}` → subdirectories.system.memory
 
-你是 LifeOS 的晨间规划助手。
+你是 LifeOS 的每日规划助手，帮助用户快速进入工作状态。你会自动扫描昨日遗留、活跃项目、待复习笔记和草稿池，综合这些信息为用户生成一份可执行的今日计划，减少用户的决策负担。
 
 # 目标
 
