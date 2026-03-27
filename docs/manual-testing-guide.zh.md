@@ -11,7 +11,7 @@
 
 ---
 
-## 1. 构建与准备
+## 1. 构建与本地注册
 
 ```bash
 cd /path/to/lifeos          # 进入项目目录
@@ -19,6 +19,16 @@ npm install
 npm run build
 npm run typecheck            # 确认无类型错误
 npm test                     # 确认测试通过
+npm link                     # 全局注册 lifeos 命令
+```
+
+> **关键：** `npm link` 会将本地构建注册为全局包，之后 `npx lifeos`、`lifeos` 命令均解析到本地构建产物。
+> 这样 `lifeos init` 生成的 `.mcp.json`（默认使用 `npx -y lifeos`）无需手动覆写即可直接工作。
+
+**验证注册成功：**
+```bash
+lifeos --version             # 应输出 1.0.0
+which lifeos                 # 应指向全局 node_modules 的 symlink
 ```
 
 ---
@@ -26,12 +36,13 @@ npm test                     # 确认测试通过
 ## 2. 初始化测试 Vault
 
 ```bash
-node bin/lifeos.js init /tmp/lifeos-manual-test --lang zh
+lifeos init /tmp/lifeos-manual-test --lang zh
 ```
 
 **预期输出：**
 - 10 个目录已创建（`00_草稿` ~ `90_系统`）
-- 模板、规范、技能文件已复制
+- 模板、规范、提示词、技能文件已复制
+- `.claude/skills` → `.agents/skills` 符号链接已创建
 - `.mcp.json`、`.codex/config.toml`、`opencode.json` 已注册
 - Git 仓库已初始化
 
@@ -40,32 +51,12 @@ node bin/lifeos.js init /tmp/lifeos-manual-test --lang zh
 ls /tmp/lifeos-manual-test/
 cat /tmp/lifeos-manual-test/lifeos.yaml
 cat /tmp/lifeos-manual-test/.mcp.json
+ls -la /tmp/lifeos-manual-test/.claude/skills   # 确认是 symlink
 ```
 
 ---
 
-## 3. 配置本地 MCP Server
-
-`lifeos init` 注册的是 `npx -y lifeos`（npm 包），本地测试需改为指向构建产物：
-
-```bash
-LIFEOS_DIR="/path/to/lifeos"    # 替换为实际路径
-
-cat > /tmp/lifeos-manual-test/.mcp.json <<EOF
-{
-  "mcpServers": {
-    "lifeos": {
-      "command": "node",
-      "args": ["$LIFEOS_DIR/dist/server.js"]
-    }
-  }
-}
-EOF
-```
-
----
-
-## 4. 启动 Claude Code
+## 3. 启动 Claude Code
 
 ```bash
 cd /tmp/lifeos-manual-test
@@ -76,11 +67,11 @@ claude
 
 ---
 
-## 5. MCP 工具逐项测试
+## 4. MCP 工具逐项测试
 
 以下测试在 Claude Code 会话中执行。每一步直接告诉 Claude 要调用的工具即可。
 
-### 5.1 memory_startup — 启动会话
+### 4.1 memory_startup — 启动会话
 
 > 对 Claude 说：调用 memory_startup
 
@@ -89,7 +80,7 @@ claude
 - [ ] `/tmp/lifeos-manual-test/memory.db` 已创建
 - [ ] 无报错
 
-### 5.2 memory_log — 记录事件
+### 4.2 memory_log — 记录事件
 
 > 对 Claude 说：调用 memory_log，记录一条观察事件，内容为"测试手动记录功能"
 
@@ -97,7 +88,7 @@ claude
 - [ ] 返回成功，包含事件 ID
 - [ ] 事件类型为 observation 或 discovery
 
-### 5.3 memory_recent — 查询最近事件
+### 4.3 memory_recent — 查询最近事件
 
 > 对 Claude 说：调用 memory_recent，查看最近的会话日志
 
@@ -105,7 +96,7 @@ claude
 - [ ] 返回列表中包含 5.2 刚记录的事件
 - [ ] 包含 memory_startup 产生的会话事件
 
-### 5.4 memory_query — 搜索 Vault
+### 4.4 memory_query — 搜索 Vault
 
 先创建一个测试笔记用于搜索：
 
@@ -133,7 +124,7 @@ EOF
 - [ ] memory_query 返回结果中包含"测试笔记.md"
 - [ ] 结果包含文件路径、标题、标签等元数据
 
-### 5.5 memory_auto_capture — 批量捕获
+### 4.5 memory_auto_capture — 批量捕获
 
 > 对 Claude 说：调用 memory_auto_capture，记录一个偏好："用户喜欢使用中文界面"
 
@@ -141,7 +132,7 @@ EOF
 - [ ] 返回成功，包含捕获的条目数量
 - [ ] 条目类型为 preference
 
-### 5.6 memory_refresh — 刷新活跃文档
+### 4.6 memory_refresh — 刷新活跃文档
 
 > 对 Claude 说：调用 memory_refresh 刷新 TaskBoard
 
@@ -160,7 +151,7 @@ EOF
   cat /tmp/lifeos-manual-test/90_系统/记忆/UserProfile.md
   ```
 
-### 5.7 memory_citations — 获取来源引用
+### 4.7 memory_citations — 获取来源引用
 
 > 对 Claude 说：调用 memory_citations，查询 TaskBoard 中某个条目的来源事件
 
@@ -168,7 +159,7 @@ EOF
 - [ ] 返回关联的 session_log 事件列表
 - [ ] 每条引用包含时间戳和原始内容
 
-### 5.8 memory_skill_context — 技能上下文组装
+### 4.8 memory_skill_context — 技能上下文组装
 
 > 对 Claude 说：调用 memory_skill_context，使用 seed profile "today"
 
@@ -176,7 +167,7 @@ EOF
 - [ ] 返回组装后的上下文，包含与 today 技能相关的信息
 - [ ] 包含 Layer 0 摘要、活跃文档摘要等
 
-### 5.9 memory_skill_complete — 标记技能完成
+### 4.9 memory_skill_complete — 标记技能完成
 
 > 对 Claude 说：调用 memory_skill_complete，标记 today 技能已完成
 
@@ -184,7 +175,7 @@ EOF
 - [ ] 返回成功
 - [ ] 该事件可通过 memory_recent 查询到
 
-### 5.10 memory_checkpoint — 关闭会话
+### 4.10 memory_checkpoint — 关闭会话
 
 > 对 Claude 说：调用 memory_checkpoint
 
@@ -195,7 +186,7 @@ EOF
 
 ---
 
-## 6. 技能触发测试
+## 5. 技能触发测试
 
 在 Claude Code 会话中直接使用斜杠命令触发技能：
 
@@ -214,7 +205,7 @@ EOF
 
 ---
 
-## 7. 数据持久化验证
+## 6. 数据持久化验证
 
 退出 Claude Code 后检查数据库状态：
 
@@ -243,7 +234,7 @@ sqlite3 /tmp/lifeos-manual-test/memory.db "SELECT slot, key, substr(value, 1, 60
 
 ---
 
-## 8. 重启后连续性
+## 7. 重启后连续性
 
 重新进入 Claude Code，验证数据跨会话保持：
 
