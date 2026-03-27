@@ -37,15 +37,15 @@ If the user's environment lacks Python, prompt them to install it before continu
 Prefer calling the local script for PDF page/chapter lookup, text extraction, and page rendering:
 
 ```bash
-python3 .agents/skills/read-pdf/scripts/read_pdf.py <PDF path> <page range or chapter name>
+python .agents/skills/read-pdf/scripts/read_pdf.py <PDF path> <page range or chapter name>
 ```
 
 Examples:
 
 ```bash
-python3 .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf 245-260
-python3 .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf "Chapter 3"
-python3 .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf --list-toc
+python .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf 245-260
+python .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf "Chapter 3"
+python .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf --list-toc
 ```
 
 Script responsibilities:

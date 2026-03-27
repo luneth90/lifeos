@@ -37,15 +37,15 @@ pip install PyMuPDF Pillow
 优先调用本地脚本完成 PDF 的页码/章节定位、文字提取、页面渲染：
 
 ```bash
-python3 .agents/skills/read-pdf/scripts/read_pdf.py <PDF路径> <页码范围或章节名>
+python .agents/skills/read-pdf/scripts/read_pdf.py <PDF路径> <页码范围或章节名>
 ```
 
 示例：
 
 ```bash
-python3 .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf 245-260
-python3 .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf "第3章"
-python3 .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf --list-toc
+python .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf 245-260
+python .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf "第3章"
+python .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf --list-toc
 ```
 
 脚本职责：

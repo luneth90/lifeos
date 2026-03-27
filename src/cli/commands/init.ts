@@ -43,6 +43,8 @@ interface PrereqResult {
 	hint: string;
 }
 
+const isWindows = process.platform === 'win32';
+
 function checkCommand(cmd: string, versionFlag = '--version'): string | null {
 	try {
 		return execSync(`${cmd} ${versionFlag}`, { stdio: 'pipe' }).toString().trim().split('\n')[0];
@@ -51,8 +53,20 @@ function checkCommand(cmd: string, versionFlag = '--version'): string | null {
 	}
 }
 
-function checkPrerequisites(): PrereqResult[] {
+/** Resolve the Python 3 executable name for this platform. */
+function findPython(): { cmd: string; version: string } | null {
+	// macOS/Linux: prefer python3; Windows: usually just python
+	const candidates = isWindows ? ['python', 'python3'] : ['python3', 'python'];
+	for (const cmd of candidates) {
+		const ver = checkCommand(cmd);
+		if (ver?.includes('3.')) return { cmd, version: ver };
+	}
+	return null;
+}
+
+function checkPrerequisites(): { results: PrereqResult[]; pythonCmd: string | null } {
 	const results: PrereqResult[] = [];
+	let pythonCmd: string | null = null;
 
 	// Node.js (already running, but check version)
 	const nodeVer = process.version;
@@ -73,24 +87,34 @@ function checkPrerequisites(): PrereqResult[] {
 	});
 
 	// Python 3
-	const py3Ver = checkCommand('python3') ?? checkCommand('python');
+	const py = findPython();
+	pythonCmd = py?.cmd ?? null;
 	results.push({
 		name: 'Python 3',
-		ok: py3Ver !== null,
-		version: py3Ver ?? undefined,
+		ok: py !== null,
+		version: py?.version,
 		hint: 'https://www.python.org/  (required by /read-pdf skill)',
 	});
 
-	// PyMuPDF
-	const pymupdf = checkCommand('python3 -c "import fitz; print(fitz.version)"', '');
-	results.push({
-		name: 'PyMuPDF',
-		ok: pymupdf !== null,
-		version: pymupdf ?? undefined,
-		hint: 'pip install PyMuPDF Pillow  (required by /read-pdf skill)',
-	});
+	// PyMuPDF — use the resolved python command with platform-safe quoting
+	if (pythonCmd) {
+		const importCmd = `${pythonCmd} -c "import fitz; print(fitz.version)"`;
+		const pymupdf = checkCommand(importCmd, '');
+		results.push({
+			name: 'PyMuPDF',
+			ok: pymupdf !== null,
+			version: pymupdf ?? undefined,
+			hint: 'pip install PyMuPDF Pillow  (required by /read-pdf skill)',
+		});
+	} else {
+		results.push({
+			name: 'PyMuPDF',
+			ok: false,
+			hint: 'pip install PyMuPDF Pillow  (install Python 3 first)',
+		});
+	}
 
-	return results;
+	return { results, pythonCmd };
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
@@ -107,7 +131,7 @@ export default async function init(args: string[]): Promise<void> {
 	const noMcp = flags['no-mcp'] === true;
 
 	// 0. Prerequisite checks
-	const prereqs = checkPrerequisites();
+	const { results: prereqs } = checkPrerequisites();
 	const missing = prereqs.filter((p) => !p.ok);
 
 	log('📋', bold('Prerequisites:'));
@@ -198,7 +222,12 @@ export default async function init(args: string[]): Promise<void> {
 	ensureDir(claudeDir);
 	const claudeSkillsLink = join(claudeDir, 'skills');
 	if (!existsSync(claudeSkillsLink)) {
-		symlinkSync(join('..', '.agents', 'skills'), claudeSkillsLink);
+		if (isWindows) {
+			// Windows: junction doesn't require admin privileges (needs absolute target)
+			symlinkSync(resolve(targetPath, '.agents', 'skills'), claudeSkillsLink, 'junction');
+		} else {
+			symlinkSync(join('..', '.agents', 'skills'), claudeSkillsLink);
+		}
 	}
 
 	// 10. Copy CLAUDE.md & AGENTS.md (single source, same content)
