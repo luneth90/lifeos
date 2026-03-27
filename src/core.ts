@@ -5,6 +5,8 @@
  * Each function opens a DB, calls services, closes DB, and returns results.
  */
 
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import {
 	refreshTaskboard,
@@ -56,6 +58,7 @@ import { resolveSessionId } from './utils/shared.js';
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function openDb(dbPath: string): Database.Database {
+	mkdirSync(dirname(dbPath), { recursive: true });
 	const db = new Database(dbPath);
 	db.pragma('journal_mode = WAL');
 	db.pragma('foreign_keys = ON');

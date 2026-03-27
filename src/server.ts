@@ -23,7 +23,12 @@ server.tool(
 	'memory_startup',
 	'Start session: scan vault, build Layer 0 summary.',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		vault_root: z.string().default(''),
 		session_id: z.string().optional(),
 	},
@@ -42,7 +47,12 @@ server.tool(
 	'memory_query',
 	'Search vault index for notes, projects, and knowledge.',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		vault_root: z.string().default(''),
 		query: z.string().default(''),
 		filters: z.record(z.string()).optional(),
@@ -67,7 +77,12 @@ server.tool(
 	'memory_recent',
 	'Query recent session log events (decisions, corrections, milestones, etc.).',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		vault_root: z.string().default(''),
 		days: z.number().int().min(1).max(365).default(14),
 		entry_type: z.string().optional(),
@@ -96,7 +111,12 @@ server.tool(
 	'memory_log',
 	'Log a single memory event (decision, correction, preference, milestone, etc.).',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		entry_type: z.enum([
 			'skill_completion',
 			'decision',
@@ -154,7 +174,12 @@ server.tool(
 	'memory_auto_capture',
 	'Batch capture corrections, decisions, and preferences from the current session.',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		corrections: z
 			.array(
 				z.object({
@@ -207,7 +232,12 @@ server.tool(
 	'memory_notify',
 	'Notify the memory system that a vault file has been created or modified.',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		vault_root: z.string().default(''),
 		file_path: z.string().min(1),
 	},
@@ -226,7 +256,12 @@ server.tool(
 	'memory_checkpoint',
 	'Close the current session: refresh active docs, process enhance queue, write session bridge.',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		vault_root: z.string().default(''),
 		session_id: z.string().optional(),
 	},
@@ -245,7 +280,12 @@ server.tool(
 	'memory_skill_complete',
 	'Record that a LifeOS skill has completed its execution.',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		vault_root: z.string().default(''),
 		skill_name: z.string().min(1),
 		summary: z.string().min(1),
@@ -292,7 +332,12 @@ server.tool(
 	'memory_refresh',
 	'Rebuild AUTO sections of an active doc (TaskBoard or UserProfile) from DB data.',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		vault_root: z.string().default(''),
 		target: z.enum(['TaskBoard', 'UserProfile']),
 		section: z.string().optional(),
@@ -315,7 +360,12 @@ server.tool(
 	'memory_citations',
 	'Get source event citations for items in TaskBoard or UserProfile.',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		vault_root: z.string().default(''),
 		target: z.enum(['TaskBoard', 'UserProfile']),
 		section: z.string().optional(),
@@ -338,7 +388,12 @@ server.tool(
 	'memory_skill_context',
 	'Assemble skill execution context using a named seed profile.',
 	{
-		db_path: z.string().default(''),
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
 		vault_root: z.string().default(''),
 		skill_profile: z.string().min(1),
 		related_files: z.array(z.string()).optional(),
