@@ -105,17 +105,12 @@ export default async function init(args: string[]): Promise<void> {
 	// 7. Copy skills
 	installSkills(targetPath, lang, 'overwrite');
 
-	// 8. Copy CLAUDE.md
-	const claudeLangSrc = join(assetsDir(), `claude.${lang}.md`);
-	const claudeFallback = join(assetsDir(), 'claude.zh.md');
-	const claudeSrc = existsSync(claudeLangSrc) ? claudeLangSrc : claudeFallback;
-	copyFileSync(claudeSrc, join(targetPath, 'CLAUDE.md'));
-
-	// 8b. Copy AGENTS.md (for Codex / OpenCode)
-	const agentsLangSrc = join(assetsDir(), `agents.${lang}.md`);
-	const agentsFallback = join(assetsDir(), 'agents.zh.md');
-	const agentsSrc = existsSync(agentsLangSrc) ? agentsLangSrc : agentsFallback;
-	copyFileSync(agentsSrc, join(targetPath, 'AGENTS.md'));
+	// 8. Copy CLAUDE.md & AGENTS.md (single source, same content)
+	const rulesLangSrc = join(assetsDir(), `lifeos-rules.${lang}.md`);
+	const rulesFallback = join(assetsDir(), 'lifeos-rules.zh.md');
+	const rulesSrc = existsSync(rulesLangSrc) ? rulesLangSrc : rulesFallback;
+	copyFileSync(rulesSrc, join(targetPath, 'CLAUDE.md'));
+	copyFileSync(rulesSrc, join(targetPath, 'AGENTS.md'));
 
 	// 9. Git init
 	if (!existsSync(join(targetPath, '.git'))) {
