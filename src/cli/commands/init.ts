@@ -12,7 +12,7 @@ import {
 	installTemplates,
 } from '../utils/install-assets.js';
 import { parseArgs } from '../utils/ui.js';
-import { bold, green, log } from '../utils/ui.js';
+import { bold, green, log, red, yellow } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 
 // ─── Language auto-detection ─────────────────────────────────────────────────
@@ -34,6 +34,65 @@ const GITIGNORE = `# LifeOS
 .obsidian/cache
 `;
 
+// ─── Prerequisite checks ────────────────────────────────────────────────────
+
+interface PrereqResult {
+	name: string;
+	ok: boolean;
+	version?: string;
+	hint: string;
+}
+
+function checkCommand(cmd: string, versionFlag = '--version'): string | null {
+	try {
+		return execSync(`${cmd} ${versionFlag}`, { stdio: 'pipe' }).toString().trim().split('\n')[0];
+	} catch {
+		return null;
+	}
+}
+
+function checkPrerequisites(): PrereqResult[] {
+	const results: PrereqResult[] = [];
+
+	// Node.js (already running, but check version)
+	const nodeVer = process.version;
+	results.push({
+		name: 'Node.js',
+		ok: true,
+		version: nodeVer,
+		hint: 'https://nodejs.org/',
+	});
+
+	// Git
+	const gitVer = checkCommand('git');
+	results.push({
+		name: 'Git',
+		ok: gitVer !== null,
+		version: gitVer ?? undefined,
+		hint: 'https://git-scm.com/',
+	});
+
+	// Python 3
+	const py3Ver = checkCommand('python3') ?? checkCommand('python');
+	results.push({
+		name: 'Python 3',
+		ok: py3Ver !== null,
+		version: py3Ver ?? undefined,
+		hint: 'https://www.python.org/  (required by /read-pdf skill)',
+	});
+
+	// PyMuPDF
+	const pymupdf = checkCommand('python3 -c "import fitz; print(fitz.version)"', '');
+	results.push({
+		name: 'PyMuPDF',
+		ok: pymupdf !== null,
+		version: pymupdf ?? undefined,
+		hint: 'pip install PyMuPDF Pillow  (required by /read-pdf skill)',
+	});
+
+	return results;
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export default async function init(args: string[]): Promise<void> {
@@ -46,6 +105,28 @@ export default async function init(args: string[]): Promise<void> {
 	const lang: 'zh' | 'en' =
 		flags.lang && flags.lang !== true ? (flags.lang as 'zh' | 'en') : detectLang();
 	const noMcp = flags['no-mcp'] === true;
+
+	// 0. Prerequisite checks
+	const prereqs = checkPrerequisites();
+	const missing = prereqs.filter((p) => !p.ok);
+
+	log('📋', bold('Prerequisites:'));
+	for (const p of prereqs) {
+		const status = p.ok ? green('✔') : red('✘');
+		const ver = p.version ? ` (${p.version})` : '';
+		log('  ', `${status} ${p.name}${ver}`);
+	}
+
+	if (missing.length > 0) {
+		log('  ', '');
+		log('⚠️', yellow('Missing prerequisites:'));
+		for (const m of missing) {
+			log('  ', `${red('→')} ${m.name}: ${m.hint}`);
+		}
+		log('  ', '');
+		throw new Error('Please install missing prerequisites before initializing.');
+	}
+	log('  ', '');
 
 	const preset: LifeOSConfig = lang === 'en' ? EN_PRESET : ZH_PRESET;
 
