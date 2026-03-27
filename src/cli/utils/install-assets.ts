@@ -47,6 +47,32 @@ export function installSchema(targetPath: string, config: LifeOSConfig): string[
 }
 
 /**
+ * Copy language-specific prompt files from assets to vault.
+ * Files are named `Foo_Prompt.zh.md` / `Foo_Prompt.en.md`;
+ * only the matching language is copied, with the lang suffix stripped.
+ * Always overwrites existing files (Tier 1).
+ */
+export function installPrompts(targetPath: string, config: LifeOSConfig): string[] {
+	const lang = config.language === 'en' ? 'en' : 'zh';
+	const suffix = `.${lang}.md`;
+	const src = join(assetsDir(), 'prompts');
+	const dest = join(targetPath, config.directories.system, config.subdirectories.system.prompts);
+	if (!existsSync(src)) return [];
+
+	ensureDir(dest);
+	const copied: string[] = [];
+
+	for (const file of readdirSync(src)) {
+		if (!file.endsWith(suffix)) continue;
+		const destName = file.replace(suffix, '.md');
+		copyFileSync(join(src, file), join(dest, destName));
+		copied.push(`${config.directories.system}/${config.subdirectories.system.prompts}/${destName}`);
+	}
+
+	return copied;
+}
+
+/**
  * Copy skills from assets to vault with language resolution.
  *
  * @param mode

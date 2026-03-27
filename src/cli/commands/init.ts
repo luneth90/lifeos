@@ -5,7 +5,7 @@ import { stringify as stringifyYaml } from 'yaml';
 import { EN_PRESET, EN_REFLECTION_SUBS, ZH_PRESET, ZH_REFLECTION_SUBS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { assetsDir, ensureDir } from '../utils/assets.js';
-import { installSchema, installSkills, installTemplates } from '../utils/install-assets.js';
+import { installPrompts, installSchema, installSkills, installTemplates } from '../utils/install-assets.js';
 import { parseArgs } from '../utils/ui.js';
 import { bold, green, log } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
@@ -102,17 +102,20 @@ export default async function init(args: string[]): Promise<void> {
 	// 6. Copy schema
 	installSchema(targetPath, preset);
 
-	// 7. Copy skills
+	// 7. Copy prompts
+	installPrompts(targetPath, preset);
+
+	// 8. Copy skills
 	installSkills(targetPath, lang, 'overwrite');
 
-	// 8. Copy CLAUDE.md & AGENTS.md (single source, same content)
+	// 9. Copy CLAUDE.md & AGENTS.md (single source, same content)
 	const rulesLangSrc = join(assetsDir(), `lifeos-rules.${lang}.md`);
 	const rulesFallback = join(assetsDir(), 'lifeos-rules.zh.md');
 	const rulesSrc = existsSync(rulesLangSrc) ? rulesLangSrc : rulesFallback;
 	copyFileSync(rulesSrc, join(targetPath, 'CLAUDE.md'));
 	copyFileSync(rulesSrc, join(targetPath, 'AGENTS.md'));
 
-	// 9. Git init
+	// 10. Git init
 	if (!existsSync(join(targetPath, '.git'))) {
 		try {
 			execSync('git init', { cwd: targetPath, stdio: 'ignore' });
@@ -125,13 +128,13 @@ export default async function init(args: string[]): Promise<void> {
 		writeFileSync(gitignorePath, GITIGNORE, 'utf-8');
 	}
 
-	// 10. MCP registration
+	// 11. MCP registration
 	if (!noMcp) {
 		const { registerMcp } = await import('../utils/mcp-register.js');
 		await registerMcp(targetPath);
 	}
 
-	// 11. Print summary
+	// 12. Print summary
 	log(green('✔'), bold('LifeOS vault initialized'));
 	log('  ', `Path:     ${targetPath}`);
 	log('  ', `Language: ${lang}`);

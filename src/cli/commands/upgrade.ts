@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { LifeOSConfig } from '../../config.js';
-import { installSchema, installSkills, installTemplates } from '../utils/install-assets.js';
+import { installPrompts, installSchema, installSkills, installTemplates } from '../utils/install-assets.js';
 import { bold, green, log, parseArgs } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 
@@ -38,9 +38,10 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 
 	const lang = (config.language as 'zh' | 'en') ?? 'zh';
 
-	// 4. Tier 1 — Templates + Schema
+	// 4. Tier 1 — Templates + Schema + Prompts
 	result.updated.push(...installTemplates(targetPath, config));
 	result.updated.push(...installSchema(targetPath, config));
+	result.updated.push(...installPrompts(targetPath, config));
 
 	// 5. Tier 2 — Skills
 	const skillResult = installSkills(targetPath, lang, 'smart-merge');
