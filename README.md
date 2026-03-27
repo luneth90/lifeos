@@ -144,3 +144,7 @@ npm run dev      # 开发模式（热重载）
 ## License
 
 [MIT](LICENSE)
+
+## 致谢
+
+本项目的灵感来源于 [MarsWang42/OrbitOS](https://github.com/MarsWang42/OrbitOS)。感谢该项目提供的启发。

@@ -144,3 +144,7 @@ npm run dev      # Dev mode (hot reload)
 ## License
 
 [MIT](LICENSE)
+
+## Acknowledgements
+
+This project was inspired by [MarsWang42/OrbitOS](https://github.com/MarsWang42/OrbitOS). Thanks to the project for the inspiration.
