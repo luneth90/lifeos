@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import init from '../../src/cli/commands/init.js';
+import renameCommand from '../../src/cli/commands/rename.js';
 import upgrade from '../../src/cli/commands/upgrade.js';
 
 function makeTmpDir() {
@@ -148,6 +149,37 @@ describe('lifeos upgrade', () => {
 			version: '1.0.0',
 			sha256: sha256(latestTemplate),
 		});
+	});
+
+	test('smart-merge still upgrades tracked templates after renaming the system directory', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		const oldTemplatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
+		const latestTemplate = readFileSync(oldTemplatePath, 'utf-8');
+		const previousTemplate = 'OLDER MANAGED TEMPLATE CONTENT';
+		writeFileSync(oldTemplatePath, previousTemplate, 'utf-8');
+
+		updateYamlConfig(dir, (config) => {
+			const versions = (config.installed_versions as Record<string, string> | undefined) ?? {};
+			versions.assets = '0.0.1';
+			config.installed_versions = versions;
+			config.managed_assets = {
+				...(config.managed_assets as Record<string, unknown> | undefined),
+				'90_系统/模板/Daily_Template.md': {
+					version: '0.0.1',
+					sha256: sha256(previousTemplate),
+				},
+			};
+		});
+
+		await renameCommand([dir, '--logical', 'system', '--name', '99_系统']);
+
+		const result = await upgrade([dir]);
+		const renamedTemplatePath = join(dir, '99_系统', '模板', 'Daily_Template.md');
+
+		expect(readFileSync(renamedTemplatePath, 'utf-8')).toBe(latestTemplate);
+		expect(result.updated).toContain('99_系统/模板/Daily_Template.md');
+		expect(result.skipped).not.toContain('99_系统/模板/Daily_Template.md');
 	});
 
 	test('skips modified schema during upgrade', async () => {

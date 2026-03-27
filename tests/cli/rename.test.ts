@@ -42,6 +42,24 @@ describe('lifeos rename', () => {
 		}
 	});
 
+	test('rewrites managed asset keys when renaming top-level directories', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+
+			await renameCommand([dir, '--logical', 'system', '--name', '99_系统']);
+
+			const yaml = parseYaml(readFileSync(join(dir, 'lifeos.yaml'), 'utf-8')) as {
+				managed_assets?: Record<string, { version?: string; sha256?: string }>;
+			};
+
+			expect(yaml.managed_assets?.['99_系统/模板/Daily_Template.md']).toBeDefined();
+			expect(yaml.managed_assets?.['90_系统/模板/Daily_Template.md']).toBeUndefined();
+		} finally {
+			cleanup();
+		}
+	});
+
 	test('throws for unknown logical name', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {

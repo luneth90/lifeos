@@ -118,6 +118,7 @@ export default async function rename(args: string[]): Promise<RenameResult> {
 	}
 
 	const oldPhysical = selectedItem.physical;
+	let managedAssetsNewPrefix = newPhysical;
 
 	if (selectedItem.isSubdir) {
 		// For subdirectories, only rename the leaf part
@@ -135,6 +136,7 @@ export default async function rename(args: string[]): Promise<RenameResult> {
 
 		// Rename physical directory
 		const parentDir = dirs[parentLogical];
+		managedAssetsNewPrefix = join(parentDir, newPhysical);
 		const oldPath = join(targetPath, parentDir, oldPhysical.split('/').slice(1).join('/'));
 		const newPath = join(targetPath, parentDir, newPhysical);
 		if (existsSync(oldPath)) {
@@ -150,6 +152,14 @@ export default async function rename(args: string[]): Promise<RenameResult> {
 		if (existsSync(oldPath)) {
 			renameSync(oldPath, newPath);
 		}
+	}
+
+	if (config.managed_assets) {
+		config.managed_assets = rewriteManagedAssetKeys(
+			config.managed_assets,
+			oldPhysical,
+			managedAssetsNewPrefix,
+		);
 	}
 
 	// Write updated config
@@ -170,6 +180,24 @@ export default async function rename(args: string[]): Promise<RenameResult> {
 		newPhysical,
 		wikilinksUpdated: replaced,
 	};
+}
+
+function rewriteManagedAssetKeys(
+	managedAssets: Record<string, { version: string; sha256: string }>,
+	oldPrefix: string,
+	newPrefix: string,
+): Record<string, { version: string; sha256: string }> {
+	const next: Record<string, { version: string; sha256: string }> = {};
+
+	for (const [key, value] of Object.entries(managedAssets)) {
+		if (key === oldPrefix || key.startsWith(`${oldPrefix}/`)) {
+			next[`${newPrefix}${key.slice(oldPrefix.length)}`] = value;
+			continue;
+		}
+		next[key] = value;
+	}
+
+	return next;
 }
 
 function replaceWikilinks(vaultRoot: string, oldPrefix: string, newPrefix: string): number {
