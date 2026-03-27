@@ -46,24 +46,17 @@ Execute the following steps:
 
 ## Step 5: Match Expert Persona
 
-- Scan `{system directory}/提示词/` to find the best matching expert persona file
-- Match by topic domain
-
-**Persona applicability rules:**
-
-| Persona                  | Applicable when                                                         | Exclusions                                                                 |
-| ------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `Art_ChinesePainting`    | Specific painters, painting styles, calligraphy traditions, poetry genres, art criticism | General cultural history; if image analysis is needed, note in plan "recommend using /ask with image upload" |
-| `History_ChineseCulture` | Chinese historical events, institutions, intellectual history, cultural phenomena | Painting/calligraphy topics (use Art persona)                              |
-| `AI_LLMResearch`         | LLM architecture, training methods, AI papers, scaling law, VLA, world models | —                                                                          |
-| `Math_HigherMathematics` | Abstract algebra, linear algebra, calculus, topology, differential manifolds, representation theory | —                                                                          |
-| No match found           | —                                                                       | Note "No match found, using general research mode"                         |
+- List all `.md` files in `{system directory}/提示词/`
+- For each file, read its **frontmatter** (`id`, `aliases`, `tags`) and the **Domain Coverage** / **Core Responsibilities** sections
+- Compare the research topic (from Step 4) against each persona's domain coverage to find the best match
+- If multiple personas could apply, pick the one whose domain is most specific to the topic
+- If no persona's domain overlaps with the research topic, note "No match found, using general research mode"
 
 **Applicability mode determination:**
 
-- `Full apply`: Replace default chapter structure entirely with the persona's Output Format
-- `Reference apply`: Borrow the analysis framework only, retain default chapters
-- `Not applicable`: Use default report structure
+- `Full apply`: The research topic falls squarely within the persona's core domain — replace default chapter structure entirely with the persona's Output Format
+- `Reference apply`: The persona's analytical framework is relevant but the topic is not its core focus — borrow the analysis framework only, retain default chapters
+- `Not applicable`: No persona matches — use default report structure
 
 ## Step 6: Create Plan File
 

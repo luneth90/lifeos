@@ -2,11 +2,11 @@
 
 [中文](./README.zh-CN.md) | English
 
-AI-native Knowledge OS — an Obsidian + AI Agent powered workspace for lifelong learning.
+Obsidian + AI Agent — your lifelong learning system.
 
 ## What is it
 
-LifeOS is a knowledge management system built on Obsidian Vault. AI Agent skills automate the capture, organization, review, and output of knowledge. It's not an app — it's a workspace you live in.
+LifeOS helps you grow scattered ideas into structured knowledge and truly master it — from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.
 
 **Core components:**
 
@@ -106,6 +106,23 @@ Renames a logical directory (e.g. `drafts`) to a new physical name, updates `lif
 | `/ask` | Quick Q&A |
 | `/brainstorm` | Interactive brainstorming |
 | `/archive` | Archive completed projects and drafts |
+
+## Custom Expert Prompts
+
+The `/research` skill automatically scans the Prompts directory in your vault for expert prompt files. LifeOS ships with built-in expert prompts (AI/LLM, Math, Art, History), but you can add your own to extend research capabilities to any domain.
+
+### How it works
+
+When you invoke `/research`, the Planning Agent:
+
+1. Lists all `.md` files in `{system directory}/Prompts/`
+2. Reads each file's frontmatter and **Domain Coverage** section
+3. Matches the research topic to the best-fit expert prompt
+4. Applies the matched prompt's analytical framework and output format to the research report
+
+### Adding custom expert prompts
+
+Create a `.md` file in your vault's Prompts directory (`{system directory}/Prompts/`). The Planning Agent will pick it up automatically on the next `/research` invocation — no restart or re-init needed. File structure should follow the built-in prompts in the same directory as reference.
 
 ## Tech Stack
 
