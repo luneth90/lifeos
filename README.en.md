@@ -90,13 +90,11 @@ Upgrades and re-syncs an initialized vault:
 
 Checks vault integrity: directory structure, templates, schema, skills, config, Node.js version, and asset version.
 
-### rename
-
-#### Directory Customization
+### rename: Directory Customization
 
 No extra flags are required. Run `npx lifeos rename [path]` and the CLI will show the directories available in the current vault, then guide you step by step to choose one and enter a new name. It updates `lifeos.yaml`, renames the actual directory, and batch-replaces related wikilinks across the vault.
 
-This means LifeOS does not lock you into fixed directory names. You can freely adapt physical directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
+This means LifeOS does not lock you into fixed directory names. You can freely adapt directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
 
 ## Skills
 
@@ -154,4 +152,4 @@ npm run dev      # Dev mode (hot reload)
 
 ## Acknowledgements
 
-This project was inspired by [MarsWang42/OrbitOS](https://github.com/MarsWang42/OrbitOS). Thanks to the project for the inspiration.
+This project was inspired by [MarsWang42/OrbitOS](https://github.com/MarsWang42/OrbitOS). 

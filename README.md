@@ -89,13 +89,11 @@ npx lifeos --version                                   # 查看版本
 
 检查 Vault 完整性：目录结构、模板、规范、技能、配置文件、Node.js 版本、资产版本。
 
-### rename
-
-#### 目录可自定义化
+### rename：目录可自定义化
 
 无需额外参数，直接执行 `npx lifeos rename [path]` 后，CLI 会列出当前 Vault 中可调整的目录，并通过交互引导你选择目录和输入新名称。它会同步更新 `lifeos.yaml`、重命名实际目录，并批量替换 Vault 中所有相关的 wikilink。
 
-这意味着 LifeOS 的目录命名不是固定死的。你可以根据自己的工作流、语言习惯和项目结构，自由调整各个目录的物理名称，同时保持配置和链接关系一致，获得最大的使用自由度。
+这意味着 LifeOS 的目录命名不是固定死的。你可以根据自己的工作流、语言习惯和项目结构，自由调整各个目录的名称，同时保持配置和链接关系一致，获得最大的使用自由度。
 
 ## 技能一览
 
@@ -153,4 +151,4 @@ npm run dev      # 开发模式（热重载）
 
 ## 致谢
 
-本项目的灵感来源于 [MarsWang42/OrbitOS](https://github.com/MarsWang42/OrbitOS)。感谢该项目提供的启发。
+本项目的灵感来源于 [MarsWang42/OrbitOS](https://github.com/MarsWang42/OrbitOS)。
