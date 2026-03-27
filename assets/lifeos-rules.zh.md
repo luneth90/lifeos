@@ -45,7 +45,7 @@
 | `/ask` | 快速问答，可选保存为草稿 | 有具体问题想快速得到解答、不需要完整研究流程时 |
 | `/brainstorm` | 交互式头脑风暴，探索和深化想法 | 有一个还不成熟的想法想聊聊、需要发散思维、探索方向可行性时 |
 | `/knowledge` | 从书籍/论文蒸馏结构化知识笔记和百科概念 | 读完一章想整理笔记、需要将原文结构化为知识体系时 |
-| `/review` | 生成复习文件、批改并更新掌握度 | 想复习已学内容、测验掌握程度、巩固薄弱环节时 |
+| `/revise` | 生成复习文件、批改并更新掌握度 | 想复习已学内容、测验掌握程度、巩固薄弱环节时 |
 | `/archive` | 归档已完成项目和已处理草稿 | 想清理 Vault、整理已完成的工作时 |
 | `/read-pdf` | 解析 PDF 为结构化 JSON | 需要将 PDF 文件转为可处理的文本时 |
 
@@ -57,7 +57,7 @@
 | 草稿 | `Draft_Template.md` |
 | 百科 | `Wiki_Template.md` |
 | 项目文件 | `Project_Template.md` |
-| 复习记录 | `Review_Template.md` |
+| 复习记录 | `Revise_Template.md` |
 | 通用知识笔记 | `Knowledge_Template.md` |
 | 深度研究报告 | `Research_Template.md` |
 | 周期复盘 | `Retrospective_Template.md` |
@@ -81,7 +81,7 @@ Compaction 后重新继续任务前，必须：
 ### 触发条件
 
 记忆工具**仅在以下场景**中调用：
-- 使用了 LifeOS 技能（`/today`、`/knowledge`、`/review`、`/research`、`/project`、`/archive`、`/brainstorm`、`/ask` 等）
+- 使用了 LifeOS 技能（`/today`、`/knowledge`、`/revise`、`/research`、`/project`、`/archive`、`/brainstorm`、`/ask` 等）
 - 用户明确要求操作 Vault 文件（创建/修改笔记、项目文件等）
 - 用户明确要求查询记忆系统
 

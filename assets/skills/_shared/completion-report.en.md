@@ -16,7 +16,7 @@ All skills should output a completion report following a unified structure, allo
 - (Omit this section if no status changes)
 
 **Suggested Next Steps:**
-- [Related skill suggestions, e.g. `/review` for review, `/archive` for archiving]
+- [Related skill suggestions, e.g. `/revise` for review, `/archive` for archiving]
 - (Only list when there are clear follow-up actions)
 ```
 

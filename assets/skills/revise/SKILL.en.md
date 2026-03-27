@@ -1,10 +1,10 @@
 ---
-name: review
-description: "Conduct active recall review of existing knowledge notes. Generates review files (.md) for the user to answer, then triggers grading upon completion, automatically updating note status (draft\u2192review\u2192mastered) and project mastery levels. Supports three modes: quiz mode (application questions), Feynman mode (explain concepts in own words), blind spot scan (self-assess mastery). Use this skill when the user wants to review, test mastery, or says '/review'. Triggers grading flow when user says 'grade' or 'mark my review'."
+name: revise
+description: "Conduct active recall review of existing knowledge notes. Generates review files (.md) for the user to answer, then triggers grading upon completion, automatically updating note status (draft\u2192review\u2192mastered) and project mastery levels. Supports three modes: quiz mode (application questions), Feynman mode (explain concepts in own words), blind spot scan (self-assess mastery). Use this skill when the user wants to review, test mastery, or says '/revise'. Triggers grading flow when user says 'grade' or 'mark my review'."
 version: 1.0.0
 dependencies:
   templates:
-    - path: "{system directory}/{templates subdirectory}/Review_Template.md"
+    - path: "{system directory}/{templates subdirectory}/Revise_Template.md"
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
@@ -51,14 +51,14 @@ memory_recent(entry_type="skill_completion", query="<chapter name> review gradin
 memory_recent(entry_type="correction", query="<chapter topic or source book convention keywords>", limit=5)
 ```
 
-2. If the user provided a scope when triggering (e.g., `/review VGT Chapter 4`), directly read the corresponding notes
+2. If the user provided a scope when triggering (e.g., `/revise VGT Chapter 4`), directly read the corresponding notes
 3. Otherwise:
    - Scan projects with `status: active` in `{projects directory}/` to obtain chapter lists
-   - Scan notes with `status: draft` or `status: review` in `{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` (prioritize loading non-mastered ones)
+   - Scan notes with `status: draft` or `status: revise` in `{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` (prioritize loading non-mastered ones)
 4. Scan existing review files (`Review_*.md`) under the chapter directory to obtain historical review performance
 5. Compile reviewable content statistics:
    - `draft` (never reviewed) → highest priority
-   - `review` (in review) → second priority
+   - `revise` (in review) → second priority
    - `mastered` (already mastered) → load only when the user explicitly specifies
 
 ## Phase 1: Configuration (1 Round of Interaction)
@@ -87,7 +87,7 @@ Use the AskUserQuestion tool to collect in one go:
 1. Read knowledge note content
 2. Read existing review files under the chapter directory (obtain historical performance, determine this session's question scope)
 3. Generate questions based on the design principles
-4. Read the `{system directory}/{templates subdirectory}/Review_Template.md` template
+4. Read the `{system directory}/{templates subdirectory}/Revise_Template.md` template
 5. Create a review file under the chapter directory: `Review_YYYY-MM-DD.md`
    - Path: `{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/Review_YYYY-MM-DD.md`
 6. Fill in frontmatter (update `note`, `domain`, `mode` fields)
@@ -181,15 +181,15 @@ Triggered when user completes answers (says "grade", "mark", "check review", etc
 > grading result format, status update rules, project mastery writeback, diary recording.
 
 **Quick reference:**
-- Status only upgrades: draft → review → mastered
-- ≥80% → mastered, 50%-80% → review, <50% → maintain current
+- Status only upgrades: draft → revise → mastered
+- ≥80% → mastered, 50%-80% → revise, <50% → maintain current
 - Update project mastery dots after grading (⚪→🔴→🟡→🟢)
 - Append review record to today's diary
 
 # Important Rules
 
 - **Continue reviewing after failure** — incorrect answers do not trigger `/knowledge`; the next review focuses on those areas
-- **Status only goes up, never down** — draft → review → mastered, never downgraded
+- **Status only goes up, never down** — draft → revise → mastered, never downgraded
 - **Do not copy note text verbatim for questions** — questions emphasize understanding and application
 - **Do not repeat already-mastered questions** — check historical review files; knowledge points marked ✅ last time are skipped
 - **Auto-deepen after blind spot scan** — concepts marked `?` and `✗` are prioritized in subsequent reviews
@@ -216,7 +216,7 @@ Triggered when user completes answers (says "grade", "mark", "check review", etc
 | --- | --- |
 | Chapter note | `{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` |
 | Review file | `{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/Review_YYYY-MM-DD.md` |
-| Review template | `{system directory}/{templates subdirectory}/Review_Template.md` |
+| Review template | `{system directory}/{templates subdirectory}/Revise_Template.md` |
 | Today's diary | `{diary directory}/YYYY-MM-DD.md` |
 | Active projects | `{projects directory}/*.md` (status: active) |
 
@@ -230,7 +230,7 @@ See Phase 0 for query code.
 
 ### Skill Completion (Two Trigger Points)
 
-> Unlike the shared protocol, `/review` calls `memory_skill_complete` twice, corresponding to different phases:
+> Unlike the shared protocol, `/revise` calls `memory_skill_complete` twice, corresponding to different phases:
 
 **1. After review file generation:**
 

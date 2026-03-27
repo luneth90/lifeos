@@ -1,18 +1,18 @@
 /**
- * review-strict.ts — /review 技能上下文画像。
+ * revise-strict.ts — /revise 技能上下文画像。
  *
- * Strictly focused on knowledge/review items and corrections.
+ * Strictly focused on knowledge/revise items and corrections.
  * Does NOT fall back to domain tags. Heavily weights correction events.
  */
 
 import type { SeedProfileConfig } from './base.js';
 
-export const REVIEW_STRICT: SeedProfileConfig = {
-	name: 'review_strict',
+export const REVISE_STRICT: SeedProfileConfig = {
+	name: 'revise_strict',
 	loadTaskboard: false,
 	allowDomainTagFallback: false,
 	rankingBias: {
-		review: 50,
+		revise: 50,
 		knowledge: 30,
 		correction: 90,
 		note: 25,

@@ -49,10 +49,10 @@ Update the `status` field of the corresponding note in `{knowledge directory}/` 
 | Performance | status Change |
 | --- | --- |
 | All/most correct (≥80%) | → `mastered` |
-| Partially correct (50%-80%) | Maintain `review` (or upgrade from `draft` to `review`) |
-| Many errors (< 50%) | Maintain `draft` or maintain `review` (no downgrade) |
+| Partially correct (50%-80%) | Maintain `revise` (or upgrade from `draft` to `revise`) |
+| Many errors (< 50%) | Maintain `draft` or maintain `revise` (no downgrade) |
 
-> **Rule**: status only goes up, never down (draft → review → mastered) — a failed review never causes a downgrade.
+> **Rule**: status only goes up, never down (draft → revise → mastered) — a failed review never causes a downgrade.
 
 ### Update Project File Mastery Indicators
 
@@ -61,7 +61,7 @@ After grading is complete, find the corresponding project file in `{projects dir
 ```
 ⚪ Not started    → note does not exist
 🔴 Not reviewed   → status: draft
-🟡 Needs practice → status: review
+🟡 Needs practice → status: revise
 🟢 Mastered       → status: mastered
 ```
 

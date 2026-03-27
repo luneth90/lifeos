@@ -45,7 +45,7 @@ Skill file location: `.agents/skills/<skill-name>/SKILL.md`
 | `/ask` | Quick Q&A, optionally save as draft | When having a specific question needing a quick answer, without the full research workflow |
 | `/brainstorm` | Interactive brainstorming, explore and deepen ideas | When having an immature idea to discuss, needing divergent thinking, or exploring feasibility |
 | `/knowledge` | Distill structured knowledge notes and wiki concepts from books/papers | After reading a chapter and wanting to organize notes, or structuring source material into a knowledge system |
-| `/review` | Generate review files, grade and update mastery | When wanting to review learned content, test understanding, or reinforce weak areas |
+| `/revise` | Generate review files, grade and update mastery | When wanting to review learned content, test understanding, or reinforce weak areas |
 | `/archive` | Archive completed projects and processed drafts | When wanting to clean up the Vault or organize completed work |
 | `/read-pdf` | Parse PDF into structured JSON | When needing to convert a PDF file into processable text |
 
@@ -57,7 +57,7 @@ Skill file location: `.agents/skills/<skill-name>/SKILL.md`
 | Draft | `Draft_Template.md` |
 | Wiki | `Wiki_Template.md` |
 | Project file | `Project_Template.md` |
-| Review record | `Review_Template.md` |
+| Review record | `Revise_Template.md` |
 | General knowledge note | `Knowledge_Template.md` |
 | In-depth research report | `Research_Template.md` |
 | Periodic retrospective | `Retrospective_Template.md` |
@@ -81,7 +81,7 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 ### Trigger Conditions
 
 Memory tools are called **only in these scenarios**:
-- A LifeOS skill is being used (`/today`, `/knowledge`, `/review`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, etc.)
+- A LifeOS skill is being used (`/today`, `/knowledge`, `/revise`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, etc.)
 - The user explicitly requests Vault file operations (create/modify notes, project files, etc.)
 - The user explicitly requests a memory system query
 

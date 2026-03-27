@@ -9,7 +9,7 @@ today (daily entry point)
   ├→ project (structure ideas into projects)
   ├→ research (deep research on topics, produce research reports)
   ├→ knowledge (distill knowledge notes from source material)
-  ├→ review (spaced review + grading)
+  ├→ revise (spaced review + grading)
   └→ archive (archive completed projects and processed drafts)
 ```
 
@@ -18,7 +18,7 @@ today (daily entry point)
 ```
 brainstorm → project | knowledge | draft (exploratory conversation, output optional)
 ask → read-pdf | knowledge | brainstorm | research (quick Q&A, escalate as needed)
-read-pdf → JSON intermediate output (PDF extractor consumed by knowledge/ask/review)
+read-pdf → JSON intermediate output (PDF extractor consumed by knowledge/ask/revise)
 ```
 
 ## Typical Learning Path
@@ -26,7 +26,7 @@ read-pdf → JSON intermediate output (PDF extractor consumed by knowledge/ask/r
 1. `/today` — Morning planning, identify active projects and notes due for review
 2. `/project` — Create a learning project, plan chapter structure
 3. `/knowledge` — Distill knowledge notes and encyclopedia concepts chapter by chapter
-4. `/review` — Generate review questions, grade upon completion
+4. `/revise` — Generate review questions, grade upon completion
 5. `/archive` — Archive completed projects and processed drafts
 
 ## Skill Invocation Matrix
@@ -40,7 +40,7 @@ read-pdf → JSON intermediate output (PDF extractor consumed by knowledge/ask/r
 | /ask | /read-pdf | Direct invocation |
 | /ask | /knowledge, /brainstorm, /research | End-of-conversation hook suggestion |
 | /knowledge | /project (prerequisite) | Stop and prompt if no project file exists |
-| /review | /brainstorm, /ask | Suggestion (for weak concepts) |
+| /revise | /brainstorm, /ask | Suggestion (for weak concepts) |
 | /research | draft (input) | Read drafts as research source |
 | /project | draft (input) | Read drafts as project seed |
 

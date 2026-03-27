@@ -94,15 +94,15 @@ describe('loadContextPolicy', () => {
 
   it('parses scenes from default file', () => {
     const policy = loadContextPolicy(vault.root);
-    // Default template includes /today and /review
+    // Default template includes /today and /revise
     expect(policy.scenes['/today']).toBeTruthy();
-    expect(policy.scenes['/review']).toBeTruthy();
+    expect(policy.scenes['/revise']).toBeTruthy();
   });
 
   it('parses citation_required from default file', () => {
     const policy = loadContextPolicy(vault.root);
     expect(policy.citation_required).toContain('/today');
-    expect(policy.citation_required).toContain('/review');
+    expect(policy.citation_required).toContain('/revise');
   });
 
   it('handles file with empty sections gracefully', () => {
@@ -158,13 +158,13 @@ describe('resolveScenePolicy', () => {
 
   it('scene value is preserved in result', () => {
     const policy = loadContextPolicy(vault.root);
-    const result = resolveScenePolicy(policy, '/review');
-    expect(result.scene).toBe('/review');
+    const result = resolveScenePolicy(policy, '/revise');
+    expect(result.scene).toBe('/revise');
   });
 
-  it('review scene has correction in recent_event_bias', () => {
+  it('revise scene has correction in recent_event_bias', () => {
     const policy = loadContextPolicy(vault.root);
-    const result = resolveScenePolicy(policy, '/review');
+    const result = resolveScenePolicy(policy, '/revise');
     // review token triggers correction event bias
     expect(result.recent_event_bias['correction']).toBeGreaterThan(0);
   });
@@ -174,7 +174,7 @@ describe('resolveScenePolicy', () => {
 
 describe('resolveSkillProfilePolicy', () => {
   it.each([
-    ['review_strict', { load_taskboard: false, allow_domain_tag_fallback: false, ranking_key: 'correction', ranking_val: 90 }],
+    ['revise_strict', { load_taskboard: false, allow_domain_tag_fallback: false, ranking_key: 'correction', ranking_val: 90 }],
     ['ask_global', { load_taskboard: false, allow_domain_tag_fallback: true, ranking_key: null, ranking_val: null }],
     ['daily_global', { load_taskboard: false, allow_domain_tag_fallback: false, ranking_key: 'project', ranking_val: 60 }],
     ['research_seed', { load_taskboard: false, allow_domain_tag_fallback: true, ranking_key: 'draft', ranking_val: 60 }],
@@ -204,15 +204,15 @@ describe('resolveSkillProfilePolicy', () => {
   it('merges loaded overrides over defaults', () => {
     const policyPath = ensureContextPolicyExists(vault.root);
     const content = readFileSync(policyPath, 'utf-8');
-    // Override review_strict to have domain_fallback=true
+    // Override revise_strict to have domain_fallback=true
     const updated = content.replace(
-      'review_strict: load_taskboard=false domain_fallback=false',
-      'review_strict: load_taskboard=false domain_fallback=true',
+      'revise_strict: load_taskboard=false domain_fallback=false',
+      'revise_strict: load_taskboard=false domain_fallback=true',
     );
     writeFileSync(policyPath, updated, 'utf-8');
 
     const policy = loadContextPolicy(vault.root);
-    const result = resolveSkillProfilePolicy(policy, 'review_strict');
+    const result = resolveSkillProfilePolicy(policy, 'revise_strict');
     expect(result.allow_domain_tag_fallback).toBe(true);
     // Defaults for ranking_bias should still apply
     expect(result.ranking_bias['correction']).toBe(90);
@@ -224,7 +224,7 @@ describe('resolveSkillProfilePolicy', () => {
 describe('DEFAULT_SKILL_PROFILE_POLICIES', () => {
   it('contains all 6 profiles with required fields', () => {
     const profiles = [
-      'review_strict', 'ask_global', 'daily_global',
+      'revise_strict', 'ask_global', 'daily_global',
       'research_seed', 'project_seed', 'knowledge_strict',
     ];
     for (const p of profiles) {

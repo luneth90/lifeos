@@ -1,6 +1,6 @@
 ---
 name: read-pdf
-description: "Extract text, charts (Vision analysis), math formulas (to LaTeX), and tables (to Markdown) from PDF files, producing JSON intermediate data for /knowledge, /ask, /review and other skills to consume. Supports page ranges and chapter name positioning. Use this skill when the user needs to read PDF content, extract specific pages, parse book chapters, or says '/read-pdf'. Also called internally by other skills."
+description: "Extract text, charts (Vision analysis), math formulas (to LaTeX), and tables (to Markdown) from PDF files, producing JSON intermediate data for /knowledge, /ask, /revise and other skills to consume. Supports page ranges and chapter name positioning. Use this skill when the user needs to read PDF content, extract specific pages, parse book chapters, or says '/read-pdf'. Also called internally by other skills."
 version: 1.0.0
 dependencies:
   templates: []
@@ -170,7 +170,7 @@ Output path: `/tmp/read-pdf-<timestamp>.json`
 - Provide the JSON file path to the user for downstream skills to read
 - Also give a **summary** in the conversation: extracted N pages of text, M charts, K formulas, J tables
 - If a page has no charts/formulas/tables, leave the corresponding arrays empty — do not fabricate content
-- **Do not perform knowledge organization** — this is an intermediate product; organization is handled by `/knowledge`, `/ask`, `/review`, and other skills
+- **Do not perform knowledge organization** — this is an intermediate product; organization is handled by `/knowledge`, `/ask`, `/revise`, and other skills
 
 # Common Issues
 

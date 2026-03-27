@@ -44,10 +44,10 @@ export const DEFAULT_SKILL_PROFILE_POLICIES: Record<
 	string,
 	Omit<SkillProfilePolicy, 'skill_profile'>
 > = {
-	review_strict: {
+	revise_strict: {
 		load_taskboard: false,
 		allow_domain_tag_fallback: false,
-		ranking_bias: { review: 50, knowledge: 30, correction: 90 },
+		ranking_bias: { revise: 50, knowledge: 30, correction: 90 },
 		recent_event_bias: { correction: 40, skill_completion: 20, milestone: 15 },
 	},
 	ask_global: {
@@ -59,7 +59,7 @@ export const DEFAULT_SKILL_PROFILE_POLICIES: Record<
 	daily_global: {
 		load_taskboard: false,
 		allow_domain_tag_fallback: false,
-		ranking_bias: { project: 60, review: 45, daily: 30 },
+		ranking_bias: { project: 60, revise: 45, daily: 30 },
 		recent_event_bias: { decision: 35, skill_completion: 15, milestone: 10 },
 	},
 	research_seed: {
@@ -109,7 +109,7 @@ taskboard_doc_limit: 3000
 /research: domain_fallback research draft resource
 /project: domain_fallback project research resource draft
 /knowledge: knowledge project resource
-/review: citation_required review knowledge correction
+/revise: citation_required revise knowledge correction
 /ask: domain_fallback
 /brainstorm: domain_fallback draft research
 /publish: knowledge project research
@@ -117,7 +117,7 @@ taskboard_doc_limit: 3000
 
 ## 技能画像策略
 
-review_strict: load_taskboard=false domain_fallback=false
+revise_strict: load_taskboard=false domain_fallback=false
 ask_global: load_taskboard=false domain_fallback=true
 daily_global: load_taskboard=false domain_fallback=false
 research_seed: load_taskboard=false domain_fallback=true
@@ -127,7 +127,7 @@ knowledge_strict: load_taskboard=false domain_fallback=false
 ## 强制引用场景
 
 /today
-/review
+/revise
 
 ## 活文档体积约束
 
@@ -309,7 +309,7 @@ const SCENE_RANKING_KEYWORDS: Record<string, Record<string, number>> = {
 	draft: { draft: 40 },
 	resource: { resource: 35 },
 	knowledge: { knowledge: 50 },
-	review: { review: 45 },
+	revise: { revise: 45 },
 	daily: { daily: 30 },
 };
 
@@ -318,7 +318,7 @@ const SCENE_EVENT_KEYWORDS: Record<string, Record<string, number>> = {
 	taskboard: { skill_completion: 15, milestone: 10 },
 	project: { decision: 30, milestone: 20 },
 	research: { decision: 20, preference: 15 },
-	review: { correction: 40, skill_completion: 20 },
+	revise: { correction: 40, skill_completion: 20 },
 };
 
 /**

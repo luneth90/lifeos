@@ -26,19 +26,19 @@ pending ──/knowledge─→ knowledged ──┘
 ## 知识笔记生命周期 (Knowledge Note Lifecycle)
 
 ```
-draft ──/review(≥50%)──→ review ──/review(≥80%)──→ mastered
+draft ──/revise(≥50%)──→ revise ──/revise(≥80%)──→ mastered
 ```
 
 | 状态 | 含义 | 设置者 |
 |------|------|--------|
 | `draft` | 由 /knowledge 创建，从未复习 | /knowledge |
-| `review` | 由 /review 在评分 50%-80% 时提升 | /review |
-| `mastered` | 由 /review 在评分 ≥80% 时提升 | /review |
+| `revise` | 由 /revise 在评分 50%-80% 时提升 | /revise |
+| `mastered` | 由 /revise 在评分 ≥80% 时提升 | /revise |
 
 **规则:**
 
-- 状态只能升级，不能降级：`draft` -> `review` -> `mastered`。
-- /review 同时更新对应项目文件中的掌握度圆点（⚪→🔴→🟡→🟢）。
+- 状态只能升级，不能降级：`draft` -> `revise` -> `mastered`。
+- /revise 同时更新对应项目文件中的掌握度圆点（⚪→🔴→🟡→🟢）。
 
 ## 项目生命周期 (Project Lifecycle)
 
@@ -62,7 +62,7 @@ active ──→ on-hold ──→ done ──/archive──→ archived
 | /research | `pending` → `researched` | - | - |
 | /project | `pending` → `projected` | - | 创建 `active` |
 | /knowledge | `pending` → `knowledged` | 创建 `draft` | - |
-| /review | - | `draft` → `review` → `mastered` | 更新掌握度圆点 |
+| /revise | - | `draft` → `revise` → `mastered` | 更新掌握度圆点 |
 | /archive | `researched/projected/knowledged` → `archived` | - | `done` → `archived` |
 | /rename | - | - | - |
 | /enhance | - | - | - |

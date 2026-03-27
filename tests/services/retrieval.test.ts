@@ -541,7 +541,7 @@ describe('queryVaultIndexByPrefixes', () => {
 
   it('filters by type within prefixes', () => {
     insertVaultNote(db, { filePath: '40_知识/wiki.md', title: 'Wiki', type: 'knowledge' });
-    insertVaultNote(db, { filePath: '40_知识/review.md', title: 'Review', type: 'review-record' });
+    insertVaultNote(db, { filePath: '40_知识/revise.md', title: 'Revise', type: 'revise-record' });
 
     const { results } = queryVaultIndexByPrefixes(db, {
       prefixes: ['40_知识/'],

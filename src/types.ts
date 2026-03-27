@@ -252,7 +252,7 @@ export const STATUS_LABELS: Readonly<Record<string, string>> = {
 	'on-hold': '搁置中',
 	done: '已完成',
 	draft: '草稿',
-	review: '待复习',
+	revise: '待复习',
 	mastered: '已掌握',
 };
 
@@ -268,14 +268,14 @@ export const ENHANCE_STATUS_LABELS: Readonly<Record<string, string>> = {
 	active: '正在推进',
 	done: '已完成',
 	draft: '处于草稿阶段',
-	review: '待复习巩固',
+	revise: '待复习巩固',
 	mastered: '已掌握',
 	'on-hold': '当前搁置',
 };
 
 export const MASTERY_STATUS_LABELS: Readonly<Record<string, string>> = {
 	draft: '🔴 未复习',
-	review: '🟡 待巩固',
+	revise: '🟡 待巩固',
 	mastered: '🟢 已掌握',
 };
 

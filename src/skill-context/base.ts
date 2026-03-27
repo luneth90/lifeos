@@ -11,7 +11,7 @@ import type { MemoryItem, SessionEvent, VaultQueryResult } from '../services/ret
  * Controls how vault results, recent events, and memory items are selected.
  */
 export interface SeedProfileConfig {
-	/** Profile identifier (e.g. 'review_strict') */
+	/** Profile identifier (e.g. 'revise_strict') */
 	name: string;
 	/** Whether to load and include the TaskBoard summary */
 	loadTaskboard: boolean;
@@ -20,7 +20,7 @@ export interface SeedProfileConfig {
 	/**
 	 * Ranking bias map: bucket/type name → bonus score added when reranking vault results.
 	 * Higher values push matching items to the top.
-	 * Example: { review: 50, knowledge: 30 }
+	 * Example: { revise: 50, knowledge: 30 }
 	 */
 	rankingBias: Record<string, number>;
 	/**

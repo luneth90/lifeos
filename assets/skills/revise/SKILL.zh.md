@@ -1,10 +1,10 @@
 ---
-name: review
-description: 对已有知识笔记进行主动回忆复习。生成复习文件（.md），用户在文件中作答后触发批改，自动更新笔记 status（draft→review→mastered）和项目掌握度。支持三种模式：提问模式（应用题）、费曼模式（用自己的话解释概念）、盲点扫描（自评掌握程度）。当用户想复习、测验掌握程度、说"/review"时使用此技能。用户说"批改"或"改卷"时触发批改流程。
+name: revise
+description: 对已有知识笔记进行主动回忆复习。生成复习文件（.md），用户在文件中作答后触发批改，自动更新笔记 status（draft→revise→mastered）和项目掌握度。支持三种模式：提问模式（应用题）、费曼模式（用自己的话解释概念）、盲点扫描（自评掌握程度）。当用户想复习、测验掌握程度、说"/revise"时使用此技能。用户说"批改"或"改卷"时触发批改流程。
 version: 1.0.0
 dependencies:
   templates:
-    - path: "{系统目录}/{模板子目录}/Review_Template.md"
+    - path: "{系统目录}/{模板子目录}/Revise_Template.md"
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
@@ -51,14 +51,14 @@ memory_recent(entry_type="skill_completion", query="<章节名称> 复习 批改
 memory_recent(entry_type="correction", query="<章节主题或原书约定关键词>", limit=5)
 ```
 
-2. 若用户触发时已提供范围（如 `/review VGT 第4章`），直接读取对应笔记
+2. 若用户触发时已提供范围（如 `/revise VGT 第4章`），直接读取对应笔记
 3. 否则：
    - 扫描 `{项目目录}/` 中 `status: active` 的项目，获取章节列表
-   - 扫描 `{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` 中 `status: draft` 或 `status: review` 的笔记（优先加载未 mastered）
+   - 扫描 `{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` 中 `status: draft` 或 `status: revise` 的笔记（优先加载未 mastered）
 4. 扫描章节目录下已有的复习文件（`复习_*.md`），获取历史复习表现
 5. 统计可复习内容：
    - `draft`（从未复习）→ 最高优先级
-   - `review`（复习中）→ 次优先级
+   - `revise`（复习中）→ 次优先级
    - `mastered`（已掌握）→ 仅用户明确指定时加载
 
 ## 阶段1：配置（1 轮交互）
@@ -87,7 +87,7 @@ memory_recent(entry_type="correction", query="<章节主题或原书约定关键
 1. 读取知识笔记内容
 2. 读取该章节目录下已有的复习文件（获取历史表现，确定本次出题范围）
 3. 基于出题原则生成题目
-4. 读取 `{系统目录}/{模板子目录}/Review_Template.md` 模板
+4. 读取 `{系统目录}/{模板子目录}/Revise_Template.md` 模板
 5. 在章节目录下创建复习文件：`复习_YYYY-MM-DD.md`
    - 路径：`{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/复习_YYYY-MM-DD.md`
 6. 填入 frontmatter（更新 `note`、`domain`、`mode` 字段）
@@ -181,15 +181,15 @@ memory_recent(entry_type="correction", query="<章节主题或原书约定关键
 > 批改结果格式、status 更新规则、项目掌握度回写、日记记录。
 
 **核心规则速查：**
-- status 只升不降：draft → review → mastered
-- ≥80% → mastered，50%-80% → review，<50% → 维持当前
+- status 只升不降：draft → revise → mastered
+- ≥80% → mastered，50%-80% → revise，<50% → 维持当前
 - 批改后更新项目掌握度小圆点（⚪→🔴→🟡→🟢）
 - 在今日日记追加复习记录
 
 # 重要规则
 
 - **复习失败继续复习** — 答错不调用 `/knowledge`，下次复习重点覆盖
-- **status 只升不降** — draft → review → mastered，从不回退
+- **status 只升不降** — draft → revise → mastered，从不回退
 - **不照搬笔记原文出题** — 问题侧重理解和应用
 - **不重复已掌握题目** — 查看历史复习文件，上次 ✅ 的知识点本次跳过
 - **盲点扫描后自动深入** — `?` 和 `✗` 的概念在后续复习中重点覆盖
@@ -216,7 +216,7 @@ memory_recent(entry_type="correction", query="<章节主题或原书约定关键
 | --- | --- |
 | 章节笔记 | `{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` |
 | 复习文件 | `{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/复习_YYYY-MM-DD.md` |
-| 复习记录模板 | `{系统目录}/{模板子目录}/Review_Template.md` |
+| 复习记录模板 | `{系统目录}/{模板子目录}/Revise_Template.md` |
 | 今日日记 | `{日记目录}/YYYY-MM-DD.md` |
 | 活跃项目 | `{项目目录}/*.md`（status: active）|
 
@@ -230,7 +230,7 @@ memory_recent(entry_type="correction", query="<章节主题或原书约定关键
 
 ### 技能完成（两个触发点）
 
-> 与通用协议不同，`/review` 需要调用两次 `memory_skill_complete`，分别对应不同阶段：
+> 与通用协议不同，`/revise` 需要调用两次 `memory_skill_complete`，分别对应不同阶段：
 
 **1. 复习文件生成后：**
 

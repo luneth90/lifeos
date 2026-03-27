@@ -35,7 +35,7 @@ describe('constants', () => {
     expect(BUCKET_TYPE_MAP['project'].has('project')).toBe(true);
     expect(BUCKET_TYPE_MAP['knowledge'].has('knowledge')).toBe(true);
     expect(BUCKET_TYPE_MAP['knowledge'].has('note')).toBe(true);
-    expect(BUCKET_TYPE_MAP['knowledge'].has('review-record')).toBe(true);
+    expect(BUCKET_TYPE_MAP['knowledge'].has('revise-record')).toBe(true);
   });
 });
 

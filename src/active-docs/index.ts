@@ -79,7 +79,7 @@ function buildTaskboardSkeleton(): string {
 	return buildSkeleton('taskboard', 'TaskBoard', [
 		{ heading: '当前焦点', marker: 'focus' },
 		{ heading: '活跃项目', marker: 'active-projects' },
-		{ heading: '待复习', marker: 'reviews' },
+		{ heading: '待复习', marker: 'revises' },
 		{ heading: '近期决策', marker: 'decisions' },
 		{ heading: '活动日志', marker: 'update-log' },
 	]);

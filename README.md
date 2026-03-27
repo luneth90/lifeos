@@ -91,7 +91,7 @@ Renames a logical directory (e.g. `drafts`) to a new physical name, updates `lif
 | `/project` | Idea → structured project |
 | `/research` | Topic → deep research report |
 | `/knowledge` | Book/paper → knowledge note |
-| `/review` | Generate quizzes, grade, track mastery |
+| `/revise` | Generate quizzes, grade, track mastery |
 | `/read-pdf` | PDF → structured notes |
 | `/ask` | Quick Q&A |
 | `/brainstorm` | Interactive brainstorming |

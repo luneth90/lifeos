@@ -89,14 +89,14 @@ function buildActiveProjectsSection(projects: ActiveProject[]): string {
 	return lines.join('\n');
 }
 
-function buildReviewsSection(db: Database.Database): string {
-	// Find knowledge items needing review (status = 'draft' or 'review')
+function buildRevisesSection(db: Database.Database): string {
+	// Find knowledge items needing revision (status = 'draft' or 'revise')
 	const rows = db
 		.prepare(
 			`SELECT file_path, title, status, domain, modified_at
        FROM vault_index
-       WHERE type IN ('note', 'knowledge', 'review-record')
-         AND status IN ('draft', 'review')
+       WHERE type IN ('note', 'knowledge', 'revise-record')
+         AND status IN ('draft', 'revise')
        ORDER BY modified_at DESC
        LIMIT 10`,
 		)
@@ -220,7 +220,7 @@ export function buildTaskboardSections(
 	return {
 		focus: buildFocusSection(projects, events),
 		'active-projects': buildActiveProjectsSection(projects),
-		reviews: buildReviewsSection(db),
+		revises: buildRevisesSection(db),
 		decisions: buildDecisionsSection(events),
 		'update-log': buildUpdateLogSection(events),
 	};

@@ -49,10 +49,10 @@
 | 表现 | status 变更 |
 | --- | --- |
 | 所有/绝大多数正确（≥80%）| → `mastered` |
-| 部分正确（50%-80%）| 维持 `review`（或从 `draft` 升为 `review`）|
-| 较多错误（< 50%）| 维持 `draft` 或维持 `review`（不回退）|
+| 部分正确（50%-80%）| 维持 `revise`（或从 `draft` 升为 `revise`）|
+| 较多错误（< 50%）| 维持 `draft` 或维持 `revise`（不回退）|
 
-> **规则**：status 只升不降（draft → review → mastered），复习失败不回退。
+> **规则**：status 只升不降（draft → revise → mastered），复习失败不回退。
 
 ### 更新项目文件掌握度小圆点
 
@@ -61,7 +61,7 @@
 ```
 ⚪ 未学    → 笔记不存在
 🔴 未复习  → status: draft
-🟡 待巩固  → status: review
+🟡 待巩固  → status: revise
 🟢 已掌握  → status: mastered
 ```
 

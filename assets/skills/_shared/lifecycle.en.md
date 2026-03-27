@@ -26,19 +26,19 @@ pending ──/knowledge─→ knowledged ──┘
 ## Knowledge Note Lifecycle
 
 ```
-draft ──/review(≥50%)──→ review ──/review(≥80%)──→ mastered
+draft ──/revise(≥50%)──→ revise ──/revise(≥80%)──→ mastered
 ```
 
 | Status | Meaning | Set by |
 |--------|---------|--------|
 | `draft` | Created by /knowledge, never reviewed | /knowledge |
-| `review` | Promoted by /review when score 50%-80% | /review |
-| `mastered` | Promoted by /review when score ≥80% | /review |
+| `revise` | Promoted by /revise when score 50%-80% | /revise |
+| `mastered` | Promoted by /revise when score ≥80% | /revise |
 
 **Rules:**
 
-- Status only upgrades, never downgrades: `draft` -> `review` -> `mastered`.
-- /review updates the corresponding project file's mastery dots (⚪→🔴→🟡→🟢).
+- Status only upgrades, never downgrades: `draft` -> `revise` -> `mastered`.
+- /revise updates the corresponding project file's mastery dots (⚪→🔴→🟡→🟢).
 
 ## Project Lifecycle
 
@@ -62,7 +62,7 @@ active ──→ on-hold ──→ done ──/archive──→ archived
 | /research | `pending` → `researched` | - | - |
 | /project | `pending` → `projected` | - | Creates `active` |
 | /knowledge | `pending` → `knowledged` | Creates `draft` | - |
-| /review | - | `draft` → `review` → `mastered` | Updates mastery dots |
+| /revise | - | `draft` → `revise` → `mastered` | Updates mastery dots |
 | /archive | `researched/projected/knowledged` → `archived` | - | `done` → `archived` |
 | /rename | - | - | - |
 | /enhance | - | - | - |

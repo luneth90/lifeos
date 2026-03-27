@@ -55,7 +55,7 @@ export const BUCKET_TYPE_MAP: Record<string, Set<string>> = {
 	draft: new Set(['draft']),
 	project: new Set(['project']),
 	research: new Set(['research']),
-	knowledge: new Set(['knowledge', 'note', 'review-record']),
+	knowledge: new Set(['knowledge', 'note', 'revise-record']),
 	resource: new Set(['resource']),
 };
 

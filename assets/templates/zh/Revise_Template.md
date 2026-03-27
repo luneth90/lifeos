@@ -1,19 +1,19 @@
 ---
 title: "{{TITLE}}"
-type: review-record
+type: revise-record
 created: "{{DATE}}"
 domain: "{{DOMAIN}}"
 note: "[[知识笔记路径]]"
 mode: quiz
 score:
 result:
-tags: [review-record]
+tags: [revise-record]
 aliases: []
 id: Review_Template
 ---
 ## 复习题目
 
-<!-- AI指令：由 /review 技能自动生成，不手动创建。根据关联知识笔记出题。 -->
+<!-- AI指令：由 /revise 技能自动生成，不手动创建。根据关联知识笔记出题。 -->
 
 ## 作答区
 
@@ -21,4 +21,4 @@ id: Review_Template
 
 ## 批改结果
 
-<!-- /review 批改后填写 -->
+<!-- /revise 批改后填写 -->

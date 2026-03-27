@@ -92,7 +92,7 @@ describe('buildTaskboardSections', () => {
 
     const sections = buildTaskboardSections(db, '/tmp/vault');
     expect(Object.keys(sections)).toEqual(
-      expect.arrayContaining(['focus', 'active-projects', 'reviews', 'decisions', 'update-log'])
+      expect.arrayContaining(['focus', 'active-projects', 'revises', 'decisions', 'update-log'])
     );
     expect(sections['focus']).toContain('My Project');
     expect(sections['active-projects']).toContain('My Project');

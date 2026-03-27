@@ -65,12 +65,12 @@ Help the user start a new day: review yesterday's progress, create today's diary
 5. **Query notes pending review** (via VaultIndex, as fallback)
    ```
    memory_query(query="", filters={"type":"knowledge","status":"draft"})
-   memory_query(query="", filters={"type":"knowledge","status":"review"})
+   memory_query(query="", filters={"type":"knowledge","status":"revise"})
    ```
-   - Merge both query results; draft takes higher priority than review
-   - Also check if any review-record entries have pending status (user received questions but hasn't answered):
+   - Merge both query results; draft takes higher priority than revise
+   - Also check if any revise-record entries have pending status (user received questions but hasn't answered):
      ```
-     memory_query(query="", filters={"type":"review-record","status":"pending"})
+     memory_query(query="", filters={"type":"revise-record","status":"pending"})
      ```
    - Count the number of items pending review
 
@@ -118,7 +118,7 @@ Use the AskUserQuestion tool to collect the following information:
 2. **Populate diary content:**
    - **To-do items**: Fill in by priority (order: yesterday's carryover → incomplete review answers → user's today goals → project next steps → notes pending review)
      - If there are review files with `status: pending` (user received questions but hasn't answered), prioritize the reminder: `📝 Complete review answers: [[Review_YYYY-MM-DD]] ([[chapter note name]])`
-     - If there are notes pending review (status: draft or review), list each as `/review [[note name]]` in to-dos
+     - If there are notes pending review (status: draft or review), list each as `/revise [[note name]]` in to-dos
    - **Log**: Leave empty for the user
    - **Notes**: Fill in suggestions (time-sensitive items, stalled project reminders, pending draft count)
    - **Related projects**: List active projects with current status
@@ -165,14 +165,14 @@ Output a concise summary:
 
 **Notes pending review ([N]):**
 - [[NoteTitle1]] (draft)
-- [[NoteTitle2]] (review)
+- [[NoteTitle2]] (revise)
 
 **Drafts:** [N] items pending
 
 ---
 
 Ready to go! Quick actions:
-- `/review` - Review notes pending review
+- `/revise` - Review notes pending review
 - `/research` - Deep dive into an idea from drafts
 - `/project` - Turn a draft idea into a formal project
 - `/brainstorm` - Explore a new direction

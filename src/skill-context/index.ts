@@ -39,7 +39,7 @@ function rerankVaultResults(
 		if (r.type && rankingBias[r.type] != null) {
 			bonus += rankingBias[r.type];
 		}
-		// Check status match (e.g. 'review', 'draft')
+		// Check status match (e.g. 'revise', 'draft')
 		if (r.status && rankingBias[r.status] != null) {
 			bonus += rankingBias[r.status];
 		}

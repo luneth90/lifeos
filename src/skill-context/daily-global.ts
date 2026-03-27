@@ -13,7 +13,7 @@ export const DAILY_GLOBAL: SeedProfileConfig = {
 	allowDomainTagFallback: false,
 	rankingBias: {
 		project: 60,
-		review: 45,
+		revise: 45,
 		daily: 30,
 	},
 	recentEventBias: {

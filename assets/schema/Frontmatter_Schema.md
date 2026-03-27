@@ -38,7 +38,7 @@ id: Frontmatter_Schema
 - `research`：研究报告
 - `retro`：复盘
 - `system`：系统
-- `review-record`：复习记录文件
+- `revise-record`：复习记录文件
 
 ## status 枚举（按 type 推荐）
 
@@ -52,7 +52,7 @@ id: Frontmatter_Schema
 
 ### knowledge
 
-- `draft` / `review` / `mastered`（只升不降）
+- `draft` / `revise` / `mastered`（只升不降）
 
 ### wiki
 
@@ -63,11 +63,11 @@ id: Frontmatter_Schema
 - `complete`
 
 
-### review
+### revise
 
 - 无状态流转
 
-### review-record
+### revise-record
 
 - 无状态流转（由 `result: pass | fail` 标记批改结果）
 
@@ -114,7 +114,7 @@ id: Frontmatter_Schema
 - `source`: 字符串，来源技能（如 `ask`、`brainstorm`）
 
 
-### review-record 推荐字段
+### revise-record 推荐字段
 
 - `note`: wikilink，关联的知识笔记
 - `mode`: `quiz | feynman | blindspot`
@@ -123,7 +123,7 @@ id: Frontmatter_Schema
 
 ### retro 推荐字段
 
-- `review_type`: `weekly | monthly | quarterly | yearly | project | calibration`
+- `revise_type`: `weekly | monthly | quarterly | yearly | project | calibration`
 - `period`: 字符串，覆盖范围（如 `2026-W10`、`2026-03`）
 - `project`: wikilink（项目复盘时填写）
 - `source`: 可选，关联的计划、日记或成果

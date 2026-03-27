@@ -91,7 +91,7 @@ lifeos --version                                # 查看版本
 | `/project` | 想法 → 结构化项目 |
 | `/research` | 主题 → 深度研究报告 |
 | `/knowledge` | 书籍/论文 → 知识笔记 |
-| `/review` | 生成复习题、批改、追踪掌握度 |
+| `/revise` | 生成复习题、批改、追踪掌握度 |
 | `/read-pdf` | PDF → 结构化笔记 |
 | `/ask` | 快速问答 |
 | `/brainstorm` | 交互式头脑风暴 |

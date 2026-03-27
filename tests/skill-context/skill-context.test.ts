@@ -4,7 +4,7 @@ import { initDb } from '../../src/db/schema.js';
 import { logEvent } from '../../src/services/capture.js';
 import { buildSkillContext } from '../../src/skill-context/index.js';
 import { getProfile, listProfiles, registerProfile } from '../../src/skill-context/seed-profiles.js';
-import { REVIEW_STRICT } from '../../src/skill-context/review-strict.js';
+import { REVISE_STRICT } from '../../src/skill-context/revise-strict.js';
 import { ASK_GLOBAL } from '../../src/skill-context/ask-global.js';
 import { DAILY_GLOBAL } from '../../src/skill-context/daily-global.js';
 import { KNOWLEDGE_STRICT } from '../../src/skill-context/knowledge-strict.js';
@@ -20,7 +20,7 @@ function createInMemoryDb(): Database.Database {
 
 describe('SeedProfileConfig properties', () => {
   it.each([
-    ['review_strict', REVIEW_STRICT, { loadTaskboard: false, allowDomainTagFallback: false, biasKey: 'correction', biasMin: 50 }],
+    ['revise_strict', REVISE_STRICT, { loadTaskboard: false, allowDomainTagFallback: false, biasKey: 'correction', biasMin: 50 }],
     ['ask_global', ASK_GLOBAL, { loadTaskboard: false, allowDomainTagFallback: true, biasKey: null, biasMin: 0 }],
     ['daily_global', DAILY_GLOBAL, { loadTaskboard: true, allowDomainTagFallback: false, biasKey: 'project', biasMin: 0 }],
     ['knowledge_strict', KNOWLEDGE_STRICT, { loadTaskboard: false, allowDomainTagFallback: false, biasKey: 'knowledge', biasMin: 50 }],
@@ -44,7 +44,7 @@ describe('getProfile', () => {
   });
 
   it('returns config for known profiles', () => {
-    expect(getProfile('review_strict')).toBeTruthy();
+    expect(getProfile('revise_strict')).toBeTruthy();
     expect(getProfile('ask_global')).toBeTruthy();
     expect(getProfile('daily_global')).toBeTruthy();
     expect(getProfile('knowledge_strict')).toBeTruthy();
@@ -57,7 +57,7 @@ describe('listProfiles', () => {
   it('returns at least 6 profiles', () => {
     const profiles = listProfiles();
     expect(profiles.length).toBeGreaterThanOrEqual(6);
-    expect(profiles).toContain('review_strict');
+    expect(profiles).toContain('revise_strict');
     expect(profiles).toContain('ask_global');
   });
 });
@@ -103,7 +103,7 @@ describe('buildSkillContext', () => {
 
   it('returns empty arrays when DB is empty', () => {
     const result = buildSkillContext(db, '/tmp/vault', {
-      skillProfile: 'review_strict',
+      skillProfile: 'revise_strict',
     });
     expect(result.vaultResults).toEqual([]);
     expect(result.recentEvents).toEqual([]);
@@ -119,17 +119,17 @@ describe('buildSkillContext', () => {
     });
 
     const result = buildSkillContext(db, '/tmp/vault', {
-      skillProfile: 'review_strict',
+      skillProfile: 'revise_strict',
     });
     expect(result.recentEvents.length).toBeGreaterThan(0);
   });
 
-  it('reranks correction events higher for review_strict', () => {
+  it('reranks correction events higher for revise_strict', () => {
     logEvent(db, { entryType: 'milestone', importance: 3, summary: '里程碑事件' });
     logEvent(db, { entryType: 'correction', importance: 3, summary: '纠错事件' });
 
     const result = buildSkillContext(db, '/tmp/vault', {
-      skillProfile: 'review_strict',
+      skillProfile: 'revise_strict',
     });
 
     // Correction should appear before milestone due to bias
@@ -168,7 +168,7 @@ describe('buildSkillContext', () => {
 
   it('taskboardSummary is undefined for non-taskboard profiles', () => {
     const result = buildSkillContext(db, '/tmp/vault', {
-      skillProfile: 'review_strict',
+      skillProfile: 'revise_strict',
     });
     expect(result.taskboardSummary).toBeUndefined();
   });

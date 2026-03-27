@@ -1,6 +1,6 @@
 ---
 name: read-pdf
-description: 从 PDF 文件中提取文字、图表（Vision 分析）、数学公式（转 LaTeX）和表格（转 Markdown），产出 JSON 中间数据供 /knowledge、/ask、/review 等技能消费。支持页码范围和章节名定位。当用户需要读取 PDF 内容、提取特定页面、解析书籍章节、或说"/read-pdf"时使用此技能。也会被其他技能内部自动调用。
+description: 从 PDF 文件中提取文字、图表（Vision 分析）、数学公式（转 LaTeX）和表格（转 Markdown），产出 JSON 中间数据供 /knowledge、/ask、/revise 等技能消费。支持页码范围和章节名定位。当用户需要读取 PDF 内容、提取特定页面、解析书籍章节、或说"/read-pdf"时使用此技能。也会被其他技能内部自动调用。
 version: 1.0.0
 dependencies:
   templates: []
@@ -170,7 +170,7 @@ for page_num in range(start - 1, end):
 - JSON 文件路径告知用户，供下游技能读取
 - 同时在对话中给出**摘要**：共提取 N 页文字、M 个图表、K 个公式、J 个表格
 - 若某页无图表/公式/表格，对应数组留空，不伪造内容
-- **不做知识整理**——这是中间产物，整理交给 `/knowledge`, `/ask`,`/review`等技能
+- **不做知识整理**——这是中间产物，整理交给 `/knowledge`, `/ask`,`/revise`等技能
 
 # 常见问题
 

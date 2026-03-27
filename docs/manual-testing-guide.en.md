@@ -196,7 +196,7 @@ Trigger skills directly in Claude Code using slash commands:
 | `/ask What is quantum entanglement` | Enter Q&A mode, can save as draft |
 | `/brainstorm Personal knowledge management` | Guided brainstorming session |
 | `/knowledge` | Create a knowledge note |
-| `/review` | Review current phase of work |
+| `/revise` | Review current phase of work |
 
 **Verify:**
 - [ ] Skills are correctly recognized and loaded

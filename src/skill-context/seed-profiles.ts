@@ -9,7 +9,7 @@ import { ASK_GLOBAL } from './ask-global.js';
 import type { SeedProfileConfig } from './base.js';
 import { DAILY_GLOBAL } from './daily-global.js';
 import { KNOWLEDGE_STRICT } from './knowledge-strict.js';
-import { REVIEW_STRICT } from './review-strict.js';
+import { REVISE_STRICT } from './revise-strict.js';
 
 // ─── Additional profiles defined inline ────────────────────────────────────────
 
@@ -57,7 +57,7 @@ const PROJECT_SEED: SeedProfileConfig = {
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 const PROFILE_REGISTRY: Map<string, SeedProfileConfig> = new Map([
-	['review_strict', REVIEW_STRICT],
+	['revise_strict', REVISE_STRICT],
 	['ask_global', ASK_GLOBAL],
 	['daily_global', DAILY_GLOBAL],
 	['knowledge_strict', KNOWLEDGE_STRICT],

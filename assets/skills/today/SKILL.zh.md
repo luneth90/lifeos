@@ -1,6 +1,6 @@
 ---
 name: today
-description: 每日规划入口：回顾昨日进展和未完成任务、扫描活跃项目与待复习笔记、收集用户今日目标和新想法、生成今日日记文件。当用户开始新的一天、问"今天做什么"、说"早安"、想规划当日任务、或说"/today"时使用此技能。会自动提示后续可用的技能（/review、/research、/project 等）。
+description: 每日规划入口：回顾昨日进展和未完成任务、扫描活跃项目与待复习笔记、收集用户今日目标和新想法、生成今日日记文件。当用户开始新的一天、问"今天做什么"、说"早安"、想规划当日任务、或说"/today"时使用此技能。会自动提示后续可用的技能（/revise、/research、/project 等）。
 version: 1.0.0
 dependencies:
   templates:
@@ -65,12 +65,12 @@ dependencies:
 5. **查询待复习笔记**（通过 VaultIndex，作为兜底）
    ```
    memory_query(query="", filters={"type":"knowledge","status":"draft"})
-   memory_query(query="", filters={"type":"knowledge","status":"review"})
+   memory_query(query="", filters={"type":"knowledge","status":"revise"})
    ```
-   - 合并两次查询结果，draft 优先级高于 review
-   - 同时检查 review-record 类型中是否有 pending 状态（用户已收到题目但未作答）：
+   - 合并两次查询结果，draft 优先级高于 revise
+   - 同时检查 revise-record 类型中是否有 pending 状态（用户已收到题目但未作答）：
      ```
-     memory_query(query="", filters={"type":"review-record","status":"pending"})
+     memory_query(query="", filters={"type":"revise-record","status":"pending"})
      ```
    - 统计待复习数量
 
@@ -118,7 +118,7 @@ dependencies:
 2. **填充日记内容：**
    - **待办事项**：按优先级填入（顺序：昨日遗留 → 未完成的复习作答 → 用户今日目标 → 项目下一步 → 待复习笔记）
      - 若有 `status: pending` 的复习文件（用户已收到题目但未作答），优先提醒：`📝 完成复习作答: [[复习_YYYY-MM-DD]]（[[章节笔记名]]）`
-     - 若有待复习笔记（status: draft 或 review），每条以 `/review [[笔记名]]` 形式列入待办
+     - 若有待复习笔记（status: draft 或 review），每条以 `/revise [[笔记名]]` 形式列入待办
    - **日志**：留空给用户
    - **备注**：填入建议（时间敏感事项、停滞项目提醒、待处理草稿数量）
    - **相关项目**：列出活跃项目及当前状态
@@ -172,7 +172,7 @@ domain: math
 ---
 
 准备开始！快捷操作:
-- `/review` - 复习待复习笔记
+- `/revise` - 复习待复习笔记
 - `/research` - 深入研究草稿中的某个想法
 - `/project` - 将草稿想法转为正式项目
 - `/brainstorm` - 发散探索某个新方向
