@@ -61,12 +61,12 @@ Launch any of these tools in the vault directory to use all skills.
 ## CLI Commands
 
 ```bash
-lifeos init [path] [--lang zh|en] [--no-mcp]       # Create a new vault
-lifeos upgrade [path] [--lang zh|en]               # Upgrade and restore assets/scaffold
-lifeos doctor [path]                               # Health check
-lifeos rename [path] --logical <name> --name <new>  # Rename a directory
-lifeos --help                                      # Show help
-lifeos --version                                   # Show version
+npx lifeos init [path] [--lang zh|en] [--no-mcp]       # Create a new vault
+npx lifeos upgrade [path] [--lang zh|en]               # Upgrade and restore assets/scaffold
+npx lifeos doctor [path]                               # Health check
+npx lifeos rename [path] --logical <name> --name <new>  # Rename a directory
+npx lifeos --help                                      # Show help
+npx lifeos --version                                   # Show version
 ```
 
 ### init

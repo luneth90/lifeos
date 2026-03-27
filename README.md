@@ -60,12 +60,12 @@ npx lifeos init ./my-vault --lang en   # 英文
 ## CLI 命令
 
 ```bash
-lifeos init [path] [--lang zh|en] [--no-mcp]       # 创建新 Vault
-lifeos upgrade [path] [--lang zh|en]               # 升级并补齐资产与脚手架
-lifeos doctor [path]                               # 健康检查
-lifeos rename [path] --logical <name> --name <new>  # 重命名目录
-lifeos --help                                      # 查看帮助
-lifeos --version                                   # 查看版本
+npx lifeos init [path] [--lang zh|en] [--no-mcp]       # 创建新 Vault
+npx lifeos upgrade [path] [--lang zh|en]               # 升级并补齐资产与脚手架
+npx lifeos doctor [path]                               # 健康检查
+npx lifeos rename [path] --logical <name> --name <new>  # 重命名目录
+npx lifeos --help                                      # 查看帮助
+npx lifeos --version                                   # 查看版本
 ```
 
 ### init
