@@ -26,7 +26,6 @@ function detectLang(): 'zh' | 'en' {
 // ─── Gitignore content ──────────────────────────────────────────────────────
 
 const GITIGNORE = `# LifeOS
-*.db
 *.db-wal
 *.db-shm
 
