@@ -4,24 +4,52 @@
 
 LifeOS helps you grow scattered ideas into structured knowledge and truly master it, from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.
 
-## Memory System
+## Core Features
 
-> **Why the memory system matters**
->
+### Memory System
+
 > The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
->
-> 1. **Cross-session continuity**: session bridges and active-document context persist, so agents do not depend only on the current conversation.
-> 2. **Project-scoped and skill-bound**: the memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, and `archive`, and keeps accumulating preferences, decisions, and context.
-> 3. **More controllable than global memory**: compared with a memory model that mixes cross-directory content and global conversations together, a project-scoped, skill-bound memory system reduces irrelevant noise and keeps retrieval and follow-up decisions closer to the current LifeOS workflow.
 
-**Core components:**
+#### Cross-session continuity
+
+Session bridges and active-document context persist, so agents do not depend only on the current conversation.
+
+#### Project-scoped and skill-bound
+
+The memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, and `archive`, and keeps accumulating preferences, decisions, and context.
+
+#### More controllable than global memory
+
+Compared with a memory model that mixes cross-directory content and global conversations together, a project-scoped, skill-bound memory system reduces irrelevant noise and keeps retrieval and follow-up decisions closer to the current LifeOS workflow.
+
+### Directory Customization
+
+LifeOS does not lock you into fixed directory names. Run `lifeos rename [path]` and the CLI will interactively list the directories that can be adjusted in the current vault, then guide you through choosing one and entering a new name.
+
+It updates `lifeos.yaml`, renames the actual directory, and batch-replaces all related wikilinks across the vault. That lets you adapt directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
+
+### Learning Workflows
+
+LifeOS provides a set of Agent skills designed around the learning process, connecting "input -> understanding -> output -> reinforcement" into a continuous workflow:
+
+- `/today`, `/brainstorm`, `/ask`: organize the day's focus, clarify questions, and quickly expand ideas
+- `/project`, `/research`, `/knowledge`: turn a topic into a project, a research report, and structured knowledge notes
+- `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to periodic archiving
+
+## Core Components
 
 - **Memory system** — Project-scoped and skill-bound, providing vault indexing, session memory, and context assembly for AI agents
 - **CLI scaffold** — install globally, then use `lifeos init` to bootstrap a complete workspace
 - **Skill system** — 9 Agent skills covering diary, projects, research, knowledge curation, review, and more
 - **Templates + Schema** — 8 structured templates + Frontmatter schema for consistent notes
 
-## Prerequisites
+## Quick Start
+
+At the moment, only the Agent CLI workflow has been verified in practice on macOS. The Agent GUI path has not been systematically tested yet, and Windows has not been verified either, so the experience there may not be fully consistent yet.
+
+### Prerequisites
+
+Before starting, make sure Obsidian and at least one of Claude Code CLI / Codex CLI / OpenCode CLI are installed locally.
 
 | Dependency | Required | Purpose |
 |---|---|---|
@@ -31,9 +59,7 @@ LifeOS helps you grow scattered ideas into structured knowledge and truly master
 
 `lifeos init` checks all prerequisites before creating the workspace.
 
-## Quick Start
-
-Before starting, make sure Obsidian and at least one of Claude Code / Codex / OpenCode CLI are installed locally.
+### Installation and Initialization
 
 ```bash
 # Step 1: install the CLI globally
