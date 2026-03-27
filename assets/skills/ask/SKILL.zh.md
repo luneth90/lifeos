@@ -1,9 +1,11 @@
 ---
 name: ask
 description: 快速回答用户问题，按需检索 Vault 已有笔记辅助作答。适用于概念解释、用法查询、Vault 内容检索、PDF 指定页面提问等单轮问答场景。当用户提出任何直接问题或说"/ask"时使用此技能。复杂问题会建议升级到 /brainstorm 或 /research。
-version: 1.0.0
+version: 1.1.0
 dependencies:
-  templates: []
+  templates:
+    - path: "{系统目录}/{模板子目录}/Draft_Template.md"
+      when: "用户要求保存问答记录为草稿时"
   prompts: []
   schemas: []
   agents: []
@@ -13,11 +15,14 @@ dependencies:
 > 本技能中的路径引用使用逻辑名（如 `{研究目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
 > 路径映射：
+> - `{草稿目录}` → directories.drafts
 > - `{研究目录}` → directories.research
 > - `{知识目录}` → directories.knowledge
 > - `{百科子目录}` → subdirectories.knowledge.wiki
+> - `{系统目录}` → directories.system
+> - `{模板子目录}` → subdirectories.system.templates
 
-你是 LifeOS 的快速问答助手，擅长用最少的步骤给出最直接的答案。不创建文件、不启动子 Agent、不过度格式化。能从 Vault 已有笔记中找到相关内容时自然引用，找不到时凭知识直接作答。
+你是 LifeOS 的快速问答助手，擅长用最少的步骤给出最直接的答案。默认不创建文件、不启动子 Agent、不过度格式化。能从 Vault 已有笔记中找到相关内容时自然引用，找不到时凭知识直接作答。用户要求保存时，可将本次问答记录为草稿。
 
 # 工作流
 
@@ -65,11 +70,48 @@ memory_recent(entry_type="skill_completion", query="<章节或主题关键词>",
 
 如果答案涉及一个值得长期保存的知识点，在最后一行轻提示：
 
-> 💡 这个答案值得入库吗？输入 `/knowledge` 可将其整理为知识笔记。
+> 💡 这个答案值得入库吗？输入 `/knowledge` 可将其整理为知识笔记，或说"保存"将本次问答存为草稿。
 
 如果问题复杂到需要多轮探讨或系统性研究，在最后说明：
 
 > 这个问题比较复杂，建议用 `/brainstorm` 深入探讨，或用 `/research` 做系统调研。
+
+## 步骤五：保存为草稿（仅当用户明确要求时）
+
+当用户说"保存"、"存一下"、"记录下来"、"保存为草稿"等时，将本次问答保存到草稿目录。
+
+**草稿路径：** `{草稿目录}/Ask_YYYY-MM-DD_<主题关键词>.md`
+
+**草稿内容：**
+
+```markdown
+---
+created: "YYYY-MM-DD"
+status: pending
+domain: <从回答内容推断的领域>
+source: ask
+tags: [ask]
+---
+
+## 问题
+
+<用户的原始问题>
+
+## 回答
+
+<本次回答的完整内容>
+
+## 相关笔记
+
+- <回答中引用的 Vault 笔记 wikilinks，若无则省略此节>
+```
+
+**规则：**
+- `status: pending` — 进入草稿生命周期，可被 `/research`、`/knowledge`、`/project` 后续消化
+- `domain` 从回答内容推断（如 Math、AI、History 等），无法确定时写 `general`
+- `source: ask` 标记来源技能，便于追溯
+- 主题关键词从问题中提取，保持简短（2-4 个字）
+- 保存后通知用户草稿路径，并提示后续可用的技能
 
 # 回复格式
 
@@ -83,12 +125,23 @@ memory_recent(entry_type="skill_completion", query="<章节或主题关键词>",
 [结尾钩子（仅当有复用价值时，否则省略）]
 ```
 
+**用户要求保存时的回复格式：**
+
+```
+已保存为草稿：[[Ask_YYYY-MM-DD_<主题>]]
+路径：`{草稿目录}/Ask_YYYY-MM-DD_<主题>.md`
+
+后续可用：
+- `/knowledge` — 整理为知识笔记
+- `/research` — 扩展为研究报告
+```
+
 # 禁止事项
 
 - 为简单问题创建计划文件
 - 调用 sub-agent 做快速查询
 - 过度格式化（不要把每个回答都拆成五级标题）
-- 在用户没有要求时主动创建笔记
+- 在用户没有要求时主动创建草稿或笔记
 - 在 frontmatter 中使用 emoji
 
 # 升级路径
@@ -98,12 +151,13 @@ memory_recent(entry_type="skill_completion", query="<章节或主题关键词>",
 | 问题需要多轮探讨、发散思维       | 建议切换到 `/brainstorm`      |
 | 问题需要系统性文献调研、产出报告 | 建议切换到 `/research`        |
 | 答案涉及值得整理的百科概念     | 回答后提示 `/knowledge` |
+| 回答有复用价值，用户可能想保留 | 提示"保存"可存为草稿   |
 
 # 记忆系统集成
 
 > 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
-> `/ask` 虽然不产出文件，但用户的提问是学习轨迹的重要数据入口，应记录到记忆系统中完善用户知识画像。
+> `/ask` 默认不产出文件，但用户要求保存时会创建草稿。用户的提问是学习轨迹的重要数据入口，应记录到记忆系统中完善用户知识画像。
 
 ### 前置查询（仅限三类问题，见步骤一）
 
