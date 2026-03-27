@@ -60,7 +60,7 @@ Launch any of these tools in the vault directory to use all skills.
 npx lifeos init [path] [--lang zh|en] [--no-mcp]       # Create a new vault
 npx lifeos upgrade [path] [--lang zh|en]               # Upgrade and restore assets/scaffold
 npx lifeos doctor [path]                               # Health check
-npx lifeos rename [path] --logical <name> --name <new>  # Rename a directory
+npx lifeos rename [path]                               # Interactive directory rename
 npx lifeos --help                                      # Show help
 npx lifeos --version                                   # Show version
 ```
@@ -92,7 +92,11 @@ Checks vault integrity: directory structure, templates, schema, skills, config, 
 
 ### rename
 
-Renames a logical directory such as `drafts` to a new physical name, updates `lifeos.yaml`, and batch-replaces all related wikilinks across the vault.
+#### Directory Customization
+
+No extra flags are required. Run `npx lifeos rename [path]` and the CLI will show the directories available in the current vault, then guide you step by step to choose one and enter a new name. It updates `lifeos.yaml`, renames the actual directory, and batch-replaces related wikilinks across the vault.
+
+This means LifeOS does not lock you into fixed directory names. You can freely adapt physical directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
 
 ## Skills
 

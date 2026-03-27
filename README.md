@@ -59,7 +59,7 @@ npx lifeos init ./my-vault --lang en   # 英文
 npx lifeos init [path] [--lang zh|en] [--no-mcp]       # 创建新 Vault
 npx lifeos upgrade [path] [--lang zh|en]               # 升级并补齐资产与脚手架
 npx lifeos doctor [path]                               # 健康检查
-npx lifeos rename [path] --logical <name> --name <new>  # 重命名目录
+npx lifeos rename [path]                               # 交互式重命名目录
 npx lifeos --help                                      # 查看帮助
 npx lifeos --version                                   # 查看版本
 ```
@@ -91,7 +91,11 @@ npx lifeos --version                                   # 查看版本
 
 ### rename
 
-重命名逻辑目录（如 `drafts`）为新的物理名称，同时更新 `lifeos.yaml` 并批量替换 Vault 中所有相关的 wikilink。
+#### 目录可自定义化
+
+无需额外参数，直接执行 `npx lifeos rename [path]` 后，CLI 会列出当前 Vault 中可调整的目录，并通过交互引导你选择目录和输入新名称。它会同步更新 `lifeos.yaml`、重命名实际目录，并批量替换 Vault 中所有相关的 wikilink。
+
+这意味着 LifeOS 的目录命名不是固定死的。你可以根据自己的工作流、语言习惯和项目结构，自由调整各个目录的物理名称，同时保持配置和链接关系一致，获得最大的使用自由度。
 
 ## 技能一览
 
