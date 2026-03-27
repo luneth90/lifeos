@@ -2,7 +2,12 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { LifeOSConfig } from '../../config.js';
-import { installPrompts, installSchema, installSkills, installTemplates } from '../utils/install-assets.js';
+import {
+	installPrompts,
+	installSchema,
+	installSkills,
+	installTemplates,
+} from '../utils/install-assets.js';
 import { bold, green, log, parseArgs } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 

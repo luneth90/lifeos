@@ -5,7 +5,12 @@ import { stringify as stringifyYaml } from 'yaml';
 import { EN_PRESET, EN_REFLECTION_SUBS, ZH_PRESET, ZH_REFLECTION_SUBS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { assetsDir, ensureDir } from '../utils/assets.js';
-import { installPrompts, installSchema, installSkills, installTemplates } from '../utils/install-assets.js';
+import {
+	installPrompts,
+	installSchema,
+	installSkills,
+	installTemplates,
+} from '../utils/install-assets.js';
 import { parseArgs } from '../utils/ui.js';
 import { bold, green, log } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
