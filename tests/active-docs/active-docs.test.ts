@@ -158,6 +158,18 @@ describe('buildUserprofileSections', () => {
     const sections = buildUserprofileSections(db, '/tmp/vault');
     expect(sections['corrections']).toContain('空格');
   });
+
+  it('shows missing knowledge status as 未标注 instead of null', () => {
+    db.prepare(`
+      INSERT INTO vault_index (file_path, title, type, status, modified_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('40_知识/笔记/no-status.md', '未标注笔记', 'note', null, new Date().toISOString());
+
+    const sections = buildUserprofileSections(db, '/tmp/vault');
+
+    expect(sections['learning-progress']).toContain('未标注');
+    expect(sections['learning-progress']).not.toContain('null:');
+  });
 });
 
 // ─── refreshTaskboard ─────────────────────────────────────────────────────────

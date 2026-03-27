@@ -193,7 +193,7 @@ function buildLearningProgressSection(db: Database.Database): string {
 		if (lines.length > 0) lines.push('');
 		lines.push('**知识掌握度：**');
 		for (const r of masteryRows) {
-			const label = MASTERY_STATUS_LABELS[r.status] ?? r.status;
+			const label = r.status == null ? '⚪ 未标注' : (MASTERY_STATUS_LABELS[r.status] ?? r.status);
 			lines.push(`- ${label}: ${r.cnt} 篇`);
 		}
 	}
