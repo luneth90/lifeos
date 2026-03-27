@@ -2,11 +2,11 @@
  * core.test.ts — Tests for core.ts dispatch layer.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'fs';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { existsSync, readFileSync, mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { createTempVault } from './setup.js';
+import { createTempVault, writeTestNote } from './setup.js';
 import {
   memoryStartup,
   memoryLog,
@@ -15,6 +15,7 @@ import {
   memoryAutoCapture,
   memoryNotify,
   memoryCheckpoint,
+  memorySkillComplete,
 } from '../src/core.js';
 import { _resetDefaultInstance } from '../src/config.js';
 
@@ -56,6 +57,38 @@ describe('memoryStartup', () => {
     });
 
     expect(typeof result.enhance_queue_size).toBe('number');
+  });
+
+  it('creates both active docs during startup', () => {
+    memoryStartup({
+      dbPath: vault.dbPath,
+      vaultRoot: vault.root,
+    });
+
+    const memoryDir = join(vault.root, '90_系统', '记忆');
+    const taskboardPath = join(memoryDir, 'TaskBoard.md');
+    const userProfilePath = join(memoryDir, 'UserProfile.md');
+
+    expect(existsSync(taskboardPath)).toBe(true);
+    expect(existsSync(userProfilePath)).toBe(true);
+    expect(readFileSync(userProfilePath, 'utf-8')).toContain('<!-- BEGIN AUTO:profile-summary -->');
+  });
+
+  it('does not warn about missing vault-indexer module during startup', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    memoryStartup({
+      dbPath: vault.dbPath,
+      vaultRoot: vault.root,
+    });
+
+    expect(
+      warnSpy.mock.calls.some(
+        (call) => call[0] === '[lifeos] vault scan failed:',
+      ),
+    ).toBe(false);
+
+    warnSpy.mockRestore();
   });
 });
 
@@ -276,6 +309,27 @@ describe('memoryNotify', () => {
     expect(result.filePath).toBeTruthy();
     expect(typeof result.action).toBe('string');
   });
+
+  it('indexes an existing markdown file instead of returning error', () => {
+    writeTestNote(
+      vault.root,
+      '20_项目/my-project.md',
+      { title: 'My Project', type: 'project', status: 'active' },
+      '项目内容',
+    );
+
+    memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
+    _resetDefaultInstance();
+
+    const result = memoryNotify({
+      dbPath: vault.dbPath,
+      vaultRoot: vault.root,
+      filePath: '20_项目/my-project.md',
+    });
+
+    expect(result.filePath).toBe('20_项目/my-project.md');
+    expect(result.action).toBe('indexed');
+  });
 });
 
 // ─── memoryCheckpoint ─────────────────────────────────────────────────────────
@@ -315,5 +369,32 @@ describe('memoryCheckpoint', () => {
     });
 
     expect(Array.isArray(result.warnings)).toBe(true);
+  });
+});
+
+// ─── memorySkillComplete ─────────────────────────────────────────────────────
+
+describe('memorySkillComplete', () => {
+  it('refreshes UserProfile by default so new preferences are written out', () => {
+    memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
+    _resetDefaultInstance();
+
+    memoryAutoCapture({
+      dbPath: vault.dbPath,
+      preferences: [{ summary: '偏好简洁中文风格' }],
+    });
+    _resetDefaultInstance();
+
+    memorySkillComplete({
+      dbPath: vault.dbPath,
+      vaultRoot: vault.root,
+      skillName: '/test',
+      summary: '完成一次技能执行',
+    });
+
+    const userProfilePath = join(vault.root, '90_系统', '记忆', 'UserProfile.md');
+    const content = readFileSync(userProfilePath, 'utf-8');
+
+    expect(content).toContain('偏好简洁中文风格');
   });
 });

@@ -333,7 +333,7 @@ export function memorySkillComplete(opts: {
 		}
 
 		// Refresh targets
-		const targets = opts.refreshTargets || ['TaskBoard'];
+		const targets = opts.refreshTargets || ['TaskBoard', 'UserProfile'];
 		for (const target of targets) {
 			if (target === 'TaskBoard') refreshTaskboard(db, vault);
 			else if (target === 'UserProfile') refreshUserprofile(db, vault);

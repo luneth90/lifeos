@@ -18,6 +18,7 @@ import {
 	resolveRuleKey,
 	resolveSessionId,
 } from '../utils/shared.js';
+import { indexSingleFile } from '../utils/vault-indexer.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -331,13 +332,8 @@ export function notifyFileChanged(
 		? relative(vaultRoot, filePath).replace(/\\/g, '/')
 		: filePath.replace(/\\/g, '/');
 
-	// Dynamically import to avoid circular-dep issues at module level
-	// Use inline require-style dynamic import workaround
 	let indexResult: { status: string; filePath?: string; reason?: string };
 	try {
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		// biome-ignore format: typeof import() must stay on one line or tsc errors
-		const { indexSingleFile } = require('../utils/vault-indexer.js') as typeof import('../utils/vault-indexer.js');
 		const dbPath = db.name; // better-sqlite3 exposes .name as the db file path
 		indexResult = indexSingleFile(vaultRoot, dbPath, relPath);
 	} catch {

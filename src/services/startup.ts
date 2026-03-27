@@ -8,12 +8,14 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
+import { refreshTaskboard, refreshUserprofile } from '../active-docs/index.js';
 import { getVaultConfig } from '../config.js';
 import { initDb } from '../db/schema.js';
 import type { StartupResult } from '../types.js';
 import { ensureContextPolicyExists, loadContextPolicy } from '../utils/context-policy.js';
 import { loadCustomDict } from '../utils/segmenter.js';
 import { coerceNow, countRows } from '../utils/shared.js';
+import { fullScan } from '../utils/vault-indexer.js';
 import { latestSessionBridge } from './capture.js';
 import { processEnhanceQueue } from './enhance.js';
 import { buildLayer0Summary } from './layer0.js';
@@ -86,10 +88,6 @@ export function runStartup(
 	// 5. Full vault scan — vault-indexer opens its own DB connection via dbPath
 	let scanIndexed = 0;
 	try {
-		// Dynamically import to avoid circular-dependency issues at module level
-		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		// biome-ignore format: typeof import() must stay on one line or tsc errors
-		const { fullScan } = require('../utils/vault-indexer.js') as typeof import('../utils/vault-indexer.js');
 		const dbPath = db.name; // better-sqlite3 exposes .name as the db file path
 		const scanResult = fullScan(vaultRoot, dbPath);
 		scanIndexed = scanResult.indexed;
@@ -107,13 +105,17 @@ export function runStartup(
 		maintenanceResult = maintenanceRun(db, now);
 	}
 
-	// 8. Load context policy and build Layer 0
+	// 8. Refresh active docs before building Layer 0 from their AUTO sections.
+	refreshTaskboard(db, vaultRoot);
+	refreshUserprofile(db, vaultRoot);
+
+	// 9. Load context policy and build Layer 0
 	ensureContextPolicyExists(vaultRoot);
 	const policy = loadContextPolicy(vaultRoot);
 	const bridgeRow = latestSessionBridge(db, resolvedSessionId) ?? latestSessionBridge(db);
 	const bridgeText = bridgeRow ? bridgeRow.summary : null;
 
-	// 9. Stats
+	// 10. Stats
 	const totalFiles = countRows(db, 'vault_index');
 	const enhanceQueueSize = countRows(db, 'enhance_queue', "status = 'pending'");
 
