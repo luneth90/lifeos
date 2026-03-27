@@ -1,5 +1,5 @@
 import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 import { EN_PRESET, EN_REFLECTION_SUBS, ZH_PRESET, ZH_REFLECTION_SUBS } from '../../config.js';
@@ -108,14 +108,22 @@ export default async function init(args: string[]): Promise<void> {
 	// 8. Copy skills
 	installSkills(targetPath, lang, 'overwrite');
 
-	// 9. Copy CLAUDE.md & AGENTS.md (single source, same content)
+	// 9. Create .claude/ and symlink skills for Claude Code discovery
+	const claudeDir = join(targetPath, '.claude');
+	ensureDir(claudeDir);
+	const claudeSkillsLink = join(claudeDir, 'skills');
+	if (!existsSync(claudeSkillsLink)) {
+		symlinkSync(join('..', '.agents', 'skills'), claudeSkillsLink);
+	}
+
+	// 10. Copy CLAUDE.md & AGENTS.md (single source, same content)
 	const rulesLangSrc = join(assetsDir(), `lifeos-rules.${lang}.md`);
 	const rulesFallback = join(assetsDir(), 'lifeos-rules.zh.md');
 	const rulesSrc = existsSync(rulesLangSrc) ? rulesLangSrc : rulesFallback;
 	copyFileSync(rulesSrc, join(targetPath, 'CLAUDE.md'));
 	copyFileSync(rulesSrc, join(targetPath, 'AGENTS.md'));
 
-	// 10. Git init
+	// 11. Git init
 	if (!existsSync(join(targetPath, '.git'))) {
 		try {
 			execSync('git init', { cwd: targetPath, stdio: 'ignore' });
@@ -128,13 +136,13 @@ export default async function init(args: string[]): Promise<void> {
 		writeFileSync(gitignorePath, GITIGNORE, 'utf-8');
 	}
 
-	// 11. MCP registration
+	// 12. MCP registration
 	if (!noMcp) {
 		const { registerMcp } = await import('../utils/mcp-register.js');
 		await registerMcp(targetPath);
 	}
 
-	// 12. Print summary
+	// 13. Print summary
 	log(green('✔'), bold('LifeOS vault initialized'));
 	log('  ', `Path:     ${targetPath}`);
 	log('  ', `Language: ${lang}`);
