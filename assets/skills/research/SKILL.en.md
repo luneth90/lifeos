@@ -1,6 +1,6 @@
 ---
 name: research
-description: "Conduct deep research on a specified topic or draft, producing structured research reports to {research directory}/. Uses dual-Agent workflow: Planning Agent scans local drafts, matches expert personas, generates research plan; Execution Agent combines local drafts with WebSearch external sources to write the report. Supports topic mode (direct topic) and file mode (draft as anchor). Use this skill when the user wants to deeply understand a topic, needs systematic research, wants to expand a draft into a full report, or says '/research'."
+description: "Conduct deep research on a specified topic or draft, producing structured research reports to {research directory}/. Uses dual-Agent workflow: the Planning Agent scans local drafts, matches expert personas, and creates a `type: plan, status: active` research plan; the Execution Agent combines local drafts with WebSearch external sources to write the report and updates the plan to `status: done`. Supports topic mode (direct topic) and file mode (draft as anchor). Use this skill when the user wants to deeply understand a topic, needs systematic research, wants to expand a draft into a full report, or says '/research'."
 version: 1.0.0
 dependencies:
   templates: []
@@ -41,7 +41,7 @@ Follow `_shared/dual-agent-orchestrator.en.md` Phase 0, with entity type `filter
 | ------- | ------------------ | -------------------------------------------------------- |
 | Phase 1 | Planning Agent     | Scan local drafts, formulate research strategy, generate plan file |
 | Phase 2 | Orchestrator (you) | Ask user clarification questions, wait for confirmation  |
-| Phase 3 | Execution Agent    | Execute research per the plan, write report, archive plan |
+| Phase 3 | Execution Agent    | Execute research per the plan, write report, and update the plan to `status: done` |
 
 # Your Responsibilities as Orchestrator
 
@@ -95,6 +95,8 @@ Follow `_shared/dual-agent-orchestrator.en.md` Phase 3.
 # Follow-up Handling
 
 When the user requests additions/modifications: edit the existing research report file directly, do not create duplicate files.
+
+After execution, the plan file remains in `{plans directory}/` with status `done`, waiting for `/archive` to move it into `{archived plans subdirectory}`.
 
 # Memory System Integration
 

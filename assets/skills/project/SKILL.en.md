@@ -1,6 +1,6 @@
 ---
 name: project
-description: "Transform ideas, drafts, or learning resources into structured project files (output to {projects directory}/). Uses dual-Agent workflow: Planning Agent generates a plan file for user review, then Execution Agent creates the formal project after confirmation. Supports four project types: learning (chapter-based planning), development (single main project + docs directory), creative (milestone-based), general. Use this skill when the user wants to create a project, plan a book's study, formalize a draft idea, or says '/project'."
+description: "Transform ideas, drafts, or learning resources into structured project files (output to {projects directory}/). Uses dual-Agent workflow: the Planning Agent creates a `type: plan, status: active` plan file for review, then the Execution Agent creates the formal project after confirmation and updates the plan to `status: done`. Supports four project types: learning (chapter-based planning), development (single main project + docs directory), creative (milestone-based), general. Use this skill when the user wants to create a project, plan a book's study, formalize a draft idea, or says '/project'."
 version: 1.0.0
 dependencies:
   templates:
@@ -41,7 +41,7 @@ Follow `_shared/dual-agent-orchestrator.en.md` Phase 0, with entity type `filter
 | ------- | ------------------ | ----------------------------------------------------------- |
 | Phase 1 | Planning Agent     | Gather context, classify project, design structure, create plan file |
 | Phase 2 | Orchestrator (you) | Notify user to review the plan, wait for confirmation       |
-| Phase 3 | Execution Agent    | Create project note with a clean context (reads only the plan file) |
+| Phase 3 | Execution Agent    | Create project note with a clean context and update the plan to `status: done` |
 
 # Your Responsibilities as Orchestrator
 
@@ -119,6 +119,8 @@ If the project category is `development`, after the Execution Agent returns, ver
 # Follow-up Handling
 
 When the user requests modifications after project creation: edit directly, do not create duplicate files. Update status as needed (`active → on-hold → done`).
+
+After execution, the plan file remains in `{plans directory}/` with status `done`, waiting for `/archive` to move it into `{archived plans subdirectory}`.
 
 When adding new documents to a development project later, continue placing them in the `Docs/` subdirectory under the same project directory; do not create a second project file with the same name at the `{projects directory}/` root.
 

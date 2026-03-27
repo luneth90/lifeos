@@ -24,7 +24,7 @@ You are the user's lifelong learning partner. Through **LifeOS**, help the user 
 - **outputs** (default `50_Outputs`): Externalized outputs from knowledge and projects
   - Stores articles, tutorials, talk scripts, solutions, presentation outlines, demo materials, and other deliverables
   - Primarily receives staged expressions from `{projects}` and `{knowledge}`, does not store raw materials
-- **plans** (default `60_Plans`): Execution plan files for `/research` and `/project` (archived to `{system}/{archive_plans}/` upon completion)
+- **plans** (default `60_Plans`): Execution plan files for `/research` and `/project` (`status: active | done`; kept in `{plans}` after execution and moved into `{system}/{archive_plans}/` later by `/archive`)
 - **resources** (default `70_Resources`): Raw materials (`Books/`, `Literature/`)
 - **reflection** (default `80_Reflection`): Periodic reviews and system calibration
   - `Weekly/`, `Monthly/`, `Quarterly/`, `Yearly/`, `Projects/`
@@ -46,7 +46,7 @@ Skill file location: `.agents/skills/<skill-name>/SKILL.md`
 | `/brainstorm` | Interactive brainstorming, explore and deepen ideas | When having an immature idea to discuss, needing divergent thinking, or exploring feasibility |
 | `/knowledge` | Distill structured knowledge notes and wiki concepts from books/papers | After reading a chapter and wanting to organize notes, or structuring source material into a knowledge system |
 | `/revise` | Generate review files, grade and update mastery | When wanting to review learned content, test understanding, or reinforce weak areas |
-| `/archive` | Archive completed projects and processed drafts | When wanting to clean up the Vault or organize completed work |
+| `/archive` | Archive completed projects, processed drafts, and completed plans | When wanting to clean up the Vault or organize completed work |
 | `/read-pdf` | Parse PDF into structured JSON | When needing to convert a PDF file into processable text |
 
 **Template Routing:**
@@ -144,10 +144,11 @@ Before creating/modifying any note, must first read `[[Frontmatter_Schema]]` and
 
 ### Status Flow
 
-Drafts and knowledge notes each have independent status lifecycles. See `.agents/skills/_shared/lifecycle.md` for details.
+Drafts, knowledge notes, and plans each have independent status lifecycles. See `.agents/skills/_shared/lifecycle.md` for details.
 
 Core constraints:
 - Drafts with `status: pending` are **never** archived
+- Plans follow `active → done → archived`: `/project` and `/research` update finished plans to `done`, and `/archive` moves them and updates them to `archived`
 - Knowledge note status **only goes up, never down** (draft → review → mastered)
 
 ### Learning Project Knowledge Accuracy

@@ -53,16 +53,32 @@ active ──→ on-hold ──→ done ──/archive──→ archived
 | `done` | Completed, ready for archival | Manual |
 | `archived` | Moved to archive directory by /archive | /archive |
 
+## Plan Lifecycle
+
+```
+active ──/project,/research──→ done ──/archive──→ archived
+```
+
+| Status | Meaning | Set by |
+|--------|---------|--------|
+| `active` | Created by /project or /research and kept in `{plans directory}/` while waiting for execution or review | /project, /research |
+| `done` | The corresponding project or research work has finished and is waiting for /archive | /project, /research |
+| `archived` | Moved into `{system directory}/{archived plans subdirectory}/` by /archive | /archive |
+
+**Rules:**
+
+- /project and /research must write `type: plan` and `status: active` when creating a plan file
+- /project and /research only update the plan status to `done` after execution; they do not move the plan file directly
+- /archive only archives plans with `status: done` and updates them to `archived` after moving
+
 ## Skill Participation Matrix
 
-| Skill | Draft Transitions | Knowledge Note Transitions | Project Transitions |
-|-------|-------------------|---------------------------|---------------------|
-| /brainstorm | Creates `pending` | - | - |
-| /today | Creates `pending` | - | - |
-| /research | `pending` → `researched` | - | - |
-| /project | `pending` → `projected` | - | Creates `active` |
-| /knowledge | `pending` → `knowledged` | Creates `draft` | - |
-| /revise | - | `draft` → `revise` → `mastered` | Updates mastery dots |
-| /archive | `researched/projected/knowledged` → `archived` | - | `done` → `archived` |
-| /rename | - | - | - |
-| /enhance | - | - | - |
+| Skill | Draft Transitions | Knowledge Note Transitions | Project Transitions | Plan Transitions |
+|-------|-------------------|---------------------------|---------------------|------------------|
+| /brainstorm | Creates `pending` | - | - | - |
+| /today | Creates `pending` | - | - | - |
+| /research | `pending` → `researched` | - | - | Creates `active`, then updates to `done` after execution |
+| /project | `pending` → `projected` | - | Creates `active` | Creates `active`, then updates to `done` after execution |
+| /knowledge | `pending` → `knowledged` | Creates `draft` | - | - |
+| /revise | - | `draft` → `revise` → `mastered` | Updates mastery dots | - |
+| /archive | `researched/projected/knowledged` → `archived` | - | `done` → `archived` | `done` → `archived` |

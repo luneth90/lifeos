@@ -45,6 +45,15 @@ parent_skill: project
 
 ```markdown
 ---
+title: "Plan: [项目名称]"
+type: plan
+status: active
+created: "YYYY-MM-DD"
+source: project
+project: "[项目名称]"
+tags: [plan, project]
+aliases: []
+---
 
 # 启动计划: [项目名称]
 

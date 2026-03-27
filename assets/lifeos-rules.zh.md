@@ -24,7 +24,7 @@
 - **outputs**（默认 `50_成果`）：知识与项目的外化输出
   - 存放文章、教程、讲稿、题解、分享提纲、演示材料等可交付成果
   - 优先承接 `{projects}` 与 `{knowledge}` 的阶段性表达，不存放原始资料
-- **plans**（默认 `60_计划`）：`/research` 和 `/project` 的执行计划文件（完成后归档至 `{system}/{archive_plans}/`）
+- **plans**（默认 `60_计划`）：`/research` 和 `/project` 的执行计划文件（`status: active | done`；执行完成后保留在 `{plans}`，由 `/archive` 统一移入 `{system}/{archive_plans}/`）
 - **resources**（默认 `70_资源`）：原始资料（`书籍/`、`文献/`）
 - **reflection**（默认 `80_复盘`）：周期性回顾与系统校准
   - `周复盘/`、`月复盘/`、`季度复盘/`、`年度复盘/`、`项目复盘/`
@@ -46,7 +46,7 @@
 | `/brainstorm` | 交互式头脑风暴，探索和深化想法 | 有一个还不成熟的想法想聊聊、需要发散思维、探索方向可行性时 |
 | `/knowledge` | 从书籍/论文蒸馏结构化知识笔记和百科概念 | 读完一章想整理笔记、需要将原文结构化为知识体系时 |
 | `/revise` | 生成复习文件、批改并更新掌握度 | 想复习已学内容、测验掌握程度、巩固薄弱环节时 |
-| `/archive` | 归档已完成项目和已处理草稿 | 想清理 Vault、整理已完成的工作时 |
+| `/archive` | 归档已完成项目、已处理草稿和已完成计划 | 想清理 Vault、整理已完成的工作时 |
 | `/read-pdf` | 解析 PDF 为结构化 JSON | 需要将 PDF 文件转为可处理的文本时 |
 
 **模板路由：**
@@ -144,10 +144,11 @@ Compaction 后重新继续任务前，必须：
 
 ### 状态流转
 
-草稿和知识笔记各有独立的状态生命周期，详见 `.agents/skills/_shared/lifecycle.md`。
+草稿、知识笔记和计划各有独立的状态生命周期，详见 `.agents/skills/_shared/lifecycle.md`。
 
 核心约束：
 - `status: pending` 的草稿**绝不**被归档
+- 计划状态按 `active → done → archived` 流转：`/project`、`/research` 将完成的计划更新为 `done`，`/archive` 负责移动并更新为 `archived`
 - 知识笔记 status **只升不降**（draft → review → mastered）
 
 ### 学习类项目知识准确性

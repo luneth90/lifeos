@@ -36,12 +36,12 @@ function printHelp(): void {
 Usage:
   lifeos                       Start MCP server (default)
   lifeos init [path] [options] Create a new LifeOS vault
-  lifeos upgrade               Upgrade assets to latest version
+  lifeos upgrade [path] [opts] Upgrade assets to latest version
   lifeos doctor [path]         Check vault health
   lifeos rename [path]         Rename a vault directory
 
-Options (init):
-  --lang, -l <zh|en>   Language preset (default: auto-detect)
+Options (init / upgrade):
+  --lang, -l <zh|en>   Language preset (default: auto-detect / from config)
 
 Options (global):
   --help, -h           Show this help

@@ -1,0 +1,147 @@
+# LifeOS
+
+[中文](./README.md) | English
+
+Obsidian + AI Agent — your lifelong learning system.
+
+## What Is It
+
+LifeOS helps you grow scattered ideas into structured knowledge and truly master it, from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.
+
+**Core components:**
+
+- **MCP Server** — Memory system providing vault indexing, session memory, and context assembly for AI agents
+- **CLI scaffold** — `npx lifeos init` to bootstrap a complete workspace
+- **Skill system** — 9 Agent skills covering diary, projects, research, knowledge curation, review, and more
+- **Templates + Schema** — 8 structured templates + Frontmatter schema for consistent notes
+
+## Prerequisites
+
+| Dependency | Required | Purpose |
+|---|---|---|
+| **Node.js 18+** | Required | Runtime for MCP server and CLI |
+| **Git** | Required | Version control for vault data, including the memory DB |
+| **Python 3** | Required | PDF extraction (`/read-pdf` skill) |
+
+`lifeos init` checks all prerequisites before creating the workspace.
+
+## Quick Start
+
+```bash
+# Create a new LifeOS workspace (auto-detects language from system locale)
+npx lifeos init ./my-vault
+
+# Or specify language explicitly
+npx lifeos init ./my-vault --lang zh   # Chinese
+npx lifeos init ./my-vault --lang en   # English
+
+# Skip MCP registration (create directories/files only)
+npx lifeos init ./my-vault --no-mcp
+
+# Open with Obsidian, then start working with your AI coding assistant
+```
+
+After init, MCP server configs are automatically registered for:
+
+| Tool | Config file |
+|---|---|
+| **Claude Code** | `.mcp.json` |
+| **Codex** | `.codex/config.toml` |
+| **OpenCode** | `opencode.json` |
+
+Launch any of these tools in the vault directory to use all skills.
+
+## CLI Commands
+
+```bash
+lifeos init [path] [--lang zh|en] [--no-mcp]       # Create a new vault
+lifeos upgrade [path] [--lang zh|en]               # Upgrade and restore assets/scaffold
+lifeos doctor [path]                               # Health check
+lifeos rename [path] --logical <name> --name <new>  # Rename a directory
+lifeos --help                                      # Show help
+lifeos --version                                   # Show version
+```
+
+### init
+
+Creates a complete LifeOS workspace:
+
+- 10 top-level directories plus nested subdirectories
+- 8 Markdown templates
+- Frontmatter schema
+- 9 AI skills with language-aware assets
+- `CLAUDE.md` agent behavior spec
+- `lifeos.yaml` config
+- Git init plus `.gitignore`
+- MCP server registration (Claude Code / Codex / OpenCode)
+
+### upgrade
+
+Upgrades and re-syncs an initialized vault:
+
+- **Always update**: templates, schema, prompts
+- **Smart merge**: update unmodified skill files, skip modified ones with a warning
+- **Restore missing scaffold**: bring back missing directories and managed files such as the memory directory, `.claude/skills`, `CLAUDE.md`, `AGENTS.md`, `.gitignore`, `.git`, and MCP config entries
+- **Preserve user changes when possible**: existing user-customized files are not force-overwritten
+
+### doctor
+
+Checks vault integrity: directory structure, templates, schema, skills, config, Node.js version, and asset version.
+
+### rename
+
+Renames a logical directory such as `drafts` to a new physical name, updates `lifeos.yaml`, and batch-replaces all related wikilinks across the vault.
+
+## Skills
+
+| Skill | Description |
+|---|---|
+| `/today` | Morning planning: review yesterday, plan today |
+| `/project` | Idea -> structured project |
+| `/research` | Topic -> deep research report |
+| `/knowledge` | Book/paper -> knowledge note |
+| `/revise` | Generate quizzes, grade, and track mastery |
+| `/read-pdf` | PDF -> structured notes |
+| `/ask` | Quick Q&A |
+| `/brainstorm` | Interactive brainstorming |
+| `/archive` | Archive completed projects, processed drafts, and completed plans |
+
+## Custom Expert Prompts
+
+The `/research` skill automatically scans the Prompts directory in your vault for expert prompt files. LifeOS ships with built-in expert prompts for AI/LLM, Math, Art, and History, and you can add your own to extend research capabilities to any domain.
+
+### How It Works
+
+When you invoke `/research`, the Planning Agent:
+
+1. Lists all `.md` files in `{system directory}/Prompts/`
+2. Reads each file's frontmatter and **Domain Coverage** section
+3. Matches the research topic to the best-fit expert prompt
+4. Applies the matched prompt's analytical framework and output format to the research report
+
+### Adding Custom Expert Prompts
+
+Create a `.md` file in your vault's Prompts directory (`{system directory}/Prompts/`). The Planning Agent will pick it up automatically on the next `/research` invocation, with no restart or re-init required. Use the built-in prompts in the same directory as a reference for structure.
+
+## Tech Stack
+
+- **Runtime:** TypeScript + Node.js 18+
+- **Database:** SQLite + FTS5 (full-text search)
+- **Segmentation:** @node-rs/jieba (Chinese tokenization)
+- **Protocol:** MCP (Model Context Protocol)
+- **Vault:** Obsidian (plain Markdown + Frontmatter)
+
+## Development
+
+```bash
+git clone git@github.com:luneth90/lifeos.git
+cd lifeos
+npm install
+npm run build    # Compile TypeScript
+npm test         # Run tests (431 tests)
+npm run dev      # Dev mode (hot reload)
+```
+
+## License
+
+[MIT](LICENSE)

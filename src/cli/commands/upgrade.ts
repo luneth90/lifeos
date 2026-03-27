@@ -1,13 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { resolveConfig } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
-import {
-	installPrompts,
-	installSchema,
-	installSkills,
-	installTemplates,
-} from '../utils/install-assets.js';
+import { syncVault } from '../utils/sync-vault.js';
 import { bold, green, log, parseArgs } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 
@@ -18,7 +14,9 @@ export interface UpgradeResult {
 }
 
 export default async function upgrade(args: string[]): Promise<UpgradeResult> {
-	const { positionals } = parseArgs(args, {});
+	const { positionals, flags } = parseArgs(args, {
+		lang: { alias: 'l' },
+	});
 
 	// 1. Parse args
 	const targetPath = resolve(positionals[0] ?? '.');
@@ -30,29 +28,36 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	}
 
 	const yamlContent = readFileSync(yamlPath, 'utf-8');
-	const config = parseYaml(yamlContent) as LifeOSConfig;
+	const rawConfig = (parseYaml(yamlContent) as Record<string, unknown> | null) ?? {};
+	const config = resolveConfig(targetPath, rawConfig).rawConfig as LifeOSConfig;
 
 	const result: UpgradeResult = { updated: [], skipped: [], unchanged: [] };
 
 	// 3. Version check
 	const installedAssets = config.installed_versions?.assets ?? '0.0.0';
 	if (installedAssets === VERSION) {
-		log(green('✔'), 'Already up to date.');
-		return result;
+		log(green('✔'), 'Assets version already current. Syncing files anyway.');
 	}
 
-	const lang = (config.language as 'zh' | 'en') ?? 'zh';
+	const lang: 'zh' | 'en' =
+		flags.lang && flags.lang !== true
+			? (flags.lang as 'zh' | 'en')
+			: ((config.language as 'zh' | 'en') ?? 'zh');
 
-	// 4. Tier 1 — Templates + Schema + Prompts
-	result.updated.push(...installTemplates(targetPath, config));
-	result.updated.push(...installSchema(targetPath, config));
-	result.updated.push(...installPrompts(targetPath, config));
+	// Update config language if overridden by flag
+	if (flags.lang && flags.lang !== true && config.language !== lang) {
+		config.language = lang;
+	}
 
-	// 5. Tier 2 — Skills
-	const skillResult = installSkills(targetPath, lang, 'smart-merge');
-	result.updated.push(...skillResult.updated);
-	result.skipped.push(...skillResult.skipped);
-	result.unchanged.push(...skillResult.unchanged);
+	// 4. Reuse the same vault sync path as init, but in conservative upgrade mode.
+	const syncResult = await syncVault(targetPath, config, {
+		lang,
+		skillMode: 'smart-merge',
+		ensureMcp: true,
+	});
+	result.updated.push(...syncResult.updated);
+	result.skipped.push(...syncResult.skipped);
+	result.unchanged.push(...syncResult.unchanged);
 
 	// 7. Update installed_versions
 	if (!config.installed_versions) {

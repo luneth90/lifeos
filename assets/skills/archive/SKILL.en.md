@@ -1,6 +1,6 @@
 ---
 name: archive
-description: "Scan and archive completed projects (status:done) and consumed drafts (status:researched/projected/knowledged), moving them to archive directories by year/month and updating frontmatter. Never touches pending drafts. Use this skill when the user wants to clean up the Vault, archive completed work, tidy up, or says '/archive'."
+description: "Scan and archive completed projects (status:done), consumed drafts (status:researched/projected/knowledged), and completed plans (status: done), moving them into the unified archive structure and updating frontmatter. Never touches pending drafts or active plans. Use this skill when the user wants to clean up the Vault, archive completed work, tidy up, or says '/archive'."
 version: 1.0.0
 dependencies:
   templates: []
@@ -16,16 +16,18 @@ dependencies:
 > - `{drafts directory}` → directories.drafts
 > - `{diary directory}` → directories.diary
 > - `{projects directory}` → directories.projects
+> - `{plans directory}` → directories.plans
 > - `{resources directory}` → directories.resources
 > - `{system directory}` → directories.system
 > - `{archived projects subdirectory}` → subdirectories.system.archive.projects
 > - `{archived drafts subdirectory}` → subdirectories.system.archive.drafts
+> - `{archived plans subdirectory}` → subdirectories.system.archive.plans
 
 You are LifeOS's archive manager, helping users keep the Vault's active space tidy. You only archive completed work, never touch content still being processed, and always require user confirmation before archiving.
 
 # Goal
 
-Help the user archive completed projects and processed drafts, keeping the active workspace tidy while fully preserving historical records.
+Help the user archive completed projects, processed drafts, and completed plans, keeping the active workspace tidy while fully preserving historical records.
 
 # Workflow
 
@@ -38,6 +40,7 @@ memory_query(query="", filters={"type":"project","status":"done"})
 memory_query(query="", filters={"status":"researched"}, limit=50)
 memory_query(query="", filters={"status":"projected"}, limit=50)
 memory_query(query="", filters={"status":"knowledged"}, limit=50)
+memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 ```
 
 Use the query results as the candidate list; confirm each candidate file individually in Step 1.
@@ -54,7 +57,11 @@ Use the query results as the candidate list; confirm each candidate file individ
      - `status: knowledged` (organized into knowledge notes by `/knowledge`)
    - **Do not archive** drafts with `status: pending` (not yet processed)
 
-3. **Present summary:**
+3. **Scan completed plans:**
+   - Find all plan files with `status: done` in `{plans directory}/`
+   - **Do not archive** plans with `status: active` (still in execution or review)
+
+4. **Present summary:**
 
 ```
 ## Content to Archive
@@ -68,15 +75,21 @@ Use the query results as the candidate list; confirm each candidate file individ
 - [[Draft2]] - converted to [[ProjectName]] (projected)
 - [[Draft3]] - organized into [[Knowledge Note]] (knowledged)
 
+**Completed plans ([N]):**
+- [[Plan_2026-03-27_Project_LifeOS]] - status: done, waiting for `{archived plans subdirectory}`
+- [[Plan_2026-03-27_Research_Agents]] - status: done, waiting for `{archived plans subdirectory}`
+
 **Skipped (still pending):**
 - [[Draft4]] (pending) - can be processed with /research, /project, or /knowledge
+- [[Plan_2026-03-28_Project_X]] (active) - plan is still in execution or under review
 
 Please choose:
 1. Archive all
 2. Archive projects only
 3. Archive drafts only
-4. Select specific items
-5. Cancel
+4. Archive plans only
+5. Select specific items
+6. Cancel
 ```
 
 ## Step 2: Execute Archival
@@ -96,9 +109,14 @@ After user confirmation, for each item to archive:
    - Move to `{system directory}/{archived drafts subdirectory}/YYYY/MM/filename.md`
    - Organized by archival year and month (preserving chronology and capture history)
 
+   **Plan archival:**
+   - Move to `{system directory}/{archived plans subdirectory}/Plan_YYYY-MM-DD_Type_Name.md`
+   - Keep the original filename unchanged and store all archived plans in the shared plans archive directory
+
 3. **Update frontmatter:**
    - Add `archived: "YYYY-MM-DD"`
-   - Keep all other fields unchanged
+   - For plan files, update `status: done` to `status: archived`
+   - Keep other fields unchanged
 
 4. **Update today's diary:**
    - Append archival records to the notes section of `{diary directory}/YYYY-MM-DD.md` (if the file exists)
@@ -121,11 +139,17 @@ After user confirmation, for each item to archive:
 - Draft2.md → archived/drafts/2026/02/ (projected)
 - Draft3.md → archived/drafts/2026/02/ (knowledged)
 
+**Archived [N] plans to `{system directory}/{archived plans subdirectory}/`:**
+- Plan_2026-03-27_Project_LifeOS.md → archived/plans/ (status: archived)
+- Plan_2026-03-27_Research_Agents.md → archived/plans/ (status: archived)
+
 **Vault status:**
 - Active projects: [N]
 - Pending drafts (pending): [N]
+- Active/review plans (`active`): [N]
 - Archived projects (total): [N]
 - Archived drafts (total): [N]
+- Archived plans (total): [N]
 
 **Suggestions:**
 - [ ] Check on-hold projects to see if they need archiving
@@ -135,15 +159,17 @@ After user confirmation, for each item to archive:
 # Important Rules
 
 - **Only archive processed drafts** — drafts with `status: pending` are never archived
+- **Only archive completed plans** — only plans with `status: done` can be archived; plans with `status: active` are never archived
 - **Never delete** — only move, never destroy content
-- **Organize by year/month** — projects by completion year, drafts by archival year and month
+- **Organize by archive rule** — projects by completion year, drafts by archival year and month, plans in `{archived plans subdirectory}`
 - **Confirm before archiving** — let the user review the list before execution
-- **Update frontmatter** — write the `archived` date
+- **Update frontmatter** — write the `archived` date; for plans also set `status: archived`
 - **Log in diary** — append archival actions to today's diary
 
 # Edge Cases
 
 - **Nothing to archive:** Inform the user the vault is tidy; suggest using `/research`, `/project`, or `/knowledge` to process pending drafts
+- **Plan still active:** Skip it and tell the user the plan is not complete yet, so it cannot be archived
 - **Folder project with mixed statuses:** Ask the user whether to archive the entire folder or only specific files
 - **Large project with resources:** Confirm whether to also archive associated resources in `{resources directory}/`
 - **Recently completed project:** Remind the user they may want to do a project retrospective before archiving
@@ -161,21 +187,25 @@ After user confirmation, for each item to archive:
 │   │   └── SimpleProject.md
 │   └── 2025/
 │       └── OldProject.md
-└── {archived drafts subdirectory}/
-    ├── 2026/
-    │   ├── 01/
-    │   │   └── processed-idea.md
-    │   └── 02/
-    │       └── another-note.md
-    └── 2025/
-        └── 12/
-            └── old-capture.md
+├── {archived drafts subdirectory}/
+│   ├── 2026/
+│   │   ├── 01/
+│   │   │   └── processed-idea.md
+│   │   └── 02/
+│   │       └── another-note.md
+│   └── 2025/
+│       └── 12/
+│           └── old-capture.md
+└── {archived plans subdirectory}/
+    ├── Plan_2026-03-27_Project_LifeOS.md
+    └── Plan_2026-03-27_Research_Agents.md
 ```
 
 **Key distinction:**
 
 - **Project archival:** Organized by completion year (structured work with deliverables)
 - **Draft archival:** Organized by archival year and month (digested fragmentary ideas)
+- **Plan archival:** Stored in `{archived plans subdirectory}` as completed process artifacts
 
 # Additional Features
 
@@ -212,3 +242,4 @@ After archival is complete, suggestions:
 1. Run `/archive` periodically (weekly/monthly) to keep the vault tidy
 2. Check on-hold projects and consider reactivating or archiving them
 3. Process remaining pending drafts with `/research`, `/project`, or `/knowledge`
+4. Continue or review plans that are still `active`, then rerun `/archive` after they are done

@@ -129,9 +129,11 @@ For each draft file used from "Local Draft Materials":
 
 If `{diary directory}/YYYY-MM-DD.md` exists, append a brief research summary. Skip this step if the diary file does not exist.
 
-## Step 9: Archive the Plan File (Critical)
+## Step 9: Update Plan Status (Critical)
 
-Move the plan file from `{plans directory}/` to `{system directory}/{archived plans subdirectory}/`, keeping the filename unchanged.
+- After the research report is complete, update the plan file frontmatter `status` to `done`
+- Keep the plan file in `{plans directory}/`
+- `/archive` later moves plans with `status: done` into `{system directory}/{archived plans subdirectory}/`
 
 ---
 
@@ -150,7 +152,7 @@ After completion, report in English:
 **Integrated draft sources:**
 - [List draft files used, or "None"] → status updated to researched
 
-**Plan archived:** {system directory}/{archived plans subdirectory}/Plan_YYYY-MM-DD_Research_Topic.md
+**Plan status:** {plans directory}/Plan_YYYY-MM-DD_Research_Topic.md → `status: done` (waiting for `/archive` to move it into `{system directory}/{archived plans subdirectory}/`)
 
 **Key takeaways:**
 1. [Takeaway 1]

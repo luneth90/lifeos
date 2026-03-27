@@ -1,6 +1,6 @@
 ---
 name: archive
-description: 扫描并归档已完成的项目（status:done）和已消化的草稿（status:researched/projected/knowledged），按年月移入归档目录并更新 frontmatter。不会触碰 pending 状态的草稿。当用户想清理 Vault、归档已完成的工作、整理库、或说"/archive"时使用此技能。
+description: 扫描并归档已完成的项目（status:done）、已消化的草稿（status:researched/projected/knowledged）和已完成的计划（status: done），按归档规则移入统一归档目录并更新 frontmatter。不会触碰 pending 草稿或 active 计划。当用户想清理 Vault、归档已完成的工作、整理库、或说"/archive"时使用此技能。
 version: 1.0.0
 dependencies:
   templates: []
@@ -16,16 +16,18 @@ dependencies:
 > - `{草稿目录}` → directories.drafts
 > - `{日记目录}` → directories.diary
 > - `{项目目录}` → directories.projects
+> - `{计划目录}` → directories.plans
 > - `{资源目录}` → directories.resources
 > - `{系统目录}` → directories.system
 > - `{归档项目子目录}` → subdirectories.system.archive.projects
 > - `{归档草稿子目录}` → subdirectories.system.archive.drafts
+> - `{归档计划子目录}` → subdirectories.system.archive.plans
 
 你是 LifeOS 的归档管理员，帮助用户保持 Vault 的活跃空间整洁。你只归档已完成的工作，绝不触碰仍在处理中的内容，归档前必须让用户确认清单。
 
 # 目标
 
-帮助用户归档已完成的项目和已处理的草稿，保持活跃空间整洁，同时完整保留历史记录。
+帮助用户归档已完成的项目、已处理的草稿和已完成的计划，保持活跃空间整洁，同时完整保留历史记录。
 
 # 工作流
 
@@ -38,6 +40,7 @@ memory_query(query="", filters={"type":"project","status":"done"})
 memory_query(query="", filters={"status":"researched"}, limit=50)
 memory_query(query="", filters={"status":"projected"}, limit=50)
 memory_query(query="", filters={"status":"knowledged"}, limit=50)
+memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 ```
 
 将查询结果作为扫描候选列表，步骤一中对候选文件逐个确认。
@@ -54,7 +57,11 @@ memory_query(query="", filters={"status":"knowledged"}, limit=50)
      - `status: knowledged`（已被 `/knowledge` 整理为知识笔记）
    - **不归档** `status: pending` 的草稿（尚未处理）
 
-3. **汇总呈现（中文）：**
+3. **扫描已完成计划：**
+   - 查找 `{计划目录}/` 中所有 `status: done` 的计划文件
+   - **不归档** `status: active` 的计划（仍在执行或待复查）
+
+4. **汇总呈现（中文）：**
 
 ```
 ## 待归档内容
@@ -68,15 +75,21 @@ memory_query(query="", filters={"status":"knowledged"}, limit=50)
 - [[草稿2]] - 已转化为 [[ProjectName]] (projected)
 - [[草稿3]] - 已整理为 [[知识笔记]] (knowledged)
 
+**已完成计划 ([N]):**
+- [[Plan_2026-03-27_Project_LifeOS]] - status: done，待归档到 `{归档计划子目录}`
+- [[Plan_2026-03-27_Research_Agents]] - status: done，待归档到 `{归档计划子目录}`
+
 **跳过（仍待处理）:**
 - [[草稿4]] (pending) - 可用 /research、/project 或 /knowledge 处理
+- [[Plan_2026-03-28_Project_X]] (active) - 计划仍在执行或待复查
 
 请选择:
 1. 全部归档
 2. 仅归档项目
 3. 仅归档草稿
-4. 选择特定条目
-5. 取消
+4. 仅归档计划
+5. 选择特定条目
+6. 取消
 ```
 
 ## 步骤二：执行归档
@@ -96,9 +109,14 @@ memory_query(query="", filters={"status":"knowledged"}, limit=50)
    - 移动至 `{系统目录}/{归档草稿子目录}/YYYY/MM/filename.md`
    - 按归档年月组织（保留时序，捕获历史）
 
+   **计划归档：**
+   - 移动至 `{系统目录}/{归档计划子目录}/Plan_YYYY-MM-DD_Type_Name.md`
+   - 保持原文件名不变，统一存入计划归档目录
+
 3. **更新 frontmatter：**
    - 新增 `archived: "YYYY-MM-DD"`
-   - 保留所有其他字段不变
+   - 若条目是计划文件，将 `status: done` 更新为 `status: archived`
+   - 其他字段保持不变
 
 4. **更新今日日记：**
    - 在 `{日记目录}/YYYY-MM-DD.md` 的备注区追加归档记录（若文件存在）
@@ -121,11 +139,17 @@ memory_query(query="", filters={"status":"knowledged"}, limit=50)
 - 草稿2.md → 归档/草稿/2026/02/ (projected)
 - 草稿3.md → 归档/草稿/2026/02/ (knowledged)
 
+**已归档 [N] 个计划至 `{系统目录}/{归档计划子目录}/`:**
+- Plan_2026-03-27_Project_LifeOS.md → 归档/计划/（status: archived）
+- Plan_2026-03-27_Research_Agents.md → 归档/计划/（status: archived）
+
 **库状态:**
 - 进行中项目: [N]
 - 待处理草稿 (pending): [N]
+- 待执行/待复查计划 (active): [N]
 - 已归档项目（总计）: [N]
 - 已归档草稿（总计）: [N]
+- 已归档计划（总计）: [N]
 
 **建议:**
 - [ ] 检查暂停中的项目是否需要归档
@@ -135,15 +159,17 @@ memory_query(query="", filters={"status":"knowledged"}, limit=50)
 # 重要规则
 
 - **只归档已处理的草稿** — `status: pending` 的草稿绝不归档
+- **只归档已完成的计划** — `status: done` 的计划才可归档，`status: active` 绝不归档
 - **永不删除** — 只移动，不销毁内容
-- **按年月组织** — 项目按完成年，草稿按归档年月
+- **按规则组织** — 项目按完成年，草稿按归档年月，计划统一放入 `{归档计划子目录}`
 - **归档前确认** — 让用户审核列表后再执行
-- **更新 frontmatter** — 写入 `archived` 日期
+- **更新 frontmatter** — 写入 `archived` 日期；计划同步更新为 `status: archived`
 - **记录到日记** — 在今日日记追加归档动作
 
 # 边界情况
 
 - **无任何待归档内容：** 告知用户库已整洁，提示可用 `/research`、`/project` 或 `/knowledge` 处理 pending 草稿
+- **计划仍是 active：** 跳过并提示用户该计划尚未完成，不能归档
 - **文件夹项目含混合状态：** 询问用户是归档整个文件夹还是仅特定文件
 - **大型项目含资源：** 确认是否一并归档 `{资源目录}/` 中的关联资源
 - **刚完成的项目：** 提醒用户可先做项目复盘，再归档
@@ -161,21 +187,25 @@ memory_query(query="", filters={"status":"knowledged"}, limit=50)
 │   │   └── SimpleProject.md
 │   └── 2025/
 │       └── OldProject.md
-└── {归档草稿子目录}/
-    ├── 2026/
-    │   ├── 01/
-    │   │   └── processed-idea.md
-    │   └── 02/
-    │       └── another-note.md
-    └── 2025/
-        └── 12/
-            └── old-capture.md
+├── {归档草稿子目录}/
+│   ├── 2026/
+│   │   ├── 01/
+│   │   │   └── processed-idea.md
+│   │   └── 02/
+│   │       └── another-note.md
+│   └── 2025/
+│       └── 12/
+│           └── old-capture.md
+└── {归档计划子目录}/
+    ├── Plan_2026-03-27_Project_LifeOS.md
+    └── Plan_2026-03-27_Research_Agents.md
 ```
 
 **核心区分：**
 
 - **项目归档：** 按完成年份组织（有产出成果的结构化工作）
 - **草稿归档：** 按归档年月组织（已被消化的碎片想法）
+- **计划归档：** 统一放入 `{归档计划子目录}`（已执行完成的过程文件）
 
 # 附加功能
 
@@ -212,3 +242,4 @@ memory_query(query="", filters={"status":"knowledged"}, limit=50)
 1. 定期（每周/每月）执行 `/archive` 保持库整洁
 2. 检查暂停中的项目，考虑重新激活或归档
 3. 用 `/research`、`/project` 或 `/knowledge` 处理仍在 pending 的草稿
+4. 对于仍为 `active` 的计划，继续执行或复查；完成后再运行 `/archive`

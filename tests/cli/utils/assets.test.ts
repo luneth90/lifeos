@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { assetsDir, copyDir, ensureDir } from '../../../src/cli/utils/assets.js';
@@ -11,6 +11,57 @@ describe('assetsDir', () => {
 		expect(existsSync(join(dir, 'lifeos.yaml'))).toBe(true);
 		expect(existsSync(join(dir, 'templates', 'zh'))).toBe(true);
 		expect(existsSync(join(dir, 'templates', 'en'))).toBe(true);
+	});
+
+	test('documents plan lifecycle and plan statuses across schema and skills', () => {
+		const dir = assetsDir();
+		const schema = readFileSync(join(dir, 'schema', 'Frontmatter_Schema.md'), 'utf-8');
+		const lifecycleZh = readFileSync(join(dir, 'skills', '_shared', 'lifecycle.zh.md'), 'utf-8');
+		const lifecycleEn = readFileSync(join(dir, 'skills', '_shared', 'lifecycle.en.md'), 'utf-8');
+		const archiveZh = readFileSync(join(dir, 'skills', 'archive', 'SKILL.zh.md'), 'utf-8');
+		const archiveEn = readFileSync(join(dir, 'skills', 'archive', 'SKILL.en.md'), 'utf-8');
+		const projectPlanZh = readFileSync(
+			join(dir, 'skills', 'project', 'references', 'planning-agent-prompt.zh.md'),
+			'utf-8',
+		);
+		const projectExecZh = readFileSync(
+			join(dir, 'skills', 'project', 'references', 'execution-agent-prompt.zh.md'),
+			'utf-8',
+		);
+		const researchPlanZh = readFileSync(
+			join(dir, 'skills', 'research', 'references', 'planning-agent-prompt.zh.md'),
+			'utf-8',
+		);
+		const researchExecZh = readFileSync(
+			join(dir, 'skills', 'research', 'references', 'execution-agent-prompt.zh.md'),
+			'utf-8',
+		);
+
+		expect(schema).toContain('- `plan`');
+		expect(schema).toContain('### plan');
+		expect(schema).toContain('- `active` / `done` / `archived`');
+
+		expect(lifecycleZh).toContain('## 计划生命周期');
+		expect(lifecycleZh).toContain('active ──/project,/research──→ done ──/archive──→ archived');
+		expect(lifecycleEn).toContain('## Plan Lifecycle');
+		expect(lifecycleEn).toContain('active ──/project,/research──→ done ──/archive──→ archived');
+
+		expect(projectPlanZh).toContain('type: plan');
+		expect(projectPlanZh).toContain('status: active');
+		expect(researchPlanZh).toContain('type: plan');
+		expect(researchPlanZh).toContain('status: active');
+
+		expect(projectExecZh).toContain('将计划文件的 frontmatter 中 `status` 更新为 `done`');
+		expect(projectExecZh).not.toContain('将计划文件从 `{计划目录}/Plan_YYYY-MM-DD_Project_ProjectName.md` 移动到');
+		expect(researchExecZh).toContain('将计划文件的 frontmatter 中 `status` 更新为 `done`');
+		expect(researchExecZh).not.toContain('将计划文件从 `{计划目录}/` 移动到');
+
+		expect(archiveZh).toContain('{计划目录}');
+		expect(archiveZh).toContain('{归档计划子目录}');
+		expect(archiveZh).toContain('status: done');
+		expect(archiveEn).toContain('{plans directory}');
+		expect(archiveEn).toContain('{archived plans subdirectory}');
+		expect(archiveEn).toContain('status: done');
 	});
 });
 

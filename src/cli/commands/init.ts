@@ -1,16 +1,11 @@
 import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
-import { EN_PRESET, EN_REFLECTION_SUBS, ZH_PRESET, ZH_REFLECTION_SUBS } from '../../config.js';
+import { EN_PRESET, ZH_PRESET } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
-import { assetsDir, ensureDir } from '../utils/assets.js';
-import {
-	installPrompts,
-	installSchema,
-	installSkills,
-	installTemplates,
-} from '../utils/install-assets.js';
+import { ensureDir } from '../utils/assets.js';
+import { syncVault } from '../utils/sync-vault.js';
 import { parseArgs } from '../utils/ui.js';
 import { bold, green, log, red, yellow } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
@@ -22,17 +17,6 @@ function detectLang(): 'zh' | 'en' {
 		Intl.DateTimeFormat().resolvedOptions().locale ?? process.env.LANG ?? process.env.LC_ALL ?? '';
 	return locale.startsWith('zh') ? 'zh' : 'en';
 }
-
-// ─── Gitignore content ──────────────────────────────────────────────────────
-
-const GITIGNORE = `# LifeOS
-*.db-wal
-*.db-shm
-
-# Obsidian
-.obsidian/workspace*.json
-.obsidian/cache
-`;
 
 // ─── Prerequisite checks ────────────────────────────────────────────────────
 
@@ -145,38 +129,6 @@ export default async function init(args: string[]): Promise<void> {
 	// 2. Create target directory
 	ensureDir(targetPath);
 
-	// 3. Create directory structure
-	const dirs = preset.directories;
-	const subdirs = preset.subdirectories;
-
-	// Top-level directories
-	for (const dirName of Object.values(dirs)) {
-		ensureDir(join(targetPath, dirName));
-	}
-
-	// Subdirectories
-	for (const [parentLogical, group] of Object.entries(subdirs)) {
-		const parentDir = dirs[parentLogical];
-		if (!parentDir) continue;
-		for (const [, subValue] of Object.entries(group as Record<string, unknown>)) {
-			if (typeof subValue === 'string') {
-				ensureDir(join(targetPath, parentDir, subValue));
-			} else if (typeof subValue === 'object' && subValue !== null) {
-				// nested group like archive: { projects, drafts, plans }
-				for (const [, nestedValue] of Object.entries(subValue as Record<string, string>)) {
-					ensureDir(join(targetPath, parentDir, nestedValue));
-				}
-			}
-		}
-	}
-
-	// Reflection subdirectories
-	const reflectionDir = dirs.reflection;
-	const reflectionSubs = lang === 'zh' ? ZH_REFLECTION_SUBS : EN_REFLECTION_SUBS;
-	for (const sub of reflectionSubs) {
-		ensureDir(join(targetPath, reflectionDir, sub));
-	}
-
 	// 4. Generate lifeos.yaml
 	const yamlConfig = {
 		...preset,
@@ -187,58 +139,14 @@ export default async function init(args: string[]): Promise<void> {
 	};
 	writeFileSync(yamlPath, stringifyYaml(yamlConfig), 'utf-8');
 
-	// 5. Copy templates
-	installTemplates(targetPath, preset);
+	// 5. Sync vault scaffold
+	await syncVault(targetPath, preset, {
+		lang,
+		skillMode: 'overwrite',
+		ensureMcp: !noMcp,
+	});
 
-	// 6. Copy schema
-	installSchema(targetPath, preset);
-
-	// 7. Copy prompts
-	installPrompts(targetPath, preset);
-
-	// 8. Copy skills
-	installSkills(targetPath, lang, 'overwrite');
-
-	// 9. Create .claude/ and symlink skills for Claude Code discovery
-	const claudeDir = join(targetPath, '.claude');
-	ensureDir(claudeDir);
-	const claudeSkillsLink = join(claudeDir, 'skills');
-	if (!existsSync(claudeSkillsLink)) {
-		if (isWindows) {
-			// Windows: junction doesn't require admin privileges (needs absolute target)
-			symlinkSync(resolve(targetPath, '.agents', 'skills'), claudeSkillsLink, 'junction');
-		} else {
-			symlinkSync(join('..', '.agents', 'skills'), claudeSkillsLink);
-		}
-	}
-
-	// 10. Copy CLAUDE.md & AGENTS.md (single source, same content)
-	const rulesLangSrc = join(assetsDir(), `lifeos-rules.${lang}.md`);
-	const rulesFallback = join(assetsDir(), 'lifeos-rules.zh.md');
-	const rulesSrc = existsSync(rulesLangSrc) ? rulesLangSrc : rulesFallback;
-	copyFileSync(rulesSrc, join(targetPath, 'CLAUDE.md'));
-	copyFileSync(rulesSrc, join(targetPath, 'AGENTS.md'));
-
-	// 11. Git init
-	if (!existsSync(join(targetPath, '.git'))) {
-		try {
-			execSync('git init', { cwd: targetPath, stdio: 'ignore' });
-		} catch {
-			// git not available — skip silently
-		}
-	}
-	const gitignorePath = join(targetPath, '.gitignore');
-	if (!existsSync(gitignorePath)) {
-		writeFileSync(gitignorePath, GITIGNORE, 'utf-8');
-	}
-
-	// 12. MCP registration
-	if (!noMcp) {
-		const { registerMcp } = await import('../utils/mcp-register.js');
-		await registerMcp(targetPath);
-	}
-
-	// 13. Print summary
+	// 6. Print summary
 	log(green('✔'), bold('LifeOS vault initialized'));
 	log('  ', `Path:     ${targetPath}`);
 	log('  ', `Language: ${lang}`);

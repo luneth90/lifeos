@@ -45,6 +45,15 @@ Path: `{plans directory}/Plan_YYYY-MM-DD_Project_ProjectName.md`
 
 ```markdown
 ---
+title: "Plan: [Project Name]"
+type: plan
+status: active
+created: "YYYY-MM-DD"
+source: project
+project: "[Project Name]"
+tags: [plan, project]
+aliases: []
+---
 
 # Launch Plan: [Project Name]
 

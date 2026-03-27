@@ -64,6 +64,15 @@ parent_skill: research
 
 ```markdown
 ---
+title: "Plan: [主题]"
+type: plan
+status: active
+created: "YYYY-MM-DD"
+source: research
+topic: "[主题]"
+tags: [plan, research]
+aliases: []
+---
 
 # 研究计划: [主题]
 

@@ -36,6 +36,7 @@ id: Frontmatter_Schema
 - `draft`：草稿 / 想法捕获
 - `note`：日记 / 笔记
 - `research`：研究报告
+- `plan`：执行计划文件
 - `retro`：复盘
 - `system`：系统
 - `revise-record`：复习记录文件
@@ -62,6 +63,9 @@ id: Frontmatter_Schema
 
 - `complete`
 
+### plan
+
+- `active` / `done` / `archived`
 
 ### revise
 
@@ -108,6 +112,12 @@ id: Frontmatter_Schema
 ### project-doc 推荐字段
 
 - `project`: wikilink，关联的主项目文件
+
+### plan 推荐字段
+
+- `source`: 字符串，来源技能（如 `project`、`research`）
+- `project`: wikilink 或字符串，关联项目（项目计划时可填）
+- `topic`: 字符串，研究主题（研究计划时可填）
 
 ### draft 推荐字段
 

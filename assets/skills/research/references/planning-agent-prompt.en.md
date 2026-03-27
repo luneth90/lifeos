@@ -64,6 +64,15 @@ Path: `{plans directory}/Plan_YYYY-MM-DD_Research_Topic.md`
 
 ```markdown
 ---
+title: "Plan: [Topic]"
+type: plan
+status: active
+created: "YYYY-MM-DD"
+source: research
+topic: "[Topic]"
+tags: [plan, research]
+aliases: []
+---
 
 # Research Plan: [Topic]
 

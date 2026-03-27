@@ -53,16 +53,32 @@ active ──→ on-hold ──→ done ──/archive──→ archived
 | `done` | 已完成，可归档 | 手动 |
 | `archived` | 已被 /archive 移入归档目录 | /archive |
 
+## 计划生命周期
+
+```
+active ──/project,/research──→ done ──/archive──→ archived
+```
+
+| 状态 | 含义 | 设置者 |
+|------|------|--------|
+| `active` | 由 /project 或 /research 生成，计划仍位于 `{计划目录}/`，等待执行或复查 | /project, /research |
+| `done` | 对应项目或研究已执行完成，等待 /archive 归档 | /project, /research |
+| `archived` | 已被 /archive 移入 `{系统目录}/{归档计划子目录}/` | /archive |
+
+**规则:**
+
+- /project 和 /research 创建计划文件时，必须写入 `type: plan` 与 `status: active`
+- /project 和 /research 执行完成后，只将计划状态更新为 `done`，不直接移动计划文件
+- /archive 仅归档 `status: done` 的计划，并在移动后将其更新为 `archived`
+
 ## 技能参与矩阵
 
-| 技能 | 草稿状态转换 | 知识笔记状态转换 | 项目状态转换 |
-|------|-------------|-----------------|-------------|
-| /brainstorm | 创建 `pending` | - | - |
-| /today | 创建 `pending` | - | - |
-| /research | `pending` → `researched` | - | - |
-| /project | `pending` → `projected` | - | 创建 `active` |
-| /knowledge | `pending` → `knowledged` | 创建 `draft` | - |
-| /revise | - | `draft` → `revise` → `mastered` | 更新掌握度圆点 |
-| /archive | `researched/projected/knowledged` → `archived` | - | `done` → `archived` |
-| /rename | - | - | - |
-| /enhance | - | - | - |
+| 技能 | 草稿状态转换 | 知识笔记状态转换 | 项目状态转换 | 计划状态转换 |
+|------|-------------|-----------------|-------------|-------------|
+| /brainstorm | 创建 `pending` | - | - | - |
+| /today | 创建 `pending` | - | - | - |
+| /research | `pending` → `researched` | - | - | 创建 `active`，执行后更新为 `done` |
+| /project | `pending` → `projected` | - | 创建 `active` | 创建 `active`，执行后更新为 `done` |
+| /knowledge | `pending` → `knowledged` | 创建 `draft` | - | - |
+| /revise | - | `draft` → `revise` → `mastered` | 更新掌握度圆点 | - |
+| /archive | `researched/projected/knowledged` → `archived` | - | `done` → `archived` | `done` → `archived` |

@@ -120,9 +120,11 @@ Check the "Source Draft" field in the plan file:
 - If a draft file path is listed (not "None"): update the `status` in that draft file's frontmatter to `projected`
 - This marks the draft as processed, allowing `/archive` to identify and archive it
 
-## Step 5: Archive the Plan File (Critical)
+## Step 5: Update Plan Status (Critical)
 
-Move the plan file from `{plans directory}/Plan_YYYY-MM-DD_Project_ProjectName.md` to `{system directory}/{archived plans subdirectory}/Plan_YYYY-MM-DD_Project_ProjectName.md`, keeping the filename unchanged.
+- After the project is created, update the plan file frontmatter `status` to `done`
+- Keep the plan file at `{plans directory}/Plan_YYYY-MM-DD_Project_ProjectName.md`
+- `/archive` later moves plans with `status: done` into `{system directory}/{archived plans subdirectory}/`
 
 ---
 
@@ -137,7 +139,7 @@ After completion, report in English:
 **Knowledge domain:** [Domain]
 **Linked Vault resources:** [List actually linked notes and resources]
 **Source draft status:** [{drafts directory}/filename.md → status updated to projected, or "No source draft"]
-**Plan archived:** {system directory}/{archived plans subdirectory}/Plan_YYYY-MM-DD_Project_ProjectName.md
+**Plan status:** {plans directory}/Plan_YYYY-MM-DD_Project_ProjectName.md → `status: done` (waiting for `/archive` to move it into `{system directory}/{archived plans subdirectory}/`)
 
 If it is a development project, also include:
 

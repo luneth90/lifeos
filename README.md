@@ -1,146 +1,145 @@
 # LifeOS
 
-[中文](./README.zh-CN.md) | English
+中文 | [English](./README.en.md)
 
-Obsidian + AI Agent — your lifelong learning system.
+Obsidian + AI Agent，你的终身学习系统。
 
-## What is it
+## 是什么
 
-LifeOS helps you grow scattered ideas into structured knowledge and truly master it — from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.
+LifeOS 帮助你将碎片灵感发展为结构化知识，并真正掌握它，从随手捕获的想法，到头脑风暴与深度研究，到体系化的项目规划与知识笔记，再到间隔复习与掌握度追踪。目标不只是建立知识库，而是帮你理解、内化和驾驭复杂知识。
 
-**Core components:**
+**核心组件：**
 
-- **MCP Server** — Memory system providing vault indexing, session memory, and context assembly for AI agents
-- **CLI scaffold** — `npx lifeos init` to bootstrap a complete workspace
-- **Skill system** — 9 Agent skills covering diary, projects, research, knowledge curation, review, and more
-- **Templates + Schema** — 8 structured templates + Frontmatter schema for consistent notes
+- **MCP Server**：记忆系统，为 AI Agent 提供 Vault 索引、会话记忆、上下文组装
+- **CLI 脚手架**：`npx lifeos init` 一键创建工作空间
+- **技能系统**：9 个 Agent 技能覆盖日记、项目、研究、知识整理、复习等工作流
+- **模板 + 规范**：8 个结构化模板 + Frontmatter 规范，确保笔记一致性
 
-## Prerequisites
+## 前置要求
 
-| Dependency | Required | Purpose |
+| 依赖 | 必须 | 用途 |
 |---|---|---|
-| **Node.js 18+** | Required | Runtime for MCP server and CLI |
-| **Git** | Required | Version control for vault data (including memory DB) |
-| **Python 3** | Required | PDF extraction (`/read-pdf` skill) |
+| **Node.js 18+** | 必须 | MCP Server 和 CLI 运行环境 |
+| **Git** | 必须 | Vault 版本控制（包括记忆数据库） |
+| **Python 3** | 必须 | PDF 提取（`/read-pdf` 技能） |
 
-`lifeos init` will check all prerequisites before creating the workspace.
+`lifeos init` 会在创建工作空间前自动检查所有前置依赖。
 
-## Quick Start
+## 快速开始
 
 ```bash
-# Create a new LifeOS workspace (auto-detects language from system locale)
+# 创建新的 LifeOS 工作空间（根据系统 locale 自动检测语言）
 npx lifeos init ./my-vault
 
-# Or specify language explicitly
-npx lifeos init ./my-vault --lang zh   # Chinese
-npx lifeos init ./my-vault --lang en   # English
+# 或显式指定语言
+npx lifeos init ./my-vault --lang zh   # 中文
+npx lifeos init ./my-vault --lang en   # 英文
 
-# Skip MCP registration (config files only)
+# 跳过 MCP 注册（仅创建目录和文件）
 npx lifeos init ./my-vault --no-mcp
 
-# Open with Obsidian, then start working with your AI coding assistant
+# 用 Obsidian 打开，然后用 AI 编程助手开始工作
 ```
 
-After init, MCP server configs are automatically registered for:
+安装完成后，MCP server 配置会自动注册到以下工具：
 
-| Tool | Config file |
+| 工具 | 配置文件 |
 |---|---|
 | **Claude Code** | `.mcp.json` |
 | **Codex** | `.codex/config.toml` |
 | **OpenCode** | `opencode.json` |
 
-Launch any of these tools in the vault directory to use all skills.
+在 Vault 目录下启动任一工具即可使用所有技能。
 
-## CLI Commands
+## CLI 命令
 
 ```bash
-lifeos init [path] [--lang zh|en] [--no-mcp]  # Create new vault
-lifeos upgrade [path]                           # Upgrade assets (templates, skills, schema)
-lifeos doctor [path]                            # Health check
-lifeos rename [path] --logical <name> --name <new>  # Rename a directory
-lifeos --help                                   # Show help
-lifeos --version                                # Show version
+lifeos init [path] [--lang zh|en] [--no-mcp]       # 创建新 Vault
+lifeos upgrade [path] [--lang zh|en]               # 升级并补齐资产与脚手架
+lifeos doctor [path]                               # 健康检查
+lifeos rename [path] --logical <name> --name <new>  # 重命名目录
+lifeos --help                                      # 查看帮助
+lifeos --version                                   # 查看版本
 ```
 
 ### init
 
-Creates a complete LifeOS workspace:
+创建完整的 LifeOS 工作空间：
 
-- 10 top-level directories + nested subdirectories
-- 8 Markdown templates
-- Frontmatter schema
-- 9 AI skills (language-aware)
-- `CLAUDE.md` agent behavior spec
-- `lifeos.yaml` config
-- Git init + `.gitignore`
-- MCP server registration (Claude Code / Codex / OpenCode)
+- 10 个顶层目录 + 嵌套子目录
+- 8 个 Markdown 模板
+- Frontmatter 规范
+- 9 个 AI 技能（按语言自动切换）
+- `CLAUDE.md` Agent 行为规范
+- `lifeos.yaml` 配置文件
+- Git 初始化 + `.gitignore`
+- MCP Server 注册（Claude Code / Codex / OpenCode）
 
 ### upgrade
 
-Three-tier upgrade strategy:
+对已初始化的 Vault 执行升级与补全：
 
-| Strategy | Files | Behavior |
-|---|---|---|
-| **Overwrite** | Templates, schema | Always update to latest |
-| **Smart merge** | Skill files | Unmodified → update; modified → skip with warning |
-| **Hands off** | `CLAUDE.md`, `lifeos.yaml` | Preserve user customizations |
+- **始终更新**：模板、规范、提示词
+- **智能合并**：技能文件未修改则更新，已修改则跳过并警告
+- **缺失补全**：缺失的目录和脚手架文件会补回，例如记忆目录、`.claude/skills`、`CLAUDE.md`、`AGENTS.md`、`.gitignore`、`.git`、MCP 配置
+- **尽量保留用户修改**：已存在且可能被用户自定义的文件不强制覆盖
 
 ### doctor
 
-Checks vault integrity: directory structure, templates, schema, skills, config, Node.js version, asset version.
+检查 Vault 完整性：目录结构、模板、规范、技能、配置文件、Node.js 版本、资产版本。
 
 ### rename
 
-Renames a logical directory (e.g. `drafts`) to a new physical name, updates `lifeos.yaml`, and batch-replaces all wikilinks across the vault.
+重命名逻辑目录（如 `drafts`）为新的物理名称，同时更新 `lifeos.yaml` 并批量替换 Vault 中所有相关的 wikilink。
 
-## Skills
+## 技能一览
 
-| Skill | Description |
+| 技能 | 功能 |
 |---|---|
-| `/today` | Morning planning: review yesterday, plan today |
-| `/project` | Idea → structured project |
-| `/research` | Topic → deep research report |
-| `/knowledge` | Book/paper → knowledge note |
-| `/revise` | Generate quizzes, grade, track mastery |
-| `/read-pdf` | PDF → structured notes |
-| `/ask` | Quick Q&A |
-| `/brainstorm` | Interactive brainstorming |
-| `/archive` | Archive completed projects and drafts |
+| `/today` | 晨间规划：回顾昨日、规划今日 |
+| `/project` | 想法 → 结构化项目 |
+| `/research` | 主题 → 深度研究报告 |
+| `/knowledge` | 书籍/论文 → 知识笔记 |
+| `/revise` | 生成复习题、批改、追踪掌握度 |
+| `/read-pdf` | PDF → 结构化笔记 |
+| `/ask` | 快速问答 |
+| `/brainstorm` | 交互式头脑风暴 |
+| `/archive` | 归档已完成的项目、已处理的草稿和已完成的计划 |
 
-## Custom Expert Prompts
+## 自定义专家提示词
 
-The `/research` skill automatically scans the Prompts directory in your vault for expert prompt files. LifeOS ships with built-in expert prompts (AI/LLM, Math, Art, History), but you can add your own to extend research capabilities to any domain.
+`/research` 技能会自动扫描 Vault 中提示词目录下的所有专家人格文件。LifeOS 内置了 AI/LLM、数学、艺术、历史等领域的专家人格，你可以添加自己的提示词来扩展研究能力到任何领域。
 
-### How it works
+### 工作原理
 
-When you invoke `/research`, the Planning Agent:
+调用 `/research` 时，Planning Agent 会：
 
-1. Lists all `.md` files in `{system directory}/Prompts/`
-2. Reads each file's frontmatter and **Domain Coverage** section
-3. Matches the research topic to the best-fit expert prompt
-4. Applies the matched prompt's analytical framework and output format to the research report
+1. 列出 `{系统目录}/提示词/` 下所有 `.md` 文件
+2. 读取每个文件的 frontmatter 和**领域覆盖**章节
+3. 将研究主题与最匹配的专家提示词进行比对
+4. 将匹配的专家提示词的分析框架和输出格式应用到研究报告中
 
-### Adding custom expert prompts
+### 添加自定义专家提示词
 
-Create a `.md` file in your vault's Prompts directory (`{system directory}/Prompts/`). The Planning Agent will pick it up automatically on the next `/research` invocation — no restart or re-init needed. File structure should follow the built-in prompts in the same directory as reference.
+在 Vault 的提示词目录（`{系统目录}/提示词/`）下创建 `.md` 文件即可。Planning Agent 在下次 `/research` 调用时会自动发现，无需重启或重新初始化。文件结构参照同目录下的预设提示词即可。
 
-## Tech Stack
+## 技术栈
 
 - **Runtime:** TypeScript + Node.js 18+
-- **Database:** SQLite + FTS5 (full-text search)
-- **Segmentation:** @node-rs/jieba (Chinese tokenization)
+- **Database:** SQLite + FTS5（全文搜索）
+- **Segmentation:** @node-rs/jieba（中文分词）
 - **Protocol:** MCP (Model Context Protocol)
-- **Vault:** Obsidian (plain Markdown + Frontmatter)
+- **Vault:** Obsidian（纯 Markdown + Frontmatter）
 
-## Development
+## 开发
 
 ```bash
 git clone git@github.com:luneth90/lifeos.git
 cd lifeos
 npm install
-npm run build    # Compile TypeScript
-npm test         # Run tests (431 tests)
-npm run dev      # Dev mode (hot reload)
+npm run build    # 编译 TypeScript
+npm test         # 运行测试（431 个）
+npm run dev      # 开发模式（热重载）
 ```
 
 ## License
