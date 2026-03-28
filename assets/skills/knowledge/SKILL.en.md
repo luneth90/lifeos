@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: "Distill structured knowledge notes and wiki concepts from book chapters or papers (output to {knowledge directory}/). Requires three inputs: project file (required), source content (required), draft notes (optional fusion). Produces main notes (template-structured) and wiki concepts (Wiki entries), establishing bidirectional Wikilinks. Use this skill when the user wants to organize chapter knowledge, extract wiki concepts, structure source text into notes, or says '/knowledge'. Will prompt to use /project first if no project file exists."
-version: 1.0.1
+version: 1.0.2
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Knowledge_Template.md"

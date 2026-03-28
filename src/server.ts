@@ -13,7 +13,7 @@ import * as core from './core.js';
 
 const server = new McpServer({
 	name: 'lifeos',
-	version: '1.0.1',
+	version: '1.0.2',
 });
 
 // ─── Tool registrations ───────────────────────────────────────────────────────

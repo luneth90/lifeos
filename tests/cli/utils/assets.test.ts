@@ -1,8 +1,24 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { Dirent, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
+import { parse as parseYaml } from 'yaml';
 import { assetsDir, copyDir, ensureDir } from '../../../src/cli/utils/assets.js';
 import { parseArgs } from '../../../src/cli/utils/ui.js';
+
+function walkFiles(dir: string): string[] {
+	return readdirSync(dir, { withFileTypes: true }).flatMap((entry: Dirent) => {
+		const fullPath = join(dir, entry.name);
+		return entry.isDirectory() ? walkFiles(fullPath) : [fullPath];
+	});
+}
+
+function extractFrontmatter(content: string): string {
+	const match = content.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+	if (!match) {
+		throw new Error('missing frontmatter');
+	}
+	return match[1];
+}
 
 describe('assetsDir', () => {
 	test('points to existing assets/ directory', () => {
@@ -76,6 +92,26 @@ describe('assetsDir', () => {
 		expect(archiveEn).toContain('status: done');
 		expect(rulesZh).toContain('归档/日记/YYYY/MM/');
 		expect(rulesEn).toContain('Archive/Diary/YYYY/MM/');
+	});
+
+	test('all skill frontmatters are valid yaml', () => {
+		const dir = join(assetsDir(), 'skills');
+		const skillFiles = walkFiles(dir).filter((file) => /\/SKILL\.(en|zh)\.md$/.test(file));
+
+		for (const file of skillFiles) {
+			const content = readFileSync(file, 'utf-8');
+			const frontmatter = extractFrontmatter(content);
+
+			try {
+				parseYaml(frontmatter);
+			} catch (error) {
+				throw new Error(
+					`Invalid frontmatter in ${relative(assetsDir(), file)}: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
+			}
+		}
 	});
 });
 

@@ -146,7 +146,7 @@ describe('lifeos upgrade', () => {
 		expect(readFileSync(templatePath, 'utf-8')).toBe(latestTemplate);
 		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
 		expect(config.managed_assets?.['90_系统/模板/Daily_Template.md']).toEqual({
-			version: '1.0.1',
+			version: '1.0.2',
 			sha256: sha256(latestTemplate),
 		});
 	});
@@ -348,8 +348,8 @@ describe('lifeos upgrade', () => {
 
 		const config = readYamlConfig(dir);
 		const versions = config.installed_versions as Record<string, string>;
-		expect(versions.assets).toBe('1.0.1');
-		expect(versions.cli).toBe('1.0.1');
+		expect(versions.assets).toBe('1.0.2');
+		expect(versions.cli).toBe('1.0.2');
 	});
 
 	test('en: skips modified English templates', async () => {

@@ -1,7 +1,7 @@
 ---
 name: brainstorm
 description: Explore and deepen user ideas through multi-turn interactive dialogue, using techniques like 5 Whys, What if, and Devil's Advocate to guide divergent thinking. Upon conclusion, the user can choose to create a project (invoke /project), organize wiki notes, or save as a draft. Suitable when the user wants to discuss an immature idea, needs divergent thinking, or wants to explore the feasibility of a direction.
-version: 1.0.1
+version: 1.0.2
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Wiki_Template.md"
