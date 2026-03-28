@@ -114,7 +114,13 @@ Upgrades and re-syncs an initialized vault:
 - **Smart merge**: update unmodified templates, schema files, built-in prompts, and skill files; skip modified ones with a warning
 - **Restore missing scaffold**: bring back missing directories and managed files such as the memory directory, `.claude/skills`, `CLAUDE.md`, `AGENTS.md`, `.gitignore`, `.git`, and MCP config entries
 - **Preserve user changes**: built-in files already customized by the user are not force-overwritten
-- **`--override` force-refreshes managed content**: overwrite templates, schema, prompts, skills, `CLAUDE.md`, `AGENTS.md`, and MCP config entries without deleting user notes, resources, `memory.db`, memory-system data, or custom directory/memory settings in `lifeos.yaml`
+- **`--override` force-refreshes resources**: overwrite templates, schema, prompts, skills, `CLAUDE.md`, `AGENTS.md`, and MCP config entries without deleting user notes, resources, `memory.db`, memory-system data, or custom directory/memory settings in `lifeos.yaml`
+
+By default, `lifeos upgrade` tries to preserve resource files you have already modified, while updating untouched content and restoring anything missing. If you want to explicitly replace those resources with the current built-in templates, skills, schema files, and MCP config entries, use `--override`:
+
+```bash
+lifeos upgrade ./my-vault --override
+```
 
 ### doctor
 
@@ -164,6 +170,17 @@ Create a `.md` file in your vault's Prompts directory (`{system directory}/Promp
 - **Segmentation:** @node-rs/jieba (Chinese tokenization)
 - **Protocol:** MCP (Model Context Protocol)
 - **Vault:** Obsidian (plain Markdown + Frontmatter)
+
+## Milestones
+
+- ✅ LifeOS 1.0 is now basically usable
+- ✅ The CLI supports directory customization
+- ✅ The CLI `upgrade` command supports smart updates
+- ✅ Agent CLI has been tested on macOS
+- ☐ Test and support Agent GUI and Windows
+- ☐ Improve memory-system precision
+- ☐ Support custom skills
+- ☐ Support custom workflows
 
 ## Development
 

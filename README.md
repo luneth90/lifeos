@@ -114,7 +114,13 @@ lifeos --version                                       # 查看版本
 - **智能合并**：模板、规范、内置提示词、技能文件未修改则更新，已修改则跳过并警告
 - **缺失补全**：缺失的目录和脚手架文件会补回，例如记忆目录、`.claude/skills`、`CLAUDE.md`、`AGENTS.md`、`.gitignore`、`.git`、MCP 配置
 - **保留用户修改**：已存在且被用户改过的内置文件不会被强制覆盖
-- **`--override` 强制刷新受管内容**：覆盖模板、规范、提示词、技能、`CLAUDE.md`、`AGENTS.md` 以及 MCP 配置，但不会删除用户笔记、资源、`memory.db`、记忆系统数据，也不会改写 `lifeos.yaml` 里的目录和记忆配置
+- **`--override` 强制刷新资源**：覆盖模板、规范、提示词、技能、`CLAUDE.md`、`AGENTS.md` 以及 MCP 配置，但不会删除用户笔记、资源、`memory.db`、记忆系统数据，也不会改写 `lifeos.yaml` 里的目录和记忆配置
+
+默认执行 `lifeos upgrade` 时，会尽量保留你已经改过的资源文件，只更新未修改内容并补齐缺失项。如果你希望直接用当前版本的内置模板、技能、规范和 MCP 配置重新覆盖这些资源，可以显式加上 `--override`：
+
+```bash
+lifeos upgrade ./my-vault --override
+```
 
 ### doctor
 
@@ -164,6 +170,17 @@ lifeos --version                                       # 查看版本
 - **Segmentation:** @node-rs/jieba（中文分词）
 - **Protocol:** MCP (Model Context Protocol)
 - **Vault:** Obsidian（纯 Markdown + Frontmatter）
+
+## 里程碑
+
+- ✅ LifeOS 1.0 版本已初步可用
+- ✅ CLI 支持目录自定义
+- ✅ CLI upgrade 支持智能更新
+- ✅ macOS 端 Agent CLI 已测试
+- ☐ Agent GUI 和 Windows 测试与支持
+- ☐ 强化记忆系统精准性
+- ☐ 支持自定义技能
+- ☐ 支持自定义工作流
 
 ## 开发
 
