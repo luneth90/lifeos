@@ -45,11 +45,11 @@ LifeOS provides a set of Agent skills designed around the learning process, conn
 
 ## Quick Start
 
-At the moment, only the Agent CLI workflow has been verified in practice on macOS. The Agent GUI path has not been systematically tested yet, and Windows has not been verified either, so the experience there may not be fully consistent yet.
+At the moment, only the Agent TUI workflow has been verified in practice on macOS. The Agent GUI path has not been systematically tested yet, and Windows has not been verified either, so the experience there may not be fully consistent yet.
 
 ### Prerequisites
 
-Before starting, make sure Obsidian and at least one of Claude Code CLI / Codex CLI / OpenCode CLI are installed locally.
+Before starting, make sure Obsidian and at least one of Claude Code TUI / Codex TUI / OpenCode TUI are installed locally.
 
 | Dependency | Required | Purpose |
 |---|---|---|
@@ -176,8 +176,7 @@ Create a `.md` file in your vault's Prompts directory (`{system directory}/Promp
 - ✅ LifeOS 1.0 is now basically usable
 - ✅ The CLI supports directory customization
 - ✅ The CLI `upgrade` command supports smart updates
-- ✅ Agent CLI has been tested on macOS
-- ☐ Test and support Agent GUI and Windows
+- ✅ Agent TUI has been tested on macOS
 - ☐ Improve memory-system precision
 - ☐ Support custom skills
 - ☐ Support custom workflows
