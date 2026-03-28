@@ -4,6 +4,10 @@
 
 LifeOS helps you grow scattered ideas into structured knowledge and truly master it, from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.
 
+## Why Build LifeOS?
+
+LifeOS started from a simple goal: package learning workflows, skills, templates, prompts, and a memory system into one complete setup you can use immediately. Instead of assembling your own toolchain from scratch or jumping between disconnected tools, you can initialize once, start working right away, and keep accumulating knowledge, process, and preferences as you go.
+
 ## Core Features
 
 ### Memory System
