@@ -27,7 +27,7 @@ npm link                     # Register lifeos command globally
 
 **Verify registration:**
 ```bash
-lifeos --version             # Should output 1.0.0
+lifeos --version             # Should output 1.0.1
 which lifeos                 # Should point to global node_modules symlink
 ```
 

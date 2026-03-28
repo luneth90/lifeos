@@ -112,8 +112,8 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(config.memory).toBeDefined();
 
 		const versions = config.installed_versions as Record<string, string>;
-		expect(versions.cli).toBe('1.0.0');
-		expect(versions.assets).toBe('1.0.0');
+		expect(versions.cli).toBe('1.0.1');
+		expect(versions.assets).toBe('1.0.1');
 	});
 
 	test('records managed asset hashes in lifeos.yaml', async () => {
@@ -126,13 +126,13 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 
 		expect(managedAssets).toBeDefined();
 		expect(managedAssets?.[`${d.system}/${d.templates}/Daily_Template.md`]).toMatchObject({
-			version: '1.0.0',
+			version: '1.0.1',
 		});
 		expect(managedAssets?.[`${d.system}/${d.templates}/Daily_Template.md`]?.sha256).toMatch(
 			/^[0-9a-f]{64}$/,
 		);
 		expect(managedAssets?.['.agents/skills/today/SKILL.md']).toMatchObject({
-			version: '1.0.0',
+			version: '1.0.1',
 		});
 	});
 
