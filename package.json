@@ -51,5 +51,9 @@
     "knowledge-management",
     "obsidian"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/luneth90/lifeos.git"
+  }
 }
