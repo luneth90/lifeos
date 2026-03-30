@@ -271,6 +271,347 @@ print(json.dumps(payload, ensure_ascii=False))
 		});
 	});
 
+	test('uses lowercase official server keys for bioRxiv and medRxiv API calls', () => {
+		const output = runPythonJson(`
+import importlib.util, json
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+servers = []
+
+def fake_fetch_biorxiv_pubs(server, cutoff):
+    servers.append(server)
+    return {
+        "collection": [
+            {
+                "preprint_title": f"{server} result",
+                "biorxiv_doi": "10.1101/2026.03.28.123456",
+                "preprint_date": "2026-03-29",
+                "preprint_abstract": "Atlas biomarker result for digest testing",
+                "preprint_authors": "Ada Lovelace; Grace Hopper",
+                "preprint_category": "neuroscience",
+            }
+        ]
+    }
+
+module.fetch_biorxiv_pubs = fake_fetch_biorxiv_pubs
+cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
+biorxiv_payload = module.collect_biorxiv_source(
+    {"queries": ["atlas biomarker"], "scope": "neuroscience", "max_results": 20},
+    cutoff,
+    "en",
+)
+medrxiv_payload = module.collect_medrxiv_source(
+    {"queries": ["atlas biomarker"], "scope": "neuroscience", "max_results": 20},
+    cutoff,
+    "en",
+)
+
+print(json.dumps({
+    "servers": servers,
+    "biorxiv_count": len(biorxiv_payload["papers"]),
+    "medrxiv_count": len(medrxiv_payload["papers"]),
+}, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			servers: ['biorxiv', 'medrxiv'],
+			biorxiv_count: 1,
+			medrxiv_count: 1,
+		});
+	});
+
+	test('uses the official bioRxiv details endpoint for recent preprints', () => {
+		const output = runPythonJson(`
+import importlib.util, json, urllib.parse
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+captured = {}
+
+class FakeResponse:
+    def read(self):
+        return json.dumps({"collection": []}).encode("utf-8")
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+def fake_urlopen(request, timeout=0):
+    captured["url"] = request.full_url
+    return FakeResponse()
+
+module.urllib.request.urlopen = fake_urlopen
+cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
+module.fetch_biorxiv_pubs("biorxiv", cutoff)
+
+parsed = urllib.parse.urlparse(captured["url"])
+print(json.dumps({
+    "path": parsed.path,
+    "suffix": parsed.path.split("/details/")[-1],
+}, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			path: '/details/biorxiv/2026-03-20/2026-03-30/0/json',
+			suffix: 'biorxiv/2026-03-20/2026-03-30/0/json',
+		});
+	});
+
+	test('parses official details payload dates for bioRxiv and medRxiv results', () => {
+		const output = runPythonJson(`
+import importlib.util, json
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+def fake_fetch_biorxiv_pubs(server, cutoff):
+    return {
+        "collection": [
+            {
+                "title": f"{server} protein result",
+                "doi": "10.1101/2026.03.28.123456",
+                "date": "2026-03-29",
+                "abstract": "protein biomarker atlas",
+                "authors": "Ada Lovelace; Grace Hopper",
+                "category": "bioinformatics",
+            }
+        ]
+    }
+
+module.fetch_biorxiv_pubs = fake_fetch_biorxiv_pubs
+cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
+biorxiv_payload = module.collect_biorxiv_source(
+    {"queries": ["protein"], "scope": "", "max_results": 20},
+    cutoff,
+    "en",
+)
+medrxiv_payload = module.collect_medrxiv_source(
+    {"queries": ["protein"], "scope": "", "max_results": 20},
+    cutoff,
+    "en",
+)
+
+print(json.dumps({
+    "biorxiv": biorxiv_payload,
+    "medrxiv": medrxiv_payload,
+}, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			biorxiv: {
+				papers: [
+					{
+						title: 'biorxiv protein result',
+						link: 'https://doi.org/10.1101/2026.03.28.123456',
+						published: '2026-03-29',
+						summary: 'protein biomarker atlas',
+						categories: 'bioinformatics',
+						authors: 'Ada Lovelace; Grace Hopper',
+						source: 'biorxiv',
+						source_type: 'bioRxiv',
+						scope: 'bioinformatics',
+					},
+				],
+				errors: [],
+			},
+			medrxiv: {
+				papers: [
+					{
+						title: 'medrxiv protein result',
+						link: 'https://doi.org/10.1101/2026.03.28.123456',
+						published: '2026-03-29',
+						summary: 'protein biomarker atlas',
+						categories: 'bioinformatics',
+						authors: 'Ada Lovelace; Grace Hopper',
+						source: 'medrxiv',
+						source_type: 'medRxiv',
+						scope: 'bioinformatics',
+					},
+				],
+				errors: [],
+			},
+		});
+	});
+
+	test('retries transient bioRxiv connection drops before failing', () => {
+		const output = runPythonJson(`
+import http.client, importlib.util, json
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+attempts = []
+
+class FakeResponse:
+    def read(self):
+        return json.dumps({"collection": []}).encode("utf-8")
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+def fake_urlopen(request, timeout=0):
+    attempts.append(request.full_url)
+    if len(attempts) == 1:
+        raise http.client.RemoteDisconnected("Remote end closed connection without response")
+    return FakeResponse()
+
+module.urllib.request.urlopen = fake_urlopen
+cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
+payload = module.fetch_biorxiv_pubs("biorxiv", cutoff)
+
+print(json.dumps({
+    "attempt_count": len(attempts),
+    "collection": payload["collection"],
+}, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			attempt_count: 2,
+			collection: [],
+		});
+	});
+
+	test('fetches ChemRxiv results through repository-filtered OpenAlex transport', () => {
+		const output = runPythonJson(`
+import importlib.util, io, json, urllib.parse
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+captured = {}
+
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+    def read(self):
+        return self.payload.encode("utf-8")
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+def fake_urlopen(request, timeout=0):
+    captured["url"] = request.full_url
+    return FakeResponse(json.dumps({"results": [{"id": "W1"}]}))
+
+module.urllib.request.urlopen = fake_urlopen
+cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
+payload = module.fetch_chemrxiv_results(
+    {"queries": ["catalyst discovery"], "max_results": 25},
+    cutoff,
+)
+parsed = urllib.parse.urlparse(captured["url"])
+params = urllib.parse.parse_qs(parsed.query)
+
+print(json.dumps({
+    "host": parsed.netloc,
+    "path": parsed.path,
+    "search": params.get("search", []),
+    "filter": params.get("filter", []),
+    "per_page": params.get("per-page", []),
+    "result_count": len(payload.get("results", [])),
+}, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			host: 'api.openalex.org',
+			path: '/works',
+			search: ['catalyst discovery'],
+			filter: ['from_publication_date:2026-03-20,repository:S4393918830'],
+			per_page: ['25'],
+			result_count: 1,
+		});
+	});
+
+	test('collects ChemRxiv papers from repository-filtered OpenAlex payloads', () => {
+		const output = runPythonJson(`
+import importlib.util, json
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+def fake_fetch_chemrxiv_results(source, cutoff):
+    return {
+        "results": [
+            {
+                "display_name": "Catalyst discovery with polymer electrolytes",
+                "publication_date": "2026-03-30",
+                "abstract_inverted_index": {
+                    "Catalyst": [0],
+                    "discovery": [1],
+                    "with": [2],
+                    "polymer": [3],
+                    "electrolytes": [4],
+                },
+                "doi": "https://doi.org/10.26434/chemrxiv-2026-abcdef",
+                "authorships": [
+                    {"author": {"display_name": "Ada Lovelace"}},
+                    {"author": {"display_name": "Linus Torvalds"}},
+                ],
+                "primary_topic": {
+                    "subfield": {"display_name": "Catalysis"}
+                },
+                "primary_location": {
+                    "source": {"display_name": "ChemRxiv"},
+                    "landing_page_url": "https://doi.org/10.26434/chemrxiv-2026-abcdef",
+                    "pdf_url": "https://chemrxiv.org/doi/pdf/10.26434/chemrxiv-2026-abcdef",
+                },
+                "locations": [
+                    {
+                        "source": {"display_name": "ChemRxiv"},
+                        "landing_page_url": "https://doi.org/10.26434/chemrxiv-2026-abcdef",
+                        "pdf_url": "https://chemrxiv.org/doi/pdf/10.26434/chemrxiv-2026-abcdef",
+                    }
+                ],
+            }
+        ]
+    }
+
+module.fetch_chemrxiv_results = fake_fetch_chemrxiv_results
+cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
+payload = module.collect_chemrxiv_source(
+    {"queries": ["catalyst discovery"], "scope": "catalysis", "max_results": 20},
+    cutoff,
+    "en",
+)
+
+print(json.dumps(payload, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			papers: [
+				{
+					title: 'Catalyst discovery with polymer electrolytes',
+					link: 'https://doi.org/10.26434/chemrxiv-2026-abcdef',
+					published: '2026-03-30',
+					summary: 'Catalyst discovery with polymer electrolytes',
+					categories: 'Catalysis',
+					authors: 'Ada Lovelace, Linus Torvalds',
+					source: 'chemrxiv',
+					source_type: 'ChemRxiv',
+					scope: 'catalysis',
+				},
+			],
+			errors: [],
+		});
+	});
+
 	test('aggregates multiple paper sources and keeps successful results after one failure', () => {
 		const output = runPythonJson(`
 import importlib.util, json

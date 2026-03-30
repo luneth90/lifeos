@@ -25,10 +25,12 @@ ARXIV_API_URL = "http://export.arxiv.org/api/query"
 OPENALEX_API_URL = "https://api.openalex.org/works"
 REQUEST_HEADERS = {"User-Agent": "LifeOS digest/1.0"}
 ARXIV_REQUEST_INTERVAL_SECONDS = 3
+CHEMRXIV_OPENALEX_REPOSITORY_ID = "S4393918830"
 ARXIV_LINK_RE = re.compile(
     r"arxiv\.org/(?:abs|pdf)/((?:[a-z\-]+(?:\.[a-z\-]+)?/\d{7})|(?:\d{4}\.\d{4,5}))(?:v\d+)?(?:\.pdf)?",
     re.IGNORECASE,
 )
+CHEMRXIV_DOI_RE = re.compile(r"10\.26434/chemrxiv[0-9A-Za-z./_-]*", re.IGNORECASE)
 CJK_RE = re.compile(r"[\u3400-\u9fff]")
 WHITESPACE_RE = re.compile(r"\s+")
 QUOTE_RE = re.compile(r'"([^"]+)"')
@@ -476,6 +478,43 @@ def extract_openalex_abstract(work: dict) -> str:
     return ""
 
 
+def extract_openalex_author_names(work: dict) -> list[str]:
+    """Collect OpenAlex author display names."""
+    author_names: list[str] = []
+    authorships = work.get("authorships")
+    if not isinstance(authorships, list):
+        return author_names
+
+    for authorship in authorships:
+        if not isinstance(authorship, dict):
+            continue
+        author = authorship.get("author")
+        if not isinstance(author, dict):
+            continue
+        display_name = author.get("display_name")
+        if isinstance(display_name, str):
+            author_names.append(display_name)
+
+    return author_names
+
+
+def extract_openalex_category(work: dict) -> str:
+    """Extract the most specific OpenAlex topic label available."""
+    primary_topic = work.get("primary_topic")
+    if not isinstance(primary_topic, dict):
+        return ""
+
+    for field in ["subfield", "field", "domain"]:
+        nested = primary_topic.get(field)
+        if not isinstance(nested, dict):
+            continue
+        display_name = nested.get("display_name")
+        if isinstance(display_name, str) and display_name:
+            return display_name
+
+    return ""
+
+
 def normalize_openalex_arxiv_link(work: dict) -> str | None:
     """Extract a canonical arXiv abs URL from an OpenAlex work."""
     ids = work.get("ids")
@@ -505,6 +544,63 @@ def normalize_openalex_arxiv_link(work: dict) -> str | None:
                     return normalized
 
     return None
+
+
+def normalize_openalex_chemrxiv_link(work: dict) -> str | None:
+    """Extract a canonical ChemRxiv DOI URL from an OpenAlex work."""
+    candidates: list[object] = [work.get("doi")]
+    ids = work.get("ids")
+    if isinstance(ids, dict):
+        candidates.append(ids.get("doi"))
+
+    location_candidates: list[object] = []
+    for field in ["primary_location", "best_oa_location"]:
+        location_candidates.append(work.get(field))
+    locations = work.get("locations")
+    if isinstance(locations, list):
+        location_candidates.extend(locations)
+
+    for location in location_candidates:
+        if not isinstance(location, dict):
+            continue
+        for field in ["landing_page_url", "pdf_url"]:
+            candidates.append(location.get(field))
+
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        matched = CHEMRXIV_DOI_RE.search(normalize_whitespace(candidate))
+        if matched:
+            return f"https://doi.org/{matched.group(0)}"
+
+    return None
+
+
+def is_openalex_chemrxiv_work(work: dict) -> bool:
+    """Return whether an OpenAlex work can be attributed to ChemRxiv."""
+    if normalize_openalex_chemrxiv_link(work) is not None:
+        return True
+
+    location_candidates: list[object] = []
+    for field in ["primary_location", "best_oa_location"]:
+        location_candidates.append(work.get(field))
+    locations = work.get("locations")
+    if isinstance(locations, list):
+        location_candidates.extend(locations)
+
+    for location in location_candidates:
+        if not isinstance(location, dict):
+            continue
+        source = location.get("source")
+        if not isinstance(source, dict):
+            continue
+
+        source_id = normalize_whitespace(str(source.get("id") or ""))
+        display_name = normalize_whitespace(str(source.get("display_name") or ""))
+        if source_id.endswith(f"/{CHEMRXIV_OPENALEX_REPOSITORY_ID}") or display_name == "ChemRxiv":
+            return True
+
+    return False
 
 
 def parse_openalex_results(
@@ -539,29 +635,8 @@ def parse_openalex_results(
             continue
 
         title = work.get("display_name") or work.get("title") or messages["untitled"]
-        authorships = work.get("authorships")
-        author_names: list[str] = []
-        if isinstance(authorships, list):
-            for authorship in authorships:
-                if not isinstance(authorship, dict):
-                    continue
-                author = authorship.get("author")
-                if not isinstance(author, dict):
-                    continue
-                display_name = author.get("display_name")
-                if isinstance(display_name, str):
-                    author_names.append(display_name)
-
-        category = ""
-        primary_topic = work.get("primary_topic")
-        if isinstance(primary_topic, dict):
-            for field in ["subfield", "field", "domain"]:
-                nested = primary_topic.get(field)
-                if isinstance(nested, dict):
-                    display_name = nested.get("display_name")
-                    if isinstance(display_name, str) and display_name:
-                        category = display_name
-                        break
+        author_names = extract_openalex_author_names(work)
+        category = extract_openalex_category(work)
 
         papers.append(
             normalize_paper_record(
@@ -716,14 +791,23 @@ def build_openalex_query(keywords: list[str]) -> str:
     return " ".join(part for part in parts if part)
 
 
-def fetch_openalex_works(query: str, cutoff: datetime, max_results: int) -> dict:
+def fetch_openalex_works(
+    query: str,
+    cutoff: datetime,
+    max_results: int,
+    extra_filters: list[str] | None = None,
+) -> dict:
     """Run an OpenAlex work search constrained by the digest date window."""
+    filters = [f"from_publication_date:{cutoff.date().isoformat()}"]
+    if extra_filters:
+        filters.extend(filter(None, extra_filters))
+
     params = urllib.parse.urlencode(
         {
             "search": query,
             "per-page": min(max_results, 100),
             "sort": "publication_date:desc",
-            "filter": f"from_publication_date:{cutoff.date().isoformat()}",
+            "filter": ",".join(filters),
         }
     )
     request = urllib.request.Request(
@@ -797,7 +881,7 @@ def parse_biorxiv_results(
         if not isinstance(item, dict):
             continue
 
-        published = normalize_published_date(item.get("preprint_date") or item.get("published_date"))
+        published = normalize_published_date(item.get("preprint_date") or item.get("published_date") or item.get("date"))
         if not published:
             continue
 
@@ -855,7 +939,15 @@ def parse_chemrxiv_results(
         if not isinstance(item, dict):
             continue
 
-        published = normalize_published_date(item.get("published") or item.get("published_date") or item.get("date"))
+        is_openalex_record = any(
+            key in item for key in ["publication_date", "authorships", "primary_location", "best_oa_location"]
+        )
+        if is_openalex_record and not is_openalex_chemrxiv_work(item):
+            continue
+
+        published = normalize_published_date(
+            item.get("published") or item.get("published_date") or item.get("date") or item.get("publication_date")
+        )
         if not published:
             continue
 
@@ -863,21 +955,34 @@ def parse_chemrxiv_results(
         if published_at < cutoff:
             continue
 
-        category = normalize_whitespace(str(item.get("categories") or item.get("category") or scope or ""))
+        category_value = item.get("categories") or item.get("category") or extract_openalex_category(item) or scope or ""
+        category = normalize_whitespace(str(category_value))
         if scope:
             scope_terms = normalize_string_list(scope)
             if scope_terms and not any(term.lower() in category.lower() for term in scope_terms):
                 continue
+
+        link = item.get("link") or item.get("url") or item.get("doi")
+        if not link and is_openalex_record:
+            link = normalize_openalex_chemrxiv_link(item) or ""
+
+        summary = item.get("summary") or item.get("abstract") or item.get("description")
+        if not summary and is_openalex_record:
+            summary = extract_openalex_abstract(item)
+
+        authors = item.get("authors") or item.get("author_names")
+        if not authors and is_openalex_record:
+            authors = extract_openalex_author_names(item)
 
         papers.append(
             normalize_paper_record(
                 "ChemRxiv",
                 {
                     "title": item.get("title") or item.get("display_name"),
-                    "link": item.get("link") or item.get("url") or item.get("doi"),
+                    "link": link,
                     "published": published,
-                    "summary": item.get("summary") or item.get("abstract") or item.get("description"),
-                    "authors": item.get("authors") or item.get("author_names"),
+                    "summary": summary,
+                    "authors": authors,
                     "categories": category,
                 },
                 scope or category,
@@ -889,23 +994,36 @@ def parse_chemrxiv_results(
 
 
 def fetch_biorxiv_pubs(server: str, cutoff: datetime) -> dict:
-    """Fetch bioRxiv/medRxiv published preprints for a date window."""
+    """Fetch bioRxiv/medRxiv preprints for a date window."""
     interval = f"{cutoff.date().isoformat()}/{datetime.now(timezone.utc).date().isoformat()}"
     request = urllib.request.Request(
-        f"https://api.biorxiv.org/pubs/{server}/{interval}/0/json",
+        f"https://api.biorxiv.org/details/{server}/{interval}/0/json",
         headers=REQUEST_HEADERS,
     )
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return json.loads(response.read().decode("utf-8"))
+    last_error: Exception | None = None
+    for _ in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except Exception as error:
+            last_error = error
+
+    if last_error is not None:
+        raise last_error
+
+    return {"collection": []}
 
 
 def fetch_chemrxiv_results(source: dict, cutoff: datetime) -> object:
-    """Fetch ChemRxiv results.
-
-    Phase 1 keeps this as a thin adapter boundary so tests and future transports can inject
-    deterministic payloads without depending on unstable site markup.
-    """
-    raise NotImplementedError("ChemRxiv transport is adapter-only in phase 1")
+    """Fetch ChemRxiv results via repository-filtered OpenAlex search."""
+    query = build_openalex_query(normalize_string_list(source.get("queries")))
+    max_results = int(source.get("max_results", 200))
+    return fetch_openalex_works(
+        query,
+        cutoff,
+        max_results,
+        extra_filters=[f"repository:{CHEMRXIV_OPENALEX_REPOSITORY_ID}"],
+    )
 
 
 def collect_biorxiv_like_source(
@@ -1028,7 +1146,7 @@ def collect_biorxiv_source(
     language: str,
 ) -> dict[str, list[dict[str, str]]]:
     """Collect bioRxiv papers."""
-    return collect_biorxiv_like_source(source, cutoff, language, "biorxiv", "bioRxiv")
+    return collect_biorxiv_like_source(source, cutoff, language, "biorxiv", "biorxiv")
 
 
 def collect_medrxiv_source(
@@ -1037,7 +1155,7 @@ def collect_medrxiv_source(
     language: str,
 ) -> dict[str, list[dict[str, str]]]:
     """Collect medRxiv papers."""
-    return collect_biorxiv_like_source(source, cutoff, language, "medrxiv", "medRxiv")
+    return collect_biorxiv_like_source(source, cutoff, language, "medrxiv", "medrxiv")
 
 
 def collect_chemrxiv_source(
