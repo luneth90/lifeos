@@ -21,6 +21,14 @@
 - Added GitHub Actions CI for Node 18/20/22
 - Added bilingual test matrix (zh/en parametrized tests)
 
+## 1.0.3 (2026-03-30)
+
+### Features
+
+- Added the `/digest` skill for custom-topic weekly digests
+- `/digest` now supports multilingual digest generation with configurable paper sources, RSS, and web search
+- Expanded paper-source fetching across `arXiv`, `bioRxiv`, `medRxiv`, `ChemRxiv`, `SocArXiv`, and `SSRN`
+
 ## 1.0.0
 
 - Initial release: MCP memory server with 11 tools

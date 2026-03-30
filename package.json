@@ -1,6 +1,6 @@
 {
   "name": "lifeos",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "LifeOS — AI-native knowledge OS runtime, CLI scaffold, and MCP memory server",
   "type": "module",
   "main": "dist/index.js",

@@ -1,5 +1,5 @@
 // lifeos — LifeOS MCP Server
-export const VERSION = '1.0.2';
+export const VERSION = '1.0.3';
 
 export * from './core.js';
 export { VaultConfig } from './config.js';
