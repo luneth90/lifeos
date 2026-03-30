@@ -113,6 +113,19 @@ describe('assetsDir', () => {
 			}
 		}
 	});
+
+	test('digest skill ships bilingual main and reference docs', () => {
+		const dir = join(assetsDir(), 'skills', 'digest');
+		expect(existsSync(join(dir, 'SKILL.zh.md'))).toBe(true);
+		expect(existsSync(join(dir, 'SKILL.en.md'))).toBe(true);
+		expect(existsSync(join(dir, 'references', 'setup-guide.zh.md'))).toBe(true);
+		expect(existsSync(join(dir, 'references', 'setup-guide.en.md'))).toBe(true);
+		expect(existsSync(join(dir, 'references', 'config-parser.zh.md'))).toBe(true);
+		expect(existsSync(join(dir, 'references', 'config-parser.en.md'))).toBe(true);
+		expect(existsSync(join(dir, 'references', 'run-pipeline.zh.md'))).toBe(true);
+		expect(existsSync(join(dir, 'references', 'run-pipeline.en.md'))).toBe(true);
+		expect(existsSync(join(dir, 'references', 'rss-arxiv-script.py'))).toBe(true);
+	});
 });
 
 describe('ensureDir', () => {

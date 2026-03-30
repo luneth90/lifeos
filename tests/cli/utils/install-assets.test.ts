@@ -170,4 +170,23 @@ describe('installSkills', () => {
 			cleanup();
 		}
 	});
+
+	test('installs language-specific digest skill content', () => {
+		const zhTmp = makeTmpDir();
+		const enTmp = makeTmpDir();
+		try {
+			installSkills(zhTmp.dir, 'zh', 'overwrite');
+			installSkills(enTmp.dir, 'en', 'overwrite');
+
+			const zhDigest = readFileSync(join(zhTmp.dir, '.agents', 'skills', 'digest', 'SKILL.md'), 'utf-8');
+			const enDigest = readFileSync(join(enTmp.dir, '.agents', 'skills', 'digest', 'SKILL.md'), 'utf-8');
+
+			expect(zhDigest).not.toBe(enDigest);
+			expect(zhDigest).toContain('通用信息周报');
+			expect(enDigest).toContain('general weekly digest');
+		} finally {
+			zhTmp.cleanup();
+			enTmp.cleanup();
+		}
+	});
 });

@@ -31,6 +31,26 @@ describe('resolveSkillFiles', () => {
 		});
 	});
 
+	describe('digest/ (has bilingual skill and reference docs)', () => {
+		it('zh → maps digest language variants to suffix-free paths', () => {
+			const map = resolveSkillFiles(join(skills, 'digest'), 'zh');
+
+			expect(map.get('SKILL.md')).toContain('SKILL.zh.md');
+			expect(map.get('references/setup-guide.md')).toContain('setup-guide.zh.md');
+			expect(map.get('references/config-parser.md')).toContain('config-parser.zh.md');
+			expect(map.get('references/run-pipeline.md')).toContain('run-pipeline.zh.md');
+		});
+
+		it('en → maps digest language variants to suffix-free paths', () => {
+			const map = resolveSkillFiles(join(skills, 'digest'), 'en');
+
+			expect(map.get('SKILL.md')).toContain('SKILL.en.md');
+			expect(map.get('references/setup-guide.md')).toContain('setup-guide.en.md');
+			expect(map.get('references/config-parser.md')).toContain('config-parser.en.md');
+			expect(map.get('references/run-pipeline.md')).toContain('run-pipeline.en.md');
+		});
+	});
+
 	describe('project/ (nested references/ with language variants)', () => {
 		it('zh → resolves all language files, no .zh.md or .en.md in output', () => {
 			const map = resolveSkillFiles(join(skills, 'project'), 'zh');
