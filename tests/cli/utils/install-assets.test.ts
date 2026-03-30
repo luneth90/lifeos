@@ -180,10 +180,24 @@ describe('installSkills', () => {
 
 			const zhDigest = readFileSync(join(zhTmp.dir, '.agents', 'skills', 'digest', 'SKILL.md'), 'utf-8');
 			const enDigest = readFileSync(join(enTmp.dir, '.agents', 'skills', 'digest', 'SKILL.md'), 'utf-8');
+			const zhConfig = readFileSync(
+				join(zhTmp.dir, '.agents', 'skills', 'digest', 'references', 'config-parser.md'),
+				'utf-8',
+			);
+			const enConfig = readFileSync(
+				join(enTmp.dir, '.agents', 'skills', 'digest', 'references', 'config-parser.md'),
+				'utf-8',
+			);
 
 			expect(zhDigest).not.toBe(enDigest);
 			expect(zhDigest).toContain('通用信息周报');
 			expect(enDigest).toContain('general weekly digest');
+			expect(zhDigest).toContain('Paper Sources');
+			expect(enDigest).toContain('Paper Sources');
+			expect(zhConfig).toContain('Paper Sources');
+			expect(enConfig).toContain('Paper Sources');
+			expect(zhConfig).toContain('旧版兼容');
+			expect(enConfig).toContain('### arXiv Search');
 		} finally {
 			zhTmp.cleanup();
 			enTmp.cleanup();

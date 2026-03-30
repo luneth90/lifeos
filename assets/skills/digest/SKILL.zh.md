@@ -1,6 +1,6 @@
 ---
 name: digest
-description: '通用信息周报技能：首次使用通过对话生成主题配置（RSS、arXiv、Web 搜索等），后续按配置自动抓取并产出结构化周报到草稿目录。支持多主题，每个主题独立配置和独立产出。当用户说"/digest"、"信息周报"、"周报"、"digest"时触发。'
+description: '通用信息周报技能：首次使用通过对话生成主题配置（Paper Sources、RSS、Web 搜索等），后续按配置自动抓取并产出结构化周报到草稿目录。支持多主题，每个主题独立配置和独立产出。当用户说"/digest"、"信息周报"、"周报"、"digest"时触发。'
 version: 1.0.2
 dependencies:
   templates: []
@@ -57,7 +57,7 @@ dependencies:
 配置笔记使用 Markdown 表格 + checkbox 开关，用户在 Obsidian 中可直接编辑：
 
 - checkbox 勾选/取消 → 启用或禁用信息源模块
-- 表格增删行 → 增删具体信息源
+- 表格增删行 → 增删具体信息源，包括 `Paper Sources`
 - 分类表格 → 调整周报结构
 
 配置笔记结构详见 `references/config-parser.md`。
@@ -76,7 +76,7 @@ dependencies:
 ```text
 Phase 1: 解析配置 → 结构化数据
 Phase 2: 并行抓取
-  ├─ Task A: RSS + arXiv → Python 脚本（references/rss-arxiv-script.py）
+  ├─ Task A: RSS + paper sources → Python 脚本（references/rss-arxiv-script.py）
   ├─ Task B: Web 搜索 → WebSearch 工具
   ├─ Task C: HuggingFace 热门 → WebFetch
   └─ Task D: GitHub Trending → WebFetch（可选）
@@ -86,11 +86,18 @@ Phase 4: 写入周报 → {草稿目录}/<TopicName>-MMDD-MMDD.md
 
 ### Python 脚本调用
 
-RSS + arXiv 抓取通过参数化 Python 脚本执行。技能先解析配置，构造 JSON 输入，通过 stdin 传入脚本。
+RSS + paper source 抓取通过参数化 Python 脚本执行。技能先解析配置，构造 JSON 输入，通过 stdin 传入脚本。
+
+Phase 1 使用新的 `Paper Sources` 模型：
+
+- 支持的来源类型：`arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv`
+- 每一行包含 `Source Type`、`Query`、`Scope`、`Notes`
+- 脚本会为每个来源使用独立 adapter 归一化结果，并返回结构化错误，不会因为单个来源失败就中断整个流程
+- 旧版 `### arXiv Search` 配置块仍然兼容，系统会把它转换成 `arXiv` 来源继续执行
 
 其中 arXiv 模块有三个关键约束：
 
-- arXiv 关键词必须使用英文
+- arXiv 查询必须使用英文
 - 脚本会先按类别抓最近论文，再在本地过滤
 - 若官方 arXiv 路径失败，可回退到 OpenAlex，但只保留能映射回 arXiv 的论文
 
@@ -109,19 +116,28 @@ JSON 输入格式：
     "enabled": true,
     "feeds": [{"name": "源名称", "url": "https://..."}]
   },
-  "arxiv": {
+  "papers": {
     "enabled": true,
-    "keywords": ["\"llm agent\""],
-    "categories": ["cs.AI"],
-    "max_results": 200,
-    "fallback_enabled": true,
-    "require_arxiv_link": true
+    "sources": [
+      {
+        "source_type": "arXiv",
+        "query": "\"llm agent\"",
+        "scope": "cs.AI",
+        "notes": "核心技术论文"
+      },
+      {
+        "source_type": "bioRxiv",
+        "query": "single-cell",
+        "scope": "Neuroscience",
+        "notes": "生物医学预印本"
+      }
+    ]
   },
   "days": 7
 }
 ```
 
-脚本会返回 `rss_articles`、`arxiv_papers`、`stats` 和结构化的 `errors`。
+脚本会返回 `rss_articles`、归一化后的论文结果、`stats` 和结构化的 `errors`。
 
 ### 周报产出
 

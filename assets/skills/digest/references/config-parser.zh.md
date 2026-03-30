@@ -11,7 +11,8 @@
 ## 基本信息                   ← 键值表格
 ## 信息源                     ← 容器标题（不解析）
   ### RSS 订阅               ← 模块：checkbox + 表格
-  ### arXiv 搜索             ← 模块：checkbox + 表格
+  ### Paper Sources          ← 模块：checkbox + 表格
+  ### arXiv 搜索             ← 旧版模块：checkbox + 表格（仍兼容）
   ### Web 搜索               ← 模块：checkbox + 表格 + 补充站点表格
   ### HuggingFace 热门论文    ← 模块：checkbox + 关键词行
   ### GitHub Trending         ← 模块：checkbox + 关键词行
@@ -79,6 +80,36 @@
 - 若 URL 不以 `http` 开头，自动补全 `https://`
 - 若 URL 不含 `/feed` 或 `/rss`，可尝试在末尾追加 `/feed` 作为 RSS 地址
 
+#### Paper Sources
+
+表格 schema：`Source Type | Query | Scope | Notes`
+
+```json
+{
+  "enabled": true,
+  "sources": [
+    {
+      "source_type": "arXiv",
+      "query": "\"LLM agent\"",
+      "scope": "cs.AI, cs.CL",
+      "notes": "核心技术论文"
+    },
+    {
+      "source_type": "bioRxiv",
+      "query": "single-cell",
+      "scope": "Neuroscience",
+      "notes": "生物医学预印本"
+    }
+  ]
+}
+```
+
+**Phase 1 支持的来源类型：** `arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv`。
+**字段含义：** `Query` 是检索词或关键词短语；`Scope` 是该来源使用的类别、集合或期刊
+过滤；`Notes` 是给 helper 的自由说明。
+**归一化：** helper 会把每一行转换成独立来源 adapter 输入，并在不同来源之间去重。
+**兼容策略：** 新配置优先使用这个模型。
+
 #### arXiv 搜索
 
 表格 schema：`关键词 | 类别`
@@ -92,12 +123,14 @@
 }
 ```
 
+**旧版兼容：** 解析器仍然接受 `### arXiv 搜索`，并将其归一化为一个 `arXiv` 论文来源，
+确保旧配置继续可用。
 **关键词语言：** 关键词必须是英文词或英文引号短语。若出现中文关键词，则将 arXiv
-模块视为配置错误。  
-**类别去重：** 合并所有行的类别列，去重后作为搜索范围。  
-**主抓取行为：** 类别用于官方 arXiv feed 抓取，关键词只在本地对标题和摘要做过滤。  
+来源视为配置错误。
+**类别去重：** 合并所有行的类别列，去重后作为搜索范围。
+**主抓取行为：** 类别用于官方 arXiv feed 抓取，关键词只在本地对标题和摘要做过滤。
 **fallback 行为：** 若类别缺失，或官方 arXiv 路径失败，可回退到 OpenAlex，但只保留能映射回
-arXiv 的论文。  
+arXiv 的论文。
 **max_results：** 固定 200，不在配置中暴露。
 
 #### Web 搜索

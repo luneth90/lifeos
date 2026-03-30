@@ -24,7 +24,7 @@ config = {
   language: "English",
   modules: {
     rss: { enabled, feeds },
-    arxiv: { enabled, keywords, categories },
+    papers: { enabled, sources },
     web: { enabled, queries, sites },
     huggingface: { enabled, keywords },
     github: { enabled, keywords }
@@ -32,6 +32,9 @@ config = {
   categories: [{ name, scope }]
 }
 ```
+
+Legacy `arxiv` blocks are still accepted during the transition and are normalized into
+`papers.sources` before execution.
 
 Compute the date range:
 
@@ -44,14 +47,16 @@ Compute the date range:
 
 Run enabled modules in parallel. RSS + arXiv use the Python helper; the rest use agent tools.
 
-#### Task A: RSS + arXiv (Python helper)
+#### Task A: RSS + paper sources (Python helper)
 
-For arXiv, the helper should use this runtime contract:
+For paper sources, the helper should use this runtime contract:
 
-1. fetch recent papers from the configured arXiv categories
-2. locally filter and rank them with the configured English keywords
-3. if the official arXiv path fails, or yields zero matches, fall back to OpenAlex
-4. only keep fallback records that normalize back to arXiv links
+1. normalize `Paper Sources` rows into source adapter inputs
+2. run the phase 1 adapters for `arXiv`, `bioRxiv`, `medRxiv`, and `ChemRxiv`
+3. return normalized papers plus structured per-source errors
+4. if one source fails, keep the successful sources and report the failure in `errors`
+5. legacy `arxiv` config blocks are converted into `arXiv` adapter inputs before execution
+6. the `arXiv` adapter retains the existing OpenAlex fallback behavior when arXiv lookups fail
 
 Build the JSON input and send it through stdin:
 
@@ -65,13 +70,22 @@ The payload should include at least:
 {
   "language": "en",
   "rss": {...},
-  "arxiv": {
+  "papers": {
     "enabled": true,
-    "keywords": ["\"llm agent\"", "\"tool use\""],
-    "categories": ["cs.AI"],
-    "max_results": 200,
-    "fallback_enabled": true,
-    "require_arxiv_link": true
+    "sources": [
+      {
+        "source_type": "arXiv",
+        "query": "\"llm agent\"",
+        "scope": "cs.AI",
+        "notes": "Core technical papers"
+      },
+      {
+        "source_type": "bioRxiv",
+        "query": "single-cell",
+        "scope": "Neuroscience",
+        "notes": "Biomedical preprints"
+      }
+    ]
   },
   "days": 7
 }
@@ -82,8 +96,8 @@ The script returns JSON:
 ```json
 {
   "rss_articles": [...],
-  "arxiv_papers": [...],
-  "stats": { "rss_count": 12, "arxiv_count": 45 },
+  "papers": [...],
+  "stats": { "rss_count": 12, "paper_count": 45 },
   "errors": [...]
 }
 ```
@@ -123,9 +137,9 @@ Use `defuddle` on high-value results when the article body matters.
    - priority: arXiv original > HuggingFace > RSS summary > Web search
 
 2. **Categorization**
-   - match titles and summaries against the configured category system
-   - the "Key Papers / Key Articles" section should contain the 3-5 most important items overall
-   - uncategorized items fall back to the last category, usually "Industry Updates"
+  - match titles and summaries against the configured category system
+  - the "Key Papers / Key Articles" section should contain the 3-5 most important items overall
+  - uncategorized items fall back to the last category, usually "Industry Updates"
 
 3. **Summary writing**
    - write a 1-2 sentence English summary for each item
@@ -168,7 +182,8 @@ aliases: []
 ## Sources
 
 **RSS feeds:** {rss_names_list}
-**arXiv search:** {arxiv_categories} (filtered by keywords)
+**Paper sources:** {paper_source_summaries}
+**Legacy arXiv search:** {legacy_arxiv_summary if present}
 **Web search:** {web_sites_list}
 **HuggingFace:** huggingface.co/papers
 **GitHub:** github.com/trending
@@ -206,6 +221,7 @@ All weekly digests generated:
 |-------|----------|
 | Python unavailable | tell the user to install Python and stop |
 | RSS feed timeout | mark that source as failed and continue |
+| paper source adapter failure | record a structured source error and continue with the other sources |
 | arXiv API unavailable | record a structured arXiv error and try OpenAlex fallback |
 | WebSearch returns nothing | skip that query and continue |
 | config parsing fails | raise an error with the concrete problem |

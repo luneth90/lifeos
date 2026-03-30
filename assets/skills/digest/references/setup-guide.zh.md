@@ -45,11 +45,14 @@
    - 推荐 5-15 个高质量信息源
    - 优先选择提供 RSS feed 的来源
 
-2. **arXiv 关键词**
-   - 生成 10-20 个英文搜索关键词（可含英文引号短语）
-   - 选择相对收敛的 arXiv 类别（如 `cs.AI`、`cs.CL`、`cs.CV`、`cs.RO`）
-   - digest 会先按类别抓最近论文，再用这些英文关键词在本地过滤标题和摘要
-   - 非学术主题默认禁用
+2. **Paper Sources**
+   - 不要默认只配 arXiv，优先给出明确的来源行
+   - 生物医学主题优先使用 `bioRxiv` / `medRxiv`
+   - 化学主题优先使用 `ChemRxiv`
+   - 技术 / AI 主题优先使用 `arXiv`
+   - 生成少量具体的 `Source Type | Query | Scope | Notes` 行
+   - `Query` 要尽量可检索、与来源匹配，必要时用 `Notes` 说明特殊处理
+   - 非学术主题默认关闭论文来源，除非用户明确希望继续追踪预印本
 
 3. **Web 搜索**
    - 为无 RSS 的重要来源设计 3-5 条查询模板
@@ -100,13 +103,18 @@ aliases: []
 | {name} | {url} | {description} |
 ...
 
-### arXiv 搜索
+### Paper Sources
 
 - [x] 启用
 
-| 关键词 | 类别 |
-|--------|------|
-| {english_keyword} | {categories} |
+| Source Type | Query | Scope | Notes |
+|-------------|-------|-------|-------|
+| arXiv | {query} | {scope} | {notes} |
+| bioRxiv | {query} | {scope} | {notes} |
+...
+
+> 旧版兼容：老配置仍然可以使用 `### arXiv 搜索`。新配置应优先使用 `Paper Sources`，
+> 但已有的 arXiv-only 配置仍然有效。
 ...
 
 ### Web 搜索
@@ -160,7 +168,7 @@ aliases: []
 
 请在 Obsidian 中打开检查：
 - 用 checkbox 关闭不需要的信息源模块
-- 保持 arXiv 关键词为英文，再增删 RSS 源、arXiv 行和 Web 搜索目标
+- 保持论文来源查询可检索，再增删 RSS 源、Paper Sources 行和 Web 搜索目标
 - 调整分类体系
 
 确认后，运行 `/digest {topic_name}` 即可生成第一期周报。
@@ -172,3 +180,5 @@ aliases: []
 - Agent 推荐的信息源应具体到 URL，不要只给名称
 - 用户提到的必读来源必须包含在配置中
 - 非技术主题（如理财、历史）应自动禁用 arXiv、HuggingFace、GitHub 模块
+- 生物医学主题通常优先 `bioRxiv` / `medRxiv`，化学主题优先 `ChemRxiv`，技术 /
+  AI 主题优先 `arXiv`

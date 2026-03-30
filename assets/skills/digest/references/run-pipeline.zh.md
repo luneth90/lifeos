@@ -24,7 +24,7 @@ config = {
   language: "中文",
   modules: {
     rss: { enabled, feeds },
-    arxiv: { enabled, keywords, categories },
+    papers: { enabled, sources },
     web: { enabled, queries, sites },
     huggingface: { enabled, keywords },
     github: { enabled, keywords }
@@ -32,6 +32,8 @@ config = {
   categories: [{ name, scope }]
 }
 ```
+
+旧版 `arxiv` 配置块在过渡期内仍然兼容，会在执行前归一化为 `papers.sources`。
 
 计算日期范围：
 
@@ -44,14 +46,16 @@ config = {
 
 按启用的模块执行抓取。RSS + arXiv 通过 Python 脚本批量处理，其余通过 Agent 工具处理。
 
-#### Task A: RSS + arXiv（Python 脚本）
+#### Task A: RSS + paper sources（Python 脚本）
 
-对 arXiv，脚本应遵循以下运行契约：
+对论文来源，脚本应遵循以下运行契约：
 
-1. 先从配置的 arXiv 类别抓取最近论文
-2. 再用配置里的英文关键词在本地过滤和排序
-3. 若官方 arXiv 路径失败，或过滤后为 0，则回退到 OpenAlex
-4. fallback 结果只保留能归一化回 arXiv 链接的论文
+1. 将 `Paper Sources` 行归一化为来源 adapter 输入
+2. 依次运行 `arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv` 的 phase 1 adapters
+3. 返回归一化后的论文结果以及结构化的逐来源错误
+4. 某个来源失败时，保留成功来源并把失败写入 `errors`
+5. 旧版 `arxiv` 配置块会先转换成 `arXiv` adapter 输入，再继续执行
+6. `arXiv` adapter 在 arXiv 检索失败时会保留现有的 OpenAlex fallback 行为
 
 构造 JSON 输入并通过 stdin 传给脚本：
 
@@ -65,13 +69,22 @@ JSON 输入从 Phase 1 的配置构造，至少包括：
 {
   "language": "zh",
   "rss": {...},
-  "arxiv": {
+  "papers": {
     "enabled": true,
-    "keywords": ["\"llm agent\"", "\"tool use\""],
-    "categories": ["cs.AI"],
-    "max_results": 200,
-    "fallback_enabled": true,
-    "require_arxiv_link": true
+    "sources": [
+      {
+        "source_type": "arXiv",
+        "query": "\"llm agent\"",
+        "scope": "cs.AI",
+        "notes": "核心技术论文"
+      },
+      {
+        "source_type": "bioRxiv",
+        "query": "single-cell",
+        "scope": "Neuroscience",
+        "notes": "生物医学预印本"
+      }
+    ]
   },
   "days": 7
 }
@@ -82,8 +95,8 @@ JSON 输入从 Phase 1 的配置构造，至少包括：
 ```json
 {
   "rss_articles": [...],
-  "arxiv_papers": [...],
-  "stats": { "rss_count": 12, "arxiv_count": 45 },
+  "papers": [...],
+  "stats": { "rss_count": 12, "paper_count": 45 },
   "errors": [...]
 }
 ```
@@ -168,7 +181,8 @@ aliases: []
 ## 信息来源
 
 **RSS 订阅：** {rss_names_list}
-**arXiv 搜索：** {arxiv_categories}（关键词过滤）
+**论文来源：** {paper_source_summaries}
+**旧版 arXiv 搜索：** {legacy_arxiv_summary if present}
 **Web 搜索：** {web_sites_list}
 **HuggingFace：** huggingface.co/papers
 **GitHub：** github.com/trending
@@ -206,6 +220,7 @@ aliases: []
 |------|------|
 | Python 不可用 | 报错提示安装并中止执行 |
 | RSS feed 超时 | 标记失败，继续其他来源 |
+| 论文来源 adapter 失败 | 记录结构化来源错误，继续执行其他来源 |
 | arXiv API 无响应 | 记录结构化 arXiv 错误，并尝试 OpenAlex fallback |
 | WebSearch 无结果 | 跳过该查询，继续 |
 | 配置解析失败 | 报错并提示具体问题 |

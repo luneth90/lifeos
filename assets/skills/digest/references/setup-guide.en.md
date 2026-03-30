@@ -45,12 +45,16 @@ Based on the topic and preferences, use agent capabilities to recommend sources 
    - recommend 5-15 high-quality sources
    - prefer sources that expose RSS feeds
 
-2. **arXiv keywords**
-   - generate 10-20 English keywords, including quoted English phrases
-   - prefer reasonably narrow arXiv categories such as `cs.AI`, `cs.CL`, `cs.CV`, and `cs.RO`
-   - remember that digest now pulls recent arXiv papers by category first, then filters them locally
-     with the configured English keywords
-   - disable by default for non-academic topics
+2. **Paper Sources**
+   - recommend explicit source rows instead of assuming arXiv-only defaults
+   - use `bioRxiv` / `medRxiv` for biomedical topics
+   - use `ChemRxiv` for chemistry topics
+   - use `arXiv` for technical / AI topics
+   - generate a small number of concrete `Source Type | Query | Scope | Notes` rows
+   - keep `Query` values searchable and source-specific, and write a short note when a source needs
+     special handling
+   - disable paper sources by default for non-academic topics unless the user explicitly wants
+     preprints
 
 3. **Web search**
    - design 3-5 query templates for important sources without RSS
@@ -101,14 +105,18 @@ aliases: []
 | {name} | {url} | {description} |
 ...
 
-### arXiv Search
+### Paper Sources
 
 - [x] Enabled
 
-| Keyword | Categories |
-|---------|------------|
-| {english_keyword} | {categories} |
+| Source Type | Query | Scope | Notes |
+|-------------|-------|-------|-------|
+| arXiv | {query} | {scope} | {notes} |
+| bioRxiv | {query} | {scope} | {notes} |
 ...
+
+> Legacy compatibility: old notes may still use `### arXiv Search`. New setups should prefer
+> `Paper Sources`, but existing arXiv-only configs remain valid.
 
 ### Web Search
 
@@ -161,7 +169,8 @@ Config note created: {system directory}/{digest subdirectory}/{topic_name}.md
 
 Ask the user to review it in Obsidian:
 - disable modules they do not want with checkboxes
-- keep arXiv keywords in English, then add or remove RSS feeds, arXiv rows, and Web search targets
+- keep paper-source queries searchable, then add or remove RSS feeds, Paper Sources rows, and Web
+  search targets
 - adjust the category system
 
 After review, they can run `/digest {topic_name}` to generate the first digest.
@@ -173,3 +182,5 @@ After review, they can run `/digest {topic_name}` to generate the first digest.
 - source recommendations should include concrete URLs, not only names
 - any must-read source mentioned by the user must appear in the config
 - non-technical topics such as finance or history should disable arXiv, HuggingFace, and GitHub by default
+- biomedical topics should usually prioritize `bioRxiv` / `medRxiv`, chemistry should prioritize
+  `ChemRxiv`, and technical / AI topics should prioritize `arXiv`

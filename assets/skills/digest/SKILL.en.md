@@ -1,6 +1,6 @@
 ---
 name: digest
-description: "A general weekly digest skill: on first use, guide the user through creating a topic config note (RSS, arXiv, Web search, and more), then automatically fetch updates and write a structured weekly digest into the drafts directory. Supports multiple topics with separate configs and separate outputs. Trigger when the user says '/digest', 'digest', or asks for a weekly digest."
+description: "A general weekly digest skill: on first use, guide the user through creating a topic config note (Paper Sources, RSS, Web search, and more), then automatically fetch updates and write a structured weekly digest into the drafts directory. Supports multiple topics with separate configs and separate outputs. Trigger when the user says '/digest', 'digest', or asks for a weekly digest."
 version: 1.0.2
 dependencies:
   templates: []
@@ -57,7 +57,7 @@ Follow `references/setup-guide.md` for the conversation flow:
 The config note uses Markdown tables plus checkbox switches so the user can edit it directly in Obsidian:
 
 - toggle checkboxes to enable or disable modules
-- add or remove table rows to change concrete sources
+- add or remove table rows to change concrete sources, including `Paper Sources`
 - edit the category table to reshape the digest structure
 
 See `references/config-parser.md` for the config note structure.
@@ -76,7 +76,7 @@ Follow `references/run-pipeline.md` for the fetch pipeline.
 ```text
 Phase 1: Parse config → structured data
 Phase 2: Fetch in parallel
-  ├─ Task A: RSS + arXiv → Python script (references/rss-arxiv-script.py)
+  ├─ Task A: RSS + paper sources → Python script (references/rss-arxiv-script.py)
   ├─ Task B: Web search → WebSearch tool
   ├─ Task C: HuggingFace papers → WebFetch
   └─ Task D: GitHub Trending → WebFetch (optional)
@@ -86,12 +86,21 @@ Phase 4: Write digest → {drafts directory}/<TopicName>-MMDD-MMDD.md
 
 ### Python Script Invocation
 
-RSS + arXiv fetching runs through the parameterized Python helper. Parse the config, build the JSON
-payload, and pass it through stdin.
+RSS + paper-source fetching runs through the parameterized Python helper. Parse the config, build
+the JSON payload, and pass it through stdin.
+
+Phase 1 uses the new `Paper Sources` model:
+
+- supported source types: `arXiv`, `bioRxiv`, `medRxiv`, `ChemRxiv`
+- each row supplies `Source Type`, `Query`, `Scope`, and `Notes`
+- the helper normalizes each source through a dedicated adapter and returns structured errors per
+  source instead of failing the whole run
+- legacy `### arXiv Search` config blocks are still accepted and translated into `arXiv` sources so
+  older notes keep working
 
 For arXiv specifically:
 
-- configured arXiv keywords must be English
+- configured arXiv queries must be English
 - the helper fetches recent category results first, then filters locally
 - if the official arXiv path fails, it may fall back to OpenAlex but only keep arXiv-mappable
   papers
@@ -111,19 +120,28 @@ JSON input shape:
     "enabled": true,
     "feeds": [{"name": "Source name", "url": "https://..."}]
   },
-  "arxiv": {
+  "papers": {
     "enabled": true,
-    "keywords": ["\"llm agent\""],
-    "categories": ["cs.AI"],
-    "max_results": 200,
-    "fallback_enabled": true,
-    "require_arxiv_link": true
+    "sources": [
+      {
+        "source_type": "arXiv",
+        "query": "\"llm agent\"",
+        "scope": "cs.AI",
+        "notes": "Core technical papers"
+      },
+      {
+        "source_type": "bioRxiv",
+        "query": "single-cell",
+        "scope": "Neuroscience",
+        "notes": "Biomedical preprints"
+      }
+    ]
   },
   "days": 7
 }
 ```
 
-The helper returns `rss_articles`, `arxiv_papers`, `stats`, and structured `errors`.
+The helper returns `rss_articles`, normalized paper results, `stats`, and structured `errors`.
 
 ### Digest Output
 

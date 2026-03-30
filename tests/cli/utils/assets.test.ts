@@ -116,6 +116,12 @@ describe('assetsDir', () => {
 
 	test('digest skill ships bilingual main and reference docs', () => {
 		const dir = join(assetsDir(), 'skills', 'digest');
+		const digestEn = readFileSync(join(dir, 'SKILL.en.md'), 'utf-8');
+		const digestZh = readFileSync(join(dir, 'SKILL.zh.md'), 'utf-8');
+		const configEn = readFileSync(join(dir, 'references', 'config-parser.en.md'), 'utf-8');
+		const setupEn = readFileSync(join(dir, 'references', 'setup-guide.en.md'), 'utf-8');
+		const runEn = readFileSync(join(dir, 'references', 'run-pipeline.en.md'), 'utf-8');
+
 		expect(existsSync(join(dir, 'SKILL.zh.md'))).toBe(true);
 		expect(existsSync(join(dir, 'SKILL.en.md'))).toBe(true);
 		expect(existsSync(join(dir, 'references', 'setup-guide.zh.md'))).toBe(true);
@@ -125,6 +131,14 @@ describe('assetsDir', () => {
 		expect(existsSync(join(dir, 'references', 'run-pipeline.zh.md'))).toBe(true);
 		expect(existsSync(join(dir, 'references', 'run-pipeline.en.md'))).toBe(true);
 		expect(existsSync(join(dir, 'references', 'rss-arxiv-script.py'))).toBe(true);
+		expect(digestEn).toContain('Paper Sources');
+		expect(digestZh).toContain('Paper Sources');
+		expect(configEn).toContain('### Paper Sources');
+		expect(configEn).toContain('### arXiv Search');
+		expect(setupEn).toContain('bioRxiv');
+		expect(setupEn).toContain('ChemRxiv');
+		expect(runEn).toContain('paper sources');
+		expect(runEn).toContain('structured per-source errors');
 	});
 });
 

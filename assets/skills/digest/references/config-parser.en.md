@@ -11,7 +11,8 @@ The config note contains the following fixed sections, identified by second-leve
 ## Basic Info                ← key-value table
 ## Sources                   ← container heading, not parsed
   ### RSS Feeds              ← module: checkbox + table
-  ### arXiv Search           ← module: checkbox + table
+  ### Paper Sources          ← module: checkbox + table
+  ### arXiv Search           ← legacy module: checkbox + table (still accepted)
   ### Web Search             ← module: checkbox + table + supplemental sites table
   ### HuggingFace Papers     ← module: checkbox + keyword line
   ### GitHub Trending        ← module: checkbox + keyword line
@@ -79,6 +80,37 @@ Table schema: `Name | URL | Focus`
 - prepend `https://` when the URL does not start with `http`
 - if the URL has no `/feed` or `/rss`, optionally try appending `/feed`
 
+#### Paper Sources
+
+Table schema: `Source Type | Query | Scope | Notes`
+
+```json
+{
+  "enabled": true,
+  "sources": [
+    {
+      "source_type": "arXiv",
+      "query": "\"LLM agent\"",
+      "scope": "cs.AI, cs.CL",
+      "notes": "Core technical papers"
+    },
+    {
+      "source_type": "bioRxiv",
+      "query": "single-cell",
+      "scope": "Neuroscience",
+      "notes": "Biomedical preprints"
+    }
+  ]
+}
+```
+
+**Phase 1 supported source types:** `arXiv`, `bioRxiv`, `medRxiv`, `ChemRxiv`.
+**Source semantics:** `Query` is the search term or keyword phrase; `Scope` is the category,
+collection, or journal filter used by that source; `Notes` is free-form guidance for the helper.
+**Normalization:** the helper converts each row into a source adapter input and deduplicates papers
+across sources.
+**Compatibility:** this is the preferred model for new notes.
+
 #### arXiv Search
 
 Table schema: `Keyword | Categories`
@@ -92,8 +124,10 @@ Table schema: `Keyword | Categories`
 }
 ```
 
+**Legacy compatibility:** the parser still accepts `### arXiv Search` and normalizes it into an
+`arXiv` paper source so older notes continue to work.
 **Keyword language:** keywords must be English terms or English quoted phrases. Treat non-English
-keywords as a config error for the arXiv module.
+keywords as a config error for the arXiv source.
 **Category deduplication:** combine all categories from every row and deduplicate them.  
 **Primary fetch behavior:** categories drive the official arXiv feed; keyword filtering happens
 locally against title and abstract.  
