@@ -46,6 +46,13 @@ config = {
 
 #### Task A: RSS + arXiv（Python 脚本）
 
+对 arXiv，脚本应遵循以下运行契约：
+
+1. 先从配置的 arXiv 类别抓取最近论文
+2. 再用配置里的英文关键词在本地过滤和排序
+3. 若官方 arXiv 路径失败，或过滤后为 0，则回退到 OpenAlex
+4. fallback 结果只保留能归一化回 arXiv 链接的论文
+
 构造 JSON 输入并通过 stdin 传给脚本：
 
 ```bash
@@ -58,7 +65,14 @@ JSON 输入从 Phase 1 的配置构造，至少包括：
 {
   "language": "zh",
   "rss": {...},
-  "arxiv": {...},
+  "arxiv": {
+    "enabled": true,
+    "keywords": ["\"llm agent\"", "\"tool use\""],
+    "categories": ["cs.AI"],
+    "max_results": 200,
+    "fallback_enabled": true,
+    "require_arxiv_link": true
+  },
   "days": 7
 }
 ```
@@ -69,7 +83,8 @@ JSON 输入从 Phase 1 的配置构造，至少包括：
 {
   "rss_articles": [...],
   "arxiv_papers": [...],
-  "stats": { "rss_count": 12, "arxiv_count": 45 }
+  "stats": { "rss_count": 12, "arxiv_count": 45 },
+  "errors": [...]
 }
 ```
 
@@ -191,7 +206,7 @@ aliases: []
 |------|------|
 | Python 不可用 | 报错提示安装并中止执行 |
 | RSS feed 超时 | 标记失败，继续其他来源 |
-| arXiv API 无响应 | 标记失败，继续其他模块 |
+| arXiv API 无响应 | 记录结构化 arXiv 错误，并尝试 OpenAlex fallback |
 | WebSearch 无结果 | 跳过该查询，继续 |
 | 配置解析失败 | 报错并提示具体问题 |
 | 所有来源均失败 | 不生成周报，报告失败原因 |

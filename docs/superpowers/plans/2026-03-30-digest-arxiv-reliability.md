@@ -15,7 +15,7 @@
 **Files:**
 - Modify: `tests/assets/digest-rss-arxiv-script.test.ts`
 
-- [ ] **Step 1: Write failing tests for reliable arXiv behavior**
+- [x] **Step 1: Write failing tests for reliable arXiv behavior**
 
 Add tests for:
 - rejecting non-English arXiv keywords with structured errors
@@ -24,7 +24,7 @@ Add tests for:
 - keeping only fallback results that normalize to arXiv links
 - returning real papers in `arxiv_papers` and structured failures in `errors`
 
-- [ ] **Step 2: Run the focused test file and verify RED**
+- [x] **Step 2: Run the focused test file and verify RED**
 
 Run:
 
@@ -34,7 +34,7 @@ npm test -- tests/assets/digest-rss-arxiv-script.test.ts
 
 Expected: FAIL because the current script still uses the old query path and fake failure items.
 
-- [ ] **Step 3: Commit the failing-test checkpoint only if the repo workflow needs it**
+- [x] **Step 3: Commit the failing-test checkpoint only if the repo workflow needs it**
 
 Otherwise continue directly to implementation.
 
@@ -43,7 +43,7 @@ Otherwise continue directly to implementation.
 **Files:**
 - Modify: `assets/skills/digest/references/rss-arxiv-script.py`
 
-- [ ] **Step 1: Add pure helper functions**
+- [x] **Step 1: Add pure helper functions**
 
 Introduce focused helpers for:
 - English keyword validation and compilation
@@ -53,17 +53,17 @@ Introduce focused helpers for:
 - structured error collection
 - result deduplication with source priority
 
-- [ ] **Step 2: Replace the primary arXiv fetch strategy**
+- [x] **Step 2: Replace the primary arXiv fetch strategy**
 
 Implement category-based recent-paper retrieval and local filtering instead of the current remote
 keyword boolean query.
 
-- [ ] **Step 3: Add OpenAlex fallback orchestration**
+- [x] **Step 3: Add OpenAlex fallback orchestration**
 
 Trigger fallback on transport failures, parse failures, missing categories, or zero filtered arXiv
 results. Keep only records that map back to arXiv.
 
-- [ ] **Step 4: Keep the top-level JSON contract compatible**
+- [x] **Step 4: Keep the top-level JSON contract compatible**
 
 Return:
 
@@ -78,7 +78,7 @@ Return:
 
 `arxiv_papers` must contain only real papers.
 
-- [ ] **Step 5: Re-run the focused script tests and verify GREEN**
+- [x] **Step 5: Re-run the focused script tests and verify GREEN**
 
 Run:
 
@@ -88,7 +88,7 @@ npm test -- tests/assets/digest-rss-arxiv-script.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add assets/skills/digest/references/rss-arxiv-script.py tests/assets/digest-rss-arxiv-script.test.ts
@@ -107,22 +107,22 @@ git commit -m "feat: harden digest arxiv fetching"
 - Modify: `assets/skills/digest/references/setup-guide.en.md`
 - Modify: `assets/skills/digest/references/setup-guide.zh.md`
 
-- [ ] **Step 1: Update the config parser docs**
+- [x] **Step 1: Update the config parser docs**
 
 Document that arXiv keywords must be English and that missing categories force fallback behavior.
 
-- [ ] **Step 2: Update the setup guides**
+- [x] **Step 2: Update the setup guides**
 
 Tell the user explicitly to provide English arXiv keywords and reasonably narrow categories.
 
-- [ ] **Step 3: Update the run pipeline and skill overview**
+- [x] **Step 3: Update the run pipeline and skill overview**
 
 Document:
 - primary arXiv category feed + local filtering
 - OpenAlex arXiv-only fallback
 - structured `errors` output from the Python helper
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add assets/skills/digest/SKILL.en.md assets/skills/digest/SKILL.zh.md assets/skills/digest/references/config-parser.en.md assets/skills/digest/references/config-parser.zh.md assets/skills/digest/references/run-pipeline.en.md assets/skills/digest/references/run-pipeline.zh.md assets/skills/digest/references/setup-guide.en.md assets/skills/digest/references/setup-guide.zh.md
@@ -134,7 +134,7 @@ git commit -m "docs: update digest arxiv reliability guidance"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-03-30-digest-arxiv-reliability.md`
 
-- [ ] **Step 1: Run the focused script regression tests**
+- [x] **Step 1: Run the focused script regression tests**
 
 Run:
 
@@ -144,7 +144,7 @@ npm test -- tests/assets/digest-rss-arxiv-script.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 2: Run the broader digest-related test set**
+- [x] **Step 2: Run the broader digest-related test set**
 
 Run:
 
@@ -154,7 +154,7 @@ npm test -- tests/cli/utils/assets.test.ts tests/cli/utils/install-assets.test.t
 
 Expected: PASS.
 
-- [ ] **Step 3: Run typecheck**
+- [x] **Step 3: Run typecheck**
 
 Run:
 
@@ -164,7 +164,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 4: Run lint**
+- [x] **Step 4: Run lint**
 
 Run:
 
@@ -174,6 +174,6 @@ npm run lint
 
 Expected: PASS.
 
-- [ ] **Step 5: Update this plan checkbox state if execution stays close enough to the plan**
+- [x] **Step 5: Update this plan checkbox state if execution stays close enough to the plan**
 
-- [ ] **Step 6: Use `superpowers:verification-before-completion` before reporting completion**
+- [x] **Step 6: Use `superpowers:verification-before-completion` before reporting completion**

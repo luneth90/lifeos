@@ -46,8 +46,9 @@
    - 优先选择提供 RSS feed 的来源
 
 2. **arXiv 关键词**
-   - 生成 10-20 个搜索关键词（含引号短语）
-   - 匹配合适的 arXiv 类别（如 `cs.AI`、`cs.CL`、`cs.CV`、`cs.RO`）
+   - 生成 10-20 个英文搜索关键词（可含英文引号短语）
+   - 选择相对收敛的 arXiv 类别（如 `cs.AI`、`cs.CL`、`cs.CV`、`cs.RO`）
+   - digest 会先按类别抓最近论文，再用这些英文关键词在本地过滤标题和摘要
    - 非学术主题默认禁用
 
 3. **Web 搜索**
@@ -105,7 +106,7 @@ aliases: []
 
 | 关键词 | 类别 |
 |--------|------|
-| {keyword} | {categories} |
+| {english_keyword} | {categories} |
 ...
 
 ### Web 搜索
@@ -159,7 +160,7 @@ aliases: []
 
 请在 Obsidian 中打开检查：
 - 用 checkbox 关闭不需要的信息源模块
-- 增删 RSS 源、arXiv 关键词、Web 搜索目标
+- 保持 arXiv 关键词为英文，再增删 RSS 源、arXiv 行和 Web 搜索目标
 - 调整分类体系
 
 确认后，运行 `/digest {topic_name}` 即可生成第一期周报。

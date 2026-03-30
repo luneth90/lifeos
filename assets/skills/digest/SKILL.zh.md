@@ -86,7 +86,15 @@ Phase 4: 写入周报 → {草稿目录}/<TopicName>-MMDD-MMDD.md
 
 ### Python 脚本调用
 
-RSS + arXiv 抓取通过参数化 Python 脚本执行。技能先解析配置，构造 JSON 输入，通过 stdin 传入脚本：
+RSS + arXiv 抓取通过参数化 Python 脚本执行。技能先解析配置，构造 JSON 输入，通过 stdin 传入脚本。
+
+其中 arXiv 模块有三个关键约束：
+
+- arXiv 关键词必须使用英文
+- 脚本会先按类别抓最近论文，再在本地过滤
+- 若官方 arXiv 路径失败，可回退到 OpenAlex，但只保留能映射回 arXiv 的论文
+
+调用方式：
 
 ```bash
 echo '<json_input>' | python3 .agents/skills/digest/references/rss-arxiv-script.py
@@ -103,13 +111,17 @@ JSON 输入格式：
   },
   "arxiv": {
     "enabled": true,
-    "keywords": ["\"关键词\""],
+    "keywords": ["\"llm agent\""],
     "categories": ["cs.AI"],
-    "max_results": 200
+    "max_results": 200,
+    "fallback_enabled": true,
+    "require_arxiv_link": true
   },
   "days": 7
 }
 ```
+
+脚本会返回 `rss_articles`、`arxiv_papers`、`stats` 和结构化的 `errors`。
 
 ### 周报产出
 

@@ -46,6 +46,13 @@ Run enabled modules in parallel. RSS + arXiv use the Python helper; the rest use
 
 #### Task A: RSS + arXiv (Python helper)
 
+For arXiv, the helper should use this runtime contract:
+
+1. fetch recent papers from the configured arXiv categories
+2. locally filter and rank them with the configured English keywords
+3. if the official arXiv path fails, or yields zero matches, fall back to OpenAlex
+4. only keep fallback records that normalize back to arXiv links
+
 Build the JSON input and send it through stdin:
 
 ```bash
@@ -58,7 +65,14 @@ The payload should include at least:
 {
   "language": "en",
   "rss": {...},
-  "arxiv": {...},
+  "arxiv": {
+    "enabled": true,
+    "keywords": ["\"llm agent\"", "\"tool use\""],
+    "categories": ["cs.AI"],
+    "max_results": 200,
+    "fallback_enabled": true,
+    "require_arxiv_link": true
+  },
   "days": 7
 }
 ```
@@ -69,7 +83,8 @@ The script returns JSON:
 {
   "rss_articles": [...],
   "arxiv_papers": [...],
-  "stats": { "rss_count": 12, "arxiv_count": 45 }
+  "stats": { "rss_count": 12, "arxiv_count": 45 },
+  "errors": [...]
 }
 ```
 
@@ -191,7 +206,7 @@ All weekly digests generated:
 |-------|----------|
 | Python unavailable | tell the user to install Python and stop |
 | RSS feed timeout | mark that source as failed and continue |
-| arXiv API unavailable | mark the module as failed and continue |
+| arXiv API unavailable | record a structured arXiv error and try OpenAlex fallback |
 | WebSearch returns nothing | skip that query and continue |
 | config parsing fails | raise an error with the concrete problem |
 | every source fails | do not generate a digest; report the failure reasons |

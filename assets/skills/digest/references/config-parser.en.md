@@ -92,7 +92,13 @@ Table schema: `Keyword | Categories`
 }
 ```
 
+**Keyword language:** keywords must be English terms or English quoted phrases. Treat non-English
+keywords as a config error for the arXiv module.
 **Category deduplication:** combine all categories from every row and deduplicate them.  
+**Primary fetch behavior:** categories drive the official arXiv feed; keyword filtering happens
+locally against title and abstract.  
+**Fallback behavior:** when categories are missing or the official arXiv path fails, the helper may
+fall back to OpenAlex, but only keep papers that map back to arXiv.
 **max_results:** fixed at 200 and not exposed in the note.
 
 #### Web Search

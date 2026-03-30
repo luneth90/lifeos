@@ -46,8 +46,10 @@ Based on the topic and preferences, use agent capabilities to recommend sources 
    - prefer sources that expose RSS feeds
 
 2. **arXiv keywords**
-   - generate 10-20 search keywords, including quoted phrases
-   - match appropriate arXiv categories such as `cs.AI`, `cs.CL`, `cs.CV`, and `cs.RO`
+   - generate 10-20 English keywords, including quoted English phrases
+   - prefer reasonably narrow arXiv categories such as `cs.AI`, `cs.CL`, `cs.CV`, and `cs.RO`
+   - remember that digest now pulls recent arXiv papers by category first, then filters them locally
+     with the configured English keywords
    - disable by default for non-academic topics
 
 3. **Web search**
@@ -105,7 +107,7 @@ aliases: []
 
 | Keyword | Categories |
 |---------|------------|
-| {keyword} | {categories} |
+| {english_keyword} | {categories} |
 ...
 
 ### Web Search
@@ -159,7 +161,7 @@ Config note created: {system directory}/{digest subdirectory}/{topic_name}.md
 
 Ask the user to review it in Obsidian:
 - disable modules they do not want with checkboxes
-- add or remove RSS feeds, arXiv keywords, and Web search targets
+- keep arXiv keywords in English, then add or remove RSS feeds, arXiv rows, and Web search targets
 - adjust the category system
 
 After review, they can run `/digest {topic_name}` to generate the first digest.

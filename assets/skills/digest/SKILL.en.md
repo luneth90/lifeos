@@ -87,7 +87,16 @@ Phase 4: Write digest → {drafts directory}/<TopicName>-MMDD-MMDD.md
 ### Python Script Invocation
 
 RSS + arXiv fetching runs through the parameterized Python helper. Parse the config, build the JSON
-payload, and pass it through stdin:
+payload, and pass it through stdin.
+
+For arXiv specifically:
+
+- configured arXiv keywords must be English
+- the helper fetches recent category results first, then filters locally
+- if the official arXiv path fails, it may fall back to OpenAlex but only keep arXiv-mappable
+  papers
+
+Invoke it like this:
 
 ```bash
 echo '<json_input>' | python3 .agents/skills/digest/references/rss-arxiv-script.py
@@ -104,13 +113,17 @@ JSON input shape:
   },
   "arxiv": {
     "enabled": true,
-    "keywords": ["\"keyword\""],
+    "keywords": ["\"llm agent\""],
     "categories": ["cs.AI"],
-    "max_results": 200
+    "max_results": 200,
+    "fallback_enabled": true,
+    "require_arxiv_link": true
   },
   "days": 7
 }
 ```
+
+The helper returns `rss_articles`, `arxiv_papers`, `stats`, and structured `errors`.
 
 ### Digest Output
 
