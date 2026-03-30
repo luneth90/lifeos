@@ -1,203 +1,296 @@
 #!/usr/bin/env python3
 """
-/digest 技能 — RSS + arXiv 参数化抓取脚本
+/digest RSS + arXiv fetch helper.
 
-输入：通过 stdin 接收 JSON 配置
-输出：stdout 输出 JSON 结果
+Input: JSON config from stdin.
+Output: JSON result on stdout.
 
-用法：
-  echo '{"rss": {...}, "arxiv": {...}, "days": 7}' | python3 rss-arxiv-script.py
+Example:
+  echo '{"language":"en","rss":{"enabled":false},"arxiv":{"enabled":false},"days":7}' | python3 rss-arxiv-script.py
 """
 
-import subprocess, sys, json, re, os
-import urllib.request, urllib.parse
-from datetime import datetime, timezone, timedelta
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+import urllib.parse
+import urllib.request
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta, timezone
 
 
-def ensure_dependencies():
-    """确保 feedparser 和 requests 已安装"""
+MESSAGES = {
+    "zh": {
+        "untitled": "无标题",
+        "fetch_failed": "抓取失败",
+        "arxiv_batch_failed": "arXiv 批次 {index} 抓取失败",
+        "author_suffix": " 等",
+    },
+    "en": {
+        "untitled": "Untitled",
+        "fetch_failed": "Fetch failed",
+        "arxiv_batch_failed": "arXiv batch {index} failed",
+        "author_suffix": " et al.",
+    },
+}
+
+
+def normalize_language(language: str | None) -> str:
+    """Return a supported language key."""
+    return "en" if language == "en" else "zh"
+
+
+def get_messages(language: str | None) -> dict[str, str]:
+    """Return the localized message bundle."""
+    return MESSAGES[normalize_language(language)]
+
+
+def format_authors(authors: list[str], language: str | None) -> str:
+    """Format author names with a localized overflow suffix."""
+    if not authors:
+        return ""
+
+    formatted = ", ".join(authors[:3])
+    if len(authors) > 3:
+        formatted += get_messages(language)["author_suffix"]
+    return formatted
+
+
+def build_failure_title(label: str, error: Exception) -> str:
+    """Build a bracketed failure title that keeps the existing JSON contract stable."""
+    return f"[{label}: {error}]"
+
+
+def ensure_dependencies() -> None:
+    """Install feedparser and requests on demand."""
     try:
-        import feedparser, requests
+        import feedparser  # noqa: F401
+        import requests  # noqa: F401
     except ImportError:
         subprocess.run(
-            [sys.executable, "-m", "pip", "install", "feedparser", "requests",
-             "--break-system-packages", "-q"],
-            check=True
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "feedparser",
+                "requests",
+                "--break-system-packages",
+                "-q",
+            ],
+            check=True,
         )
 
 
-def fetch_rss(feeds, cutoff):
-    """抓取 RSS 订阅文章"""
-    import feedparser, requests
+def fetch_rss(feeds: list[dict[str, str]], cutoff: datetime, language: str) -> list[dict[str, str]]:
+    """Fetch RSS articles published after the cutoff."""
+    import feedparser
+    import requests
     from email.utils import parsedate_to_datetime
 
-    articles = []
+    messages = get_messages(language)
+    articles: list[dict[str, str]] = []
+
     for feed in feeds:
         url = feed["url"]
         if not url.startswith("http"):
             url = "https://" + url
 
         try:
-            resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
-            parsed = feedparser.parse(resp.content)
+            response = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+            parsed = feedparser.parse(response.content)
             for entry in parsed.entries:
-                pub = None
+                published_at = None
                 for attr in ["published", "updated"]:
                     if hasattr(entry, attr):
                         try:
-                            pub = parsedate_to_datetime(getattr(entry, attr))
+                            published_at = parsedate_to_datetime(getattr(entry, attr))
                             break
                         except Exception:
                             pass
-                if pub is None:
-                    pub = datetime.now(timezone.utc)
-                if pub.tzinfo is None:
-                    pub = pub.replace(tzinfo=timezone.utc)
-                if pub >= cutoff:
+                if published_at is None:
+                    published_at = datetime.now(timezone.utc)
+                if published_at.tzinfo is None:
+                    published_at = published_at.replace(tzinfo=timezone.utc)
+                if published_at >= cutoff:
                     summary = re.sub(r"<[^>]+>", "", getattr(entry, "summary", "") or "")[:300]
-                    articles.append({
-                        "source": feed.get("name", ""),
-                        "title": entry.get("title", "无标题"),
-                        "link": entry.get("link", ""),
-                        "published": pub.strftime("%Y-%m-%d"),
-                        "summary": summary.strip()
-                    })
-        except Exception as e:
-            articles.append({
-                "source": feed.get("name", ""),
-                "title": f"[抓取失败: {e}]",
-                "link": "", "published": "", "summary": ""
-            })
+                    articles.append(
+                        {
+                            "source": feed.get("name", ""),
+                            "title": entry.get("title", messages["untitled"]),
+                            "link": entry.get("link", ""),
+                            "published": published_at.strftime("%Y-%m-%d"),
+                            "summary": summary.strip(),
+                        }
+                    )
+        except Exception as error:
+            articles.append(
+                {
+                    "source": feed.get("name", ""),
+                    "title": build_failure_title(messages["fetch_failed"], error),
+                    "link": "",
+                    "published": "",
+                    "summary": "",
+                }
+            )
 
     return articles
 
 
-def _arxiv_query(search_query, max_results, cutoff):
-    """单次 arXiv API 查询，返回论文列表"""
-    import time
-
-    params = urllib.parse.urlencode({
-        'search_query': search_query,
-        'start': 0,
-        'max_results': max_results,
-        'sortBy': 'submittedDate',
-        'sortOrder': 'descending'
-    })
-
-    req = urllib.request.Request(
-        f"http://export.arxiv.org/api/query?{params}",
-        headers={"User-Agent": "Mozilla/5.0"}
+def arxiv_query(
+    search_query: str, max_results: int, cutoff: datetime, language: str
+) -> list[dict[str, str]]:
+    """Run a single arXiv API query and return matching papers."""
+    params = urllib.parse.urlencode(
+        {
+            "search_query": search_query,
+            "start": 0,
+            "max_results": max_results,
+            "sortBy": "submittedDate",
+            "sortOrder": "descending",
+        }
     )
-    resp = urllib.request.urlopen(req, timeout=60)
-    xml_data = resp.read()
 
-    papers = []
-    ns = {'atom': 'http://www.w3.org/2005/Atom'}
+    request = urllib.request.Request(
+        f"http://export.arxiv.org/api/query?{params}",
+        headers={"User-Agent": "Mozilla/5.0"},
+    )
+    response = urllib.request.urlopen(request, timeout=60)
+    xml_data = response.read()
+
+    papers: list[dict[str, str]] = []
+    namespaces = {"atom": "http://www.w3.org/2005/Atom"}
     root = ET.fromstring(xml_data)
 
-    for entry in root.findall('atom:entry', ns):
-        id_elem = entry.find('atom:id', ns)
-        published_elem = entry.find('atom:published', ns)
-        if id_elem is None or published_elem is None:
+    for entry in root.findall("atom:entry", namespaces):
+        identifier = entry.find("atom:id", namespaces)
+        published_elem = entry.find("atom:published", namespaces)
+        title_elem = entry.find("atom:title", namespaces)
+        summary_elem = entry.find("atom:summary", namespaces)
+        if (
+            identifier is None
+            or published_elem is None
+            or title_elem is None
+            or summary_elem is None
+            or identifier.text is None
+            or published_elem.text is None
+            or title_elem.text is None
+            or summary_elem.text is None
+        ):
             continue
-        pub_date = datetime.fromisoformat(
-            published_elem.text.replace('Z', '+00:00')
+
+        published_at = datetime.fromisoformat(published_elem.text.replace("Z", "+00:00"))
+        if published_at < cutoff:
+            continue
+
+        entry_categories = [category.get("term") or "" for category in entry.findall("atom:category", namespaces)]
+        authors = [
+            author_name.text
+            for author in entry.findall("atom:author", namespaces)
+            for author_name in [author.find("atom:name", namespaces)]
+            if author_name is not None and author_name.text is not None
+        ]
+        papers.append(
+            {
+                "title": title_elem.text.strip().replace("\n", " ").replace("  ", " "),
+                "link": identifier.text,
+                "published": published_at.strftime("%Y-%m-%d"),
+                "summary": summary_elem.text.strip()[:300].replace("\n", " "),
+                "categories": ", ".join(entry_categories[:5]),
+                "authors": format_authors(authors, language),
+            }
         )
-        if pub_date >= cutoff:
-            title = entry.find('atom:title', ns).text.strip().replace('\n', ' ').replace('  ', ' ')
-            summary = entry.find('atom:summary', ns).text.strip()[:300].replace('\n', ' ')
-            link = id_elem.text
-            entry_categories = [c.get('term') for c in entry.findall('atom:category', ns)]
-            authors = [a.find('atom:name', ns).text for a in entry.findall('atom:author', ns)]
-            papers.append({
-                "title": title,
-                "link": link,
-                "published": pub_date.strftime("%Y-%m-%d"),
-                "summary": summary,
-                "categories": ', '.join(entry_categories[:5]),
-                "authors": ', '.join(authors[:3]) + (' 等' if len(authors) > 3 else '')
-            })
 
     return papers
 
 
-def fetch_arxiv(keywords, categories, max_results, cutoff):
-    """分批查询 arXiv API，每批最多 5 个关键词，间隔 3 秒，确保不触发限流"""
+def fetch_arxiv(
+    keywords: list[str], categories: list[str], max_results: int, cutoff: datetime, language: str
+) -> list[dict[str, str]]:
+    """Fetch arXiv results in small batches to avoid rate limits."""
     import time
 
-    BATCH_SIZE = 5
-    PER_BATCH_RESULTS = max(max_results // ((len(keywords) + BATCH_SIZE - 1) // BATCH_SIZE), 30)
-    INTERVAL = 3  # arXiv 官方推荐最小间隔
+    if not keywords:
+        return []
 
-    # 构建类别过滤（所有批次共用）
-    cat_filter = ""
+    messages = get_messages(language)
+    batch_size = 5
+    per_batch_results = max(max_results // ((len(keywords) + batch_size - 1) // batch_size), 30)
+    interval_seconds = 3
+
+    category_filter = ""
     if categories:
-        cat_filter = ' OR '.join([f'cat:{cat}' for cat in categories])
+        category_filter = " OR ".join([f"cat:{category}" for category in categories])
 
-    # 按 BATCH_SIZE 分批
-    batches = [keywords[i:i + BATCH_SIZE] for i in range(0, len(keywords), BATCH_SIZE)]
+    batches = [keywords[index:index + batch_size] for index in range(0, len(keywords), batch_size)]
 
-    all_papers = []
-    seen_links = set()
+    all_papers: list[dict[str, str]] = []
+    seen_links: set[str] = set()
 
-    for idx, batch in enumerate(batches):
-        if idx > 0:
-            time.sleep(INTERVAL)
+    for batch_index, batch in enumerate(batches):
+        if batch_index > 0:
+            time.sleep(interval_seconds)
 
-        search_parts = [f'abs:{kw}' for kw in batch]
-        search_query = ' OR '.join(search_parts)
-        if cat_filter:
-            search_query = f'({search_query}) AND ({cat_filter})'
+        search_parts = [f"abs:{keyword}" for keyword in batch]
+        search_query = " OR ".join(search_parts)
+        if category_filter:
+            search_query = f"({search_query}) AND ({category_filter})"
 
         try:
-            papers = _arxiv_query(search_query, PER_BATCH_RESULTS, cutoff)
-            for p in papers:
-                if p["link"] not in seen_links:
-                    seen_links.add(p["link"])
-                    all_papers.append(p)
-        except Exception as e:
-            all_papers.append({
-                "title": f"[arXiv 批次 {idx+1} 抓取失败: {e}]",
-                "link": "", "published": "", "summary": "",
-                "categories": "", "authors": ""
-            })
+            papers = arxiv_query(search_query, per_batch_results, cutoff, language)
+            for paper in papers:
+                if paper["link"] not in seen_links:
+                    seen_links.add(paper["link"])
+                    all_papers.append(paper)
+        except Exception as error:
+            all_papers.append(
+                {
+                    "title": build_failure_title(
+                        messages["arxiv_batch_failed"].format(index=batch_index + 1), error
+                    ),
+                    "link": "",
+                    "published": "",
+                    "summary": "",
+                    "categories": "",
+                    "authors": "",
+                }
+            )
 
     return all_papers
 
 
-def main():
-    # 读取 stdin JSON 配置
+def main() -> None:
+    """Read config from stdin, run enabled fetchers, and print JSON."""
     config = json.loads(sys.stdin.read())
+    language = normalize_language(config.get("language"))
     days = config.get("days", 7)
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
-    rss_articles = []
-    arxiv_papers = []
+    rss_articles: list[dict[str, str]] = []
+    arxiv_papers: list[dict[str, str]] = []
 
-    # RSS 抓取
     rss_config = config.get("rss", {})
     if rss_config.get("enabled", False):
         ensure_dependencies()
         feeds = rss_config.get("feeds", [])
-        rss_articles = fetch_rss(feeds, cutoff)
+        rss_articles = fetch_rss(feeds, cutoff, language)
 
-    # arXiv 抓取
     arxiv_config = config.get("arxiv", {})
     if arxiv_config.get("enabled", False):
         keywords = arxiv_config.get("keywords", [])
         categories = arxiv_config.get("categories", [])
         max_results = arxiv_config.get("max_results", 100)
-        arxiv_papers = fetch_arxiv(keywords, categories, max_results, cutoff)
+        arxiv_papers = fetch_arxiv(keywords, categories, max_results, cutoff, language)
 
-    # 输出结果
     result = {
         "rss_articles": rss_articles,
         "arxiv_papers": arxiv_papers,
         "stats": {
-            "rss_count": len([a for a in rss_articles if not a["title"].startswith("[")]),
-            "arxiv_count": len([p for p in arxiv_papers if not p["title"].startswith("[")])
-        }
+            "rss_count": len([article for article in rss_articles if not article["title"].startswith("[")]),
+            "arxiv_count": len([paper for paper in arxiv_papers if not paper["title"].startswith("[")]),
+        },
     }
     print(json.dumps(result, ensure_ascii=False))
 
