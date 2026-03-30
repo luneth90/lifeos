@@ -1,10 +1,10 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { resolveConfig } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { syncVault } from '../utils/sync-vault.js';
-import { bold, green, log, parseArgs } from '../utils/ui.js';
+import { bold, green, log, parseArgs, yellow } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 
 export interface UpgradeResult {
@@ -51,6 +51,8 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 		config.language = lang;
 	}
 
+	migrateLegacyDigestDirectory(targetPath, config);
+
 	// 4. Reuse the same vault sync path as init, but in conservative upgrade mode.
 	const syncResult = await syncVault(targetPath, config, {
 		lang,
@@ -82,4 +84,27 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	log('  ', `Unchanged: ${result.unchanged.length} files`);
 
 	return result;
+}
+
+function migrateLegacyDigestDirectory(targetPath: string, config: LifeOSConfig): void {
+	const systemDir = config.directories.system;
+	const digestDir = config.subdirectories.system.digest;
+	const legacyDigestName = '信息';
+
+	if (!systemDir || !digestDir || digestDir === legacyDigestName) return;
+
+	const legacyPath = join(targetPath, systemDir, legacyDigestName);
+	if (!existsSync(legacyPath)) return;
+
+	const targetPathname = join(targetPath, systemDir, digestDir);
+	if (existsSync(targetPathname)) {
+		log(
+			yellow('⚠'),
+			`Legacy digest directory kept because target already exists: ${systemDir}/${legacyDigestName}`,
+		);
+		return;
+	}
+
+	renameSync(legacyPath, targetPathname);
+	log(green('✔'), `Migrated digest directory to ${systemDir}/${digestDir}`);
 }
