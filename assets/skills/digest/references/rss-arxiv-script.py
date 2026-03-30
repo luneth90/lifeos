@@ -33,9 +33,22 @@ CJK_RE = re.compile(r"[\u3400-\u9fff]")
 WHITESPACE_RE = re.compile(r"\s+")
 QUOTE_RE = re.compile(r'"([^"]+)"')
 SOURCE_PRIORITY = {
-    "arxiv": 2,
+    "arxiv": 4,
+    "biorxiv": 3,
+    "medrxiv": 3,
+    "chemrxiv": 3,
     "openalex": 1,
 }
+
+SOURCE_DISPLAY_NAMES = {
+    "arxiv": "arXiv",
+    "biorxiv": "bioRxiv",
+    "medrxiv": "medRxiv",
+    "chemrxiv": "ChemRxiv",
+    "openalex": "openalex",
+}
+
+SUPPORTED_PAPER_SOURCE_KEYS = {"arxiv", "biorxiv", "medrxiv", "chemrxiv"}
 
 
 MESSAGES = {
@@ -57,6 +70,163 @@ MESSAGES = {
 def normalize_language(language: str | None) -> str:
     """Return a supported language key."""
     return "en" if language == "en" else "zh"
+
+
+def normalize_source_type(source_type: str | None) -> str:
+    """Return a canonical lowercase paper source key."""
+    if not source_type:
+        return ""
+
+    normalized = normalize_whitespace(source_type).lower().replace(" ", "")
+    aliases = {
+        "arxiv": "arxiv",
+        "biorxiv": "biorxiv",
+        "medrxiv": "medrxiv",
+        "chemrxiv": "chemrxiv",
+        "openalex": "openalex",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def display_source_type(source_type: str | None) -> str:
+    """Return the canonical display name for a paper source."""
+    source_key = normalize_source_type(source_type)
+    if not source_key:
+        return ""
+    return SOURCE_DISPLAY_NAMES.get(source_key, source_key)
+
+
+def normalize_string_list(value: object) -> list[str]:
+    """Normalize a config or record field into a flat string list."""
+    if value is None:
+        return []
+
+    if isinstance(value, list):
+        items: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                cleaned = normalize_whitespace(item)
+                if cleaned:
+                    items.append(cleaned)
+            elif item is not None:
+                cleaned = normalize_whitespace(str(item))
+                if cleaned:
+                    items.append(cleaned)
+        return items
+
+    if isinstance(value, str):
+        parts = [normalize_whitespace(part) for part in value.split(",")]
+        return [part for part in parts if part]
+
+    cleaned = normalize_whitespace(str(value))
+    return [cleaned] if cleaned else []
+
+
+def normalize_published_date(value: object) -> str:
+    """Return a YYYY-MM-DD date string when possible."""
+    if value is None:
+        return ""
+
+    text = normalize_whitespace(str(value))
+    if not text:
+        return ""
+
+    try:
+        published_at = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return published_at.strftime("%Y-%m-%d")
+    except Exception:
+        match = re.search(r"\d{4}-\d{2}-\d{2}", text)
+        return match.group(0) if match else ""
+
+
+def normalize_paper_title(value: object, language: str | None) -> str:
+    """Return a stable title string for a paper record."""
+    title = normalize_whitespace(str(value)) if value is not None else ""
+    return title or get_messages(language)["untitled"]
+
+
+def normalize_paper_authors(authors: object, language: str | None) -> str:
+    """Normalize paper authors from list or string input."""
+    if isinstance(authors, list):
+        names = [normalize_whitespace(str(author)) for author in authors if normalize_whitespace(str(author))]
+        return format_authors(names, language)
+
+    if isinstance(authors, str):
+        return normalize_whitespace(authors)
+
+    if authors is None:
+        return ""
+
+    return normalize_whitespace(str(authors))
+
+
+def normalize_paper_record(
+    source_type: str,
+    record: dict,
+    scope: str,
+    language: str | None,
+) -> dict[str, str]:
+    """Normalize a source-specific record into the unified paper schema."""
+    source_key = normalize_source_type(source_type)
+    raw_link = record.get("link") or record.get("url") or record.get("doi")
+    link = normalize_whitespace(str(raw_link)) if raw_link is not None else ""
+    if source_key == "arxiv" and link:
+        normalized_link = normalize_arxiv_link(link)
+        if normalized_link is not None:
+            link = normalized_link
+    elif source_key == "openalex" and link:
+        normalized_link = normalize_arxiv_link(link)
+        if normalized_link is not None:
+            link = normalized_link
+
+    categories_value = (
+        record.get("categories")
+        or record.get("category")
+        or record.get("preprint_category")
+        or record.get("scope")
+        or scope
+        or ""
+    )
+    categories = normalize_whitespace(str(categories_value))
+    published = normalize_published_date(
+        record.get("published")
+        or record.get("published_date")
+        or record.get("preprint_date")
+        or record.get("date")
+        or record.get("publication_date")
+    )
+    summary_value = (
+        record.get("summary")
+        or record.get("abstract")
+        or record.get("preprint_abstract")
+        or record.get("description")
+        or ""
+    )
+    summary = normalize_whitespace(str(summary_value))[:300]
+    title = normalize_paper_title(
+        record.get("title")
+        or record.get("display_name")
+        or record.get("preprint_title")
+        or record.get("name"),
+        language,
+    )
+    authors = normalize_paper_authors(
+        record.get("authors") or record.get("preprint_authors") or record.get("author_names"),
+        language,
+    )
+
+    normalized_scope = normalize_whitespace(str(record.get("scope") or scope or categories))
+    return {
+        "title": title,
+        "link": link,
+        "published": published,
+        "summary": summary,
+        "categories": categories,
+        "authors": authors,
+        "source": source_key,
+        "source_type": display_source_type(source_key),
+        "scope": normalized_scope,
+    }
 
 
 def get_messages(language: str | None) -> dict[str, str]:
@@ -247,15 +417,19 @@ def parse_arxiv_feed(xml_data: bytes, cutoff: datetime, language: str) -> list[d
             if author_name is not None and author_name.text is not None
         ]
         papers.append(
-            {
-                "title": normalize_whitespace(title_elem.text),
-                "link": normalized_link,
-                "published": published_at.strftime("%Y-%m-%d"),
-                "summary": normalize_whitespace(summary_elem.text)[:300],
-                "categories": ", ".join(entry_categories[:5]),
-                "authors": format_authors(authors, language),
-                "source": "arxiv",
-            }
+            normalize_paper_record(
+                "arXiv",
+                {
+                    "title": normalize_whitespace(title_elem.text),
+                    "link": normalized_link,
+                    "published": published_at.strftime("%Y-%m-%d"),
+                    "summary": normalize_whitespace(summary_elem.text)[:300],
+                    "categories": ", ".join(entry_categories[:5]),
+                    "authors": authors,
+                },
+                ", ".join(entry_categories[:5]),
+                language,
+            )
         )
 
     return papers
@@ -390,15 +564,19 @@ def parse_openalex_results(
                         break
 
         papers.append(
-            {
-                "title": normalize_whitespace(str(title)),
-                "link": normalized_link or "",
-                "published": published_at.strftime("%Y-%m-%d"),
-                "summary": extract_openalex_abstract(work),
-                "categories": category,
-                "authors": format_authors(author_names, language),
-                "source": "openalex",
-            }
+            normalize_paper_record(
+                "openalex",
+                {
+                    "title": normalize_whitespace(str(title)),
+                    "link": normalized_link or "",
+                    "published": published_at.strftime("%Y-%m-%d"),
+                    "summary": extract_openalex_abstract(work),
+                    "categories": category,
+                    "authors": author_names,
+                },
+                category,
+                language,
+            )
         )
 
     return papers
@@ -475,6 +653,7 @@ def rank_papers(papers: list[dict[str, str]], expressions: list[list[str]]) -> l
 
 def strip_internal_fields(paper: dict[str, str]) -> dict[str, str]:
     """Remove helper-only fields before returning JSON."""
+    source = paper.get("source", "")
     return {
         "title": paper.get("title", ""),
         "link": paper.get("link", ""),
@@ -482,7 +661,9 @@ def strip_internal_fields(paper: dict[str, str]) -> dict[str, str]:
         "summary": paper.get("summary", ""),
         "categories": paper.get("categories", ""),
         "authors": paper.get("authors", ""),
-        "source": paper.get("source", ""),
+        "source": source,
+        "source_type": paper.get("source_type", "") or display_source_type(source),
+        "scope": paper.get("scope", "") or paper.get("categories", ""),
     }
 
 
@@ -553,39 +734,239 @@ def fetch_openalex_works(query: str, cutoff: datetime, max_results: int) -> dict
         return json.loads(response.read().decode("utf-8"))
 
 
-def fetch_arxiv(
-    keywords: list[str], categories: list[str], max_results: int, cutoff: datetime, language: str
-) -> list[dict[str, str]]:
-    """Backward-compatible wrapper that returns only paper rows."""
-    return collect_arxiv_papers(
-        keywords=keywords,
-        categories=categories,
-        max_results=max_results,
-        cutoff=cutoff,
-        language=language,
-    )["papers"]
+def normalize_paper_sources(config: dict) -> list[dict[str, object]]:
+    """Normalize legacy and phase-1 paper source config into runtime entries."""
+    sources: list[dict[str, object]] = []
+
+    paper_sources = config.get("paper_sources")
+    if isinstance(paper_sources, list):
+        for row in paper_sources:
+            if not isinstance(row, dict):
+                continue
+
+            source_key = normalize_source_type(row.get("source_type"))
+            if not source_key:
+                continue
+
+            enabled_value = row.get("enabled")
+            sources.append(
+                {
+                    "enabled": bool(enabled_value) if enabled_value is not None else True,
+                    "source_type": display_source_type(source_key),
+                    "queries": normalize_string_list(row.get("queries") or row.get("query") or row.get("keywords")),
+                    "scope": normalize_whitespace(str(row.get("scope") or row.get("categories") or "")),
+                    "notes": normalize_whitespace(str(row.get("notes") or "")),
+                    "max_results": int(row.get("max_results", 200)) if row.get("max_results") is not None else 200,
+                    "fallback_enabled": bool(row.get("fallback_enabled", True)),
+                    "require_arxiv_link": bool(row.get("require_arxiv_link", True)),
+                }
+            )
+
+    arxiv_config = config.get("arxiv")
+    if isinstance(arxiv_config, dict) and arxiv_config.get("enabled", False):
+        sources.append(
+            {
+                "enabled": True,
+                "source_type": "arXiv",
+                "queries": normalize_string_list(arxiv_config.get("keywords")),
+                "scope": ", ".join(normalize_string_list(arxiv_config.get("categories"))),
+                "notes": "",
+                "max_results": int(arxiv_config.get("max_results", 200)),
+                "fallback_enabled": bool(arxiv_config.get("fallback_enabled", True)),
+                "require_arxiv_link": bool(arxiv_config.get("require_arxiv_link", True)),
+            }
+        )
+
+    return sources
 
 
-def collect_arxiv_papers(
-    keywords: list[str],
-    categories: list[str],
-    max_results: int,
+def parse_biorxiv_results(
+    payload: dict,
     cutoff: datetime,
     language: str,
-    fallback_enabled: bool = True,
-    require_arxiv_link: bool = True,
+    source_type: str,
+    scope: str,
+) -> list[dict[str, str]]:
+    """Parse bioRxiv/medRxiv API payloads into unified paper records."""
+    papers: list[dict[str, str]] = []
+    collection = payload.get("collection")
+    if not isinstance(collection, list):
+        return papers
+
+    for item in collection:
+        if not isinstance(item, dict):
+            continue
+
+        published = normalize_published_date(item.get("preprint_date") or item.get("published_date"))
+        if not published:
+            continue
+
+        published_at = datetime.fromisoformat(f"{published}T00:00:00+00:00")
+        if published_at < cutoff:
+            continue
+
+        category = normalize_whitespace(str(item.get("preprint_category") or item.get("category") or ""))
+        if scope:
+            scope_terms = normalize_string_list(scope)
+            if scope_terms and not any(term.lower() in category.lower() for term in scope_terms):
+                continue
+
+        doi = item.get("biorxiv_doi") or item.get("doi")
+        link = ""
+        if isinstance(doi, str) and doi:
+            link = f"https://doi.org/{normalize_whitespace(doi)}"
+
+        papers.append(
+            normalize_paper_record(
+                source_type,
+                {
+                    "title": item.get("preprint_title") or item.get("title"),
+                    "link": link,
+                    "published": published,
+                    "summary": item.get("preprint_abstract") or item.get("abstract"),
+                    "authors": item.get("preprint_authors") or item.get("authors"),
+                    "categories": category,
+                },
+                scope or category,
+                language,
+            )
+        )
+
+    return papers
+
+
+def parse_chemrxiv_results(
+    payload: object,
+    cutoff: datetime,
+    language: str,
+    scope: str,
+) -> list[dict[str, str]]:
+    """Parse ChemRxiv adapter payloads into unified paper records."""
+    papers: list[dict[str, str]] = []
+    if isinstance(payload, dict):
+        records = payload.get("results") or payload.get("collection") or payload.get("items")
+    else:
+        records = payload
+
+    if not isinstance(records, list):
+        return papers
+
+    for item in records:
+        if not isinstance(item, dict):
+            continue
+
+        published = normalize_published_date(item.get("published") or item.get("published_date") or item.get("date"))
+        if not published:
+            continue
+
+        published_at = datetime.fromisoformat(f"{published}T00:00:00+00:00")
+        if published_at < cutoff:
+            continue
+
+        category = normalize_whitespace(str(item.get("categories") or item.get("category") or scope or ""))
+        if scope:
+            scope_terms = normalize_string_list(scope)
+            if scope_terms and not any(term.lower() in category.lower() for term in scope_terms):
+                continue
+
+        papers.append(
+            normalize_paper_record(
+                "ChemRxiv",
+                {
+                    "title": item.get("title") or item.get("display_name"),
+                    "link": item.get("link") or item.get("url") or item.get("doi"),
+                    "published": published,
+                    "summary": item.get("summary") or item.get("abstract") or item.get("description"),
+                    "authors": item.get("authors") or item.get("author_names"),
+                    "categories": category,
+                },
+                scope or category,
+                language,
+            )
+        )
+
+    return papers
+
+
+def fetch_biorxiv_pubs(server: str, cutoff: datetime) -> dict:
+    """Fetch bioRxiv/medRxiv published preprints for a date window."""
+    interval = f"{cutoff.date().isoformat()}/{datetime.now(timezone.utc).date().isoformat()}"
+    request = urllib.request.Request(
+        f"https://api.biorxiv.org/pubs/{server}/{interval}/0/json",
+        headers=REQUEST_HEADERS,
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def fetch_chemrxiv_results(source: dict, cutoff: datetime) -> object:
+    """Fetch ChemRxiv results.
+
+    Phase 1 keeps this as a thin adapter boundary so tests and future transports can inject
+    deterministic payloads without depending on unstable site markup.
+    """
+    raise NotImplementedError("ChemRxiv transport is adapter-only in phase 1")
+
+
+def collect_biorxiv_like_source(
+    source: dict[str, object],
+    cutoff: datetime,
+    language: str,
+    source_key: str,
+    server: str,
+) -> dict[str, list[dict[str, str]]]:
+    """Collect bioRxiv/medRxiv papers using the official API."""
+    queries = [query for query in normalize_string_list(source.get("queries")) if query]
+    if any(keyword_contains_non_english(query) for query in queries):
+        return {
+            "papers": [],
+            "errors": [build_error(source_key, "config", f"{display_source_type(source_key)} keywords must be English")],
+        }
+
+    expressions = compile_keyword_expressions(queries)
+    if not expressions:
+        return {
+            "papers": [],
+            "errors": [],
+        }
+
+    try:
+        payload = fetch_biorxiv_pubs(server, cutoff)
+        candidates = parse_biorxiv_results(payload, cutoff, language, source_key, str(source.get("scope", "")))
+        ranked = rank_papers(candidates, expressions)
+        max_results = int(source.get("max_results", 200))
+        return {
+            "papers": deduplicate_papers(ranked)[:max_results],
+            "errors": [],
+        }
+    except Exception as error:
+        return {
+            "papers": [],
+            "errors": [build_error(source_key, "adapter", str(error))],
+        }
+
+
+def collect_arxiv_source(
+    source: dict[str, object],
+    cutoff: datetime,
+    language: str,
 ) -> dict[str, list[dict[str, str]]]:
     """Collect arXiv papers using official feeds first and OpenAlex fallback second."""
     import time
 
-    cleaned_keywords = [normalize_whitespace(keyword) for keyword in keywords if normalize_whitespace(keyword)]
-    if any(keyword_contains_non_english(keyword) for keyword in cleaned_keywords):
+    queries = [query for query in normalize_string_list(source.get("queries")) if query]
+    categories = [category for category in normalize_string_list(source.get("scope")) if category]
+    max_results = int(source.get("max_results", 200))
+    fallback_enabled = bool(source.get("fallback_enabled", True))
+    require_arxiv_link = bool(source.get("require_arxiv_link", True))
+
+    if any(keyword_contains_non_english(keyword) for keyword in queries):
         return {
             "papers": [],
             "errors": [build_error("arxiv", "config", "arXiv keywords must be English")],
         }
 
-    expressions = compile_keyword_expressions(cleaned_keywords)
+    expressions = compile_keyword_expressions(queries)
     if not expressions:
         return {
             "papers": [],
@@ -594,11 +975,10 @@ def collect_arxiv_papers(
 
     errors: list[dict[str, str]] = []
     primary_candidates: list[dict[str, str]] = []
-    normalized_categories = [normalize_whitespace(category) for category in categories if normalize_whitespace(category)]
     per_category_results = max(50, min(100, max_results))
 
-    if normalized_categories:
-        for index, category in enumerate(dict.fromkeys(normalized_categories)):
+    if categories:
+        for index, category in enumerate(dict.fromkeys(categories)):
             if index > 0:
                 time.sleep(ARXIV_REQUEST_INTERVAL_SECONDS)
             try:
@@ -622,7 +1002,7 @@ def collect_arxiv_papers(
         }
 
     try:
-        openalex_payload = fetch_openalex_works(build_openalex_query(cleaned_keywords), cutoff, max_results)
+        openalex_payload = fetch_openalex_works(build_openalex_query(queries), cutoff, max_results)
         fallback_candidates = parse_openalex_results(
             openalex_payload,
             cutoff,
@@ -642,6 +1022,146 @@ def collect_arxiv_papers(
         }
 
 
+def collect_biorxiv_source(
+    source: dict[str, object],
+    cutoff: datetime,
+    language: str,
+) -> dict[str, list[dict[str, str]]]:
+    """Collect bioRxiv papers."""
+    return collect_biorxiv_like_source(source, cutoff, language, "biorxiv", "bioRxiv")
+
+
+def collect_medrxiv_source(
+    source: dict[str, object],
+    cutoff: datetime,
+    language: str,
+) -> dict[str, list[dict[str, str]]]:
+    """Collect medRxiv papers."""
+    return collect_biorxiv_like_source(source, cutoff, language, "medrxiv", "medRxiv")
+
+
+def collect_chemrxiv_source(
+    source: dict[str, object],
+    cutoff: datetime,
+    language: str,
+) -> dict[str, list[dict[str, str]]]:
+    """Collect ChemRxiv papers through the adapter boundary."""
+    queries = [query for query in normalize_string_list(source.get("queries")) if query]
+    if any(keyword_contains_non_english(query) for query in queries):
+        return {
+            "papers": [],
+            "errors": [build_error("chemrxiv", "config", "ChemRxiv keywords must be English")],
+        }
+
+    expressions = compile_keyword_expressions(queries)
+    if not expressions:
+        return {
+            "papers": [],
+            "errors": [],
+        }
+
+    try:
+        payload = fetch_chemrxiv_results(source, cutoff)
+        candidates = parse_chemrxiv_results(payload, cutoff, language, str(source.get("scope", "")))
+        ranked = rank_papers(candidates, expressions)
+        max_results = int(source.get("max_results", 200))
+        return {
+            "papers": deduplicate_papers(ranked)[:max_results],
+            "errors": [],
+        }
+    except Exception as error:
+        return {
+            "papers": [],
+            "errors": [build_error("chemrxiv", "adapter", str(error))],
+        }
+
+
+def collect_papers(
+    paper_sources: list[dict[str, object]],
+    cutoff: datetime,
+    language: str,
+    max_results: int = 200,
+) -> dict[str, list[dict[str, str]]]:
+    """Collect papers across multiple explicit source adapters."""
+    papers: list[dict[str, str]] = []
+    errors: list[dict[str, str]] = []
+
+    for source in paper_sources:
+        if not isinstance(source, dict):
+            continue
+        if not source.get("enabled", True):
+            continue
+
+        source_key = normalize_source_type(str(source.get("source_type") or ""))
+        try:
+            if source_key == "arxiv":
+                result = collect_arxiv_source(source, cutoff, language)
+            elif source_key == "biorxiv":
+                result = collect_biorxiv_source(source, cutoff, language)
+            elif source_key == "medrxiv":
+                result = collect_medrxiv_source(source, cutoff, language)
+            elif source_key == "chemrxiv":
+                result = collect_chemrxiv_source(source, cutoff, language)
+            else:
+                errors.append(
+                    build_error(
+                        source_key or "papers",
+                        "config",
+                        f"Unsupported paper source type: {source.get('source_type')}",
+                    )
+                )
+                continue
+        except Exception as error:
+            errors.append(build_error(source_key or "papers", "adapter", str(error)))
+            continue
+
+        papers.extend(result["papers"])
+        errors.extend(result["errors"])
+
+    return {
+        "papers": deduplicate_papers(papers)[:max_results],
+        "errors": errors,
+    }
+
+
+def fetch_arxiv(
+    keywords: list[str], categories: list[str], max_results: int, cutoff: datetime, language: str
+) -> list[dict[str, str]]:
+    """Backward-compatible wrapper that returns only paper rows."""
+    return collect_arxiv_papers(
+        keywords=keywords,
+        categories=categories,
+        max_results=max_results,
+        cutoff=cutoff,
+        language=language,
+    )["papers"]
+
+
+def collect_arxiv_papers(
+    keywords: list[str],
+    categories: list[str],
+    max_results: int,
+    cutoff: datetime,
+    language: str,
+    fallback_enabled: bool = True,
+    require_arxiv_link: bool = True,
+) -> dict[str, list[dict[str, str]]]:
+    """Backward-compatible wrapper around the generic papers collector."""
+    paper_sources = normalize_paper_sources(
+        {
+            "arxiv": {
+                "enabled": True,
+                "keywords": keywords,
+                "categories": categories,
+                "max_results": max_results,
+                "fallback_enabled": fallback_enabled,
+                "require_arxiv_link": require_arxiv_link,
+            }
+        }
+    )
+    return collect_papers(paper_sources, cutoff, language, max_results)
+
+
 def main() -> None:
     """Read config from stdin, run enabled fetchers, and print JSON."""
     config = json.loads(sys.stdin.read())
@@ -659,24 +1179,11 @@ def main() -> None:
         feeds = rss_config.get("feeds", [])
         rss_articles = fetch_rss(feeds, cutoff, language)
 
-    arxiv_config = config.get("arxiv", {})
-    if arxiv_config.get("enabled", False):
-        keywords = arxiv_config.get("keywords", [])
-        categories = arxiv_config.get("categories", [])
-        max_results = arxiv_config.get("max_results", 100)
-        fallback_enabled = arxiv_config.get("fallback_enabled", True)
-        require_arxiv_link = arxiv_config.get("require_arxiv_link", True)
-        arxiv_result = collect_arxiv_papers(
-            keywords=keywords,
-            categories=categories,
-            max_results=max_results,
-            cutoff=cutoff,
-            language=language,
-            fallback_enabled=fallback_enabled,
-            require_arxiv_link=require_arxiv_link,
-        )
-        arxiv_papers = arxiv_result["papers"]
-        errors.extend(arxiv_result["errors"])
+    paper_sources = normalize_paper_sources(config)
+    if paper_sources:
+        paper_result = collect_papers(paper_sources, cutoff, language, 200)
+        arxiv_papers = paper_result["papers"]
+        errors.extend(paper_result["errors"])
 
     result = {
         "rss_articles": rss_articles,
