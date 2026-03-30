@@ -20,7 +20,7 @@ Session bridges and active-document context persist, so agents do not depend onl
 
 #### Project-scoped and skill-bound
 
-The memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, and `archive`, and keeps accumulating preferences, decisions, and context.
+The memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, `digest`, and `archive`, and keeps accumulating preferences, decisions, and context.
 
 #### More controllable than global memory
 
@@ -38,13 +38,14 @@ LifeOS provides a set of Agent skills designed around the learning process, conn
 
 - `/today`, `/brainstorm`, `/ask`: organize the day's focus, clarify questions, and quickly expand ideas
 - `/project`, `/research`, `/knowledge`: turn a topic into a project, a research report, and structured knowledge notes
+- `/digest`: subscribe to topic updates and generate structured weekly digests from paper sources, RSS, and web search
 - `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to periodic archiving
 
 ## Core Components
 
 - **Memory system** — Project-scoped and skill-bound, providing vault indexing, session memory, and context assembly for AI agents
 - **CLI scaffold** — install globally, then use `lifeos init` to bootstrap a complete workspace
-- **Skill system** — 9 Agent skills covering diary, projects, research, knowledge curation, review, and more
+- **Skill system** — 10 Agent skills covering daily planning, projects, research, weekly digests, knowledge curation, review, and more
 - **Templates + Schema** — 8 structured templates + Frontmatter schema for consistent notes
 
 ## Quick Start
@@ -59,7 +60,7 @@ Before starting, make sure Obsidian and at least one of Claude Code TUI / Codex 
 |---|---|---|
 | **Node.js 18+** | Required | Runtime for MCP server and CLI |
 | **Git** | Required | Version control for vault data, including the memory DB |
-| **Python 3** | Required | PDF extraction (`/read-pdf` skill) |
+| **Python 3** | Required | PDF extraction (`/read-pdf`) and digest fetch helpers (`/digest`) |
 
 `lifeos init` checks all prerequisites before creating the workspace.
 
@@ -105,7 +106,7 @@ Creates a complete LifeOS workspace:
 - 10 top-level directories plus nested subdirectories
 - 8 Markdown templates
 - Frontmatter schema
-- 9 AI skills with language-aware assets
+- 10 AI skills with language-aware assets
 - `CLAUDE.md` agent behavior spec
 - `lifeos.yaml` config
 - Git init plus `.gitignore`
@@ -143,6 +144,7 @@ This means LifeOS does not lock you into fixed directory names. You can freely a
 | `/today` | Morning planning: review yesterday, plan today |
 | `/project` | Idea -> structured project |
 | `/research` | Topic -> deep research report |
+| `/digest` | Topic subscription -> structured weekly digest |
 | `/knowledge` | Book/paper -> knowledge note |
 | `/revise` | Generate quizzes, grade, and track mastery |
 | `/read-pdf` | PDF -> structured notes |
@@ -181,6 +183,7 @@ Create a `.md` file in your vault's Prompts directory (`{system directory}/Promp
 - ✅ The CLI supports directory customization
 - ✅ The CLI `upgrade` command supports smart updates
 - ✅ Agent TUI has been tested on macOS
+- ✅ The `/digest` skill supports multilingual weekly digests with multi-source paper fetching
 - ☐ Improve memory-system precision
 - ☐ Support custom skills
 - ☐ Support custom workflows
