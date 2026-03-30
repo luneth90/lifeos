@@ -2,7 +2,10 @@ import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'no
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import initCommand from '../../src/cli/commands/init.js';
-import doctorCommand from '../../src/cli/commands/doctor.js';
+import doctorCommand, {
+	MIN_NODE_VERSION,
+	isNodeVersionSupported,
+} from '../../src/cli/commands/doctor.js';
 
 function makeTmpDir() {
 	const dir = mkdtempSync(join(tmpdir(), 'lifeos-doctor-'));
@@ -129,9 +132,19 @@ describe('lifeos doctor', () => {
 		try {
 			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
 			const result = await doctorCommand([dir]);
-			expect(result.checks.some((c) => c.name === 'Node.js >= 18')).toBe(true);
+			expect(result.checks.some((c) => c.name === `Node.js >= ${MIN_NODE_VERSION}`)).toBe(
+				true,
+			);
 		} finally {
 			cleanup();
 		}
+	});
+
+	test('Node.js version helper enforces the full minimum version', () => {
+		expect(isNodeVersionSupported('v24.14.1')).toBe(true);
+		expect(isNodeVersionSupported('v24.14.0')).toBe(false);
+		expect(isNodeVersionSupported('v24.15.0')).toBe(true);
+		expect(isNodeVersionSupported('v25.0.0')).toBe(true);
+		expect(isNodeVersionSupported('v23.99.99')).toBe(false);
 	});
 });

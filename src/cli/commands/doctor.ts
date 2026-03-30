@@ -7,9 +7,37 @@ import { assetsDir } from '../utils/assets.js';
 import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 
+export const MIN_NODE_VERSION = '24.14.1';
+
 export interface DoctorResult {
 	passed: boolean;
 	checks: Array<{ name: string; status: 'pass' | 'warn' | 'fail'; detail?: string }>;
+}
+
+function parseNodeVersion(version: string): [major: number, minor: number, patch: number] | null {
+	const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version);
+	if (!match) return null;
+	return [
+		Number.parseInt(match[1], 10),
+		Number.parseInt(match[2], 10),
+		Number.parseInt(match[3], 10),
+	];
+}
+
+export function isNodeVersionSupported(
+	version: string,
+	minimumVersion = MIN_NODE_VERSION,
+): boolean {
+	const actual = parseNodeVersion(version);
+	const minimum = parseNodeVersion(minimumVersion);
+	if (!actual || !minimum) return false;
+
+	for (let index = 0; index < minimum.length; index += 1) {
+		if (actual[index] > minimum[index]) return true;
+		if (actual[index] < minimum[index]) return false;
+	}
+
+	return true;
 }
 
 export default async function doctor(args: string[]): Promise<DoctorResult> {
@@ -124,8 +152,11 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	check('AGENTS.md', agentsExists ? 'pass' : 'warn', agentsExists ? undefined : 'missing');
 
 	// 8. Node.js version
-	const nodeVersion = Number.parseInt(process.version.slice(1), 10);
-	check('Node.js >= 18', nodeVersion >= 18 ? 'pass' : 'warn', process.version);
+	check(
+		`Node.js >= ${MIN_NODE_VERSION}`,
+		isNodeVersionSupported(process.version) ? 'pass' : 'warn',
+		process.version,
+	);
 
 	// 9. Version check
 	const installedVersion = resolvedConfig.installed_versions?.assets;

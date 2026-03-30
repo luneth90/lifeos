@@ -26,7 +26,7 @@ lifeos init tmp/test-auto --no-mcp
 - locale 以 `zh` 开头 → 创建中文 vault
 - 其他（含 `en-US`、`en-GB` 等） → 创建英文 vault
 
-> **跨平台：** `Intl` API 在 macOS/Linux/Windows 的 Node.js 18+ 上均可用，读取操作系统的区域设置。
+> **跨平台：** `Intl` API 在 macOS/Linux/Windows 的 Node.js 24.14.1+（LTS）上均可用，读取操作系统的区域设置。
 
 **验证：**
 ```bash
@@ -60,7 +60,6 @@ lifeos init tmp/test-zh --lang zh --no-mcp
 - [ ] 技能文件已复制到 `.agents/skills/`（9 个技能目录）
 - [ ] `CLAUDE.md` 已复制到根目录
 - [ ] `AGENTS.md` 已复制到根目录
-- [ ] `.git` 和 `.gitignore` 已创建
 
 ```bash
 cat tmp/test-zh/lifeos.yaml                    # 确认嵌套 subdirectories

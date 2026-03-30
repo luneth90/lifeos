@@ -61,15 +61,6 @@ function checkPrerequisites(): { results: PrereqResult[]; pythonCmd: string | nu
 		hint: 'https://nodejs.org/',
 	});
 
-	// Git
-	const gitVer = checkCommand('git');
-	results.push({
-		name: 'Git',
-		ok: gitVer !== null,
-		version: gitVer ?? undefined,
-		hint: 'https://git-scm.com/',
-	});
-
 	// Python 3
 	const py = findPython();
 	pythonCmd = py?.cmd ?? null;

@@ -26,7 +26,7 @@ lifeos init tmp/test-auto --no-mcp
 - Locale starts with `zh` → creates Chinese vault
 - Others (including `en-US`, `en-GB`, etc.) → creates English vault
 
-> **Cross-platform:** The `Intl` API is available on Node.js 18+ across macOS/Linux/Windows, reading the OS locale settings.
+> **Cross-platform:** The `Intl` API is available on Node.js 24.14.1+ (LTS) across macOS/Linux/Windows, reading the OS locale settings.
 
 **Verify:**
 ```bash
@@ -60,7 +60,6 @@ lifeos init tmp/test-zh --lang zh --no-mcp
 - [ ] Skill files copied to `.agents/skills/` (9 skill directories)
 - [ ] `CLAUDE.md` copied to root
 - [ ] `AGENTS.md` copied to root
-- [ ] `.git` and `.gitignore` created
 
 ```bash
 cat tmp/test-zh/lifeos.yaml                    # Confirm nested subdirectories

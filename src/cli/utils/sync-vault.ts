@@ -1,5 +1,4 @@
-import { execSync } from 'node:child_process';
-import { copyFileSync, existsSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EN_REFLECTION_SUBS, ZH_REFLECTION_SUBS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
@@ -15,15 +14,6 @@ import {
 import { cloneManagedAssets } from './managed-assets.js';
 import type { MergeMode } from './mcp-register.js';
 import { registerMcp } from './mcp-register.js';
-
-const GITIGNORE = `# LifeOS
-*.db-wal
-*.db-shm
-
-# Obsidian
-.obsidian/workspace*.json
-.obsidian/cache
-`;
 
 const isWindows = process.platform === 'win32';
 
@@ -85,8 +75,6 @@ export async function syncVault(
 
 	ensureClaudeSkillsLink(targetPath);
 	ensureRulesFiles(targetPath, options.lang, options.rulesMode);
-	ensureGitRepository(targetPath);
-	ensureGitignore(targetPath);
 
 	if (options.ensureMcp) {
 		await registerMcp(targetPath, options.mcpMode);
@@ -158,20 +146,4 @@ function ensureRulesFiles(
 	if (mode === 'overwrite' || !existsSync(agentsPath)) {
 		copyFileSync(rulesSrc, agentsPath);
 	}
-}
-
-function ensureGitRepository(targetPath: string): void {
-	if (existsSync(join(targetPath, '.git'))) return;
-
-	try {
-		execSync('git init', { cwd: targetPath, stdio: 'ignore' });
-	} catch {
-		// git not available — skip silently
-	}
-}
-
-function ensureGitignore(targetPath: string): void {
-	const gitignorePath = join(targetPath, '.gitignore');
-	if (existsSync(gitignorePath)) return;
-	writeFileSync(gitignorePath, GITIGNORE, 'utf-8');
 }

@@ -190,21 +190,17 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(content.length).toBeGreaterThan(0);
 	});
 
-	test('creates .gitignore', async () => {
+	test('does not create .gitignore', async () => {
 		await init([dir, '--lang', lang, '--no-mcp']);
 
 		const gitignorePath = join(dir, '.gitignore');
-		expect(existsSync(gitignorePath)).toBe(true);
-
-		const content = readFileSync(gitignorePath, 'utf-8');
-		expect(content).toContain('*.db');
-		expect(content).toContain('.obsidian/workspace*.json');
+		expect(existsSync(gitignorePath)).toBe(false);
 	});
 
-	test('initializes git repository', async () => {
+	test('does not initialize a git repository', async () => {
 		await init([dir, '--lang', lang, '--no-mcp']);
 
-		expect(existsSync(join(dir, '.git'))).toBe(true);
+		expect(existsSync(join(dir, '.git'))).toBe(false);
 	});
 });
 

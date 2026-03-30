@@ -5,7 +5,7 @@
 
 ## 前置条件
 
-- Node.js 18+
+- Node.js 24.14.1+（LTS）
 - Claude Code CLI 已安装（`claude` 命令可用）
 - LifeOS 项目源码已 clone
 
@@ -44,7 +44,8 @@ lifeos init tmp/lifeos-manual-test --lang zh
 - 模板、规范、提示词、技能文件已复制
 - `.claude/skills` → `.agents/skills` 符号链接已创建
 - `.mcp.json`、`.codex/config.toml`、`opencode.json` 已注册
-- Git 仓库已初始化
+
+如需 Git 版本控制，请在初始化完成后自行执行。
 
 **验证：**
 ```bash

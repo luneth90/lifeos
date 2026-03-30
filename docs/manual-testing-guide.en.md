@@ -5,7 +5,7 @@
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 24.14.1+ (LTS)
 - Claude Code CLI installed (`claude` command available)
 - LifeOS project source cloned
 
@@ -44,7 +44,8 @@ lifeos init tmp/lifeos-manual-test --lang en
 - Templates, schema, prompts, and skill files copied
 - `.claude/skills` → `.agents/skills` symlink created
 - `.mcp.json`, `.codex/config.toml`, `opencode.json` registered
-- Git repository initialized
+
+If you want Git version control, initialize it yourself after setup.
 
 **Verify:**
 ```bash

@@ -50,16 +50,15 @@ LifeOS provides a set of Agent skills designed around the learning process, conn
 
 ## Quick Start
 
-At the moment, only Claude Code TUI / Codex TUI / OpenCode TUI on macOS have been confirmed to work properly. GUI desktop apps and Windows environments have not been validated or tested yet, so they may not be supported in practice.
+LifeOS has been verified to work properly with Claude Code TUI / Codex TUI / OpenCode TUI on macOS, and with OpenCode GUI on Windows. Other desktop GUI apps or platform/client combinations have not been validated yet and may require additional testing.
 
 ### Prerequisites
 
-Before starting, make sure Obsidian and at least one of Claude Code TUI / Codex TUI / OpenCode TUI are installed locally.
+Before starting, make sure Obsidian and at least one of Claude Code TUI / Codex TUI / OpenCode TUI / OpenCode GUI are installed locally.
 
 | Dependency | Required | Purpose |
 |---|---|---|
-| **Node.js 18+** | Required | Runtime for MCP server and CLI |
-| **Git** | Required | Version control for vault data, including the memory DB |
+| **Node.js 24.14.1+ (LTS)** | Required | Runtime for MCP server and CLI |
 | **Python 3** | Required | PDF extraction (`/read-pdf`) and digest fetch helpers (`/digest`) |
 
 `lifeos init` checks all prerequisites before creating the workspace.
@@ -88,6 +87,8 @@ After init, MCP server configs are automatically registered for:
 
 Launch any of these tools in the vault directory to use all skills.
 
+If you want version control for the vault, initialize and manage Git yourself. LifeOS does not create or manage Git metadata for you.
+
 ## CLI Commands
 
 ```bash
@@ -109,7 +110,6 @@ Creates a complete LifeOS workspace:
 - 10 AI skills with language-aware assets
 - `CLAUDE.md` agent behavior spec
 - `lifeos.yaml` config
-- Git init plus `.gitignore`
 - MCP server registration (Claude Code / Codex / OpenCode)
 
 ### upgrade
@@ -117,7 +117,7 @@ Creates a complete LifeOS workspace:
 Upgrades and re-syncs an initialized vault:
 
 - **Smart merge**: update unmodified templates, schema files, built-in prompts, and skill files; skip modified ones with a warning
-- **Restore missing scaffold**: bring back missing directories and managed files such as the memory directory, `.claude/skills`, `CLAUDE.md`, `AGENTS.md`, `.gitignore`, `.git`, and MCP config entries
+- **Restore missing scaffold**: bring back missing directories and managed files such as the memory directory, `.claude/skills`, `CLAUDE.md`, `AGENTS.md`, and MCP config entries
 - **Preserve user changes**: built-in files already customized by the user are not force-overwritten
 - **`--override` force-refreshes resources**: overwrite templates, schema, prompts, skills, `CLAUDE.md`, `AGENTS.md`, and MCP config entries without deleting user notes, resources, `memory.db`, memory-system data, or custom directory/memory settings in `lifeos.yaml`
 
@@ -171,7 +171,7 @@ Create a `.md` file in your vault's Prompts directory (`{system directory}/Promp
 
 ## Tech Stack
 
-- **Runtime:** TypeScript + Node.js 18+
+- **Runtime:** TypeScript + Node.js 24.14.1+ (LTS)
 - **Database:** SQLite + FTS5 (full-text search)
 - **Segmentation:** @node-rs/jieba (Chinese tokenization)
 - **Protocol:** MCP (Model Context Protocol)
@@ -182,7 +182,7 @@ Create a `.md` file in your vault's Prompts directory (`{system directory}/Promp
 - ✅ LifeOS 1.0 is now basically usable
 - ✅ The CLI supports directory customization
 - ✅ The CLI `upgrade` command supports smart updates
-- ✅ Agent TUI has been tested on macOS
+- ✅ Claude Code TUI / Codex TUI / OpenCode TUI on macOS and OpenCode GUI on Windows have been tested
 - ✅ The `/digest` skill supports multilingual weekly digests with multi-source paper fetching
 - ☐ Improve memory-system precision
 - ☐ Support custom skills

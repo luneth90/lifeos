@@ -464,7 +464,6 @@ describe('lifeos upgrade', () => {
 		rmSync(join(dir, '.claude'), { recursive: true, force: true });
 		rmSync(join(dir, 'CLAUDE.md'), { force: true });
 		rmSync(join(dir, 'AGENTS.md'), { force: true });
-		rmSync(join(dir, '.gitignore'), { force: true });
 
 		await upgrade([dir]);
 
@@ -473,16 +472,17 @@ describe('lifeos upgrade', () => {
 		expect(existsSync(join(dir, '.claude', 'skills'))).toBe(true);
 		expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true);
 		expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true);
-		expect(existsSync(join(dir, '.gitignore'))).toBe(true);
 	});
 
-	test('recreates git metadata when missing', async () => {
+	test('does not recreate git metadata when missing', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 		rmSync(join(dir, '.git'), { recursive: true, force: true });
+		rmSync(join(dir, '.gitignore'), { force: true });
 
 		await upgrade([dir]);
 
-		expect(existsSync(join(dir, '.git'))).toBe(true);
+		expect(existsSync(join(dir, '.git'))).toBe(false);
+		expect(existsSync(join(dir, '.gitignore'))).toBe(false);
 	});
 
 	test('registers missing MCP config entries during upgrade', async () => {
