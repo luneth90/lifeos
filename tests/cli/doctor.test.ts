@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, unlinkSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import initCommand from '../../src/cli/commands/init.js';
@@ -10,6 +10,7 @@ function makeTmpDir() {
 }
 
 const FIRST_DIR = { zh: '00_草稿', en: '00_Drafts' } as const;
+const DIGEST_DIR = { zh: join('90_系统', '信息'), en: join('90_System', 'Digest') } as const;
 
 describe.each(['zh', 'en'] as const)('lifeos doctor --lang %s', (lang) => {
 	test('healthy vault: all checks pass', async () => {
@@ -36,6 +37,23 @@ describe.each(['zh', 'en'] as const)('lifeos doctor --lang %s', (lang) => {
 				(c) => c.detail === 'missing' && c.name.includes(dirName),
 			);
 			expect(warn).toBeDefined();
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('missing digest subdirectory: reports warning', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			await initCommand([dir, '--lang', lang, '--no-mcp']);
+			rmSync(join(dir, DIGEST_DIR[lang]), { recursive: true, force: true });
+			const result = await doctorCommand([dir]);
+			expect(result.passed).toBe(true);
+			expect(
+				result.checks.some(
+					(c) => c.name === `subdirectory: ${DIGEST_DIR[lang]}` && c.status === 'warn',
+				),
+			).toBe(true);
 		} finally {
 			cleanup();
 		}

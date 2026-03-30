@@ -24,6 +24,7 @@ subdirectories:
     templates: "模板"
     schema: "规范"
     memory: "记忆"
+    digest: "信息"
     prompts: "提示词"
     archive:
       projects: "归档/项目"

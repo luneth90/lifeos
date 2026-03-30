@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { EN_PRESET, ZH_PRESET } from '../../config.js';
+import { resolveConfig } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { assetsDir } from '../utils/assets.js';
 import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
@@ -42,8 +42,8 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 		return result;
 	}
 
-	const lang = config?.language === 'en' ? 'en' : 'zh';
-	const preset = lang === 'en' ? EN_PRESET : ZH_PRESET;
+	const resolvedConfig = resolveConfig(targetPath, config ?? {}).rawConfig as LifeOSConfig;
+	const lang = resolvedConfig.language === 'en' ? 'en' : 'zh';
 
 	const templatesSrc = join(assetsDir(), 'templates', lang);
 	const expectedTemplates = existsSync(templatesSrc)
@@ -51,7 +51,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 		: [];
 
 	// 2. Top-level directories
-	for (const dirName of Object.values(preset.directories)) {
+	for (const dirName of Object.values(resolvedConfig.directories)) {
 		if (existsSync(join(targetPath, dirName))) {
 			check(`directory: ${dirName}`, 'pass');
 		} else {
@@ -60,8 +60,8 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	}
 
 	// 3. Subdirectories
-	for (const [parentLogical, group] of Object.entries(preset.subdirectories)) {
-		const parentDir = preset.directories[parentLogical];
+	for (const [parentLogical, group] of Object.entries(resolvedConfig.subdirectories)) {
+		const parentDir = resolvedConfig.directories[parentLogical];
 		if (!parentDir) continue;
 		for (const [, subValue] of Object.entries(group as Record<string, unknown>)) {
 			if (typeof subValue === 'string') {
@@ -87,8 +87,8 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	// 4. Templates
 	const tplDir = join(
 		targetPath,
-		preset.directories.system,
-		preset.subdirectories.system.templates,
+		resolvedConfig.directories.system,
+		resolvedConfig.subdirectories.system.templates,
 	);
 	for (const tpl of expectedTemplates) {
 		if (existsSync(join(tplDir, tpl))) {
@@ -101,8 +101,8 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	// 5. Schema
 	const schemaPath = join(
 		targetPath,
-		preset.directories.system,
-		preset.subdirectories.system.schema,
+		resolvedConfig.directories.system,
+		resolvedConfig.subdirectories.system.schema,
 		'Frontmatter_Schema.md',
 	);
 	check(
@@ -128,7 +128,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	check('Node.js >= 18', nodeVersion >= 18 ? 'pass' : 'warn', process.version);
 
 	// 9. Version check
-	const installedVersion = (config as LifeOSConfig)?.installed_versions?.assets;
+	const installedVersion = resolvedConfig.installed_versions?.assets;
 	if (installedVersion === VERSION) {
 		check('assets version', 'pass', `v${VERSION}`);
 	} else if (installedVersion) {

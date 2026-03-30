@@ -19,6 +19,7 @@ const ZH_DIRS = {
 	templates: '模板',
 	schema: '规范',
 	memory: '记忆',
+	digest: '信息',
 	archiveDiary: '归档/日记',
 	reflectionSubs: ['周复盘', '月复盘', '季度复盘', '年度复盘', '项目复盘'],
 	topLevel: [
@@ -45,6 +46,7 @@ const EN_DIRS = {
 	templates: 'Templates',
 	schema: 'Schema',
 	memory: 'Memory',
+	digest: 'Digest',
 	archiveDiary: 'Archive/Diary',
 	reflectionSubs: ['Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Projects'],
 	topLevel: [
@@ -87,10 +89,11 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		// Subdirectories
 		expect(existsSync(join(dir, d.knowledge, d.notes))).toBe(true);
 		expect(existsSync(join(dir, d.knowledge, d.wiki))).toBe(true);
-		expect(existsSync(join(dir, d.system, d.templates))).toBe(true);
-		expect(existsSync(join(dir, d.system, d.schema))).toBe(true);
-		expect(existsSync(join(dir, d.system, d.memory))).toBe(true);
-		expect(existsSync(join(dir, d.system, d.archiveDiary))).toBe(true);
+			expect(existsSync(join(dir, d.system, d.templates))).toBe(true);
+			expect(existsSync(join(dir, d.system, d.schema))).toBe(true);
+			expect(existsSync(join(dir, d.system, d.memory))).toBe(true);
+			expect(existsSync(join(dir, d.system, d.digest))).toBe(true);
+			expect(existsSync(join(dir, d.system, d.archiveDiary))).toBe(true);
 
 		// Reflection subdirectories
 		for (const sub of d.reflectionSubs) {
@@ -107,9 +110,12 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		const config = parseYaml(readFileSync(yamlPath, 'utf-8')) as Record<string, unknown>;
 		expect(config.language).toBe(lang);
 		expect(config.version).toBe('1.0');
-		expect(config.directories).toBeDefined();
-		expect(config.subdirectories).toBeDefined();
-		expect(config.memory).toBeDefined();
+			expect(config.directories).toBeDefined();
+			expect(config.subdirectories).toBeDefined();
+			expect(config.memory).toBeDefined();
+			expect(
+				(config.subdirectories as { system?: { digest?: string } }).system?.digest,
+			).toBe(d.digest);
 
 		const versions = config.installed_versions as Record<string, string>;
 		expect(versions.cli).toBe('1.0.2');

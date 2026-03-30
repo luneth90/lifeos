@@ -31,6 +31,7 @@ interface SubdirectoriesConfig {
 		templates: string;
 		schema: string;
 		memory: string;
+		digest: string;
 		prompts: string;
 		archive: { projects: string; drafts: string; plans: string; diary: string };
 	};
@@ -84,6 +85,7 @@ const ZH_PRESET: LifeOSConfig = {
 			templates: '模板',
 			schema: '规范',
 			memory: '记忆',
+			digest: '信息',
 			prompts: '提示词',
 			archive: {
 				projects: '归档/项目',
@@ -140,6 +142,7 @@ const EN_PRESET: LifeOSConfig = {
 			templates: 'Templates',
 			schema: 'Schema',
 			memory: 'Memory',
+			digest: 'Digest',
 			prompts: 'Prompts',
 			archive: {
 				projects: 'Archive/Projects',

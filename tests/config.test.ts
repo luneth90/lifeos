@@ -3,7 +3,9 @@ import { join } from 'path';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import {
+  EN_PRESET,
   VaultConfig,
+  ZH_PRESET,
   resolveConfig,
   getVaultConfig,
   setVaultConfig,
@@ -45,9 +47,15 @@ describe('VaultConfig — zh preset (default)', () => {
     const cfg = new VaultConfig(tmp.root);
     expect(cfg.rawConfig.language).toBe('zh');
     expect(cfg.rawConfig.directories.drafts).toBe('00_草稿');
+    expect(cfg.rawConfig.subdirectories.system.digest).toBe('信息');
     expect((cfg.rawConfig.subdirectories.system.archive as Record<string, string>).diary).toBe(
       '归档/日记',
     );
+  });
+
+  it('exports zh and en digest preset names', () => {
+    expect(ZH_PRESET.subdirectories.system.digest).toBe('信息');
+    expect(EN_PRESET.subdirectories.system.digest).toBe('Digest');
   });
 
   it('vaultRoot returns the absolute path', () => {
@@ -78,6 +86,7 @@ describe('VaultConfig — zh preset (default)', () => {
     expect(cfg.dirPrefix('drafts')).toBe('00_草稿/');
     expect(cfg.dirPrefix('projects')).toBe('20_项目/');
     expect(cfg.subDirPrefix('knowledge', 'notes')).toBe('40_知识/笔记/');
+    expect(cfg.subDirPrefix('system', 'digest')).toBe('90_系统/信息/');
     expect(cfg.subDirPrefix('system', 'memory')).toBe('90_系统/记忆/');
   });
 
@@ -86,6 +95,7 @@ describe('VaultConfig — zh preset (default)', () => {
     const cfg = new VaultConfig(tmp.root);
     expect(cfg.subDirPath('knowledge', 'notes')).toBe(join(tmp.root, '40_知识', '笔记'));
     expect(cfg.subDirPath('knowledge', 'wiki')).toBe(join(tmp.root, '40_知识', '百科'));
+    expect(cfg.subDirPath('system', 'digest')).toBe(join(tmp.root, '90_系统', '信息'));
     expect(cfg.subDirPath('system', 'memory')).toBe(join(tmp.root, '90_系统', '记忆'));
     expect(cfg.subDirPath('system', 'templates')).toBe(join(tmp.root, '90_系统', '模板'));
   });
@@ -161,6 +171,7 @@ describe('VaultConfig — lifeos.yaml loading', () => {
     expect(cfg.rawConfig.language).toBe('en');
     // en preset uses English folder names
     expect(cfg.dirPath('drafts')).toBe(join(tmp.root, '00_Drafts'));
+    expect(cfg.subDirPath('system', 'digest')).toBe(join(tmp.root, '90_System', 'Digest'));
     expect((cfg.rawConfig.subdirectories.system.archive as Record<string, string>).diary).toBe(
       'Archive/Diary',
     );
