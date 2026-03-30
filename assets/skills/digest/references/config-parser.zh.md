@@ -104,10 +104,13 @@
 }
 ```
 
-**Phase 1 支持的来源类型：** `arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv`。
+**支持的来源类型：** `arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv`、`SocArXiv`、`SSRN`。
 **字段含义：** `Query` 是检索词或关键词短语；`Scope` 是该来源使用的类别、集合或期刊
 过滤；`Notes` 是给 helper 的自由说明。
 **归一化：** helper 会把每一行转换成独立来源 adapter 输入，并在不同来源之间去重。
+**来源链接规则：** `SocArXiv` 可以归一化到 `osf.io` 或 `socarxiv.com`；`SSRN`
+必须归一化到 `papers.ssrn.com`、`ssrn.com` 或 SSRN DOI。
+**预算规则：** 每个来源只发一次主请求，不做分页。
 **兼容策略：** 新配置优先使用这个模型。
 
 #### arXiv 搜索

@@ -113,6 +113,8 @@ aliases: []
 |-------------|-------|-------|-------|
 | arXiv | {query} | {scope} | {notes} |
 | bioRxiv | {query} | {scope} | {notes} |
+| SocArXiv | {query} | {scope} | {notes} |
+| SSRN | {query} | {scope} | {notes} |
 ...
 
 > Legacy compatibility: old notes may still use `### arXiv Search`. New setups should prefer
@@ -183,4 +185,8 @@ After review, they can run `/digest {topic_name}` to generate the first digest.
 - any must-read source mentioned by the user must appear in the config
 - non-technical topics such as finance or history should disable arXiv, HuggingFace, and GitHub by default
 - biomedical topics should usually prioritize `bioRxiv` / `medRxiv`, chemistry should prioritize
-  `ChemRxiv`, and technical / AI topics should prioritize `arXiv`
+  `ChemRxiv`, social-science topics should usually prioritize `SocArXiv` / `SSRN`, and
+  technical / AI topics should prioritize `arXiv`
+- `SocArXiv` papers may resolve to `OSF` landing pages because that is the source-hosted record
+- paper-source fetching stays intentionally low-budget: one primary request per source and no
+  pagination

@@ -111,6 +111,8 @@ aliases: []
 |-------------|-------|-------|-------|
 | arXiv | {query} | {scope} | {notes} |
 | bioRxiv | {query} | {scope} | {notes} |
+| SocArXiv | {query} | {scope} | {notes} |
+| SSRN | {query} | {scope} | {notes} |
 ...
 
 > 旧版兼容：老配置仍然可以使用 `### arXiv 搜索`。新配置应优先使用 `Paper Sources`，
@@ -181,4 +183,6 @@ aliases: []
 - 用户提到的必读来源必须包含在配置中
 - 非技术主题（如理财、历史）应自动禁用 arXiv、HuggingFace、GitHub 模块
 - 生物医学主题通常优先 `bioRxiv` / `medRxiv`，化学主题优先 `ChemRxiv`，技术 /
-  AI 主题优先 `arXiv`
+  AI 主题优先 `arXiv`，社会科学主题通常优先 `SocArXiv` / `SSRN`
+- `SocArXiv` 论文可能回到 `OSF` 落地页，因为那就是源站托管页面
+- 论文来源抓取刻意保持低请求预算：每个来源一次主请求，不做分页补全

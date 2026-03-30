@@ -104,11 +104,14 @@ Table schema: `Source Type | Query | Scope | Notes`
 }
 ```
 
-**Phase 1 supported source types:** `arXiv`, `bioRxiv`, `medRxiv`, `ChemRxiv`.
+**Supported source types:** `arXiv`, `bioRxiv`, `medRxiv`, `ChemRxiv`, `SocArXiv`, `SSRN`.
 **Source semantics:** `Query` is the search term or keyword phrase; `Scope` is the category,
 collection, or journal filter used by that source; `Notes` is free-form guidance for the helper.
 **Normalization:** the helper converts each row into a source adapter input and deduplicates papers
 across sources.
+**Source-link rules:** `SocArXiv` may normalize to `osf.io` or `socarxiv.com`; `SSRN` must
+normalize to `papers.ssrn.com`, `ssrn.com`, or an SSRN DOI.
+**Budget rule:** keep one primary request per source and do not paginate.
 **Compatibility:** this is the preferred model for new notes.
 
 #### arXiv Search

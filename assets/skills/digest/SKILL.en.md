@@ -89,14 +89,17 @@ Phase 4: Write digest → {drafts directory}/<TopicName>-MMDD-MMDD.md
 RSS + paper-source fetching runs through the parameterized Python helper. Parse the config, build
 the JSON payload, and pass it through stdin.
 
-Phase 1 uses the new `Paper Sources` model:
+The `Paper Sources` model now supports:
 
-- supported source types: `arXiv`, `bioRxiv`, `medRxiv`, `ChemRxiv`
+- `arXiv`, `bioRxiv`, `medRxiv`, `ChemRxiv`, `SocArXiv`, `SSRN`
 - each row supplies `Source Type`, `Query`, `Scope`, and `Notes`
 - the helper normalizes each source through a dedicated adapter and returns structured errors per
   source instead of failing the whole run
 - legacy `### arXiv Search` config blocks are still accepted and translated into `arXiv` sources so
   older notes keep working
+- `SocArXiv` results may normalize to `OSF` landing pages when that is the source-hosted record
+- all paper-source adapters stay on a low-request budget: one primary request per source, bounded
+  retry only for transient failures, and no pagination
 
 For arXiv specifically:
 

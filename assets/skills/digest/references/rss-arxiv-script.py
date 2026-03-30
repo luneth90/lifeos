@@ -26,11 +26,14 @@ OPENALEX_API_URL = "https://api.openalex.org/works"
 REQUEST_HEADERS = {"User-Agent": "LifeOS digest/1.0"}
 ARXIV_REQUEST_INTERVAL_SECONDS = 3
 CHEMRXIV_OPENALEX_REPOSITORY_ID = "S4393918830"
+SOCARXIV_OPENALEX_REPOSITORY_ID = "S4306401238"
+SSRN_OPENALEX_REPOSITORY_ID = "S4210172589"
 ARXIV_LINK_RE = re.compile(
     r"arxiv\.org/(?:abs|pdf)/((?:[a-z\-]+(?:\.[a-z\-]+)?/\d{7})|(?:\d{4}\.\d{4,5}))(?:v\d+)?(?:\.pdf)?",
     re.IGNORECASE,
 )
 CHEMRXIV_DOI_RE = re.compile(r"10\.26434/chemrxiv[0-9A-Za-z./_-]*", re.IGNORECASE)
+SSRN_DOI_RE = re.compile(r"10\.2139/ssrn[0-9A-Za-z./_-]*", re.IGNORECASE)
 CJK_RE = re.compile(r"[\u3400-\u9fff]")
 WHITESPACE_RE = re.compile(r"\s+")
 QUOTE_RE = re.compile(r'"([^"]+)"')
@@ -39,6 +42,8 @@ SOURCE_PRIORITY = {
     "biorxiv": 3,
     "medrxiv": 3,
     "chemrxiv": 3,
+    "socarxiv": 3,
+    "ssrn": 3,
     "openalex": 1,
 }
 
@@ -47,10 +52,12 @@ SOURCE_DISPLAY_NAMES = {
     "biorxiv": "bioRxiv",
     "medrxiv": "medRxiv",
     "chemrxiv": "ChemRxiv",
+    "socarxiv": "SocArXiv",
+    "ssrn": "SSRN",
     "openalex": "openalex",
 }
 
-SUPPORTED_PAPER_SOURCE_KEYS = {"arxiv", "biorxiv", "medrxiv", "chemrxiv"}
+SUPPORTED_PAPER_SOURCE_KEYS = {"arxiv", "biorxiv", "medrxiv", "chemrxiv", "socarxiv", "ssrn"}
 
 
 MESSAGES = {
@@ -85,6 +92,8 @@ def normalize_source_type(source_type: str | None) -> str:
         "biorxiv": "biorxiv",
         "medrxiv": "medrxiv",
         "chemrxiv": "chemrxiv",
+        "socarxiv": "socarxiv",
+        "ssrn": "ssrn",
         "openalex": "openalex",
     }
     return aliases.get(normalized, normalized)
@@ -576,6 +585,66 @@ def normalize_openalex_chemrxiv_link(work: dict) -> str | None:
     return None
 
 
+def collect_openalex_location_urls(work: dict) -> list[str]:
+    """Collect OpenAlex landing-page and PDF URLs in source order."""
+    urls: list[str] = []
+    location_candidates: list[object] = []
+    for field in ["primary_location", "best_oa_location"]:
+        location_candidates.append(work.get(field))
+    locations = work.get("locations")
+    if isinstance(locations, list):
+        location_candidates.extend(locations)
+
+    for location in location_candidates:
+        if not isinstance(location, dict):
+            continue
+        for field in ["landing_page_url", "pdf_url"]:
+            candidate = location.get(field)
+            if isinstance(candidate, str):
+                normalized = normalize_whitespace(candidate)
+                if normalized:
+                    urls.append(normalized)
+
+    return urls
+
+
+def normalize_openalex_socarxiv_link(work: dict) -> str | None:
+    """Extract a canonical SocArXiv link from an OpenAlex work."""
+    urls = collect_openalex_location_urls(work)
+    for candidate in urls:
+        if "socarxiv.com" in candidate:
+            return candidate
+    for candidate in urls:
+        if "osf.io" in candidate:
+            return candidate
+    return None
+
+
+def normalize_openalex_ssrn_link(work: dict) -> str | None:
+    """Extract a canonical SSRN link from an OpenAlex work."""
+    urls = collect_openalex_location_urls(work)
+    for candidate in urls:
+        if "papers.ssrn.com" in candidate:
+            return candidate
+    for candidate in urls:
+        if "ssrn.com" in candidate:
+            return candidate
+
+    candidates: list[object] = [work.get("doi")]
+    ids = work.get("ids")
+    if isinstance(ids, dict):
+        candidates.append(ids.get("doi"))
+
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        matched = SSRN_DOI_RE.search(normalize_whitespace(candidate))
+        if matched:
+            return f"https://doi.org/{matched.group(0)}"
+
+    return None
+
+
 def is_openalex_chemrxiv_work(work: dict) -> bool:
     """Return whether an OpenAlex work can be attributed to ChemRxiv."""
     if normalize_openalex_chemrxiv_link(work) is not None:
@@ -601,6 +670,61 @@ def is_openalex_chemrxiv_work(work: dict) -> bool:
             return True
 
     return False
+
+
+def parse_openalex_repository_results(
+    payload: dict,
+    cutoff: datetime,
+    language: str,
+    source_type: str,
+    scope: str,
+    link_normalizer,
+) -> list[dict[str, str]]:
+    """Parse repository-filtered OpenAlex results into normalized paper records."""
+    papers: list[dict[str, str]] = []
+    results = payload.get("results")
+    if not isinstance(results, list):
+        return papers
+
+    for work in results:
+        if not isinstance(work, dict):
+            continue
+
+        published = normalize_published_date(work.get("publication_date"))
+        if not published:
+            continue
+
+        published_at = datetime.fromisoformat(f"{published}T00:00:00+00:00")
+        if published_at < cutoff:
+            continue
+
+        link = link_normalizer(work)
+        if not link:
+            continue
+
+        category = normalize_whitespace(str(extract_openalex_category(work) or scope or ""))
+        if scope:
+            scope_terms = normalize_string_list(scope)
+            if scope_terms and not any(term.lower() in category.lower() for term in scope_terms):
+                continue
+
+        papers.append(
+            normalize_paper_record(
+                source_type,
+                {
+                    "title": work.get("display_name") or work.get("title"),
+                    "link": link,
+                    "published": published,
+                    "summary": extract_openalex_abstract(work),
+                    "authors": extract_openalex_author_names(work),
+                    "categories": category,
+                },
+                scope or category,
+                language,
+            )
+        )
+
+    return papers
 
 
 def parse_openalex_results(
@@ -1026,6 +1150,30 @@ def fetch_chemrxiv_results(source: dict, cutoff: datetime) -> object:
     )
 
 
+def fetch_socarxiv_results(source: dict, cutoff: datetime) -> object:
+    """Fetch SocArXiv results via repository-filtered OpenAlex search."""
+    query = build_openalex_query(normalize_string_list(source.get("queries")))
+    max_results = int(source.get("max_results", 200))
+    return fetch_openalex_works(
+        query,
+        cutoff,
+        max_results,
+        extra_filters=[f"repository:{SOCARXIV_OPENALEX_REPOSITORY_ID}"],
+    )
+
+
+def fetch_ssrn_results(source: dict, cutoff: datetime) -> object:
+    """Fetch SSRN results via repository-filtered OpenAlex search."""
+    query = build_openalex_query(normalize_string_list(source.get("queries")))
+    max_results = int(source.get("max_results", 200))
+    return fetch_openalex_works(
+        query,
+        cutoff,
+        max_results,
+        extra_filters=[f"repository:{SSRN_OPENALEX_REPOSITORY_ID}"],
+    )
+
+
 def collect_biorxiv_like_source(
     source: dict[str, object],
     cutoff: datetime,
@@ -1194,6 +1342,84 @@ def collect_chemrxiv_source(
         }
 
 
+def collect_openalex_repository_source(
+    source: dict[str, object],
+    cutoff: datetime,
+    language: str,
+    source_key: str,
+    fetcher,
+    link_normalizer,
+) -> dict[str, list[dict[str, str]]]:
+    """Collect repository-backed OpenAlex papers for a source type."""
+    queries = [query for query in normalize_string_list(source.get("queries")) if query]
+    if any(keyword_contains_non_english(query) for query in queries):
+        return {
+            "papers": [],
+            "errors": [build_error(source_key, "config", f"{display_source_type(source_key)} keywords must be English")],
+        }
+
+    expressions = compile_keyword_expressions(queries)
+    if not expressions:
+        return {
+            "papers": [],
+            "errors": [],
+        }
+
+    try:
+        payload = fetcher(source, cutoff)
+        candidates = parse_openalex_repository_results(
+            payload,
+            cutoff,
+            language,
+            display_source_type(source_key),
+            str(source.get("scope", "")),
+            link_normalizer,
+        )
+        ranked = rank_papers(candidates, expressions)
+        max_results = int(source.get("max_results", 200))
+        return {
+            "papers": deduplicate_papers(ranked)[:max_results],
+            "errors": [],
+        }
+    except Exception as error:
+        return {
+            "papers": [],
+            "errors": [build_error(source_key, "adapter", str(error))],
+        }
+
+
+def collect_socarxiv_source(
+    source: dict[str, object],
+    cutoff: datetime,
+    language: str,
+) -> dict[str, list[dict[str, str]]]:
+    """Collect SocArXiv papers through repository-filtered OpenAlex search."""
+    return collect_openalex_repository_source(
+        source,
+        cutoff,
+        language,
+        "socarxiv",
+        fetch_socarxiv_results,
+        normalize_openalex_socarxiv_link,
+    )
+
+
+def collect_ssrn_source(
+    source: dict[str, object],
+    cutoff: datetime,
+    language: str,
+) -> dict[str, list[dict[str, str]]]:
+    """Collect SSRN papers through repository-filtered OpenAlex search."""
+    return collect_openalex_repository_source(
+        source,
+        cutoff,
+        language,
+        "ssrn",
+        fetch_ssrn_results,
+        normalize_openalex_ssrn_link,
+    )
+
+
 def collect_papers(
     paper_sources: list[dict[str, object]],
     cutoff: datetime,
@@ -1220,6 +1446,10 @@ def collect_papers(
                 result = collect_medrxiv_source(source, cutoff, language)
             elif source_key == "chemrxiv":
                 result = collect_chemrxiv_source(source, cutoff, language)
+            elif source_key == "socarxiv":
+                result = collect_socarxiv_source(source, cutoff, language)
+            elif source_key == "ssrn":
+                result = collect_ssrn_source(source, cutoff, language)
             else:
                 errors.append(
                     build_error(

@@ -612,6 +612,284 @@ print(json.dumps(payload, ensure_ascii=False))
 		});
 	});
 
+	test('fetches SocArXiv results through repository-filtered OpenAlex transport', () => {
+		const output = runPythonJson(`
+import importlib.util, json, urllib.parse
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+captured = {}
+
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+    def read(self):
+        return self.payload.encode("utf-8")
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+def fake_urlopen(request, timeout=0):
+    captured["url"] = request.full_url
+    return FakeResponse(json.dumps({"results": [{"id": "W1"}]}))
+
+module.urllib.request.urlopen = fake_urlopen
+cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
+payload = module.fetch_socarxiv_results(
+    {"queries": ["social identity"], "max_results": 25},
+    cutoff,
+)
+parsed = urllib.parse.urlparse(captured["url"])
+params = urllib.parse.parse_qs(parsed.query)
+
+print(json.dumps({
+    "host": parsed.netloc,
+    "path": parsed.path,
+    "search": params.get("search", []),
+    "filter": params.get("filter", []),
+    "per_page": params.get("per-page", []),
+    "result_count": len(payload.get("results", [])),
+}, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			host: 'api.openalex.org',
+			path: '/works',
+			search: ['social identity'],
+			filter: ['from_publication_date:2026-03-20,repository:S4306401238'],
+			per_page: ['25'],
+			result_count: 1,
+		});
+	});
+
+	test('collects SocArXiv papers from source-hosted OpenAlex payloads', () => {
+		const output = runPythonJson(`
+import importlib.util, json
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+def fake_fetch_socarxiv_results(source, cutoff):
+    return {
+        "results": [
+            {
+                "display_name": "The Partisan Effects of Social Media Bans",
+                "publication_date": "2026-03-21",
+                "abstract_inverted_index": {
+                    "Social": [0],
+                    "identity": [1],
+                    "effects": [2],
+                },
+                "authorships": [
+                    {"author": {"display_name": "Ada Lovelace"}},
+                    {"author": {"display_name": "Grace Hopper"}},
+                ],
+                "primary_topic": {
+                    "subfield": {"display_name": "Sociology"}
+                },
+                "primary_location": {
+                    "source": {"display_name": "SocArXiv (OSF Preprints)"},
+                    "landing_page_url": "https://osf.io/4stfw",
+                },
+                "locations": [
+                    {
+                        "source": {"display_name": "SocArXiv (OSF Preprints)"},
+                        "landing_page_url": "https://osf.io/4stfw",
+                    },
+                    {
+                        "source": {"display_name": "Example"},
+                        "landing_page_url": "https://example.com/not-socarxiv",
+                    }
+                ],
+            },
+            {
+                "display_name": "Rejected mirror result",
+                "publication_date": "2026-03-21",
+                "abstract_inverted_index": {
+                    "Social": [0],
+                    "identity": [1],
+                },
+                "primary_topic": {
+                    "subfield": {"display_name": "Sociology"}
+                },
+                "primary_location": {
+                    "source": {"display_name": "Example"},
+                    "landing_page_url": "https://example.com/not-socarxiv",
+                },
+                "locations": [
+                    {
+                        "source": {"display_name": "Example"},
+                        "landing_page_url": "https://example.com/not-socarxiv",
+                    }
+                ],
+            }
+        ]
+    }
+
+module.fetch_socarxiv_results = fake_fetch_socarxiv_results
+cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
+payload = module.collect_socarxiv_source(
+    {"queries": ["social identity"], "scope": "sociology", "max_results": 20},
+    cutoff,
+    "en",
+)
+
+print(json.dumps(payload, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			papers: [
+				{
+					title: 'The Partisan Effects of Social Media Bans',
+					link: 'https://osf.io/4stfw',
+					published: '2026-03-21',
+					summary: 'Social identity effects',
+					categories: 'Sociology',
+					authors: 'Ada Lovelace, Grace Hopper',
+					source: 'socarxiv',
+					source_type: 'SocArXiv',
+					scope: 'sociology',
+				},
+			],
+			errors: [],
+		});
+	});
+
+	test('fetches SSRN results through repository-filtered OpenAlex transport', () => {
+		const output = runPythonJson(`
+import importlib.util, json, urllib.parse
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+captured = {}
+
+class FakeResponse:
+    def __init__(self, payload):
+        self.payload = payload
+    def read(self):
+        return self.payload.encode("utf-8")
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+def fake_urlopen(request, timeout=0):
+    captured["url"] = request.full_url
+    return FakeResponse(json.dumps({"results": [{"id": "W1"}]}))
+
+module.urllib.request.urlopen = fake_urlopen
+cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
+payload = module.fetch_ssrn_results(
+    {"queries": ["corporate governance"], "max_results": 25},
+    cutoff,
+)
+parsed = urllib.parse.urlparse(captured["url"])
+params = urllib.parse.parse_qs(parsed.query)
+
+print(json.dumps({
+    "host": parsed.netloc,
+    "path": parsed.path,
+    "search": params.get("search", []),
+    "filter": params.get("filter", []),
+    "per_page": params.get("per-page", []),
+    "result_count": len(payload.get("results", [])),
+}, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			host: 'api.openalex.org',
+			path: '/works',
+			search: ['corporate governance'],
+			filter: ['from_publication_date:2026-03-20,repository:S4210172589'],
+			per_page: ['25'],
+			result_count: 1,
+		});
+	});
+
+	test('collects SSRN papers and prefers source-hosted landing pages', () => {
+		const output = runPythonJson(`
+import importlib.util, json
+from datetime import datetime, timezone
+
+spec = importlib.util.spec_from_file_location("digest_script", r"""${SCRIPT_PATH}""")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+def fake_fetch_ssrn_results(source, cutoff):
+    return {
+        "results": [
+            {
+                "display_name": "Knowledge Is Power",
+                "publication_date": "2026-02-06",
+                "doi": "https://doi.org/10.2139/ssrn.3661649",
+                "abstract_inverted_index": {
+                    "Corporate": [0],
+                    "governance": [1],
+                    "monitoring": [2],
+                },
+                "authorships": [
+                    {"author": {"display_name": "Ada Lovelace"}},
+                    {"author": {"display_name": "Linus Torvalds"}},
+                ],
+                "primary_topic": {
+                    "subfield": {"display_name": "Corporate Governance"}
+                },
+                "primary_location": {
+                    "source": {"display_name": "SSRN Electronic Journal"},
+                    "landing_page_url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3661649",
+                },
+                "locations": [
+                    {
+                        "source": {"display_name": "SSRN Electronic Journal"},
+                        "landing_page_url": "https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3661649",
+                    },
+                    {
+                        "source": {"display_name": "Publisher"},
+                        "landing_page_url": "https://doi.org/10.1111/1911-3846.70032",
+                    }
+                ],
+            }
+        ]
+    }
+
+module.fetch_ssrn_results = fake_fetch_ssrn_results
+cutoff = datetime(2026, 1, 20, tzinfo=timezone.utc)
+payload = module.collect_ssrn_source(
+    {"queries": ["corporate governance"], "scope": "corporate governance", "max_results": 20},
+    cutoff,
+    "en",
+)
+
+print(json.dumps(payload, ensure_ascii=False))
+`);
+
+		expect(output).toEqual({
+			papers: [
+				{
+					title: 'Knowledge Is Power',
+					link: 'https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3661649',
+					published: '2026-02-06',
+					summary: 'Corporate governance monitoring',
+					categories: 'Corporate Governance',
+					authors: 'Ada Lovelace, Linus Torvalds',
+					source: 'ssrn',
+					source_type: 'SSRN',
+					scope: 'corporate governance',
+				},
+			],
+			errors: [],
+		});
+	});
+
 	test('aggregates multiple paper sources and keeps successful results after one failure', () => {
 		const output = runPythonJson(`
 import importlib.util, json
@@ -646,10 +924,18 @@ def collect_medrxiv_source(*args, **kwargs):
 def collect_chemrxiv_source(*args, **kwargs):
     return {"papers": [paper("Catalyst Discovery", "chemrxiv", "ChemRxiv", "catalysis")], "errors": []}
 
+def collect_socarxiv_source(*args, **kwargs):
+    return {"papers": [paper("The Partisan Effects", "socarxiv", "SocArXiv", "sociology")], "errors": []}
+
+def collect_ssrn_source(*args, **kwargs):
+    return {"papers": [paper("Knowledge Is Power", "ssrn", "SSRN", "corporate governance")], "errors": []}
+
 module.collect_arxiv_source = collect_arxiv_source
 module.collect_biorxiv_source = collect_biorxiv_source
 module.collect_medrxiv_source = collect_medrxiv_source
 module.collect_chemrxiv_source = collect_chemrxiv_source
+module.collect_socarxiv_source = collect_socarxiv_source
+module.collect_ssrn_source = collect_ssrn_source
 
 cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
 payload = module.collect_papers(
@@ -658,6 +944,8 @@ payload = module.collect_papers(
         {"enabled": True, "source_type": "bioRxiv", "queries": ["single-cell atlas"], "scope": "neuroscience", "notes": "English only"},
         {"enabled": True, "source_type": "medRxiv", "queries": ["sepsis biomarker"], "scope": "critical care", "notes": "English only"},
         {"enabled": True, "source_type": "ChemRxiv", "queries": ["catalyst discovery"], "scope": "catalysis", "notes": "English only"},
+        {"enabled": True, "source_type": "SocArXiv", "queries": ["social identity"], "scope": "sociology", "notes": "English only"},
+        {"enabled": True, "source_type": "SSRN", "queries": ["corporate governance"], "scope": "corporate governance", "notes": "English only"},
     ],
     cutoff,
     "en",
@@ -681,6 +969,17 @@ print(json.dumps(payload, ensure_ascii=False))
 					scope: 'cs.AI',
 				},
 				{
+					title: 'The Partisan Effects',
+					link: 'https://example.com/socarxiv/the-partisan-effects',
+					published: '2026-03-30',
+					summary: 'The Partisan Effects summary',
+					categories: 'sociology',
+					authors: 'Ada Lovelace',
+					source: 'socarxiv',
+					source_type: 'SocArXiv',
+					scope: 'sociology',
+				},
+				{
 					title: 'Single-cell Atlas',
 					link: 'https://example.com/biorxiv/single-cell-atlas',
 					published: '2026-03-30',
@@ -690,6 +989,17 @@ print(json.dumps(payload, ensure_ascii=False))
 					source: 'biorxiv',
 					source_type: 'bioRxiv',
 					scope: 'neuroscience',
+				},
+				{
+					title: 'Knowledge Is Power',
+					link: 'https://example.com/ssrn/knowledge-is-power',
+					published: '2026-03-30',
+					summary: 'Knowledge Is Power summary',
+					categories: 'corporate governance',
+					authors: 'Ada Lovelace',
+					source: 'ssrn',
+					source_type: 'SSRN',
+					scope: 'corporate governance',
 				},
 				{
 					title: 'Catalyst Discovery',

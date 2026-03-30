@@ -52,11 +52,13 @@ Run enabled modules in parallel. RSS + arXiv use the Python helper; the rest use
 For paper sources, the helper should use this runtime contract:
 
 1. normalize `Paper Sources` rows into source adapter inputs
-2. run the phase 1 adapters for `arXiv`, `bioRxiv`, `medRxiv`, and `ChemRxiv`
+2. run the source adapters for `arXiv`, `bioRxiv`, `medRxiv`, `ChemRxiv`, `SocArXiv`, and `SSRN`
 3. return normalized papers plus structured per-source errors
 4. if one source fails, keep the successful sources and report the failure in `errors`
 5. legacy `arxiv` config blocks are converted into `arXiv` adapter inputs before execution
 6. the `arXiv` adapter retains the existing OpenAlex fallback behavior when arXiv lookups fail
+7. `SocArXiv` may normalize to `OSF` landing pages; `SSRN` prefers source-hosted SSRN links
+8. keep the transport low-budget: one primary request per source and no pagination
 
 Build the JSON input and send it through stdin:
 
@@ -84,6 +86,12 @@ The payload should include at least:
         "query": "single-cell",
         "scope": "Neuroscience",
         "notes": "Biomedical preprints"
+      },
+      {
+        "source_type": "SocArXiv",
+        "query": "social identity",
+        "scope": "Sociology",
+        "notes": "Social science preprints"
       }
     ]
   },

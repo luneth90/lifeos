@@ -51,11 +51,13 @@ config = {
 对论文来源，脚本应遵循以下运行契约：
 
 1. 将 `Paper Sources` 行归一化为来源 adapter 输入
-2. 依次运行 `arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv` 的 phase 1 adapters
+2. 依次运行 `arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv`、`SocArXiv`、`SSRN` 的来源 adapters
 3. 返回归一化后的论文结果以及结构化的逐来源错误
 4. 某个来源失败时，保留成功来源并把失败写入 `errors`
 5. 旧版 `arxiv` 配置块会先转换成 `arXiv` adapter 输入，再继续执行
 6. `arXiv` adapter 在 arXiv 检索失败时会保留现有的 OpenAlex fallback 行为
+7. `SocArXiv` 可以归一化到 `OSF` 落地页；`SSRN` 优先保留源站 SSRN 链接
+8. 传输层保持低请求预算：每个来源一次主请求，不做分页
 
 构造 JSON 输入并通过 stdin 传给脚本：
 
@@ -83,6 +85,12 @@ JSON 输入从 Phase 1 的配置构造，至少包括：
         "query": "single-cell",
         "scope": "Neuroscience",
         "notes": "生物医学预印本"
+      },
+      {
+        "source_type": "SocArXiv",
+        "query": "social identity",
+        "scope": "Sociology",
+        "notes": "社会科学预印本"
       }
     ]
   },

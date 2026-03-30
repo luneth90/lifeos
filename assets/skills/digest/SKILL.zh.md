@@ -88,12 +88,14 @@ Phase 4: 写入周报 → {草稿目录}/<TopicName>-MMDD-MMDD.md
 
 RSS + paper source 抓取通过参数化 Python 脚本执行。技能先解析配置，构造 JSON 输入，通过 stdin 传入脚本。
 
-Phase 1 使用新的 `Paper Sources` 模型：
+`Paper Sources` 模型现在支持：
 
-- 支持的来源类型：`arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv`
+- `arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv`、`SocArXiv`、`SSRN`
 - 每一行包含 `Source Type`、`Query`、`Scope`、`Notes`
 - 脚本会为每个来源使用独立 adapter 归一化结果，并返回结构化错误，不会因为单个来源失败就中断整个流程
 - 旧版 `### arXiv Search` 配置块仍然兼容，系统会把它转换成 `arXiv` 来源继续执行
+- `SocArXiv` 结果在源站托管为 `OSF` 页面时，可以归一化为 `osf.io` 落地页
+- 所有论文来源 adapter 都保持低请求预算：每个来源一次主请求，瞬时错误有限 retry，不做分页补全
 
 其中 arXiv 模块有三个关键约束：
 
