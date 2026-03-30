@@ -1,7 +1,7 @@
 ---
 name: ask
 description: 快速回答用户问题，按需检索 Vault 已有笔记辅助作答。适用于概念解释、用法查询、Vault 内容检索、PDF 指定页面提问等单轮问答场景。当用户提出任何直接问题或说"/ask"时使用此技能。复杂问题会建议升级到 /brainstorm 或 /research。
-version: 1.0.3
+version: 1.1.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Draft_Template.md"
