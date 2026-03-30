@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readFileSync, readdirSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { LifeOSConfig } from '../../config.js';
 import { assetsDir, ensureDir } from './assets.js';
@@ -197,7 +197,10 @@ export function installSkills(
 
 	const entries: Array<{ srcPath: string; destPath: string; displayPath: string }> = [];
 
-	for (const skillName of readdirSync(skillsSrc)) {
+	for (const skillName of readdirSync(skillsSrc).filter((entry) => {
+		if (entry.startsWith('.')) return false;
+		return statSync(join(skillsSrc, entry)).isDirectory();
+	})) {
 		const skillSrcDir = join(skillsSrc, skillName);
 		const fileMap = resolveSkillFiles(skillSrcDir, lang);
 

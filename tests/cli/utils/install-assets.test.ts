@@ -98,6 +98,15 @@ describe('installPrompts', () => {
 });
 
 describe('installSkills', () => {
+	test('ignores hidden non-directory entries in the skills asset root', () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			expect(() => installSkills(dir, 'zh', 'overwrite')).not.toThrow();
+		} finally {
+			cleanup();
+		}
+	});
+
 	test('overwrite mode copies all skills', () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {
