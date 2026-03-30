@@ -36,7 +36,7 @@
 **Files:**
 - Modify: `tests/assets/digest-rss-arxiv-script.test.ts`
 
-- [ ] **Step 1: Write failing tests for new source adapters**
+- [x] **Step 1: Write failing tests for new source adapters**
 
 Add tests that prove:
 - the helper can normalize `source_type`-specific records for `arXiv`, `bioRxiv`, `medRxiv`, and
@@ -45,7 +45,7 @@ Add tests that prove:
 - one paper source failure returns a structured error without discarding successful sources
 - the helper preserves the top-level JSON contract while adding generic paper-source behavior
 
-- [ ] **Step 2: Run the focused test file and verify RED**
+- [x] **Step 2: Run the focused test file and verify RED**
 
 Run:
 
@@ -55,7 +55,7 @@ npm test -- tests/assets/digest-rss-arxiv-script.test.ts
 
 Expected: FAIL because the helper is still structured primarily around the current `arxiv` config.
 
-- [ ] **Step 3: Continue directly to implementation**
+- [x] **Step 3: Continue directly to implementation**
 
 Do not add production code before the RED test output is observed.
 
@@ -64,7 +64,7 @@ Do not add production code before the RED test output is observed.
 **Files:**
 - Modify: `assets/skills/digest/references/rss-arxiv-script.py`
 
-- [ ] **Step 1: Add source-type parsing and normalized paper helpers**
+- [x] **Step 1: Add source-type parsing and normalized paper helpers**
 
 Implement helper functions that:
 - normalize `Paper Sources` rows into runtime entries
@@ -72,7 +72,7 @@ Implement helper functions that:
 - deduplicate papers across sources
 - accumulate structured source-specific errors
 
-- [ ] **Step 2: Add phase 1 adapters**
+- [x] **Step 2: Add phase 1 adapters**
 
 Implement deterministic adapter functions for:
 - `arXiv`
@@ -82,12 +82,12 @@ Implement deterministic adapter functions for:
 
 Each adapter must return `papers` and `errors` without throwing to the caller on routine failures.
 
-- [ ] **Step 3: Keep legacy arXiv behavior compatible**
+- [x] **Step 3: Keep legacy arXiv behavior compatible**
 
 Allow the helper to continue accepting the current `arxiv` config shape so existing digest runs do
 not break while the docs transition to `Paper Sources`.
 
-- [ ] **Step 4: Re-run the focused script tests and verify GREEN**
+- [x] **Step 4: Re-run the focused script tests and verify GREEN**
 
 Run:
 
@@ -97,7 +97,7 @@ npm test -- tests/assets/digest-rss-arxiv-script.test.ts
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add assets/skills/digest/references/rss-arxiv-script.py tests/assets/digest-rss-arxiv-script.test.ts
@@ -116,7 +116,7 @@ git commit -m "feat: add phase1 digest paper source adapters"
 - Modify: `assets/skills/digest/references/run-pipeline.en.md`
 - Modify: `assets/skills/digest/references/run-pipeline.zh.md`
 
-- [ ] **Step 1: Update config docs**
+- [x] **Step 1: Update config docs**
 
 Document:
 - the new `### Paper Sources` section
@@ -124,7 +124,7 @@ Document:
 - backward compatibility with legacy `### arXiv Search`
 - phase 1 supported source types
 
-- [ ] **Step 2: Update setup guides**
+- [x] **Step 2: Update setup guides**
 
 Make setup explicitly recommend:
 - `bioRxiv` / `medRxiv` for biomedical topics
@@ -132,14 +132,14 @@ Make setup explicitly recommend:
 - `arXiv` for technical / AI topics
 - explicit source rows instead of inferred arXiv-only defaults
 
-- [ ] **Step 3: Update run pipeline docs**
+- [x] **Step 3: Update run pipeline docs**
 
 Describe:
 - generic papers collection
 - source adapters and structured errors
 - backward compatibility for legacy arXiv configs
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add assets/skills/digest/SKILL.en.md assets/skills/digest/SKILL.zh.md assets/skills/digest/references/config-parser.en.md assets/skills/digest/references/config-parser.zh.md assets/skills/digest/references/setup-guide.en.md assets/skills/digest/references/setup-guide.zh.md assets/skills/digest/references/run-pipeline.en.md assets/skills/digest/references/run-pipeline.zh.md
@@ -153,14 +153,14 @@ git commit -m "docs: add digest paper sources model"
 - Modify: `tests/cli/utils/install-assets.test.ts`
 - Modify: `tests/cli/utils/lang.test.ts`
 
-- [ ] **Step 1: Add any needed asset-content assertions**
+- [x] **Step 1: Add any needed asset-content assertions**
 
 If current tests do not already protect the changed docs sufficiently, add focused assertions for:
 - `Paper Sources` appearing in installed digest content
 - bilingual digest docs still mapping correctly
 - the helper asset path still shipping in the bundle
 
-- [ ] **Step 2: Run the digest-related regression suite**
+- [x] **Step 2: Run the digest-related regression suite**
 
 Run:
 
@@ -170,7 +170,7 @@ npm test -- tests/cli/utils/assets.test.ts tests/cli/utils/install-assets.test.t
 
 Expected: PASS.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/cli/utils/assets.test.ts tests/cli/utils/install-assets.test.ts tests/cli/utils/lang.test.ts tests/assets/digest-rss-arxiv-script.test.ts
@@ -182,7 +182,7 @@ git commit -m "test: cover digest paper sources assets"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-03-30-digest-multidisciplinary-papers-phase1.md`
 
-- [ ] **Step 1: Run the full phase 1 verification commands**
+- [x] **Step 1: Run the full phase 1 verification commands**
 
 Run:
 
@@ -192,7 +192,7 @@ npm test -- tests/cli/utils/assets.test.ts tests/cli/utils/install-assets.test.t
 
 Expected: PASS.
 
-- [ ] **Step 2: Run typecheck**
+- [x] **Step 2: Run typecheck**
 
 Run:
 
@@ -202,7 +202,7 @@ npm run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 3: Run lint**
+- [x] **Step 3: Run lint**
 
 Run:
 
@@ -212,11 +212,19 @@ npm run lint
 
 Expected: PASS.
 
-- [ ] **Step 4: Update this plan checkbox state if execution stays close enough to the plan**
+- [x] **Step 4: Update this plan checkbox state if execution stays close enough to the plan**
 
-- [ ] **Step 5: Document phase 2 follow-up**
+- [x] **Step 5: Document phase 2 follow-up**
 
 Record that `SocArXiv` and `SSRN` remain phase 2 work because they likely need a different source
 strategy than the phase 1 preprint adapters.
 
-- [ ] **Step 6: Use `superpowers:verification-before-completion` before reporting completion**
+- [x] **Step 6: Use `superpowers:verification-before-completion` before reporting completion**
+
+Phase 2 follow-up:
+
+- `SocArXiv` and `SSRN` remain intentionally out of phase 1.
+- They likely need a different source strategy than the preprint adapters used for `arXiv`,
+  `bioRxiv`, `medRxiv`, and `ChemRxiv`.
+- The most likely next step is a stable aggregator or feed-oriented design, not direct brittle HTML
+  scraping.
