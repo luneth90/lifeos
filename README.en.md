@@ -1,5 +1,4 @@
 # LifeOS
-![LifeOS Example](./lifeos.png)
 [中文](./README.md) | [English](./README.en.md)
 
 LifeOS helps you grow scattered ideas into structured knowledge and truly master it, from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.
