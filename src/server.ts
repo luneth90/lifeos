@@ -9,6 +9,38 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import * as core from './core.js';
 
+// ─── Key conversion helpers ──────────────────────────────────────────────────
+
+function snakeToCamel(key: string): string {
+	return key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function deepConvertKeys(obj: unknown): unknown {
+	if (Array.isArray(obj)) return obj.map(deepConvertKeys);
+	if (obj !== null && typeof obj === 'object') {
+		return Object.fromEntries(
+			Object.entries(obj as Record<string, unknown>).map(([k, v]) => [
+				snakeToCamel(k),
+				deepConvertKeys(v),
+			]),
+		);
+	}
+	return obj;
+}
+
+function handleTool<P extends Record<string, unknown>>(
+	// biome-ignore lint/suspicious/noExplicitAny: core functions have varied signatures
+	coreFn: (params: any) => unknown,
+): (params: P) => Promise<{ content: { type: 'text'; text: string }[] }> {
+	return async (params: P) => {
+		const converted = deepConvertKeys(params) as Record<string, unknown>;
+		if (converted.dbPath === '') converted.dbPath = undefined;
+		if (converted.vaultRoot === '') converted.vaultRoot = undefined;
+		const result = coreFn(converted);
+		return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+	};
+}
+
 // ─── Server instance ──────────────────────────────────────────────────────────
 
 const server = new McpServer({
@@ -32,14 +64,7 @@ server.tool(
 		vault_root: z.string().default(''),
 		session_id: z.string().optional(),
 	},
-	async ({ db_path, vault_root, session_id }) => {
-		const result = core.memoryStartup({
-			dbPath: db_path || undefined,
-			vaultRoot: vault_root || undefined,
-			sessionId: session_id,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memoryStartup),
 );
 
 // 2. memory_query
@@ -59,17 +84,7 @@ server.tool(
 		limit: z.number().int().min(1).max(50).default(10),
 		scene: z.string().optional(),
 	},
-	async ({ db_path, vault_root, query, filters, limit, scene }) => {
-		const result = core.memoryQuery({
-			dbPath: db_path || undefined,
-			vaultRoot: vault_root || undefined,
-			query: query || undefined,
-			filters,
-			limit,
-			scene,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memoryQuery),
 );
 
 // 3. memory_recent
@@ -91,19 +106,7 @@ server.tool(
 		limit: z.number().int().min(1).max(100).default(20),
 		scene: z.string().optional(),
 	},
-	async ({ db_path, vault_root, days, entry_type, scope, query, limit, scene }) => {
-		const result = core.memoryRecent({
-			dbPath: db_path || undefined,
-			vaultRoot: vault_root || undefined,
-			days,
-			entryType: entry_type,
-			scope,
-			query,
-			limit,
-			scene,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memoryRecent),
 );
 
 // 4. memory_log
@@ -137,36 +140,7 @@ server.tool(
 		related_entities: z.array(z.string()).optional(),
 		supersedes: z.string().optional(),
 	},
-	async ({
-		db_path,
-		entry_type,
-		importance,
-		summary,
-		scope,
-		session_id,
-		skill_name,
-		detail,
-		source_refs,
-		related_files,
-		related_entities,
-		supersedes,
-	}) => {
-		const result = core.memoryLog({
-			dbPath: db_path || undefined,
-			entryType: entry_type,
-			importance,
-			summary,
-			scope,
-			sessionId: session_id,
-			skillName: skill_name,
-			detail,
-			sourceRefs: source_refs,
-			relatedFiles: related_files,
-			relatedEntities: related_entities,
-			supersedes,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memoryLog),
 );
 
 // 5. memory_auto_capture
@@ -215,16 +189,7 @@ server.tool(
 			.optional(),
 		session_id: z.string().optional(),
 	},
-	async ({ db_path, corrections, decisions, preferences, session_id }) => {
-		const result = core.memoryAutoCapture({
-			dbPath: db_path || undefined,
-			corrections,
-			decisions,
-			preferences,
-			sessionId: session_id,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memoryAutoCapture),
 );
 
 // 6. memory_notify
@@ -241,14 +206,7 @@ server.tool(
 		vault_root: z.string().default(''),
 		file_path: z.string().min(1),
 	},
-	async ({ db_path, vault_root, file_path }) => {
-		const result = core.memoryNotify({
-			dbPath: db_path || undefined,
-			vaultRoot: vault_root || undefined,
-			filePath: file_path,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memoryNotify),
 );
 
 // 7. memory_checkpoint
@@ -265,14 +223,7 @@ server.tool(
 		vault_root: z.string().default(''),
 		session_id: z.string().optional(),
 	},
-	async ({ db_path, vault_root, session_id }) => {
-		const result = core.memoryCheckpoint({
-			dbPath: db_path || undefined,
-			vaultRoot: vault_root || undefined,
-			sessionId: session_id,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memoryCheckpoint),
 );
 
 // 8. memory_skill_complete
@@ -297,34 +248,7 @@ server.tool(
 		context_sources: z.array(z.string()).optional(),
 		refresh_targets: z.array(z.string()).optional(),
 	},
-	async ({
-		db_path,
-		vault_root,
-		skill_name,
-		summary,
-		scope,
-		importance,
-		detail,
-		related_files,
-		related_entities,
-		context_sources,
-		refresh_targets,
-	}) => {
-		const result = core.memorySkillComplete({
-			dbPath: db_path || undefined,
-			vaultRoot: vault_root || undefined,
-			skillName: skill_name,
-			summary,
-			scope,
-			importance,
-			detail,
-			relatedFiles: related_files,
-			relatedEntities: related_entities,
-			contextSources: context_sources,
-			refreshTargets: refresh_targets,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memorySkillComplete),
 );
 
 // 9. memory_refresh
@@ -343,16 +267,7 @@ server.tool(
 		section: z.string().optional(),
 		preserve_manual: z.boolean().optional(),
 	},
-	async ({ db_path, vault_root, target, section, preserve_manual }) => {
-		const result = core.memoryRefresh({
-			dbPath: db_path || undefined,
-			vaultRoot: vault_root || undefined,
-			target,
-			section,
-			preserveManual: preserve_manual,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memoryRefresh),
 );
 
 // 10. memory_citations
@@ -371,16 +286,7 @@ server.tool(
 		section: z.string().optional(),
 		keyword: z.string().optional(),
 	},
-	async ({ db_path, vault_root, target, section, keyword }) => {
-		const result = core.memoryCitations({
-			dbPath: db_path || undefined,
-			vaultRoot: vault_root || undefined,
-			target,
-			section,
-			keyword,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memoryCitations),
 );
 
 // 11. memory_skill_context
@@ -400,17 +306,7 @@ server.tool(
 		query: z.string().optional(),
 		limit: z.number().int().min(1).max(50).optional(),
 	},
-	async ({ db_path, vault_root, skill_profile, related_files, query, limit }) => {
-		const result = core.memorySkillContext({
-			dbPath: db_path || undefined,
-			vaultRoot: vault_root || undefined,
-			skillProfile: skill_profile,
-			relatedFiles: related_files,
-			query,
-			limit,
-		});
-		return { content: [{ type: 'text', text: JSON.stringify(result) }] };
-	},
+	handleTool(core.memorySkillContext),
 );
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
