@@ -1,7 +1,7 @@
 ---
 name: archive
 description: '扫描并归档已完成的项目（status:done）、已消化的草稿（status:researched/projected/knowledged）、已完成的计划（status: done）以及超过最近 7 天的日记，按归档规则移入统一归档目录并更新 frontmatter。不会触碰 pending 草稿、active 计划或最近 7 天的日记。当用户想清理 Vault、归档已完成的工作、整理库、或说"/archive"时使用此技能。'
-version: 1.1.1
+version: 1.1.2
 dependencies:
   templates: []
   prompts: []
