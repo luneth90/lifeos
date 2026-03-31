@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.1.1 (2026-03-31)
+
+### Bug Fixes
+
+- Fixed silent data loss in `memory_auto_capture` where nested `related_files` fields in corrections, decisions, and preferences were dropped due to missing snake_case→camelCase conversion
+
+### Refactoring
+
+- Extracted `withResolvedDb` and `resolveScene` helpers in `core.ts`, eliminating repeated DB lifecycle boilerplate across all 11 tool handlers
+- Extracted `handleTool` generic wrapper in `server.ts` with recursive deep key conversion, replacing 11 manual snake_case→camelCase mapping blocks
+- Merged duplicate `refreshTaskboard`/`refreshUserprofile` into a config-driven `refreshActiveDoc`; same for citations
+- Removed dead code branches and redundant `hasCjk` parameter in `retrieval.ts`
+- Removed unnecessary re-exports from `utils/shared.ts`
+- Removed unused `_vaultRoot` parameter from `scanRecentlyModifiedFiles`
+
+### Internal
+
+- Net reduction of ~150 lines across 7 files with no behavioral changes (except the bug fix above)
+
 ## 1.1.0 (2026-03-30)
 
 ### Features
