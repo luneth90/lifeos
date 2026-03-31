@@ -36,6 +36,8 @@ function handleTool<P extends Record<string, unknown>>(
 		const converted = deepConvertKeys(params) as Record<string, unknown>;
 		if (converted.dbPath === '') converted.dbPath = undefined;
 		if (converted.vaultRoot === '') converted.vaultRoot = undefined;
+		// filters contains SQL column names — must stay snake_case
+		if ('filters' in params) converted.filters = params.filters;
 		const result = coreFn(converted);
 		return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
 	};
