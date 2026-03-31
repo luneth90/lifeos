@@ -319,9 +319,9 @@ export function fullScan(vaultRoot: string, dbPath: string, config?: VaultConfig
 		// mass-deletion on unmounted volumes or empty mountpoints.
 		let removed = 0;
 		if (isVaultIntact(vaultRoot, cfg)) {
-			const rows = db
-				.prepare('SELECT file_path FROM vault_index')
-				.all() as Array<{ file_path: string }>;
+			const rows = db.prepare('SELECT file_path FROM vault_index').all() as Array<{
+				file_path: string;
+			}>;
 			for (const { file_path } of rows) {
 				if (!seenPaths.has(file_path) && isConfirmedMissing(join(vaultRoot, file_path))) {
 					removeIndexEntry(db, file_path);
