@@ -1,50 +1,50 @@
-# Changelog
+# 更新日志
 
 ## 1.1.1 (2026-03-31)
 
-### Bug Fixes
+### 问题修复
 
-- Fixed silent data loss in `memory_auto_capture` where nested `related_files` fields in corrections, decisions, and preferences were dropped due to missing snake_case→camelCase conversion
+- 修复 `memory_auto_capture` 中的静默数据丢失：corrections、decisions、preferences 中嵌套的 `related_files` 字段因缺少 snake_case→camelCase 转换而被丢弃
 
-### Refactoring
+### 重构
 
-- Extracted `withResolvedDb` and `resolveScene` helpers in `core.ts`, eliminating repeated DB lifecycle boilerplate across all 11 tool handlers
-- Extracted `handleTool` generic wrapper in `server.ts` with recursive deep key conversion, replacing 11 manual snake_case→camelCase mapping blocks
-- Merged duplicate `refreshTaskboard`/`refreshUserprofile` into a config-driven `refreshActiveDoc`; same for citations
-- Removed dead code branches and redundant `hasCjk` parameter in `retrieval.ts`
-- Removed unnecessary re-exports from `utils/shared.ts`
-- Removed unused `_vaultRoot` parameter from `scanRecentlyModifiedFiles`
+- 在 `core.ts` 中提取 `withResolvedDb` 和 `resolveScene` 辅助函数，消除 11 个工具处理器中重复的 DB 生命周期模板代码
+- 在 `server.ts` 中提取泛型 `handleTool` 包装器并实现递归深层键名转换，替代 11 处手动 snake_case→camelCase 映射
+- 将重复的 `refreshTaskboard`/`refreshUserprofile` 合并为配置驱动的 `refreshActiveDoc`；引用处理同理
+- 移除 `retrieval.ts` 中的死代码分支和多余的 `hasCjk` 参数
+- 移除 `utils/shared.ts` 中不必要的重导出
+- 移除 `scanRecentlyModifiedFiles` 中未使用的 `_vaultRoot` 参数
 
-### Internal
+### 内部
 
-- Net reduction of ~150 lines across 7 files with no behavioral changes (except the bug fix above)
+- 跨 7 个文件净减约 150 行代码，除上述 bug 修复外无行为变化
 
 ## 1.1.0 (2026-03-30)
 
-### Features
+### 新功能
 
-- Added verified Windows support for OpenCode GUI, alongside the existing macOS support for Claude Code TUI, Codex TUI, and OpenCode TUI
-- `lifeos init` and `lifeos upgrade` no longer force-create or manage Git metadata; Git remains user-managed
-- Updated README support notes and release workflows to reflect the supported runtime and client matrix
+- 新增 Windows 上 OpenCode GUI 的验证支持，与现有 macOS 上 Claude Code TUI、Codex TUI、OpenCode TUI 并列
+- `lifeos init` 和 `lifeos upgrade` 不再强制创建或管理 Git 元数据；Git 由用户自行管理
+- 更新 README 支持说明和发布流程，反映支持的运行时与客户端矩阵
 
-### Internal
+### 内部
 
-- Upgraded the runtime baseline to Node.js 24.14.1+ and refreshed the native dependency stack, including `better-sqlite3` 12.8.0 and `@types/node` 24.x
-- Patched the transitive `path-to-regexp` audit issue and added a regression test for dependency/workflow version drift
-- Aligned GitHub Actions CI and release workflows with the supported Node.js versions
+- 运行时基线升级至 Node.js 24.14.1+，刷新原生依赖栈，包括 `better-sqlite3` 12.8.0 和 `@types/node` 24.x
+- 修补传递依赖 `path-to-regexp` 的审计问题，并新增依赖/工作流版本漂移回归测试
+- 对齐 GitHub Actions CI 和发布工作流与支持的 Node.js 版本
 
 ## 1.0.3 (2026-03-30)
 
-### Features
+### 新功能
 
-- Added the `/digest` skill for custom-topic weekly digests
-- `/digest` now supports multilingual digest generation with configurable paper sources, RSS, and web search
-- Expanded paper-source fetching across `arXiv`, `bioRxiv`, `medRxiv`, `ChemRxiv`, `SocArXiv`, and `SSRN`
+- 新增 `/digest` 技能，支持自定义主题信息周报
+- `/digest` 现支持多语言周报生成，可配置论文来源、RSS 和 Web 搜索
+- 扩展论文来源抓取，覆盖 `arXiv`、`bioRxiv`、`medRxiv`、`ChemRxiv`、`SocArXiv` 和 `SSRN`
 
 ## 1.0.0
 
-- Initial release: MCP memory server with 11 tools
-- Vault indexing with FTS5 full-text search
-- Chinese tokenization via @node-rs/jieba
-- Session memory and context assembly
-- Active documents (TaskBoard, UserProfile)
+- 首次发布：MCP 记忆服务器，包含 11 个工具
+- Vault 索引与 FTS5 全文搜索
+- 通过 @node-rs/jieba 实现中文分词
+- 会话记忆与上下文组装
+- 活跃文档（TaskBoard、UserProfile）

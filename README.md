@@ -1,127 +1,126 @@
 # LifeOS
-![LifeOS Example](./example.png)
-[中文](./README.zh.md) | English
+![LifeOS 示例](./example.png)
+[English](./README.en.md) | 中文
 
-LifeOS helps you grow scattered ideas into structured knowledge and truly master it, from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.
+LifeOS 帮助你将碎片灵感发展为结构化知识，并真正掌握它，从随手捕获的想法，到头脑风暴与深度研究，到体系化的项目规划与知识笔记，再到间隔复习与掌握度追踪。目标不只是建立知识库，而是帮你理解、内化和驾驭复杂知识。
 
-## Why Build LifeOS?
+## 为什么开发 LifeOS？
 
-LifeOS started from a simple goal: package learning workflows, skills, templates, prompts, and a memory system into one complete setup you can use immediately. Instead of assembling your own toolchain from scratch or jumping between disconnected tools, you can initialize once, start working right away, and keep accumulating knowledge, process, and preferences as you go.
+LifeOS 的出发点很直接：把学习工作流、技能、模板、提示词和记忆系统整合成一套可以直接落地的完整方案。你不需要自己从零拼装工具链，也不必在不同工具之间来回切换，初始化后即可开箱即用，并在真实使用中持续沉淀知识、流程与偏好。
 
-## Core Features
+## 核心功能
 
-### Memory System
+### 记忆系统
 
-> The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
+> 记忆系统是 LifeOS 的核心能力，它以目录级、技能绑定的方式工作，把学习过程中的上下文、偏好与决策持续沉淀下来，让长期学习更连贯、更可追踪，也更容易形成积累。
 
-#### Cross-session continuity
+#### 跨会话连续性
 
-Session bridges and active-document context persist, so agents do not depend only on the current conversation.
+会话桥接和活跃文档上下文会持续沉淀，Agent 不只依赖当前对话。
 
-#### Project-scoped and skill-bound
+#### 项目级、技能绑定
 
-The memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, `digest`, and `archive`, and keeps accumulating preferences, decisions, and context.
+记忆系统围绕当前 Vault 中的 LifeOS 项目运行，只在 `today`、`project`、`research`、`knowledge`、`revise`、`digest`、`archive` 等技能工作流里激活，并持续积累偏好、决策和上下文。
 
-#### More controllable than global memory
+#### 比全局记忆更可控
 
-Compared with a memory model that mixes cross-directory content and global conversations together, a project-scoped, skill-bound memory system reduces irrelevant noise and keeps retrieval and follow-up decisions closer to the current LifeOS workflow.
+相较于把跨目录内容和全局会话混在一起的记忆方式，项目级、技能绑定的记忆系统能减少无关噪声，让检索结果与后续决策更贴近当前 LifeOS 工作流。
 
-### Directory Customization
+### 目录自定义
 
-LifeOS does not lock you into fixed directory names. Run `lifeos rename [path]` and the CLI will interactively list the directories that can be adjusted in the current vault, then guide you through choosing one and entering a new name.
+LifeOS 不把目录命名固定死。执行 `lifeos rename [path]` 后，CLI 会交互式列出当前 Vault 中可调整的目录，引导你选择目录并输入新名称。
 
-It updates `lifeos.yaml`, renames the actual directory, and batch-replaces all related wikilinks across the vault. That lets you adapt directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
+它会同步更新 `lifeos.yaml`、重命名实际目录，并批量替换 Vault 中所有相关的 wikilink。你可以根据自己的工作流、语言习惯和项目结构自由调整目录名称，同时保持配置和链接关系一致。
 
-### Learning Workflows
+### 学习工作流
 
-LifeOS provides a set of Agent skills designed around the learning process, connecting "input -> understanding -> output -> reinforcement" into a continuous workflow:
+LifeOS 提供一组围绕学习过程设计的 Agent 技能，把“输入 -> 理解 -> 产出 -> 巩固”串成连续工作流：
 
-- `/today`, `/brainstorm`, `/ask`: organize the day's focus, clarify questions, and quickly expand ideas
-- `/project`, `/research`, `/knowledge`: turn a topic into a project, a research report, and structured knowledge notes
-- `/digest`: subscribe to topic updates and generate structured weekly digests from paper sources, RSS, and web search
-- `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to periodic archiving
+- `/today`、`/brainstorm`、`/ask`：整理当天重点、澄清问题、快速展开想法
+- `/project`、`/research`、`/knowledge`：把主题推进成项目、研究报告和知识笔记
+- `/digest`：按主题订阅论文、RSS 与 Web 更新，自动生成结构化信息周报
+- `/read-pdf`、`/revise`、`/archive`：从资料提取、复习巩固，到定期归档收束
 
-## Core Components
+## 核心组件
 
-- **Memory system** — Project-scoped and skill-bound, providing vault indexing, session memory, and context assembly for AI agents
-- **CLI scaffold** — install globally, then use `lifeos init` to bootstrap a complete workspace
-- **Skill system** — 10 Agent skills covering daily planning, projects, research, weekly digests, knowledge curation, review, and more
-- **Templates + Schema** — 8 structured templates + Frontmatter schema for consistent notes
+- **记忆系统**：项目级、技能绑定，为 AI Agent 提供 Vault 索引、会话记忆、上下文组装
+- **CLI 脚手架**：全局安装后使用 `lifeos init` 一键创建工作空间
+- **技能系统**：10 个 Agent 技能覆盖日记、项目、研究、信息周报、知识整理、复习等工作流
+- **模板 + 规范**：8 个结构化模板 + Frontmatter 规范，确保笔记一致性
 
-## Quick Start
+## 快速开始
 
-LifeOS has been verified to work properly with Claude Code TUI / Codex TUI / OpenCode TUI on macOS, and with OpenCode GUI on Windows. Other desktop GUI apps or platform/client combinations have not been validated yet and may require additional testing.
+目前已确认 macOS 上的 Claude Code TUI / Codex TUI / OpenCode TUI，以及 Windows 上 OpenCode GUI 可以正常使用。其他 GUI 桌面端或平台/客户端组合尚未完成验证，实际兼容性仍需进一步测试。
 
-### Prerequisites
+### 前置要求
 
-Before starting, make sure Obsidian and at least one of Claude Code TUI / Codex TUI / OpenCode TUI / OpenCode GUI are installed locally.
+开始前，请确保本机已安装 Obsidian，以及 Claude Code TUI / Codex TUI / OpenCode TUI / OpenCode GUI 中至少一种。
 
-| Dependency | Required | Purpose |
+| 依赖 | 必须 | 用途 |
 |---|---|---|
-| **Node.js 24.14.1+ (LTS)** | Required | Runtime for MCP server and CLI |
-| **Python 3** | Required | PDF extraction (`/read-pdf`) and digest fetch helpers (`/digest`) |
+| **Node.js 24.14.1+ (LTS)** | 必须 | MCP Server 和 CLI 运行环境 |
+| **Python 3** | 必须 | PDF 提取（`/read-pdf`）和信息周报抓取脚本（`/digest`） |
 
-`lifeos init` checks all prerequisites before creating the workspace.
+`lifeos init` 会在创建工作空间前自动检查所有前置依赖。
 
-### Installation and Initialization
+### 安装与初始化
 
 ```bash
-# Step 1: install the CLI globally
+# 第一步：全局安装 CLI
 npm install -g lifeos
 
-# Step 2: create a new LifeOS workspace (auto-detects language from system locale)
+# 第二步：创建新的 LifeOS 工作空间（根据系统 locale 自动检测语言）
 lifeos init ./my-vault
 
-# Or specify language explicitly
-lifeos init ./my-vault --lang zh   # Chinese
-lifeos init ./my-vault --lang en   # English
+# 或显式指定语言
+lifeos init ./my-vault --lang zh   # 中文
+lifeos init ./my-vault --lang en   # 英文
 ```
 
-After init, MCP server configs are automatically registered for:
+安装完成后，MCP server 配置会自动注册到以下工具：
 
-| Tool | Config file |
+| 工具 | 配置文件 |
 |---|---|
 | **Claude Code** | `.mcp.json` |
 | **Codex** | `.codex/config.toml` |
 | **OpenCode** | `opencode.json` |
 
-Launch any of these tools in the vault directory to use all skills.
+在 Vault 目录下启动任一工具即可使用所有技能。
 
-If you want version control for the vault, initialize and manage Git yourself. LifeOS does not create or manage Git metadata for you.
-
-## CLI Commands
+## CLI 命令
 
 ```bash
-lifeos init [path] [--lang zh|en] [--no-mcp]           # Create a new vault
-lifeos upgrade [path] [--lang zh|en] [--override]      # Upgrade and restore assets/scaffold
-lifeos doctor [path]                                   # Health check
-lifeos rename [path]                                   # Interactive directory rename
-lifeos --help                                          # Show help
-lifeos --version                                       # Show version
+lifeos init [path] [--lang zh|en] [--no-mcp]           # 创建新 Vault
+lifeos upgrade [path] [--lang zh|en] [--override]      # 升级并补齐资产与脚手架
+lifeos doctor [path]                                   # 健康检查
+lifeos rename [path]                                   # 交互式重命名目录
+lifeos --help                                          # 查看帮助
+lifeos --version                                       # 查看版本
 ```
 
 ### init
 
-Creates a complete LifeOS workspace:
+创建完整的 LifeOS 工作空间：
 
-- 10 top-level directories plus nested subdirectories
-- 8 Markdown templates
-- Frontmatter schema
-- 10 AI skills with language-aware assets
-- `CLAUDE.md` agent behavior spec
-- `lifeos.yaml` config
-- MCP server registration (Claude Code / Codex / OpenCode)
+- 10 个顶层目录 + 嵌套子目录
+- 8 个 Markdown 模板
+- Frontmatter 规范
+- 10 个 AI 技能（按语言自动切换）
+- `CLAUDE.md` Agent 行为规范
+- `lifeos.yaml` 配置文件
+- Git 初始化 + `.gitignore`
+- MCP Server 注册（Claude Code / Codex / OpenCode）
 
 ### upgrade
 
-Upgrades and re-syncs an initialized vault:
+对已初始化的 Vault 执行升级与补全：
 
-- **Smart merge**: update unmodified templates, schema files, built-in prompts, and skill files; skip modified ones with a warning
-- **Restore missing scaffold**: bring back missing directories and managed files such as the memory directory, `.claude/skills`, `CLAUDE.md`, `AGENTS.md`, and MCP config entries
-- **Preserve user changes**: built-in files already customized by the user are not force-overwritten
-- **`--override` force-refreshes resources**: overwrite templates, schema, prompts, skills, `CLAUDE.md`, `AGENTS.md`, and MCP config entries without deleting user notes, resources, `memory.db`, memory-system data, or custom directory/memory settings in `lifeos.yaml`
+- **智能合并**：模板、规范、内置提示词、技能文件未修改则更新，已修改则跳过并警告
+- **缺失补全**：缺失的目录和脚手架文件会补回，例如记忆目录、`.claude/skills`、`CLAUDE.md`、`AGENTS.md`、`.gitignore`、`.git`、MCP 配置
+- **保留用户修改**：已存在且被用户改过的内置文件不会被强制覆盖
+- **`--override` 强制刷新资源**：覆盖模板、规范、提示词、技能、`CLAUDE.md`、`AGENTS.md` 以及 MCP 配置，但不会删除用户笔记、资源、`memory.db`、记忆系统数据，也不会改写 `lifeos.yaml` 里的目录和记忆配置
 
-By default, `lifeos upgrade` tries to preserve resource files you have already modified, while updating untouched content and restoring anything missing. If you want to explicitly replace those resources with the current built-in templates, skills, schema files, and MCP config entries, use `--override`:
+默认执行 `lifeos upgrade` 时，会尽量保留你已经改过的资源文件，只更新未修改内容并补齐缺失项。如果你希望直接用当前版本的内置模板、技能、规范和 MCP 配置重新覆盖这些资源，可以显式加上 `--override`：
 
 ```bash
 lifeos upgrade ./my-vault --override
@@ -129,80 +128,80 @@ lifeos upgrade ./my-vault --override
 
 ### doctor
 
-Checks vault integrity: directory structure, templates, schema, skills, config, Node.js version, and asset version.
+检查 Vault 完整性：目录结构、模板、规范、技能、配置文件、Node.js 版本、资产版本。
 
-### rename: Directory Customization
+### rename：目录可自定义化
 
-No extra flags are required. Run `lifeos rename [path]` and the CLI will show the directories available in the current vault, then guide you step by step to choose one and enter a new name. It updates `lifeos.yaml`, renames the actual directory, and batch-replaces related wikilinks across the vault.
+无需额外参数，直接执行 `lifeos rename [path]` 后，CLI 会列出当前 Vault 中可调整的目录，并通过交互引导你选择目录和输入新名称。它会同步更新 `lifeos.yaml`、重命名实际目录，并批量替换 Vault 中所有相关的 wikilink。
 
-This means LifeOS does not lock you into fixed directory names. You can freely adapt directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
+这意味着 LifeOS 的目录命名不是固定死的。你可以根据自己的工作流、语言习惯和项目结构，自由调整各个目录的名称，同时保持配置和链接关系一致，获得最大的使用自由度。
 
-## Skills
+## 技能一览
 
-| Skill | Description |
+| 技能 | 功能 |
 |---|---|
-| `/today` | Morning planning: review yesterday, plan today |
-| `/project` | Idea -> structured project |
-| `/research` | Topic -> deep research report |
-| `/digest` | Topic subscription -> structured weekly digest |
-| `/knowledge` | Book/paper -> knowledge note |
-| `/revise` | Generate quizzes, grade, and track mastery |
-| `/read-pdf` | PDF -> structured notes |
-| `/ask` | Quick Q&A |
-| `/brainstorm` | Interactive brainstorming |
-| `/archive` | Archive completed projects, processed drafts, completed plans, and diary entries older than the most recent 7 days |
+| `/today` | 晨间规划：回顾昨日、规划今日 |
+| `/project` | 想法 → 结构化项目 |
+| `/research` | 主题 → 深度研究报告 |
+| `/digest` | 主题订阅 → 结构化信息周报 |
+| `/knowledge` | 书籍/论文 → 知识笔记 |
+| `/revise` | 生成复习题、批改、追踪掌握度 |
+| `/read-pdf` | PDF → 结构化笔记 |
+| `/ask` | 快速问答 |
+| `/brainstorm` | 交互式头脑风暴 |
+| `/archive` | 归档已完成的项目、已处理的草稿、已完成的计划，以及超过最近 7 天的日记 |
 
-## Custom Expert Prompts
+## 自定义专家提示词
 
-The `/research` skill automatically scans the Prompts directory in your vault for expert prompt files. LifeOS ships with built-in expert prompts for AI/LLM, Math, Art, and History, and you can add your own to extend research capabilities to any domain.
+`/research` 技能会自动扫描 Vault 中提示词目录下的所有专家人格文件。LifeOS 内置了 AI/LLM、数学、艺术、历史等领域的专家人格，你可以添加自己的提示词来扩展研究能力到任何领域。
 
-### How It Works
+### 工作原理
 
-When you invoke `/research`, the Planning Agent:
+调用 `/research` 时，Planning Agent 会：
 
-1. Lists all `.md` files in `{system directory}/Prompts/`
-2. Reads each file's frontmatter and **Domain Coverage** section
-3. Matches the research topic to the best-fit expert prompt
-4. Applies the matched prompt's analytical framework and output format to the research report
+1. 列出 `{系统目录}/提示词/` 下所有 `.md` 文件
+2. 读取每个文件的 frontmatter 和**领域覆盖**章节
+3. 将研究主题与最匹配的专家提示词进行比对
+4. 将匹配的专家提示词的分析框架和输出格式应用到研究报告中
 
-### Adding Custom Expert Prompts
+### 添加自定义专家提示词
 
-Create a `.md` file in your vault's Prompts directory (`{system directory}/Prompts/`). The Planning Agent will pick it up automatically on the next `/research` invocation, with no restart or re-init required. Use the built-in prompts in the same directory as a reference for structure.
+在 Vault 的提示词目录（`{系统目录}/提示词/`）下创建 `.md` 文件即可。Planning Agent 在下次 `/research` 调用时会自动发现，无需重启或重新初始化。文件结构参照同目录下的预设提示词即可。
 
-## Tech Stack
+## 技术栈
 
-- **Runtime:** TypeScript + Node.js 24.14.1+ (LTS)
-- **Database:** SQLite + FTS5 (full-text search)
-- **Segmentation:** @node-rs/jieba (Chinese tokenization)
+- **Runtime:** TypeScript + Node.js 18+
+- **Database:** SQLite + FTS5（全文搜索）
+- **Segmentation:** @node-rs/jieba（中文分词）
 - **Protocol:** MCP (Model Context Protocol)
-- **Vault:** Obsidian (plain Markdown + Frontmatter)
+- **Vault:** Obsidian（纯 Markdown + Frontmatter）
 
-## Milestones
+## 里程碑
 
-- ✅ LifeOS 1.0 is now basically usable
-- ✅ The CLI supports directory customization
-- ✅ The CLI `upgrade` command supports smart updates
-- ✅ Claude Code TUI / Codex TUI / OpenCode TUI on macOS and OpenCode GUI on Windows have been tested
-- ✅ The `/digest` skill supports multilingual weekly digests with multi-source paper fetching
-- ☐ Improve memory-system precision
-- ☐ Support custom skills
-- ☐ Support custom workflows
+- ✅ LifeOS 1.0 版本已初步可用
+- ✅ CLI 支持目录自定义
+- ✅ CLI upgrade 支持智能更新
+- ✅ 已完成 macOS 上 Claude Code TUI / Codex TUI / OpenCode TUI 与 Windows 上 OpenCode GUI 的验证
+- ✅ `/digest` 技能已支持中英双语信息周报与多来源论文抓取
+- ☐ 强化记忆系统精准性
+- ☐ 支持自定义技能
+- ☐ 支持自定义工作流
 
-## Development
+## 开发
 
 ```bash
 git clone git@github.com:luneth90/lifeos.git
 cd lifeos
 npm install
-npm run build    # Compile TypeScript
-npm test         # Run tests (431 tests)
-npm run dev      # Dev mode (hot reload)
+npm run build    # 编译 TypeScript
+npm test         # 运行测试（431 个）
+npm run dev      # 开发模式（热重载）
 ```
 
 ## License
 
 [MIT](LICENSE)
 
-## Acknowledgements
+## 致谢
 
-This project was inspired by [MarsWang42/OrbitOS](https://github.com/MarsWang42/OrbitOS). 
+本项目的灵感来源于 [MarsWang42/OrbitOS](https://github.com/MarsWang42/OrbitOS)。
