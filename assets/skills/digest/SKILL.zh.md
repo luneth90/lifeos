@@ -1,7 +1,7 @@
 ---
 name: digest
 description: '通用信息周报技能：首次使用通过对话生成主题配置（Paper Sources、RSS、Web 搜索等），后续按配置自动抓取并产出结构化周报到草稿目录。支持多主题，每个主题独立配置和独立产出。当用户说"/digest"、"信息周报"、"周报"、"digest"时触发。'
-version: 1.1.0
+version: 1.1.1
 dependencies:
   templates: []
   prompts: []
