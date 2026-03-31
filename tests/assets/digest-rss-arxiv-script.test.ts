@@ -335,6 +335,11 @@ spec.loader.exec_module(module)
 
 captured = {}
 
+class FixedDateTime:
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 3, 30, tzinfo=timezone.utc)
+
 class FakeResponse:
     def read(self):
         return json.dumps({"collection": []}).encode("utf-8")
@@ -348,6 +353,7 @@ def fake_urlopen(request, timeout=0):
     return FakeResponse()
 
 module.urllib.request.urlopen = fake_urlopen
+module.datetime = FixedDateTime
 cutoff = datetime(2026, 3, 20, tzinfo=timezone.utc)
 module.fetch_biorxiv_pubs("biorxiv", cutoff)
 

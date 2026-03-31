@@ -63,6 +63,10 @@ jobs:
           TARBALL="$(npm run --silent release:pack)"
           echo "tarball=${TARBALL}" >> "$GITHUB_OUTPUT"
 
+      - name: Extract changelog notes
+        run: |
+          node scripts/release/extract-changelog.mjs "${{ steps.release_ref.outputs.tag }}" > /tmp/release-notes.md
+
       - name: Publish to npm
         run: npm publish "${{ steps.pack.outputs.tarball }}"
 
@@ -70,7 +74,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          NOTES="$(cat /tmp/release-notes.md)"
           gh release create "${{ steps.release_ref.outputs.tag }}" "${{ steps.pack.outputs.tarball }}" \
             --verify-tag \
             --generate-notes \
+            --notes "$NOTES" \
             --title "${{ steps.release_ref.outputs.tag }}"
