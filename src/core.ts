@@ -8,12 +8,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
-import {
-	refreshTaskboard,
-	refreshUserprofile,
-	taskboardCitations,
-	userprofileCitations,
-} from './active-docs/index.js';
+import { activeDocCitations, refreshActiveDoc } from './active-docs/index.js';
 import { type VaultConfig, getOrCreateVaultConfig } from './config.js';
 import { initDb } from './db/schema.js';
 import {
@@ -260,8 +255,8 @@ export function memoryCheckpoint(opts: {
 		}
 
 		// Refresh active docs
-		refreshTaskboard(db, vault);
-		refreshUserprofile(db, vault);
+		refreshActiveDoc(db, vault, 'TaskBoard');
+		refreshActiveDoc(db, vault, 'UserProfile');
 
 		// Process enhance queue
 		const enhanceResult = processEnhanceQueue(db, vault, 5);
@@ -324,8 +319,9 @@ export function memorySkillComplete(opts: {
 		// Refresh targets
 		const targets = opts.refreshTargets || ['TaskBoard', 'UserProfile'];
 		for (const target of targets) {
-			if (target === 'TaskBoard') refreshTaskboard(db, vault);
-			else if (target === 'UserProfile') refreshUserprofile(db, vault);
+			if (target === 'TaskBoard' || target === 'UserProfile') {
+				refreshActiveDoc(db, vault, target);
+			}
 		}
 
 		return {
@@ -347,21 +343,15 @@ export function memoryRefresh(opts: {
 	preserveManual?: boolean;
 }): RefreshResult {
 	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
-		if (opts.target === 'TaskBoard') {
-			return refreshTaskboard(db, vault, {
-				section: opts.section,
-				preserveManual: opts.preserveManual,
-			});
+		if (!ACTIVE_DOC_TARGETS.has(opts.target)) {
+			throw new Error(
+				`Unsupported target: ${opts.target}. Supported: ${[...ACTIVE_DOC_TARGETS].join(', ')}`,
+			);
 		}
-		if (opts.target === 'UserProfile') {
-			return refreshUserprofile(db, vault, {
-				section: opts.section,
-				preserveManual: opts.preserveManual,
-			});
-		}
-		throw new Error(
-			`Unsupported target: ${opts.target}. Supported: ${[...ACTIVE_DOC_TARGETS].join(', ')}`,
-		);
+		return refreshActiveDoc(db, vault, opts.target, {
+			section: opts.section,
+			preserveManual: opts.preserveManual,
+		});
 	});
 }
 
@@ -374,20 +364,11 @@ export function memoryCitations(opts: {
 	section?: string;
 	keyword?: string;
 }): CitationsResult {
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
-		if (opts.target === 'TaskBoard') {
-			return taskboardCitations(db, {
-				section: opts.section,
-				keyword: opts.keyword,
-			});
-		}
-		if (opts.target === 'UserProfile') {
-			return userprofileCitations(db, {
-				section: opts.section,
-				keyword: opts.keyword,
-			});
-		}
-		throw new Error(`Unsupported target: ${opts.target}`);
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db }) => {
+		return activeDocCitations(db, opts.target, {
+			section: opts.section,
+			keyword: opts.keyword,
+		});
 	});
 }
 

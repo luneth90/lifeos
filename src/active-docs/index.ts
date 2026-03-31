@@ -9,10 +9,31 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { getVaultConfig, resolveConfig } from '../config.js';
-import type { CitationsResult, RefreshResult } from '../types.js';
+import type { ActiveDocTarget, CitationsResult, RefreshResult } from '../types.js';
 import { getCitations } from './citations.js';
 import { buildTaskboardSections } from './taskboard.js';
 import { buildUserprofileSections } from './userprofile.js';
+
+// ─── Config map ──────────────────────────────────────────────────────────────
+
+interface ActiveDocConfig {
+	file: string;
+	skeleton: () => string;
+	build: (db: Database.Database, vaultRoot: string) => Record<string, string>;
+}
+
+const ACTIVE_DOC_CONFIGS: Record<ActiveDocTarget, ActiveDocConfig> = {
+	TaskBoard: {
+		file: 'TaskBoard.md',
+		skeleton: () => buildTaskboardSkeleton(),
+		build: buildTaskboardSections,
+	},
+	UserProfile: {
+		file: 'UserProfile.md',
+		skeleton: () => buildUserprofileSkeleton(),
+		build: buildUserprofileSections,
+	},
+};
 
 // ─── Path helpers ─────────────────────────────────────────────────────────────
 
@@ -137,92 +158,76 @@ function rebuildAutoSections(
 	return result;
 }
 
-// ─── Refresh operations ───────────────────────────────────────────────────────
+// ─── Unified refresh ─────────────────────────────────────────────────────────
 
 /**
- * Rebuild TaskBoard AUTO sections from DB data and write the file.
- * Returns the updated sections map.
+ * Rebuild AUTO sections for any active doc target from DB data and write the file.
  */
+export function refreshActiveDoc(
+	db: Database.Database,
+	vaultRoot: string,
+	target: ActiveDocTarget,
+	opts?: { section?: string; preserveManual?: boolean },
+): RefreshResult {
+	const cfg = ACTIVE_DOC_CONFIGS[target];
+	const memDir = getMemoryDir(vaultRoot);
+	mkdirSync(memDir, { recursive: true });
+	const docPath = join(memDir, cfg.file);
+	const existing = existsSync(docPath) ? readFileSync(docPath, 'utf-8') : cfg.skeleton();
+	const sections = cfg.build(db, vaultRoot);
+	const updated = rebuildAutoSections(existing, sections, opts);
+	writeFileSync(docPath, updated, 'utf-8');
+	return {
+		status: 'ok',
+		path: docPath,
+		sections: Object.keys(sections),
+		updatedSection: opts?.section ?? 'all',
+	};
+}
+
+/** Backward-compatible wrapper for TaskBoard refresh. */
 export function refreshTaskboard(
 	db: Database.Database,
 	vaultRoot: string,
 	opts?: { section?: string; preserveManual?: boolean },
 ): RefreshResult {
-	const memDir = getMemoryDir(vaultRoot);
-	mkdirSync(memDir, { recursive: true });
-	const tbPath = join(memDir, 'TaskBoard.md');
-
-	// Read existing content or create skeleton
-	const existing = existsSync(tbPath) ? readFileSync(tbPath, 'utf-8') : buildTaskboardSkeleton();
-
-	// Build new sections from DB
-	const sections = buildTaskboardSections(db, vaultRoot);
-
-	// Rebuild content
-	const updated = rebuildAutoSections(existing, sections, opts);
-
-	// Write back
-	writeFileSync(tbPath, updated, 'utf-8');
-
-	return {
-		status: 'ok',
-		path: tbPath,
-		sections: Object.keys(sections),
-		updatedSection: opts?.section ?? 'all',
-	};
+	return refreshActiveDoc(db, vaultRoot, 'TaskBoard', opts);
 }
 
-/**
- * Rebuild UserProfile AUTO sections from DB data and write the file.
- * Returns the updated sections map.
- */
+/** Backward-compatible wrapper for UserProfile refresh. */
 export function refreshUserprofile(
 	db: Database.Database,
 	vaultRoot: string,
 	opts?: { section?: string; preserveManual?: boolean },
 ): RefreshResult {
-	const memDir = getMemoryDir(vaultRoot);
-	mkdirSync(memDir, { recursive: true });
-	const upPath = join(memDir, 'UserProfile.md');
-
-	// Read existing content or create skeleton
-	const existing = existsSync(upPath) ? readFileSync(upPath, 'utf-8') : buildUserprofileSkeleton();
-
-	// Build new sections from DB
-	const sections = buildUserprofileSections(db, vaultRoot);
-
-	// Rebuild content
-	const updated = rebuildAutoSections(existing, sections, opts);
-
-	// Write back
-	writeFileSync(upPath, updated, 'utf-8');
-
-	return {
-		status: 'ok',
-		path: upPath,
-		sections: Object.keys(sections),
-		updatedSection: opts?.section ?? 'all',
-	};
+	return refreshActiveDoc(db, vaultRoot, 'UserProfile', opts);
 }
 
-// ─── Citation proxies ─────────────────────────────────────────────────────────
+// ─── Unified citations ──────────────────────────────────────────────────────
 
 /**
- * Get citations for TaskBoard items.
+ * Get citations for any active doc target.
  */
+export function activeDocCitations(
+	db: Database.Database,
+	target: ActiveDocTarget,
+	opts?: { section?: string; keyword?: string },
+): CitationsResult {
+	return getCitations(db, target, opts);
+}
+
+/** Backward-compatible wrapper for TaskBoard citations. */
 export function taskboardCitations(
 	db: Database.Database,
 	opts?: { section?: string; keyword?: string },
 ): CitationsResult {
-	return getCitations(db, 'TaskBoard', opts);
+	return activeDocCitations(db, 'TaskBoard', opts);
 }
 
-/**
- * Get citations for UserProfile items.
- */
+/** Backward-compatible wrapper for UserProfile citations. */
 export function userprofileCitations(
 	db: Database.Database,
 	opts?: { section?: string; keyword?: string },
 ): CitationsResult {
-	return getCitations(db, 'UserProfile', opts);
+	return activeDocCitations(db, 'UserProfile', opts);
 }
