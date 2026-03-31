@@ -77,6 +77,25 @@ function resolveDbAndVault(
 	return { db, vault, config };
 }
 
+function withResolvedDb<T>(
+	dbPath: string | undefined,
+	vaultRoot: string | undefined,
+	fn: (ctx: { db: Database.Database; vault: string; config: VaultConfig }) => T,
+): T {
+	const ctx = resolveDbAndVault(dbPath, vaultRoot);
+	try {
+		return fn(ctx);
+	} finally {
+		ctx.db.close();
+	}
+}
+
+function resolveScene(vault: string, scene?: string): ScenePolicy | null {
+	if (!scene) return null;
+	const policy = loadContextPolicy(vault);
+	return resolveScenePolicy(policy, scene);
+}
+
 // ─── 1. memory_startup ────────────────────────────────────────────────────────
 
 export function memoryStartup(opts: {
@@ -84,14 +103,11 @@ export function memoryStartup(opts: {
 	vaultRoot?: string;
 	sessionId?: string;
 }): StartupResult {
-	const { db, vault } = resolveDbAndVault(opts.dbPath, opts.vaultRoot);
-	try {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
 		const resolvedSessionId = resolveSessionId(opts.sessionId);
 		ensureContextPolicyExists(vault);
 		return runStartup(db, vault, resolvedSessionId);
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 2. memory_query ──────────────────────────────────────────────────────────
@@ -104,13 +120,8 @@ export function memoryQuery(opts: {
 	scene?: string;
 	vaultRoot?: string;
 }): { results: VaultQueryResult[]; scene_policy?: ScenePolicy } {
-	const { db, vault } = resolveDbAndVault(opts.dbPath, opts.vaultRoot);
-	try {
-		let scenePolicy = null;
-		if (opts.scene) {
-			const policy = loadContextPolicy(vault);
-			scenePolicy = resolveScenePolicy(policy, opts.scene);
-		}
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
+		const scenePolicy = resolveScene(vault, opts.scene);
 		const result = queryVaultIndex(
 			db,
 			opts.query || '',
@@ -119,9 +130,7 @@ export function memoryQuery(opts: {
 			scenePolicy,
 		);
 		return scenePolicy ? { ...result, scene_policy: scenePolicy } : result;
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 3. memory_recent ─────────────────────────────────────────────────────────
@@ -136,13 +145,8 @@ export function memoryRecent(opts: {
 	scene?: string;
 	vaultRoot?: string;
 }): { events: SessionEvent[]; scene_policy?: ScenePolicy } {
-	const { db, vault } = resolveDbAndVault(opts.dbPath, opts.vaultRoot);
-	try {
-		let scenePolicy = null;
-		if (opts.scene) {
-			const policy = loadContextPolicy(vault);
-			scenePolicy = resolveScenePolicy(policy, opts.scene);
-		}
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
+		const scenePolicy = resolveScene(vault, opts.scene);
 		const result = queryRecentEvents(db, {
 			days: opts.days || 14,
 			entryType: opts.entryType || null,
@@ -152,9 +156,7 @@ export function memoryRecent(opts: {
 			scenePolicy,
 		});
 		return scenePolicy ? { ...result, scene_policy: scenePolicy } : result;
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 4. memory_log ────────────────────────────────────────────────────────────
@@ -179,8 +181,7 @@ export function memoryLog(opts: {
 	if (opts.importance < 1 || opts.importance > 5) {
 		throw new Error(`importance must be 1-5, got: ${opts.importance}`);
 	}
-	const { db } = resolveDbAndVault(opts.dbPath);
-	try {
+	return withResolvedDb(opts.dbPath, undefined, ({ db }) => {
 		return logEvent(db, {
 			entryType: opts.entryType,
 			importance: opts.importance,
@@ -194,9 +195,7 @@ export function memoryLog(opts: {
 			relatedEntities: opts.relatedEntities,
 			supersedes: opts.supersedes,
 		});
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 5. memory_auto_capture ───────────────────────────────────────────────────
@@ -208,8 +207,7 @@ export function memoryAutoCapture(opts: {
 	preferences?: AutoCaptureItem[];
 	sessionId?: string;
 }): AutoCaptureResult {
-	const { db } = resolveDbAndVault(opts.dbPath);
-	try {
+	return withResolvedDb(opts.dbPath, undefined, ({ db }) => {
 		return autoCaptureEvents(
 			db,
 			{
@@ -219,9 +217,7 @@ export function memoryAutoCapture(opts: {
 			},
 			opts.sessionId,
 		);
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 6. memory_notify ─────────────────────────────────────────────────────────
@@ -231,12 +227,9 @@ export function memoryNotify(opts: {
 	vaultRoot?: string;
 	filePath: string;
 }): NotifyFileChangedResult {
-	const { db, vault } = resolveDbAndVault(opts.dbPath, opts.vaultRoot);
-	try {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
 		return notifyFileChanged(db, vault, opts.filePath);
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 7. memory_checkpoint ─────────────────────────────────────────────────────
@@ -246,8 +239,7 @@ export function memoryCheckpoint(opts: {
 	vaultRoot?: string;
 	sessionId?: string;
 }): CheckpointResult {
-	const { db, vault } = resolveDbAndVault(opts.dbPath, opts.vaultRoot);
-	try {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
 		const resolvedSessionId = resolveSessionId(opts.sessionId);
 		const closedAt = new Date().toISOString();
 
@@ -294,9 +286,7 @@ export function memoryCheckpoint(opts: {
 			session_closed: true,
 			warnings,
 		};
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 8. memory_skill_complete ─────────────────────────────────────────────────
@@ -314,8 +304,7 @@ export function memorySkillComplete(opts: {
 	contextSources?: string[];
 	refreshTargets?: string[];
 }): SkillCompleteResult {
-	const { db, vault } = resolveDbAndVault(opts.dbPath, opts.vaultRoot);
-	try {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
 		const logResult = logEvent(db, {
 			entryType: 'skill_completion',
 			importance: opts.importance || 4,
@@ -345,9 +334,7 @@ export function memorySkillComplete(opts: {
 			logged: true,
 			skill_name: opts.skillName,
 		};
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 9. memory_refresh ────────────────────────────────────────────────────────
@@ -359,8 +346,7 @@ export function memoryRefresh(opts: {
 	section?: string;
 	preserveManual?: boolean;
 }): RefreshResult {
-	const { db, vault } = resolveDbAndVault(opts.dbPath, opts.vaultRoot);
-	try {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
 		if (opts.target === 'TaskBoard') {
 			return refreshTaskboard(db, vault, {
 				section: opts.section,
@@ -376,9 +362,7 @@ export function memoryRefresh(opts: {
 		throw new Error(
 			`Unsupported target: ${opts.target}. Supported: ${[...ACTIVE_DOC_TARGETS].join(', ')}`,
 		);
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 10. memory_citations ─────────────────────────────────────────────────────
@@ -390,8 +374,7 @@ export function memoryCitations(opts: {
 	section?: string;
 	keyword?: string;
 }): CitationsResult {
-	const { db, vault } = resolveDbAndVault(opts.dbPath, opts.vaultRoot);
-	try {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
 		if (opts.target === 'TaskBoard') {
 			return taskboardCitations(db, {
 				section: opts.section,
@@ -405,9 +388,7 @@ export function memoryCitations(opts: {
 			});
 		}
 		throw new Error(`Unsupported target: ${opts.target}`);
-	} finally {
-		db.close();
-	}
+	});
 }
 
 // ─── 11. memory_skill_context ─────────────────────────────────────────────────
@@ -420,15 +401,12 @@ export function memorySkillContext(opts: {
 	query?: string;
 	limit?: number;
 }): SkillContextResult {
-	const { db, vault } = resolveDbAndVault(opts.dbPath, opts.vaultRoot);
-	try {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
 		return buildSkillContext(db, vault, {
 			skillProfile: opts.skillProfile,
 			relatedFiles: opts.relatedFiles,
 			query: opts.query,
 			limit: opts.limit,
 		});
-	} finally {
-		db.close();
-	}
+	});
 }
