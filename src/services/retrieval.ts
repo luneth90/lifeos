@@ -113,12 +113,9 @@ function queryTerms(query: string): string[] {
 /**
  * Check if text contains all query terms.
  */
-function textMatchesTerms(text: string, terms: string[], hasCjk: boolean): boolean {
+function textMatchesTerms(text: string, terms: string[]): boolean {
 	if (terms.length === 0) return false;
 	const lower = text.toLowerCase();
-	if (hasCjk) {
-		return terms.every((t) => lower.includes(t));
-	}
 	return terms.every((t) => lower.includes(t));
 }
 
@@ -128,7 +125,6 @@ function textMatchesTerms(text: string, terms: string[], hasCjk: boolean): boole
 function matchedFields(query: string, row: VaultSelectRow): string[] {
 	if (!query.trim()) return [];
 	const terms = queryTerms(query);
-	const hasCjk = containsCjk(query);
 	const fieldMap: Record<string, string> = {
 		title: 'title',
 		summary: 'summary',
@@ -139,7 +135,7 @@ function matchedFields(query: string, row: VaultSelectRow): string[] {
 	return Object.entries(fieldMap)
 		.filter(([col]) => {
 			const value = row[col as keyof VaultSelectRow];
-			return value != null && textMatchesTerms(String(value), terms, hasCjk);
+			return value != null && textMatchesTerms(String(value), terms);
 		})
 		.map(([, name]) => name);
 }
@@ -363,47 +359,43 @@ export function queryVaultIndex(
 	}
 
 	// Case 4: LIKE fallback (CJK with few FTS results, or FTS error)
-	if (needsFallback || ftsRows.length === 0) {
-		// Try LIKE fallback
-		const likePattern = `%${q}%`;
-		let likeWhere = `(
+	// Try LIKE fallback
+	const likePattern = `%${q}%`;
+	let likeWhere = `(
       vi.semantic_summary LIKE ? OR
       vi.search_hints LIKE ? OR
       vi.summary LIKE ? OR
       vi.title LIKE ? OR
       vi.tags LIKE ?
     )`;
-		const likeParams: unknown[] = [likePattern, likePattern, likePattern, likePattern, likePattern];
+	const likeParams: unknown[] = [likePattern, likePattern, likePattern, likePattern, likePattern];
 
-		if (filterWhere) {
-			likeWhere += ` AND ${filterWhere}`;
-			likeParams.push(...filterParams);
-		}
+	if (filterWhere) {
+		likeWhere += ` AND ${filterWhere}`;
+		likeParams.push(...filterParams);
+	}
 
-		const likeSql = `
+	const likeSql = `
       SELECT ${VAULT_SELECT}
       FROM vault_index vi
       WHERE ${likeWhere}
       ORDER BY vi.modified_at DESC
       LIMIT ?
     `;
-		likeParams.push(limit);
+	likeParams.push(limit);
 
-		const likeRows = queryAll<VaultSelectRow>(db, likeSql, ...likeParams);
+	const likeRows = queryAll<VaultSelectRow>(db, likeSql, ...likeParams);
 
-		// Merge FTS rows + LIKE rows, deduplicate by file_path
-		const likeSource: MatchSource = ftsRows.length > 0 ? 'hybrid_expand' : 'like_fallback';
-		const ftsTagged = ftsRows.map((row) => ({ row, source: 'fts5' as MatchSource }));
-		const likeTagged = likeRows.map((row) => ({ row, source: likeSource }));
-		const merged = mergeAndDedupe(ftsTagged, likeTagged, (item) => String(item.row.file_path));
+	// Merge FTS rows + LIKE rows, deduplicate by file_path
+	const likeSource: MatchSource = ftsRows.length > 0 ? 'hybrid_expand' : 'like_fallback';
+	const ftsTagged = ftsRows.map((row) => ({ row, source: 'fts5' as MatchSource }));
+	const likeTagged = likeRows.map((row) => ({ row, source: likeSource }));
+	const merged = mergeAndDedupe(ftsTagged, likeTagged, (item) => String(item.row.file_path));
 
-		const results = merged
-			.slice(0, limit)
-			.map(({ row, source }) => buildQueryResult(row, source, matchedFields(q, row)));
-		return { results: rerankQueryResults(results, scenePolicy) };
-	}
-
-	return { results: [] };
+	const results = merged
+		.slice(0, limit)
+		.map(({ row, source }) => buildQueryResult(row, source, matchedFields(q, row)));
+	return { results: rerankQueryResults(results, scenePolicy) };
 }
 
 /**
