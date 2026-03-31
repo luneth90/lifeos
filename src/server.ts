@@ -47,7 +47,7 @@ function handleTool<P extends Record<string, unknown>>(
 
 const server = new McpServer({
 	name: 'lifeos',
-	version: '1.1.0',
+	version: '1.1.1',
 });
 
 // ─── Tool registrations ───────────────────────────────────────────────────────
