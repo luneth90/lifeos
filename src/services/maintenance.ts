@@ -6,8 +6,8 @@
 
 import type Database from 'better-sqlite3';
 import type { MaintenanceResult } from '../types.js';
-import { daysAgo } from '../types.js';
-import { KEY_ENTRY_TYPES, coerceNow, isArchiveSummary } from '../utils/shared.js';
+import { KEY_ENTRY_TYPES, daysAgo } from '../types.js';
+import { coerceNow, isArchiveSummary } from '../utils/shared.js';
 
 // ─── needsMaintenance ─────────────────────────────────────────────────────────
 

@@ -482,10 +482,7 @@ export interface RecentlyModifiedFile {
  * Scan for files in the vault that have been modified in the last 24 hours.
  * Uses the vault_index table modified_at field.
  */
-export function scanRecentlyModifiedFiles(
-	db: Database.Database,
-	_vaultRoot: string,
-): RecentlyModifiedFile[] {
+export function scanRecentlyModifiedFiles(db: Database.Database): RecentlyModifiedFile[] {
 	const cutoff = daysAgo(1);
 
 	const rows = db

@@ -21,9 +21,6 @@ export const ALLOWED_COUNT_TABLES: Set<string> = new Set([
 	'session_log',
 ]);
 
-export { VALID_ENTRY_TYPES, KEY_ENTRY_TYPES, ACTIVE_DOC_TARGETS } from '../types.js';
-export { daysAgo, formatDateShort } from '../types.js';
-
 export const RULE_KEY_DETAIL_FIELDS = ['rule_key', 'preference_slot', 'constraint_key'] as const;
 
 export const RULE_KEY_PREFIXES: Record<string, string> = {
