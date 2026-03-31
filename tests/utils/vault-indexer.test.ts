@@ -272,6 +272,117 @@ describe('fullScan()', () => {
     const result = fullScan(vault.root, vault.dbPath, config);
     expect(result.indexed).toBe(1);
   });
+
+  it('removes stale index entries for deleted files', () => {
+    writeTestNote(vault.root, '00_草稿/keep.md', { title: 'Keep', type: 'draft', status: 'pending' });
+    writeTestNote(vault.root, '00_草稿/delete-me.md', { title: 'Delete', type: 'draft', status: 'pending' });
+
+    // First scan indexes both
+    const first = fullScan(vault.root, vault.dbPath);
+    expect(first.indexed).toBe(2);
+    expect(first.removed).toBe(0);
+
+    // Delete one file, then rescan
+    unlinkSync(join(vault.root, '00_草稿/delete-me.md'));
+    const second = fullScan(vault.root, vault.dbPath);
+
+    expect(second.indexed).toBe(1);
+    expect(second.removed).toBe(1);
+
+    const rows = db.prepare('SELECT file_path FROM vault_index').all() as Array<{ file_path: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].file_path).toBe('00_草稿/keep.md');
+  });
+
+  it('does not remove entries for inaccessible files (non-ENOENT errors)', () => {
+    writeTestNote(vault.root, '00_草稿/note.md', { title: 'Note', type: 'draft', status: 'pending' });
+
+    // Index the file
+    fullScan(vault.root, vault.dbPath);
+
+    // Make the file's parent directory unreadable so walkMdFiles skips it,
+    // but the file still exists on disk — prune must NOT delete the row.
+    const { chmodSync } = require('fs');
+    const dir = join(vault.root, '00_草稿');
+    chmodSync(dir, 0o000);
+
+    try {
+      const result = fullScan(vault.root, vault.dbPath);
+      // Walk couldn't enter the directory, so nothing was indexed
+      expect(result.indexed).toBe(0);
+      // But the row must survive because the file still exists (EACCES, not ENOENT)
+      expect(result.removed).toBe(0);
+
+      const rows = db.prepare('SELECT file_path FROM vault_index').all() as Array<{ file_path: string }>;
+      expect(rows).toHaveLength(1);
+    } finally {
+      chmodSync(dir, 0o755);
+    }
+  });
+
+  it('returns removed count of zero when no stale entries exist', () => {
+    writeTestNote(vault.root, '00_草稿/note.md', { title: 'Note', type: 'draft', status: 'pending' });
+    const result = fullScan(vault.root, vault.dbPath);
+    expect(result.removed).toBe(0);
+  });
+
+  it('prunes stale row when the last file in the vault is deleted', () => {
+    writeTestNote(vault.root, '00_草稿/only-file.md', { title: 'Only', type: 'draft', status: 'pending' });
+
+    // Index the single file
+    const first = fullScan(vault.root, vault.dbPath);
+    expect(first.indexed).toBe(1);
+
+    // Delete the only file — vault directories still exist, just no .md files
+    unlinkSync(join(vault.root, '00_草稿/only-file.md'));
+    const second = fullScan(vault.root, vault.dbPath);
+
+    expect(second.indexed).toBe(0);
+    expect(second.removed).toBe(1);
+
+    const rows = db.prepare('SELECT file_path FROM vault_index').all();
+    expect(rows).toHaveLength(0);
+  });
+
+  it('skips pruning entirely when vault root is inaccessible', () => {
+    writeTestNote(vault.root, '00_草稿/note.md', { title: 'Note', type: 'draft', status: 'pending' });
+
+    // Index the file
+    fullScan(vault.root, vault.dbPath);
+
+    // Point fullScan at a non-existent vault root — simulates unmounted volume.
+    // Without the safety guard this would ENOENT every file and purge all rows.
+    const bogusRoot = join(vault.root, '__does_not_exist__');
+    const result = fullScan(bogusRoot, vault.dbPath);
+
+    expect(result.indexed).toBe(0);
+    expect(result.removed).toBe(0);
+
+    // Original row must survive
+    const rows = db.prepare('SELECT file_path FROM vault_index').all() as Array<{ file_path: string }>;
+    expect(rows).toHaveLength(1);
+  });
+
+  it('skips pruning when vault root is readable but empty (stale mountpoint)', () => {
+    const { mkdirSync } = require('fs');
+    writeTestNote(vault.root, '00_草稿/note.md', { title: 'Note', type: 'draft', status: 'pending' });
+
+    // Index the file
+    fullScan(vault.root, vault.dbPath);
+
+    // Create an empty directory to simulate a readable but empty mountpoint
+    const emptyRoot = join(vault.root, '__empty_mount__');
+    mkdirSync(emptyRoot);
+    const result = fullScan(emptyRoot, vault.dbPath);
+
+    expect(result.indexed).toBe(0);
+    // Walk found zero files → pruning must be skipped
+    expect(result.removed).toBe(0);
+
+    // Original row must survive
+    const rows = db.prepare('SELECT file_path FROM vault_index').all() as Array<{ file_path: string }>;
+    expect(rows).toHaveLength(1);
+  });
 });
 
 // ─── indexSingleFile ──────────────────────────────────────────────────────────

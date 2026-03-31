@@ -87,10 +87,12 @@ export function runStartup(
 
 	// 5. Full vault scan — vault-indexer opens its own DB connection via dbPath
 	let scanIndexed = 0;
+	let scanRemoved = 0;
 	try {
 		const dbPath = db.name; // better-sqlite3 exposes .name as the db file path
 		const scanResult = fullScan(vaultRoot, dbPath);
 		scanIndexed = scanResult.indexed;
+		scanRemoved = scanResult.removed;
 	} catch (e) {
 		console.warn('[lifeos] vault scan failed:', e);
 		scanIndexed = 0;
@@ -121,7 +123,7 @@ export function runStartup(
 
 	return {
 		layer0_summary: buildLayer0Summary(vaultRoot, policy, bridgeText),
-		vault_stats: { total_files: totalFiles, updated_since_last: scanIndexed },
+		vault_stats: { total_files: totalFiles, updated_since_last: scanIndexed, removed: scanRemoved },
 		enhance_queue_size: enhanceQueueSize,
 		enhanced_files: enhanceResult.processed,
 		last_session_bridge: bridgeText,

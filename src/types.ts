@@ -144,7 +144,7 @@ export type SessionSelectRow = Pick<
 
 export interface StartupResult {
 	layer0_summary: string;
-	vault_stats: { total_files: number; updated_since_last: number };
+	vault_stats: { total_files: number; updated_since_last: number; removed: number };
 	enhance_queue_size: number;
 	enhanced_files: number;
 	last_session_bridge: string | null;

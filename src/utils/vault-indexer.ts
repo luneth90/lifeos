@@ -36,6 +36,7 @@ export interface ParsedMarkdown {
 export interface ScanResult {
 	indexed: number;
 	skipped: number;
+	removed: number;
 }
 
 export interface IndexResult {
@@ -201,6 +202,42 @@ function removeIndexEntry(db: Database.Database, filePath: string): void {
 	db.prepare('DELETE FROM vault_index WHERE file_path = ?').run(filePath);
 }
 
+/** Return true only when statSync fails with ENOENT (file confirmed deleted).
+ *  Any other error (EACCES, EIO, etc.) returns false to avoid purging live rows. */
+function isConfirmedMissing(absPath: string): boolean {
+	try {
+		statSync(absPath);
+		return false;
+	} catch (err: unknown) {
+		return (err as NodeJS.ErrnoException).code === 'ENOENT';
+	}
+}
+
+/** Check that the vault looks genuine before allowing pruning.
+ *  The root must be readable AND at least one configured scan-prefix directory
+ *  must exist on disk. This prevents mass-deletion when the vault root points
+ *  at an empty/stale mountpoint that is technically readable but has none of
+ *  the vault's actual content. */
+function isVaultIntact(vaultRoot: string, cfg: VaultConfig): boolean {
+	try {
+		readdirSync(vaultRoot);
+	} catch {
+		return false;
+	}
+	// At least one scan-prefix dir must exist (e.g. "00_草稿/", "20_项目/")
+	for (const prefix of cfg.scanPrefixes()) {
+		// prefix has trailing slash (e.g. "00_草稿/"), strip it for the dir check
+		const dir = join(vaultRoot, prefix.replace(/\/$/, ''));
+		try {
+			statSync(dir);
+			return true;
+		} catch {
+			// try next prefix
+		}
+	}
+	return false;
+}
+
 // ─── Recursive file walk ──────────────────────────────────────────────────────
 
 function* walkMdFiles(dir: string): Generator<string> {
@@ -242,9 +279,11 @@ export function fullScan(vaultRoot: string, dbPath: string, config?: VaultConfig
 	try {
 		let indexed = 0;
 		let skipped = 0;
+		const seenPaths = new Set<string>();
 
 		for (const absPath of walkMdFiles(vaultRoot)) {
 			const relPath = relative(vaultRoot, absPath).replace(/\\/g, '/');
+			seenPaths.add(relPath);
 
 			if (!shouldIndex(relPath, cfg)) {
 				skipped++;
@@ -274,7 +313,24 @@ export function fullScan(vaultRoot: string, dbPath: string, config?: VaultConfig
 			indexed++;
 		}
 
-		return { indexed, skipped };
+		// Remove stale entries for files confirmed deleted from disk.
+		// Safety: only prune when the vault looks genuine — root is readable
+		// and at least one scan-prefix directory exists. This prevents
+		// mass-deletion on unmounted volumes or empty mountpoints.
+		let removed = 0;
+		if (isVaultIntact(vaultRoot, cfg)) {
+			const rows = db
+				.prepare('SELECT file_path FROM vault_index')
+				.all() as Array<{ file_path: string }>;
+			for (const { file_path } of rows) {
+				if (!seenPaths.has(file_path) && isConfirmedMissing(join(vaultRoot, file_path))) {
+					removeIndexEntry(db, file_path);
+					removed++;
+				}
+			}
+		}
+
+		return { indexed, skipped, removed };
 	} finally {
 		db.close();
 	}
