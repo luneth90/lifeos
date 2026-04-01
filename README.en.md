@@ -9,6 +9,15 @@ LifeOS started from a simple goal: package learning workflows, skills, templates
 
 ## Core Features
 
+### Learning Workflows
+
+LifeOS provides a set of Agent skills designed around the learning process, connecting "input -> understanding -> output -> reinforcement" into a continuous workflow:
+
+- `/today`, `/brainstorm`, `/ask`: organize the day's focus, clarify questions, and quickly expand ideas
+- `/project`, `/research`, `/knowledge`: turn a topic into a project, a research report, and structured knowledge notes
+- `/digest`: subscribe to topic updates and generate structured weekly digests from paper sources, RSS, and web search
+- `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to periodic archiving
+
 ### Memory System
 
 > The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
@@ -30,15 +39,6 @@ Compared with a memory model that mixes cross-directory content and global conve
 LifeOS does not lock you into fixed directory names. Run `lifeos rename [path]` and the CLI will interactively list the directories that can be adjusted in the current vault, then guide you through choosing one and entering a new name.
 
 It updates `lifeos.yaml`, renames the actual directory, and batch-replaces all related wikilinks across the vault. That lets you adapt directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
-
-### Learning Workflows
-
-LifeOS provides a set of Agent skills designed around the learning process, connecting "input -> understanding -> output -> reinforcement" into a continuous workflow:
-
-- `/today`, `/brainstorm`, `/ask`: organize the day's focus, clarify questions, and quickly expand ideas
-- `/project`, `/research`, `/knowledge`: turn a topic into a project, a research report, and structured knowledge notes
-- `/digest`: subscribe to topic updates and generate structured weekly digests from paper sources, RSS, and web search
-- `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to periodic archiving
 
 ## Core Components
 
