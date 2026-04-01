@@ -77,50 +77,65 @@ Compaction 后重新继续任务前，必须：
 
 适用于已初始化 `{system}/{memory}/` 的 Vault。
 
-> **核心原则：记忆系统仅在 LifeOS 技能工作流中激活。** 非技能的随意对话不触发任何记忆写入，避免噪声污染数据。
+> **存储规则：** 所有记忆数据必须通过 LifeOS MCP 记忆工具写入 Vault 内（`{system}/{memory}/`）。禁止将用户偏好、决策等写入平台内置记忆路径（如 Claude auto-memory、Gemini memory）——平台内置记忆无法跨 Agent 共享。平台内置记忆仅用于该平台自身的操作偏好。
 
-### 触发条件
+### 分层激活规则
 
-记忆工具**仅在以下场景**中调用：
-- 使用了 LifeOS 技能（`/today`、`/knowledge`、`/revise`、`/research`、`/project`、`/archive`、`/brainstorm`、`/ask`、`/digest`）
-- 用户明确要求操作 Vault 文件（创建/修改笔记、项目文件等）
-- 用户明确要求查询记忆系统
+记忆操作按用途分为三层，激活条件各不相同：
 
-**禁止触发的场景：** 闲聊、代码讨论、与 Vault 无关的对话。这些场景下不调用任何 `memory_*` 工具。
+#### 第一层：始终激活
 
-### 调用规则
+无论是否在技能工作流中，以下操作在**任何对话**中都必须执行：
 
-1. 每次会话开始时，调用 `memory_startup` 获取 Layer 0 摘要（无论是否使用技能）。
-2. 技能执行中修改 Vault 文件后，调用 `memory_notify` 更新索引。
-3. 技能完成后，调用 `memory_skill_complete` 记录事件并刷新活文档。
-4. 技能执行过程中出现的用户偏好、纠错、项目决策，通过 `memory_log`（单条）或 `memory_auto_capture`（批量）写入。具体捕获规则见下方「偏好与决策捕获」。
-5. 技能会话结束前，先写入 `session_bridge`（通过 `memory_log`），再调用 `memory_checkpoint`。
-6. 技能执行中需要判断用户偏好、引用历史决策、确认学习进度时，优先查询记忆系统（`memory_query` / `memory_recent`）。
+| 操作 | 时机 | 说明 |
+| --- | --- | --- |
+| `memory_startup` | 会话开始 | 获取 Layer 0 摘要，加载用户偏好和上下文 |
+| `memory_log` / `memory_auto_capture` | 用户表达持久规则时 | 捕获偏好、纠错、决策，**必须附带 `slot_key`**（详见下方「偏好与决策捕获」） |
 
-> **记忆数据存储规则：** 所有记忆数据必须通过 LifeOS MCP 记忆工具写入 Vault 内（`{system}/{memory}/`）。禁止将项目知识、用户偏好、决策等写入平台内置记忆路径。平台内置记忆仅用于该平台自身的操作偏好。
+**判断标准：** 用户说的内容**下次对话还需要遵守**吗？如果是，无论当前在做什么，都必须立即写入 LifeOS。
+
+#### 第二层：技能工作流
+
+仅在执行 LifeOS 技能（`/today`、`/knowledge`、`/revise`、`/research`、`/project`、`/archive`、`/brainstorm`、`/ask`、`/digest`）或用户明确要求操作 Vault 文件时激活：
+
+| 操作 | 时机 | 说明 |
+| --- | --- | --- |
+| `memory_notify` | 创建或修改 Vault 文件后 | 更新文件索引 |
+| `memory_skill_complete` | 技能全部文件写入完成后 | 记录技能事件，刷新活文档 |
+| `memory_query` / `memory_recent` | 需要上下文时 | 查询用户偏好、历史决策、学习进度 |
+
+#### 第三层：会话生命周期
+
+每次会话结束前执行，无论是否使用了技能：
+
+| 操作 | 时机 | 说明 |
+| --- | --- | --- |
+| `memory_log`（session_bridge） | 会话收尾第一步 | 写入本次会话摘要 |
+| `memory_checkpoint` | 会话收尾最后一步 | 刷新活文档、处理增强队列 |
+
+#### 噪声防护
+
+以下场景**不触发第二层操作**（但第一层始终生效）：
+- 闲聊、代码讨论、与 Vault 无关的对话
+- 一次性技术问答
 
 ### 偏好与决策捕获
 
-**slot_key 命名规范:** `<category>:<topic>`
+每条偏好/纠错/决策**必须附带 `slot_key`**（格式 `<category>:<topic>`）。系统会根据 `slot_key` 自动持久化到 UserProfile 或 TaskBoard，同一 `slot_key` 的后续写入会覆盖旧值。
 
-| category | 含义 | 示例 |
-| --- | --- | --- |
-| `format` | 输出格式偏好 | `format:commit-msg`、`format:note-style` |
-| `workflow` | 工作流偏好 | `workflow:review-frequency`、`workflow:pr-size` |
-| `tool` | 工具使用偏好 | `tool:editor`、`tool:terminal` |
-| `content` | 内容风格偏好 | `content:language`、`content:emoji` |
-| `schedule` | 时间安排偏好 | `schedule:study-time`、`schedule:break-interval` |
+**category 参考：** `format`（输出格式）、`workflow`（工作流）、`tool`（工具使用）、`content`（内容风格）、`schedule`（时间安排）
 
 **必须捕获的场景：**
-- 用户明确纠正 Agent 行为（例："不要用英文"、"别加 emoji"）→ `correction`
-- 用户确认某种方案或方向（例："就用这个结构"、"对，用 TDD"）→ `decision`
-- 用户表达持久偏好（例："我喜欢简洁的提交信息"、"复习间隔设为两周"）→ `preference`
+- 用户纠正 Agent 行为（"不要用英文"、"别加 emoji"、"以后…"）→ `correction`，slot_key 如 `content:language`
+- 用户确认方案或方向（"就用这个结构"、"对，用 TDD"）→ `decision`，slot_key 如 `workflow:tdd`
+- 用户表达持久偏好（"我喜欢简洁的提交信息"、"复习间隔设为两周"）→ `preference`，slot_key 如 `format:commit-msg`
 
 **禁止捕获的场景：**
-- 一次性的技术讨论（例："这个 bug 的原因是什么"）
-- 代码层面已固化的约定（例：已写入配置文件的参数）
-- 闲聊或与 Vault 无关的对话
+- 一次性的技术讨论（"这个 bug 的原因是什么"）
+- 代码层面已固化的约定（已写入配置文件的参数）
 - 从代码或 git 历史可直接推导的信息
+
+> `slot_key` 的完整命名规范和调用示例见 `.agents/skills/_shared/memory-protocol.md`。
 
 ---
 

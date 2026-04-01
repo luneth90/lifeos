@@ -169,6 +169,7 @@ export function memoryLog(opts: {
 	relatedFiles?: string[];
 	relatedEntities?: string[];
 	supersedes?: string;
+	slotKey?: string;
 }): LogEventResult {
 	if (!VALID_ENTRY_TYPES.has(opts.entryType)) {
 		throw new Error(`Invalid entry_type: ${opts.entryType}`);
@@ -189,6 +190,7 @@ export function memoryLog(opts: {
 			relatedFiles: opts.relatedFiles,
 			relatedEntities: opts.relatedEntities,
 			supersedes: opts.supersedes,
+			slotKey: opts.slotKey,
 		});
 	});
 }

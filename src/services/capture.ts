@@ -18,6 +18,7 @@ import {
 	resolveRuleKey,
 	resolveSessionId,
 } from '../utils/shared.js';
+import { upsertMemoryItem } from '../active-docs/derived-memory.js';
 import { indexSingleFile } from '../utils/vault-indexer.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ export interface LogEventOpts {
 	relatedFiles?: string[] | null;
 	relatedEntities?: string[] | null;
 	supersedes?: string | null;
+	slotKey?: string;
 }
 
 export interface LogEventResult {
@@ -48,6 +50,7 @@ export interface AutoCaptureItem {
 	importance?: number;
 	scope?: string;
 	relatedFiles?: string[];
+	slotKey?: string;
 }
 
 export interface AutoCapturePayload {
@@ -237,6 +240,30 @@ export function logEvent(db: Database.Database, opts: LogEventOpts): LogEventRes
 		ruleKey,
 	);
 
+	// Sync to memory_items when slot_key is provided for preference/correction/decision
+	const slotKey = opts.slotKey;
+	if (slotKey && (entryType === 'preference' || entryType === 'correction' || entryType === 'decision')) {
+		const target = entryType === 'decision' ? 'TaskBoard' : 'UserProfile';
+		const section = entryType === 'decision' ? 'decisions' : entryType === 'correction' ? 'corrections' : 'preferences';
+		upsertMemoryItem(db, {
+			itemId: randomUUID(),
+			target,
+			section,
+			slotKey,
+			content: summary,
+			confidence: null,
+			sourceEventIds: [eventId],
+			sourceRefs: sourceRefs ?? [],
+			relatedFiles: relatedFiles ?? [],
+			manualFlag: false,
+			status: 'active',
+			supersededBy: null,
+			lastConfirmedAt: null,
+			updatedAt: timestamp,
+			expiresAt: null,
+		});
+	}
+
 	return { eventId, timestamp, status: 'ok' };
 }
 
@@ -302,6 +329,7 @@ export function autoCaptureEvents(
 				scope: item.scope,
 				relatedFiles: item.relatedFiles,
 				sessionId,
+				slotKey: item.slotKey,
 			});
 
 			captured.push({ eventId: result.eventId, entryType, summary });

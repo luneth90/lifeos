@@ -12,7 +12,7 @@ import { loadsJsonList, parseDetailObject } from '../utils/shared.js';
 // ─── Section builders ─────────────────────────────────────────────────────────
 
 function buildProfileSummarySection(db: Database.Database): string {
-	// Look for a manual profile-summary in memory_items
+	// Priority 1: manual profile-summary in memory_items
 	const item = db
 		.prepare(
 			`SELECT content FROM memory_items
@@ -25,25 +25,72 @@ function buildProfileSummarySection(db: Database.Database): string {
 		return item.content;
 	}
 
-	// Auto-generate from recent preferences + corrections
-	const cutoff = daysAgo(90);
-	const prefRows = db
+	// Priority 2: auto-aggregate user portrait from DB statistics
+	const lines: string[] = [];
+	const cutoff30 = daysAgo(30);
+
+	// Learning focus: active learning projects by domain
+	const domainRows = db
 		.prepare(
-			`SELECT summary FROM session_log
-       WHERE entry_type = 'preference' AND timestamp >= ?
-       ORDER BY importance DESC, timestamp DESC
-       LIMIT 5`,
+			`SELECT domain, COUNT(*) as cnt FROM vault_index
+       WHERE type = 'project' AND category = 'learning' AND status = 'active' AND domain IS NOT NULL
+       GROUP BY domain ORDER BY cnt DESC LIMIT 3`,
 		)
-		.all([cutoff]) as Array<{ summary: string }>;
+		.all() as Array<{ domain: string; cnt: number }>;
 
-	if (prefRows.length === 0) {
-		return '用户偏好尚未建立。';
+	if (domainRows.length > 0) {
+		lines.push(`**学习重心：** ${domainRows.map((r) => r.domain).join('、')}`);
 	}
 
-	const lines = ['用户核心偏好摘要：'];
-	for (const r of prefRows) {
-		lines.push(`- ${r.summary}`);
+	// Most used skills (last 30 days)
+	const skillRows = db
+		.prepare(
+			`SELECT skill_name, COUNT(*) as cnt FROM session_log
+       WHERE entry_type = 'skill_completion' AND skill_name IS NOT NULL AND timestamp >= ?
+       GROUP BY skill_name ORDER BY cnt DESC LIMIT 5`,
+		)
+		.all([cutoff30]) as Array<{ skill_name: string; cnt: number }>;
+
+	if (skillRows.length > 0) {
+		const skillList = skillRows.map((r) => `/${r.skill_name}（${r.cnt}次）`).join('、');
+		lines.push(`**常用技能：** ${skillList}`);
 	}
+
+	// Activity level (last 30 days)
+	const activityRow = db
+		.prepare(
+			`SELECT COUNT(DISTINCT DATE(timestamp)) as active_days, COUNT(*) as total_events
+       FROM session_log WHERE timestamp >= ?`,
+		)
+		.get([cutoff30]) as { active_days: number; total_events: number } | undefined;
+
+	if (activityRow && activityRow.active_days > 0) {
+		const avgEvents = (activityRow.total_events / activityRow.active_days).toFixed(1);
+		lines.push(
+			`**近30天活跃度：** ${activityRow.active_days}天活跃，日均 ${avgEvents} 个事件`,
+		);
+	}
+
+	// Knowledge mastery distribution
+	const masteryRows = db
+		.prepare(
+			`SELECT status, COUNT(*) as cnt FROM vault_index
+       WHERE type IN ('note', 'knowledge') AND status IS NOT NULL
+       GROUP BY status`,
+		)
+		.all() as Array<{ status: string; cnt: number }>;
+
+	if (masteryRows.length > 0) {
+		const masteryList = masteryRows
+			.map((r) => `${MASTERY_STATUS_LABELS[r.status] ?? r.status} ${r.cnt}篇`)
+			.join('、');
+		lines.push(`**知识掌握：** ${masteryList}`);
+	}
+
+	if (lines.length === 0) {
+		return '用户画像数据尚未积累。';
+	}
+
 	return lines.join('\n');
 }
 

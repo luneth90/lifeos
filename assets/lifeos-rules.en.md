@@ -77,50 +77,65 @@ Before resuming a task after compaction:
 
 Applies to Vaults with initialized `{system}/{memory}/`.
 
-> **Core principle: The memory system activates only within LifeOS skill workflows.** Casual conversations outside skills do not trigger any memory writes, to avoid noise polluting data.
+> **Storage rule:** All memory data must be written into the Vault (`{system}/{memory}/`) through LifeOS MCP memory tools. Do NOT write user preferences, decisions, etc. to platform built-in memory paths (e.g., Claude auto-memory, Gemini memory) — platform memories cannot be shared across agents. Platform built-in memory should only be used for that platform's own operational preferences.
 
-### Trigger Conditions
+### Layered Activation Rules
 
-Memory tools are called **only in these scenarios**:
-- A LifeOS skill is being used (`/today`, `/knowledge`, `/revise`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, `/digest`)
-- The user explicitly requests Vault file operations (create/modify notes, project files, etc.)
-- The user explicitly requests a memory system query
+Memory operations are organized into three layers with different activation conditions:
 
-**Forbidden trigger scenarios:** Casual chat, code discussions, conversations unrelated to the Vault. Do not call any `memory_*` tools in these scenarios.
+#### Layer 1: Always Active
 
-### Invocation Rules
+The following operations must be performed in **any conversation**, regardless of whether a skill workflow is active:
 
-1. At the start of each session, call `memory_startup` to retrieve the Layer 0 summary (regardless of whether skills are used).
-2. After modifying Vault files during skill execution, call `memory_notify` to update the index.
-3. After skill completion, call `memory_skill_complete` to record the event and refresh active documents.
-4. User preferences, corrections, and project decisions that arise during skill execution are written via `memory_log` (single) or `memory_auto_capture` (batch). See "Preference & Decision Capture" below for details.
-5. Before ending a skill session, first write `session_bridge` (via `memory_log`), then call `memory_checkpoint`.
-6. When determining user preferences, referencing historical decisions, or confirming learning progress during skill execution, prioritize querying the memory system (`memory_query` / `memory_recent`).
+| Operation | When | Description |
+| --- | --- | --- |
+| `memory_startup` | Session start | Retrieve Layer 0 summary, load user preferences and context |
+| `memory_log` / `memory_auto_capture` | When user expresses persistent rules | Capture preferences, corrections, decisions — **must include `slot_key`** (see "Preference & Decision Capture" below) |
 
-> **Memory data storage rule:** All memory data must be written into the Vault (`{system}/{memory}/`) through LifeOS MCP memory tools. Do not write project knowledge, user preferences, decisions, etc. to platform built-in memory paths. Platform built-in memory should only be used for that platform's own operational preferences.
+**Judgment criteria:** Will the user's statement **still need to be followed in the next conversation**? If yes, regardless of what you're currently doing, it must be written to LifeOS immediately.
+
+#### Layer 2: Skill Workflows
+
+Activated only when executing a LifeOS skill (`/today`, `/knowledge`, `/revise`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, `/digest`) or when the user explicitly requests Vault file operations:
+
+| Operation | When | Description |
+| --- | --- | --- |
+| `memory_notify` | After creating or modifying a Vault file | Update file index |
+| `memory_skill_complete` | After all skill file writes are complete | Record skill event, refresh active docs |
+| `memory_query` / `memory_recent` | When context is needed | Query user preferences, historical decisions, learning progress |
+
+#### Layer 3: Session Lifecycle
+
+Executed before each session ends, regardless of whether skills were used:
+
+| Operation | When | Description |
+| --- | --- | --- |
+| `memory_log` (session_bridge) | First step of session wrap-up | Write session summary |
+| `memory_checkpoint` | Last step of session wrap-up | Refresh active docs, process enhance queue |
+
+#### Noise Protection
+
+The following scenarios **do not trigger Layer 2 operations** (but Layer 1 remains active):
+- Casual chat, code discussions, conversations unrelated to the Vault
+- One-off technical Q&A
 
 ### Preference & Decision Capture
 
-**slot_key naming convention:** `<category>:<topic>`
+Each preference/correction/decision **must include a `slot_key`** (format: `<category>:<topic>`). The system automatically persists it to UserProfile or TaskBoard; subsequent writes with the same `slot_key` overwrite the old value.
 
-| category | Meaning | Examples |
-| --- | --- | --- |
-| `format` | Output format preferences | `format:commit-msg`, `format:note-style` |
-| `workflow` | Workflow preferences | `workflow:review-frequency`, `workflow:pr-size` |
-| `tool` | Tool usage preferences | `tool:editor`, `tool:terminal` |
-| `content` | Content style preferences | `content:language`, `content:emoji` |
-| `schedule` | Scheduling preferences | `schedule:study-time`, `schedule:break-interval` |
+**Category reference:** `format` (output format), `workflow` (workflow), `tool` (tool usage), `content` (content style), `schedule` (scheduling)
 
 **Must capture scenarios:**
-- User explicitly corrects Agent behavior (e.g., "don't use Chinese", "no emoji") → `correction`
-- User confirms a specific approach or direction (e.g., "use this structure", "yes, use TDD") → `decision`
-- User expresses a persistent preference (e.g., "I prefer concise commit messages", "set review interval to two weeks") → `preference`
+- User corrects Agent behavior ("don't use English", "no emoji", "from now on...") → `correction`, slot_key e.g. `content:language`
+- User confirms an approach or direction ("use this structure", "yes, use TDD") → `decision`, slot_key e.g. `workflow:tdd`
+- User expresses a persistent preference ("I prefer concise commit messages", "set review interval to two weeks") → `preference`, slot_key e.g. `format:commit-msg`
 
 **Forbidden capture scenarios:**
-- One-off technical discussions (e.g., "what caused this bug")
-- Conventions already codified in code (e.g., parameters in config files)
-- Casual chat or conversations unrelated to the Vault
+- One-off technical discussions ("what caused this bug")
+- Conventions already codified in code (parameters in config files)
 - Information directly derivable from code or git history
+
+> For the full `slot_key` naming convention and usage examples, see `.agents/skills/_shared/memory-protocol.md`.
 
 ---
 
