@@ -34,6 +34,24 @@ The memory system runs around the current LifeOS project in the vault, activates
 
 Compared with a memory model that mixes cross-directory content and global conversations together, a project-scoped, skill-bound memory system reduces irrelevant noise and keeps retrieval and follow-up decisions closer to the current LifeOS workflow.
 
+### Directory Structure
+
+```
+Vault/
+├── 00_Drafts/        # Unstructured idea pool for quick captures
+├── 10_Diary/         # Daily journal entries (YYYY-MM-DD.md)
+├── 20_Projects/      # Active projects
+├── 30_Research/      # Deep research reports, organized by Domain/Topic/
+├── 40_Knowledge/     # Knowledge base: structured notes + wiki concepts
+├── 50_Outputs/       # Deliverables: articles, tutorials, talks, etc.
+├── 60_Plans/         # Execution plans from /research and /project
+├── 70_Resources/     # Source materials: books, papers
+├── 80_Reflection/    # Periodic reviews and system calibration
+└── 90_System/        # Templates, schema, prompts, archives
+```
+
+All directory names are customizable via `lifeos rename`. The names above are the defaults from the English preset.
+
 ### Directory Customization
 
 LifeOS does not lock you into fixed directory names. Run `lifeos rename [path]` and the CLI will interactively list the directories that can be adjusted in the current vault, then guide you through choosing one and entering a new name.
