@@ -159,6 +159,30 @@ This means LifeOS does not lock you into fixed directory names. You can freely a
 | `/brainstorm` | Interactive brainstorming |
 | `/archive` | Archive completed projects, processed drafts, completed plans, and diary entries older than the most recent 7 days |
 
+## Custom Research Digests
+
+The `/digest` skill lets you subscribe to papers, RSS feeds, and web updates by topic, and automatically generates structured weekly digests.
+
+### Setup
+
+On first use, run `/digest setup` to enter the interactive configuration:
+
+1. **Define your topic**: provide a topic name and 2–3 sub-areas of interest
+2. **Set preferences**: specify whether you lean academic or industry, and list any must-read sources
+3. **Generate config**: the Agent recommends RSS feeds, paper sources (arXiv / bioRxiv / SSRN, etc.), web search templates, HuggingFace Papers, and GitHub Trending, then writes the config file
+4. **Review and adjust**: the config is saved as Markdown — edit it directly in Obsidian to toggle sources, add or remove RSS feeds, and tweak search keywords
+
+### Run
+
+Once configured, run `/digest <topic>` to generate a digest:
+
+1. **Parse config**: read the topic config and calculate the time window (weekly 7 days / biweekly 14 days / monthly 30 days)
+2. **Parallel fetch**: collect data simultaneously from RSS + paper sources, web search, HuggingFace, and GitHub Trending
+3. **Deduplicate and categorize**: merge results, remove duplicates, and sort items into configured categories
+4. **Output digest**: generate a structured digest with summaries to the drafts directory, highlighting key papers and articles
+
+Multiple topics are supported — each has its own config and produces its own digest independently.
+
 ## Custom Expert Prompts
 
 The `/research` skill automatically scans the Prompts directory in your vault for expert prompt files. LifeOS ships with built-in expert prompts for AI/LLM, Math, Art, and History, and you can add your own to extend research capabilities to any domain.
