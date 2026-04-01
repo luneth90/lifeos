@@ -206,10 +206,13 @@ lifeos upgrade ./my-vault --override
 
 ## 技术栈
 
-- **Runtime:** TypeScript + Node.js 18+
-- **Database:** SQLite + FTS5（全文搜索）
+- **Runtime:** TypeScript + Node.js 24+
+- **Protocol:** MCP SDK（@modelcontextprotocol/sdk）
+- **Database:** better-sqlite3 + FTS5（全文搜索）
 - **Segmentation:** @node-rs/jieba（中文分词）
-- **Protocol:** MCP (Model Context Protocol)
+- **Validation:** Zod（schema 校验）
+- **Test:** Vitest
+- **Lint:** Biome
 - **Vault:** Obsidian（纯 Markdown + Frontmatter）
 
 ## 里程碑
