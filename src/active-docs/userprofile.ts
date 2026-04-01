@@ -66,9 +66,7 @@ function buildProfileSummarySection(db: Database.Database): string {
 
 	if (activityRow && activityRow.active_days > 0) {
 		const avgEvents = (activityRow.total_events / activityRow.active_days).toFixed(1);
-		lines.push(
-			`**近30天活跃度：** ${activityRow.active_days}天活跃，日均 ${avgEvents} 个事件`,
-		);
+		lines.push(`**近30天活跃度：** ${activityRow.active_days}天活跃，日均 ${avgEvents} 个事件`);
 	}
 
 	// Knowledge mastery is shown in learning-progress section, not duplicated here

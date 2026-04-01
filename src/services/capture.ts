@@ -9,6 +9,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type Database from 'better-sqlite3';
+import { upsertMemoryItem } from '../active-docs/derived-memory.js';
 import { ENTRY_TYPE_LABELS, KEY_ENTRY_TYPES, daysAgo } from '../types.js';
 import { buildSearchTokens } from '../utils/segmenter.js';
 import {
@@ -18,7 +19,6 @@ import {
 	resolveRuleKey,
 	resolveSessionId,
 } from '../utils/shared.js';
-import { upsertMemoryItem } from '../active-docs/derived-memory.js';
 import { indexSingleFile } from '../utils/vault-indexer.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -242,9 +242,17 @@ export function logEvent(db: Database.Database, opts: LogEventOpts): LogEventRes
 
 	// Sync to memory_items when slot_key is provided for preference/correction/decision
 	const slotKey = opts.slotKey;
-	if (slotKey && (entryType === 'preference' || entryType === 'correction' || entryType === 'decision')) {
+	if (
+		slotKey &&
+		(entryType === 'preference' || entryType === 'correction' || entryType === 'decision')
+	) {
 		const target = entryType === 'decision' ? 'TaskBoard' : 'UserProfile';
-		const section = entryType === 'decision' ? 'decisions' : entryType === 'correction' ? 'corrections' : 'preferences';
+		const section =
+			entryType === 'decision'
+				? 'decisions'
+				: entryType === 'correction'
+					? 'corrections'
+					: 'preferences';
 		upsertMemoryItem(db, {
 			itemId: randomUUID(),
 			target,
