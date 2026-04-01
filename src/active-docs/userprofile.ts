@@ -71,21 +71,7 @@ function buildProfileSummarySection(db: Database.Database): string {
 		);
 	}
 
-	// Knowledge mastery distribution
-	const masteryRows = db
-		.prepare(
-			`SELECT status, COUNT(*) as cnt FROM vault_index
-       WHERE type IN ('note', 'knowledge') AND status IS NOT NULL
-       GROUP BY status`,
-		)
-		.all() as Array<{ status: string; cnt: number }>;
-
-	if (masteryRows.length > 0) {
-		const masteryList = masteryRows
-			.map((r) => `${MASTERY_STATUS_LABELS[r.status] ?? r.status} ${r.cnt}篇`)
-			.join('、');
-		lines.push(`**知识掌握：** ${masteryList}`);
-	}
+	// Knowledge mastery is shown in learning-progress section, not duplicated here
 
 	if (lines.length === 0) {
 		return '用户画像数据尚未积累。';
@@ -148,6 +134,24 @@ function buildPreferencesSection(db: Database.Database): string {
 }
 
 function buildCorrectionsSection(db: Database.Database): string {
+	// First check memory_items for stored corrections
+	const items = db
+		.prepare(
+			`SELECT slot_key, content, updated_at FROM memory_items
+       WHERE target = 'UserProfile' AND section = 'corrections' AND status = 'active'
+       ORDER BY updated_at DESC`,
+		)
+		.all() as Array<{ slot_key: string; content: string; updated_at: string }>;
+
+	if (items.length > 0) {
+		const lines: string[] = [];
+		for (const item of items) {
+			lines.push(`- **${item.slot_key}**: ${item.content}`);
+		}
+		return lines.join('\n');
+	}
+
+	// Fall back to session_log corrections
 	const cutoff = daysAgo(60);
 	const rows = db
 		.prepare(

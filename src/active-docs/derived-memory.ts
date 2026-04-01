@@ -47,11 +47,21 @@ export function upsertMemoryItem(db: Database.Database, item: MemoryItem): strin
 		)
 		.get([item.target, item.section, item.slotKey]) as { item_id: string } | undefined;
 
-	const sourceEventIdsJson = JSON.stringify(item.sourceEventIds ?? []);
 	const sourceRefsJson = JSON.stringify(item.sourceRefs ?? []);
 	const relatedFilesJson = JSON.stringify(item.relatedFiles ?? []);
 
 	if (existing) {
+		// Append new source_event_ids to existing ones (keep last 10)
+		const existingRow = db
+			.prepare('SELECT source_event_ids FROM memory_items WHERE item_id = ?')
+			.get([existing.item_id]) as { source_event_ids: string | null } | undefined;
+		const existingIds: string[] = existingRow?.source_event_ids
+			? (JSON.parse(existingRow.source_event_ids) as string[])
+			: [];
+		const newIds = item.sourceEventIds ?? [];
+		const mergedIds = [...new Set([...existingIds, ...newIds])].slice(-10);
+		const sourceEventIdsJson = JSON.stringify(mergedIds);
+
 		db.prepare(
 			`UPDATE memory_items SET
         content = ?,
@@ -77,6 +87,7 @@ export function upsertMemoryItem(db: Database.Database, item: MemoryItem): strin
 		return existing.item_id;
 	}
 
+	const sourceEventIdsJson = JSON.stringify(item.sourceEventIds ?? []);
 	const itemId = item.itemId || randomUUID();
 	db.prepare(
 		`INSERT INTO memory_items

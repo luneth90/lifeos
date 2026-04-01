@@ -160,6 +160,7 @@ CREATE INDEX IF NOT EXISTS idx_session_log_rule_key ON session_log (rule_key);
 CREATE INDEX IF NOT EXISTS idx_vault_index_type_status ON vault_index (type, status);
 CREATE INDEX IF NOT EXISTS idx_enhance_queue_status ON enhance_queue (status, priority DESC);
 CREATE INDEX IF NOT EXISTS idx_scan_state_last_indexed_at ON scan_state (last_indexed_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_items_slot ON memory_items (target, section, slot_key) WHERE status = 'active';
 CREATE INDEX IF NOT EXISTS idx_memory_items_target_section_status ON memory_items (target, section, status);
 CREATE INDEX IF NOT EXISTS idx_session_state_closed_at ON session_state (closed_at);
 CREATE INDEX IF NOT EXISTS idx_session_state_last_seen_at ON session_state (last_seen_at DESC);

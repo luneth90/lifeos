@@ -143,6 +143,7 @@ server.tool(
 		supersedes: z.string().optional(),
 		slot_key: z
 			.string()
+			.regex(/^[a-z]+:[a-z0-9_-]+$/, 'slot_key must be in format "<category>:<topic>", e.g. "format:latex"')
 			.optional()
 			.describe(
 				'Optional. For preference/correction/decision events, a structured key like "format:latex" that maps to a memory_items slot for cross-agent persistence.',
@@ -170,7 +171,7 @@ server.tool(
 					importance: z.number().int().min(1).max(5).optional(),
 					scope: z.string().optional(),
 					related_files: z.array(z.string()).optional(),
-					slot_key: z.string().optional(),
+					slot_key: z.string().regex(/^[a-z]+:[a-z0-9_-]+$/).optional(),
 				}),
 			)
 			.optional(),
@@ -182,7 +183,7 @@ server.tool(
 					importance: z.number().int().min(1).max(5).optional(),
 					scope: z.string().optional(),
 					related_files: z.array(z.string()).optional(),
-					slot_key: z.string().optional(),
+					slot_key: z.string().regex(/^[a-z]+:[a-z0-9_-]+$/).optional(),
 				}),
 			)
 			.optional(),
@@ -194,7 +195,7 @@ server.tool(
 					importance: z.number().int().min(1).max(5).optional(),
 					scope: z.string().optional(),
 					related_files: z.array(z.string()).optional(),
-					slot_key: z.string().optional(),
+					slot_key: z.string().regex(/^[a-z]+:[a-z0-9_-]+$/).optional(),
 				}),
 			)
 			.optional(),
