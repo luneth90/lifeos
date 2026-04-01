@@ -82,7 +82,7 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 ### Trigger Conditions
 
 Memory tools are called **only in these scenarios**:
-- A LifeOS skill is being used (`/today`, `/knowledge`, `/revise`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, `/digest`, `/read-pdf`)
+- A LifeOS skill is being used (`/today`, `/knowledge`, `/revise`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, `/digest`)
 - The user explicitly requests Vault file operations (create/modify notes, project files, etc.)
 - The user explicitly requests a memory system query
 

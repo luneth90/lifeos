@@ -82,7 +82,7 @@ Compaction 后重新继续任务前，必须：
 ### 触发条件
 
 记忆工具**仅在以下场景**中调用：
-- 使用了 LifeOS 技能（`/today`、`/knowledge`、`/revise`、`/research`、`/project`、`/archive`、`/brainstorm`、`/ask`、`/digest`、`/read-pdf`）
+- 使用了 LifeOS 技能（`/today`、`/knowledge`、`/revise`、`/research`、`/project`、`/archive`、`/brainstorm`、`/ask`、`/digest`）
 - 用户明确要求操作 Vault 文件（创建/修改笔记、项目文件等）
 - 用户明确要求查询记忆系统
 
