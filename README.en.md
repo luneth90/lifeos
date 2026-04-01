@@ -22,15 +22,15 @@ LifeOS provides a set of Agent skills designed around the learning process, conn
 
 > The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
 
-#### Cross-session continuity
+#### 1. Cross-session continuity
 
 Session bridges and active-document context persist, so agents do not depend only on the current conversation.
 
-#### Project-scoped and skill-bound
+#### 2. Project-scoped and skill-bound
 
 The memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, `digest`, and `archive`, and keeps accumulating preferences, decisions, and context.
 
-#### More controllable than global memory
+#### 3. More controllable than global memory
 
 Compared with a memory model that mixes cross-directory content and global conversations together, a project-scoped, skill-bound memory system reduces irrelevant noise and keeps retrieval and follow-up decisions closer to the current LifeOS workflow.
 
