@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 268 76" fill="none">
+  <style>
+    .logo {
+      font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+      font-size: 24px;
+      fill: #4F46E5;
+    }
+    @media (prefers-color-scheme: dark) {
+      .logo { fill: #A5B4FC; }
+    }
+  </style>
+  <text class="logo">
+    <tspan x="8" y="26">╦  ╦╔═╗╔═╗╔═╗╔═╗</tspan>
+    <tspan x="8" y="50">║  ║╠╣ ║╣ ║ ║╚═╗</tspan>
+    <tspan x="8" y="74">╩═╝╩╚  ╚═╝╚═╝╚═╝</tspan>
+  </text>
+</svg>
