@@ -47,6 +47,7 @@
 | `/knowledge` | 从书籍/论文蒸馏结构化知识笔记和百科概念 | 读完一章想整理笔记、需要将原文结构化为知识体系时 |
 | `/revise` | 生成复习文件、批改并更新掌握度 | 想复习已学内容、测验掌握程度、巩固薄弱环节时 |
 | `/archive` | 归档已完成项目、已处理草稿、已完成计划和超过最近 7 天的日记 | 想清理 Vault、整理已完成的工作时 |
+| `/digest` | 通用信息周报：首次使用生成主题配置，后续自动抓取产出结构化周报 | 想获取某领域最新论文和资讯、需要定期信息聚合时 |
 | `/read-pdf` | 解析 PDF 为结构化 JSON | 需要将 PDF 文件转为可处理的文本时 |
 
 **模板路由：**
@@ -81,7 +82,7 @@ Compaction 后重新继续任务前，必须：
 ### 触发条件
 
 记忆工具**仅在以下场景**中调用：
-- 使用了 LifeOS 技能（`/today`、`/knowledge`、`/revise`、`/research`、`/project`、`/archive`、`/brainstorm`、`/ask` 等）
+- 使用了 LifeOS 技能（`/today`、`/knowledge`、`/revise`、`/research`、`/project`、`/archive`、`/brainstorm`、`/ask`、`/digest`、`/read-pdf`）
 - 用户明确要求操作 Vault 文件（创建/修改笔记、项目文件等）
 - 用户明确要求查询记忆系统
 

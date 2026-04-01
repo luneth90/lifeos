@@ -47,6 +47,7 @@ Skill file location: `.agents/skills/<skill-name>/SKILL.md`
 | `/knowledge` | Distill structured knowledge notes and wiki concepts from books/papers | After reading a chapter and wanting to organize notes, or structuring source material into a knowledge system |
 | `/revise` | Generate review files, grade and update mastery | When wanting to review learned content, test understanding, or reinforce weak areas |
 | `/archive` | Archive completed projects, processed drafts, completed plans, and diary entries older than the most recent 7 days | When wanting to clean up the Vault or organize completed work |
+| `/digest` | General research digest: generates topic config on first use, then auto-fetches and produces structured weekly digests | When wanting to track latest papers and news in a field, or needing periodic information aggregation |
 | `/read-pdf` | Parse PDF into structured JSON | When needing to convert a PDF file into processable text |
 
 **Template Routing:**
@@ -81,7 +82,7 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 ### Trigger Conditions
 
 Memory tools are called **only in these scenarios**:
-- A LifeOS skill is being used (`/today`, `/knowledge`, `/revise`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, etc.)
+- A LifeOS skill is being used (`/today`, `/knowledge`, `/revise`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, `/digest`, `/read-pdf`)
 - The user explicitly requests Vault file operations (create/modify notes, project files, etc.)
 - The user explicitly requests a memory system query
 

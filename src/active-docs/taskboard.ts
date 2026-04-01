@@ -82,7 +82,14 @@ function buildActiveProjectsSection(projects: ActiveProject[]): string {
 			`- **${p.title}**${domain} | 状态：${STATUS_LABELS[p.status ?? ''] ?? p.status ?? '未知'}${date}`,
 		);
 		if (p.summary) {
-			const shortSummary = p.summary.replace(/\s+/g, ' ').trim().slice(0, 80);
+			const shortSummary = p.summary
+				.split('\n')
+				.map((line) => line.replace(/^#+\s*/, '').replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1'))
+				.filter((line) => line.trim())
+				.join(' ')
+				.replace(/\s+/g, ' ')
+				.trim()
+				.slice(0, 80);
 			lines.push(`  ${shortSummary}${shortSummary.length >= 80 ? '...' : ''}`);
 		}
 	}

@@ -131,32 +131,11 @@ function buildCorrectionsSection(db: Database.Database): string {
 	return lines.join('\n');
 }
 
-function buildDecisionsSection(db: Database.Database): string {
-	const cutoff = daysAgo(60);
-	const rows = db
-		.prepare(
-			`SELECT summary, timestamp, skill_name FROM session_log
-       WHERE entry_type = 'decision' AND timestamp >= ?
-       ORDER BY importance DESC, timestamp DESC
-       LIMIT 10`,
-		)
-		.all([cutoff]) as Array<{
-		summary: string;
-		timestamp: string;
-		skill_name: string | null;
-	}>;
-
-	if (rows.length === 0) {
-		return '近期暂无决策记录。';
-	}
-
-	const lines: string[] = [];
-	for (const r of rows) {
-		const date = formatDateShort(r.timestamp);
-		const skill = r.skill_name ? ` (${r.skill_name})` : '';
-		lines.push(`- [${date}]${skill} ${r.summary}`);
-	}
-	return lines.join('\n');
+function buildDecisionsSection(_db: Database.Database): string {
+	// Decisions are now only maintained in TaskBoard to avoid duplication.
+	// This section is repurposed for user-level preference decisions only.
+	// See: LifeOS系统改进建议 — 问题1
+	return '决策记录已统一至 TaskBoard。';
 }
 
 function buildLearningProgressSection(db: Database.Database): string {
