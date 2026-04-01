@@ -52,8 +52,6 @@ Vault/
 
 All directory names are customizable via `lifeos rename`. The names above are the defaults from the English preset.
 
-### Directory Customization
-
 LifeOS does not lock you into fixed directory names. Run `lifeos rename [path]` and the CLI will interactively list the directories that can be adjusted in the current vault, then guide you through choosing one and entering a new name.
 
 It updates `lifeos.yaml`, renames the actual directory, and batch-replaces all related wikilinks across the vault. That lets you adapt directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
