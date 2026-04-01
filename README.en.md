@@ -50,7 +50,8 @@ Vault/
 └── 90_System/        # Templates, schema, prompts, archives
 ```
 
-All directory names are customizable via `lifeos rename`. The names above are the defaults from the English preset.
+1. `lifeos init` generates this default directory structure automatically.
+2. All directory names are customizable via `lifeos rename`.
 
 ## Quick Start
 
