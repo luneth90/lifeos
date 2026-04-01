@@ -451,3 +451,147 @@ describe('buildAutoSessionBridge', () => {
     expect(bridge).toContain('使用 A 方案');
   });
 });
+
+// ─── logEvent — slot_key sync ───────────────────────────────────────────────
+
+describe('logEvent — slot_key sync', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = createInMemoryDb();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('logEvent with slotKey syncs to memory_items', () => {
+    const result = logEvent(db, {
+      entryType: 'preference',
+      importance: 3,
+      summary: '数学公式使用 LaTeX 格式',
+      slotKey: 'format:latex',
+    });
+
+    // session_log 中有对应记录
+    const logRow = db
+      .prepare('SELECT * FROM session_log WHERE event_id = ?')
+      .get(result.eventId) as Record<string, unknown> | undefined;
+    expect(logRow).toBeTruthy();
+
+    // memory_items 中自动创建了对应记录
+    const memRow = db
+      .prepare(
+        `SELECT * FROM memory_items
+         WHERE target = 'UserProfile' AND section = 'preferences' AND slot_key = 'format:latex' AND status = 'active'`,
+      )
+      .get() as Record<string, unknown> | undefined;
+    expect(memRow).toBeTruthy();
+    expect(memRow!['content']).toBe('数学公式使用 LaTeX 格式');
+  });
+
+  it('logEvent with slotKey for correction maps to UserProfile/corrections', () => {
+    logEvent(db, {
+      entryType: 'correction',
+      importance: 4,
+      summary: '回复必须使用中文',
+      slotKey: 'content:language',
+    });
+
+    const memRow = db
+      .prepare(
+        `SELECT * FROM memory_items
+         WHERE target = 'UserProfile' AND section = 'corrections' AND slot_key = 'content:language' AND status = 'active'`,
+      )
+      .get() as Record<string, unknown> | undefined;
+    expect(memRow).toBeTruthy();
+    expect(memRow!['content']).toBe('回复必须使用中文');
+  });
+
+  it('logEvent with slotKey for decision maps to TaskBoard/decisions', () => {
+    logEvent(db, {
+      entryType: 'decision',
+      importance: 4,
+      summary: '采用模块化项目结构',
+      slotKey: 'project:structure',
+    });
+
+    const memRow = db
+      .prepare(
+        `SELECT * FROM memory_items
+         WHERE target = 'TaskBoard' AND section = 'decisions' AND slot_key = 'project:structure' AND status = 'active'`,
+      )
+      .get() as Record<string, unknown> | undefined;
+    expect(memRow).toBeTruthy();
+    expect(memRow!['content']).toBe('采用模块化项目结构');
+  });
+
+  it('logEvent without slotKey does NOT write to memory_items', () => {
+    logEvent(db, {
+      entryType: 'preference',
+      importance: 3,
+      summary: '偏好简洁风格',
+    });
+
+    const rows = db
+      .prepare('SELECT * FROM memory_items')
+      .all();
+    expect(rows).toHaveLength(0);
+  });
+
+  it('logEvent with slotKey updates existing memory_item on repeat', () => {
+    logEvent(db, {
+      entryType: 'preference',
+      importance: 3,
+      summary: '第一次偏好设置',
+      slotKey: 'format:latex',
+    });
+
+    logEvent(db, {
+      entryType: 'preference',
+      importance: 3,
+      summary: '更新后的偏好设置',
+      slotKey: 'format:latex',
+    });
+
+    const rows = db
+      .prepare(
+        `SELECT * FROM memory_items
+         WHERE target = 'UserProfile' AND section = 'preferences' AND slot_key = 'format:latex' AND status = 'active'`,
+      )
+      .all() as Record<string, unknown>[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]['content']).toBe('更新后的偏好设置');
+  });
+});
+
+// ─── autoCaptureEvents — slot_key sync ──────────────────────────────────────
+
+describe('autoCaptureEvents — slot_key sync', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = createInMemoryDb();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('autoCaptureEvents passes slotKey through', () => {
+    autoCaptureEvents(db, {
+      preferences: [
+        { summary: '复习间隔设为两周', slotKey: 'schedule:review-interval' },
+      ],
+    });
+
+    const memRow = db
+      .prepare(
+        `SELECT * FROM memory_items
+         WHERE target = 'UserProfile' AND section = 'preferences' AND slot_key = 'schedule:review-interval' AND status = 'active'`,
+      )
+      .get() as Record<string, unknown> | undefined;
+    expect(memRow).toBeTruthy();
+    expect(memRow!['content']).toBe('复习间隔设为两周');
+  });
+});

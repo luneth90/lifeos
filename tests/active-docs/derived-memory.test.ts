@@ -216,3 +216,102 @@ describe('getActiveMemoryItems', () => {
     expect(prefItems[0].section).toBe('preferences');
   });
 });
+
+describe('upsertMemoryItem — source_event_ids tracking', () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = createInMemoryDb();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it('appends source_event_ids on update', () => {
+    const item1 = buildMemoryItem({
+      target: 'UserProfile',
+      section: 'preferences',
+      slotKey: 'format:note-style',
+      content: '使用简洁风格',
+      sourceEventIds: ['evt-001'],
+    });
+    const id = upsertMemoryItem(db, item1);
+
+    const item2 = buildMemoryItem({
+      target: 'UserProfile',
+      section: 'preferences',
+      slotKey: 'format:note-style',
+      content: '使用简洁风格（更新）',
+      sourceEventIds: ['evt-002'],
+    });
+    upsertMemoryItem(db, item2);
+
+    const row = db
+      .prepare('SELECT source_event_ids FROM memory_items WHERE item_id = ?')
+      .get(id) as { source_event_ids: string } | undefined;
+
+    const ids = JSON.parse(row!.source_event_ids);
+    expect(ids).toContain('evt-001');
+    expect(ids).toContain('evt-002');
+    expect(ids).toEqual(['evt-001', 'evt-002']);
+  });
+
+  it('caps source_event_ids at 10', () => {
+    const existingIds = Array.from({ length: 10 }, (_, i) => `evt-${String(i).padStart(3, '0')}`);
+
+    const item1 = buildMemoryItem({
+      target: 'TaskBoard',
+      section: 'focus',
+      slotKey: 'project:cap-test',
+      content: '测试上限',
+      sourceEventIds: existingIds,
+    });
+    const id = upsertMemoryItem(db, item1);
+
+    const item2 = buildMemoryItem({
+      target: 'TaskBoard',
+      section: 'focus',
+      slotKey: 'project:cap-test',
+      content: '测试上限（更新）',
+      sourceEventIds: ['evt-new'],
+    });
+    upsertMemoryItem(db, item2);
+
+    const row = db
+      .prepare('SELECT source_event_ids FROM memory_items WHERE item_id = ?')
+      .get(id) as { source_event_ids: string } | undefined;
+
+    const ids: string[] = JSON.parse(row!.source_event_ids);
+    expect(ids.length).toBeLessThanOrEqual(10);
+    expect(ids).toContain('evt-new');
+  });
+
+  it('deduplicates source_event_ids', () => {
+    const item1 = buildMemoryItem({
+      target: 'UserProfile',
+      section: 'corrections',
+      slotKey: 'content:dedup-test',
+      content: '去重测试',
+      sourceEventIds: ['evt-001'],
+    });
+    const id = upsertMemoryItem(db, item1);
+
+    const item2 = buildMemoryItem({
+      target: 'UserProfile',
+      section: 'corrections',
+      slotKey: 'content:dedup-test',
+      content: '去重测试（更新）',
+      sourceEventIds: ['evt-001'],
+    });
+    upsertMemoryItem(db, item2);
+
+    const row = db
+      .prepare('SELECT source_event_ids FROM memory_items WHERE item_id = ?')
+      .get(id) as { source_event_ids: string } | undefined;
+
+    const ids: string[] = JSON.parse(row!.source_event_ids);
+    const occurrences = ids.filter((x) => x === 'evt-001').length;
+    expect(occurrences).toBe(1);
+  });
+});

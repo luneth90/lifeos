@@ -170,6 +170,61 @@ describe('buildUserprofileSections', () => {
     expect(sections['learning-progress']).toContain('未标注');
     expect(sections['learning-progress']).not.toContain('null:');
   });
+
+  it('profile-summary shows statistical portrait when no manual summary exists', () => {
+    db.prepare(`
+      INSERT INTO vault_index (file_path, title, type, category, status, domain, modified_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('20_项目/MathProject.md', 'Math Project', 'project', 'learning', 'active', 'Math', new Date().toISOString());
+
+    logEvent(db, {
+      entryType: 'skill_completion',
+      importance: 3,
+      summary: '完成 /knowledge 技能',
+      skillName: 'knowledge',
+    });
+
+    const sections = buildUserprofileSections(db, '/tmp/vault');
+    expect(sections['profile-summary']).toContain('Math');
+    expect(sections['profile-summary']).toContain('/knowledge');
+  });
+
+  it('profile-summary does not duplicate mastery stats from learning-progress', () => {
+    db.prepare(`
+      INSERT INTO vault_index (file_path, title, type, status, modified_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run('40_知识/笔记/test.md', '测试笔记', 'note', 'draft', new Date().toISOString());
+
+    const sections = buildUserprofileSections(db, '/tmp/vault');
+    expect(sections['profile-summary']).not.toContain('draft');
+  });
+
+  it('corrections section prioritizes memory_items over session_log', () => {
+    db.prepare(`
+      INSERT INTO memory_items (item_id, target, section, slot_key, content, manual_flag, status, updated_at)
+      VALUES (?, ?, ?, ?, ?, 0, 'active', ?)
+    `).run('corr-item-1', 'UserProfile', 'corrections', 'content:language', '不要用英文', new Date().toISOString());
+
+    logEvent(db, {
+      entryType: 'correction',
+      importance: 4,
+      summary: '旧的纠正事件',
+    });
+
+    const sections = buildUserprofileSections(db, '/tmp/vault');
+    expect(sections['corrections']).toContain('content:language');
+    expect(sections['corrections']).toContain('不要用英文');
+  });
+
+  it('preferences section prioritizes memory_items over session_log', () => {
+    db.prepare(`
+      INSERT INTO memory_items (item_id, target, section, slot_key, content, manual_flag, status, updated_at)
+      VALUES (?, ?, ?, ?, ?, 0, 'active', ?)
+    `).run('pref-item-1', 'UserProfile', 'preferences', 'format:latex', '数学公式用LaTeX', new Date().toISOString());
+
+    const sections = buildUserprofileSections(db, '/tmp/vault');
+    expect(sections['preferences']).toContain('format:latex');
+  });
 });
 
 // ─── refreshTaskboard ─────────────────────────────────────────────────────────

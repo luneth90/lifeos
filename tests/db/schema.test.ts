@@ -210,6 +210,20 @@ describe('initDb', () => {
     expect(newRows.length).toBe(1);
   });
 
+  it('memory_items has unique index on (target, section, slot_key) for active status', () => {
+    db.prepare(`
+      INSERT INTO memory_items (item_id, target, section, slot_key, content, manual_flag, status, updated_at)
+      VALUES (?, ?, ?, ?, ?, 0, 'active', ?)
+    `).run('slot-uniq-1', 'UserProfile', 'preferences', 'format:latex', '第一条', new Date().toISOString());
+
+    expect(() => {
+      db.prepare(`
+        INSERT INTO memory_items (item_id, target, section, slot_key, content, manual_flag, status, updated_at)
+        VALUES (?, ?, ?, ?, ?, 0, 'active', ?)
+      `).run('slot-uniq-2', 'UserProfile', 'preferences', 'format:latex', '第二条', new Date().toISOString());
+    }).toThrow(/UNIQUE constraint failed/);
+  });
+
   it('memory_items has correct default values', () => {
     db.prepare(`
       INSERT INTO memory_items (item_id, target, section, slot_key, content, updated_at)
