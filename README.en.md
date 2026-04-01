@@ -52,13 +52,6 @@ Vault/
 
 All directory names are customizable via `lifeos rename`. The names above are the defaults from the English preset.
 
-## Core Components
-
-- **Memory system** — Project-scoped and skill-bound, providing vault indexing, session memory, and context assembly for AI agents
-- **CLI scaffold** — install globally, then use `lifeos init` to bootstrap a complete workspace
-- **Skill system** — 10 Agent skills covering daily planning, projects, research, weekly digests, knowledge curation, review, and more
-- **Templates + Schema** — 8 structured templates + Frontmatter schema for consistent notes
-
 ## Quick Start
 
 LifeOS has been verified to work properly with Claude Code TUI / Codex TUI / OpenCode TUI on macOS, and with OpenCode GUI on Windows. Other desktop GUI apps or platform/client combinations have not been validated yet and may require additional testing.

@@ -52,13 +52,6 @@ Vault/
 
 所有目录名均可通过 `lifeos rename` 自定义，上面展示的是中文 preset 的默认值。
 
-## 核心组件
-
-- **记忆系统**：项目级、技能绑定，为 AI Agent 提供 Vault 索引、会话记忆、上下文组装
-- **CLI 脚手架**：全局安装后使用 `lifeos init` 一键创建工作空间
-- **技能系统**：10 个 Agent 技能覆盖日记、项目、研究、信息周报、知识整理、复习等工作流
-- **模板 + 规范**：8 个结构化模板 + Frontmatter 规范，确保笔记一致性
-
 ## 快速开始
 
 目前已确认 macOS 上的 Claude Code TUI / Codex TUI / OpenCode TUI，以及 Windows 上 OpenCode GUI 可以正常使用。其他 GUI 桌面端或平台/客户端组合尚未完成验证，实际兼容性仍需进一步测试。
