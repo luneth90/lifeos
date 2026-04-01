@@ -9,32 +9,9 @@ LifeOS started from a simple goal: package learning workflows, skills, templates
 
 ## Core Features
 
-### Learning Workflows
-
-LifeOS provides a set of Agent skills designed around the learning process, connecting "input -> understanding -> output -> reinforcement" into a continuous workflow:
-
-- `/today`, `/brainstorm`, `/ask`: organize the day's focus, clarify questions, and quickly expand ideas
-- `/project`, `/research`, `/knowledge`: turn a topic into a project, a research report, and structured knowledge notes
-- `/digest`: subscribe to topic updates and generate structured weekly digests from paper sources, RSS, and web search
-- `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to periodic archiving
-
-### Memory System
-
-> The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
-
-#### 1. Cross-session continuity
-
-Session bridges and active-document context persist, so agents do not depend only on the current conversation.
-
-#### 2. Project-scoped and skill-bound
-
-The memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, `digest`, and `archive`, and keeps accumulating preferences, decisions, and context.
-
-#### 3. More controllable than global memory
-
-Compared with a memory model that mixes cross-directory content and global conversations together, a project-scoped, skill-bound memory system reduces irrelevant noise and keeps retrieval and follow-up decisions closer to the current LifeOS workflow.
-
 ### Directory Structure
+
+A clear directory structure is the foundation of knowledge learning and research. LifeOS organizes 10 top-level directories around the learning process of "inspiration → research → learn → review → archive":
 
 ```
 Vault/
@@ -52,6 +29,31 @@ Vault/
 
 1. `lifeos init` generates this default directory structure automatically.
 2. All directory names are customizable via `lifeos rename`.
+
+### Learning Workflows
+
+LifeOS provides a set of Agent skills designed around the learning process, connecting "input -> understanding -> output -> reinforcement" into a continuous workflow:
+
+- `/today`, `/brainstorm`, `/ask`: organize the day's focus, clarify questions, and quickly expand ideas
+- `/project`, `/research`, `/knowledge`: turn a topic into a project, a research report, and structured knowledge notes
+- `/digest`: subscribe to topic updates and generate structured weekly digests from paper sources, RSS, and web search
+- `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to archiving
+
+### Memory System
+
+> The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
+
+#### 1. Cross-session continuity
+
+Session bridges and active-document context persist, so agents do not depend only on the current conversation.
+
+#### 2. Project-scoped and skill-bound
+
+The memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, `digest`, and `archive`, and keeps accumulating preferences, decisions, and context.
+
+#### 3. More controllable than global memory
+
+Compared with a memory model that mixes cross-directory content and global conversations together, a project-scoped, skill-bound memory system reduces irrelevant noise and keeps retrieval and follow-up decisions closer to the current LifeOS workflow.
 
 ## Quick Start
 
