@@ -137,8 +137,24 @@ function replaceAutoSection(content: string, marker: string, newContent: string)
 }
 
 /**
+ * Remove an entire AUTO section block (including its preceding H2 heading)
+ * from the document. Used to clean up obsolete sections.
+ */
+function removeAutoSection(content: string, marker: string): string {
+	const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	// Match optional preceding H2 heading + AUTO block
+	const pattern = new RegExp(
+		`(?:^## [^\\n]*\\n)?<!-- BEGIN AUTO:${escaped} -->\\n.*?\\n<!-- END AUTO:${escaped} -->\\n?`,
+		'ms',
+	);
+	return content.replace(pattern, '').replace(/\n{3,}/g, '\n\n');
+}
+
+/**
  * Rebuild all AUTO sections in a markdown document.
  * If opts.section is provided, only rebuild that section.
+ * On full rebuild (no targetSection), removes obsolete AUTO blocks
+ * that are no longer in the sections record.
  */
 function rebuildAutoSections(
 	existingContent: string,
@@ -152,6 +168,17 @@ function rebuildAutoSections(
 	for (const [marker, newContent] of Object.entries(sections)) {
 		if (targetSection && marker !== targetSection) continue;
 		result = replaceAutoSection(result, marker, newContent);
+	}
+
+	// On full rebuild, remove obsolete AUTO blocks not in sections
+	if (!targetSection) {
+		const obsolete = result.matchAll(/<!-- BEGIN AUTO:(\S+) -->/g);
+		for (const match of obsolete) {
+			const marker = match[1];
+			if (!(marker in sections)) {
+				result = removeAutoSection(result, marker);
+			}
+		}
 	}
 
 	return result;

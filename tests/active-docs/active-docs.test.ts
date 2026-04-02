@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Database from 'better-sqlite3';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { initDb } from '../../src/db/schema.js';
 import { VaultConfig, setVaultConfig, _resetDefaultInstance } from '../../src/config.js';
@@ -310,6 +310,44 @@ describe('refreshTaskboard', () => {
       const afterContent = readFileSync(tbPath, 'utf-8');
       expect(afterContent).toContain('手动记录');
       expect(afterContent).toContain('我的手动笔记内容');
+    } finally {
+      _resetDefaultInstance();
+      vault.cleanup();
+    }
+  });
+
+  it('removes obsolete AUTO sections on full rebuild', () => {
+    const vault = createTempVault();
+    try {
+      _resetDefaultInstance();
+      const vc = new VaultConfig(vault.root);
+      setVaultConfig(vc);
+
+      // Create UserProfile with an obsolete 'decisions' AUTO block
+      const memDir = vc.memoryDir();
+      mkdirSync(memDir, { recursive: true });
+      const upPath = join(memDir, 'UserProfile.md');
+      writeFileSync(upPath, [
+        '---', 'type: userprofile', '---', '',
+        '# UserProfile', '',
+        '## 用户摘要', '<!-- BEGIN AUTO:profile-summary -->', '旧摘要', '<!-- END AUTO:profile-summary -->', '',
+        '## 偏好设置', '<!-- BEGIN AUTO:preferences -->', '旧偏好', '<!-- END AUTO:preferences -->', '',
+        '## 纠错记录', '<!-- BEGIN AUTO:corrections -->', '旧纠错', '<!-- END AUTO:corrections -->', '',
+        '## 近期决策', '<!-- BEGIN AUTO:decisions -->', '决策记录已统一至 TaskBoard。', '<!-- END AUTO:decisions -->', '',
+        '## 学习进度', '<!-- BEGIN AUTO:learning-progress -->', '旧进度', '<!-- END AUTO:learning-progress -->', '',
+      ].join('\n'), 'utf-8');
+
+      // Full refresh — decisions is no longer in buildUserprofileSections
+      refreshUserprofile(db, vault.root);
+
+      const content = readFileSync(upPath, 'utf-8');
+      expect(content).not.toContain('AUTO:decisions');
+      expect(content).not.toContain('近期决策');
+      // Other sections remain
+      expect(content).toContain('AUTO:profile-summary');
+      expect(content).toContain('AUTO:preferences');
+      expect(content).toContain('AUTO:corrections');
+      expect(content).toContain('AUTO:learning-progress');
     } finally {
       _resetDefaultInstance();
       vault.cleanup();
