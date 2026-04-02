@@ -111,7 +111,6 @@ function buildUserprofileSkeleton(): string {
 		{ heading: '用户摘要', marker: 'profile-summary' },
 		{ heading: '偏好设置', marker: 'preferences' },
 		{ heading: '纠错记录', marker: 'corrections' },
-		{ heading: '近期决策', marker: 'decisions' },
 		{ heading: '学习进度', marker: 'learning-progress' },
 	]);
 }

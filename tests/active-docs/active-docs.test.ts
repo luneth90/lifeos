@@ -143,7 +143,7 @@ describe('buildUserprofileSections', () => {
 
     const sections = buildUserprofileSections(db, '/tmp/vault');
     expect(Object.keys(sections)).toEqual(
-      expect.arrayContaining(['profile-summary', 'preferences', 'corrections', 'decisions', 'learning-progress'])
+      expect.arrayContaining(['profile-summary', 'preferences', 'corrections', 'learning-progress'])
     );
     expect(sections['preferences']).toContain('简洁中文');
   });

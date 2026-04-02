@@ -180,13 +180,6 @@ function buildCorrectionsSection(db: Database.Database): string {
 	return lines.join('\n');
 }
 
-function buildDecisionsSection(_db: Database.Database): string {
-	// Decisions are now only maintained in TaskBoard to avoid duplication.
-	// This section is repurposed for user-level preference decisions only.
-	// See: LifeOS系统改进建议 — 问题1
-	return '决策记录已统一至 TaskBoard。';
-}
-
 function buildLearningProgressSection(db: Database.Database): string {
 	// Knowledge mastery summary (active projects live in TaskBoard only)
 	const masteryRows = db
@@ -223,7 +216,6 @@ export function buildUserprofileSections(
 		'profile-summary': buildProfileSummarySection(db),
 		preferences: buildPreferencesSection(db),
 		corrections: buildCorrectionsSection(db),
-		decisions: buildDecisionsSection(db),
 		'learning-progress': buildLearningProgressSection(db),
 	};
 }
