@@ -6,7 +6,9 @@ const SERVER_FLAGS = ['--vault-root'];
 
 if (!cmd || SERVER_FLAGS.includes(cmd)) {
 	// No subcommand or server flags → start MCP server
-	import('../dist/server.js');
+	import('../dist/server.js')
+		.then(m => m.main())
+		.catch(handleError);
 } else if (CLI_COMMANDS.includes(cmd)) {
 	import('../dist/cli/index.js')
 		.then(m => m.run(process.argv.slice(2)))

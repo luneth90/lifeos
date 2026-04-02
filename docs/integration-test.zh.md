@@ -326,7 +326,7 @@ cd tmp/test-mcp && opencode mcp list
 
 ```bash
 lifeos help           # 显示帮助信息
-lifeos --version      # 显示版本号 (1.0.2)
+lifeos --version      # 显示版本号（应与 package.json 一致，当前为 1.3.0）
 lifeos --help         # 同 help
 lifeos unknown        # 显示 "Unknown command" 错误
 ```

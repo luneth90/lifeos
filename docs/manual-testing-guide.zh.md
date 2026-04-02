@@ -27,7 +27,7 @@ npm link                     # 全局注册 lifeos 命令
 
 **验证注册成功：**
 ```bash
-lifeos --version             # 应输出 1.0.2
+lifeos --version             # 应输出与 package.json 一致的版本号（当前为 1.3.0）
 which lifeos                 # 应指向全局 node_modules 的 symlink
 ```
 
@@ -80,16 +80,16 @@ claude
 
 **预期：**
 - [ ] 返回结果中包含 `_layer0` 字段（说明自动启动已触发）
-- [ ] `tmp/lifeos-manual-test/memory.db` 已创建
+- [ ] `tmp/lifeos-manual-test/90_系统/记忆/memory.db` 已创建
 - [ ] 无报错
 
 ### 4.2 memory_log — 记录事件
 
-> 对 Claude 说：调用 memory_log，记录一条观察事件，内容为"测试手动记录功能"
+> 对 Claude 说：调用 memory_log，`entry_type` 设为 `"milestone"`，`importance` 设为 `3`，内容为"测试手动记录功能"
 
 **预期：**
 - [ ] 返回成功，包含事件 ID
-- [ ] 事件类型为 observation 或 discovery
+- [ ] 事件类型为 `milestone`
 
 ### 4.3 memory_recent — 查询最近事件
 
@@ -97,7 +97,7 @@ claude
 
 **预期：**
 - [ ] 返回列表中包含 5.2 刚记录的事件
-- [ ] 包含自动启动产生的会话事件
+- [ ] 若当前会话没有额外写入事件，结果可能只包含该条 `milestone` 事件
 
 ### 4.4 memory_query — 搜索 Vault
 
@@ -135,24 +135,17 @@ EOF
 - [ ] 返回成功，包含捕获的条目数量
 - [ ] 条目类型为 preference
 
-### 4.6 memory_refresh — 刷新活跃文档
+### 4.6 活跃文档自动刷新验证
 
-> 对 Claude 说：调用 memory_refresh 刷新 TaskBoard
-
-**预期：**
-- [ ] 返回刷新结果
-- [ ] 检查 vault 中 TaskBoard.md 的 AUTO 区块已更新：
-  ```bash
-  cat tmp/lifeos-manual-test/90_系统/记忆/TaskBoard.md
-  ```
-
-> 对 Claude 说：调用 memory_refresh 刷新 UserProfile
+> 对 Claude 说：调用 memory_log，记录一条带 `slot_key="content:ui-language"` 的 preference，内容为"界面提示优先中文"
 
 **预期：**
-- [ ] UserProfile.md 的 AUTO 区块已更新：
+- [ ] 返回成功
+- [ ] 检查 vault 中 UserProfile.md 的“偏好设置”AUTO 区块已更新：
   ```bash
   cat tmp/lifeos-manual-test/90_系统/记忆/UserProfile.md
   ```
+- [ ] 新偏好已出现在文件中
 
 ### 4.7 memory_citations — 获取来源引用
 
@@ -162,13 +155,13 @@ EOF
 - [ ] 返回关联的 session_log 事件列表
 - [ ] 每条引用包含时间戳和原始内容
 
-### 4.8 memory_skill_context — 技能上下文组装
+### 4.8 聚合上下文读取验证
 
-> 对 Claude 说：调用 memory_skill_context，使用 seed profile "today"
+> 对 Claude 说：读取 `90_系统/记忆/TaskBoard.md`，确认“当前焦点”区块可直接作为今日规划的优先上下文
 
 **预期：**
-- [ ] 返回组装后的上下文，包含与 today 技能相关的信息
-- [ ] 包含 Layer 0 摘要、活跃文档摘要等
+- [ ] 成功读取 TaskBoard 聚合结果
+- [ ] 其中包含“当前焦点”“活跃项目”或“近期决策”区块
 
 ### 4.9 memory_log（skill_completion）— 记录技能完成
 
@@ -198,7 +191,7 @@ EOF
 
 | 命令 | 预期行为 |
 |------|---------|
-| `/today` | 生成今日计划，调用 memory_skill_context，完成后通过 memory_log 记录 skill_completion |
+| `/today` | 生成今日计划，优先读取 TaskBoard 聚合结果，完成后通过 memory_log 记录 skill_completion |
 | `/ask 什么是量子纠缠` | 进入问答模式，可保存为草稿 |
 | `/brainstorm 个人知识管理方案` | 引导式头脑风暴 |
 | `/knowledge` | 创建知识笔记 |
@@ -217,19 +210,19 @@ EOF
 
 ```bash
 # 检查数据库文件
-ls -la tmp/lifeos-manual-test/memory.db
+ls -la tmp/lifeos-manual-test/90_系统/记忆/memory.db
 
 # 查看表结构
-sqlite3 tmp/lifeos-manual-test/memory.db ".tables"
+sqlite3 tmp/lifeos-manual-test/90_系统/记忆/memory.db ".tables"
 
 # 查看会话日志
-sqlite3 tmp/lifeos-manual-test/memory.db "SELECT id, type, title, substr(body, 1, 60) FROM session_log ORDER BY created_at DESC LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/90_系统/记忆/memory.db "SELECT id, entry_type, summary, substr(detail, 1, 60) FROM session_log ORDER BY timestamp DESC LIMIT 10;"
 
 # 查看 vault 索引
-sqlite3 tmp/lifeos-manual-test/memory.db "SELECT path, title, type, status FROM vault_index LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/90_系统/记忆/memory.db "SELECT file_path, title, type, status FROM vault_index LIMIT 10;"
 
 # 查看活跃文档条目
-sqlite3 tmp/lifeos-manual-test/memory.db "SELECT slot, key, substr(value, 1, 60) FROM memory_items LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/90_系统/记忆/memory.db "SELECT target, section, slot_key, substr(content, 1, 60) FROM memory_items LIMIT 10;"
 ```
 
 **验证：**
@@ -274,4 +267,4 @@ rm -rf tmp/lifeos-manual-test
 | 首次工具调用未返回 `_layer0` | 检查 `lifeos.yaml` 是否存在且格式正确；确认 MCP Server 已正确连接 |
 | memory_query 无结果 | 先调用 `memory_notify` 触发扫描，确认 vault_index 有数据 |
 | 技能未识别 | 检查 `.agents/skills/` 目录和 `CLAUDE.md` 技能表 |
-| 数据库锁定 | 确保没有其他进程持有 memory.db（`lsof memory.db`） |
+| 数据库锁定 | 确保没有其他进程持有 `90_系统/记忆/memory.db`（`lsof tmp/lifeos-manual-test/90_系统/记忆/memory.db`） |

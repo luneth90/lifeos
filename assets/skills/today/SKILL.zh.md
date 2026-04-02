@@ -44,10 +44,7 @@ dependencies:
    - 提取未完成任务（未勾选的 `- [ ]` 条目）
    - 记录昨日工作内容
 
-3. **刷新并读取 TaskBoard**（优先）
-   ```
-   memory_refresh(target="TaskBoard")
-   ```
+3. **读取 TaskBoard**（优先，startup 已自动刷新）
    - 读取 `{系统目录}/{记忆子目录}/TaskBoard.md`
    - 优先使用其中的“当前焦点”“活跃项目”“待复习清单”“近期决策”区块
    - 若 TaskBoard 不存在、为空或内容异常，再退回到下面的 VaultIndex / SessionLog 查询

@@ -44,10 +44,7 @@ Help the user start a new day: review yesterday's progress, create today's diary
    - Extract incomplete tasks (unchecked `- [ ]` items)
    - Note yesterday's work content
 
-3. **Refresh and read TaskBoard** (priority)
-   ```
-   memory_refresh(target="TaskBoard")
-   ```
+3. **Read TaskBoard** (priority, already refreshed during startup)
    - Read `{system directory}/{memory subdirectory}/TaskBoard.md`
    - Prefer the "Current Focus", "Active Projects", "Pending Reviews", and "Recent Decisions" sections
    - If TaskBoard does not exist, is empty, or has abnormal content, fall back to VaultIndex / SessionLog queries below

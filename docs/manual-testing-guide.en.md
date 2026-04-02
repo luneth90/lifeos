@@ -27,7 +27,7 @@ npm link                     # Register lifeos command globally
 
 **Verify registration:**
 ```bash
-lifeos --version             # Should output 1.0.2
+lifeos --version             # Should match package.json (currently 1.3.0)
 which lifeos                 # Should point to global node_modules symlink
 ```
 
@@ -80,16 +80,16 @@ Run the following tests inside the Claude Code session. Simply tell Claude which
 
 **Expected:**
 - [ ] Response contains `_layer0` field (confirming auto-startup was triggered)
-- [ ] `tmp/lifeos-manual-test/memory.db` created
+- [ ] `tmp/lifeos-manual-test/90_System/Memory/memory.db` created
 - [ ] No errors
 
 ### 4.2 memory_log — Log an Event
 
-> Tell Claude: Call memory_log to record an observation event with content "Testing manual logging"
+> Tell Claude: Call memory_log with `entry_type="milestone"` and `importance=3`, using summary "Testing manual logging"
 
 **Expected:**
 - [ ] Returns success with event ID
-- [ ] Event type is observation or discovery
+- [ ] Event type is `milestone`
 
 ### 4.3 memory_recent — Query Recent Events
 
@@ -97,7 +97,7 @@ Run the following tests inside the Claude Code session. Simply tell Claude which
 
 **Expected:**
 - [ ] Results include the event recorded in 4.2
-- [ ] Includes session events from auto-startup
+- [ ] If no additional events were written in the current session, the result may contain only that `milestone` event
 
 ### 4.4 memory_query — Search Vault
 
@@ -135,24 +135,17 @@ EOF
 - [ ] Returns success with captured entry count
 - [ ] Entry type is preference
 
-### 4.6 memory_refresh — Refresh Active Documents
+### 4.6 Active Document Auto-Refresh Verification
 
-> Tell Claude: Call memory_refresh to refresh TaskBoard
-
-**Expected:**
-- [ ] Returns refresh result
-- [ ] Check TaskBoard.md AUTO sections updated:
-  ```bash
-  cat tmp/lifeos-manual-test/90_System/Memory/TaskBoard.md
-  ```
-
-> Tell Claude: Call memory_refresh to refresh UserProfile
+> Tell Claude: Call memory_log with a preference using `slot_key="content:ui-language"` and summary "Prefer Chinese UI prompts"
 
 **Expected:**
-- [ ] UserProfile.md AUTO sections updated:
+- [ ] Returns success
+- [ ] Check the UserProfile.md "Preferences" AUTO section has updated:
   ```bash
   cat tmp/lifeos-manual-test/90_System/Memory/UserProfile.md
   ```
+- [ ] The new preference appears in the file
 
 ### 4.7 memory_citations — Get Source Citations
 
@@ -162,13 +155,13 @@ EOF
 - [ ] Returns list of associated session_log events
 - [ ] Each citation includes timestamp and original content
 
-### 4.8 memory_skill_context — Skill Context Assembly
+### 4.8 Aggregated Context Read Verification
 
-> Tell Claude: Call memory_skill_context with seed profile "today"
+> Tell Claude: Read `90_System/Memory/TaskBoard.md` and confirm the "Current Focus" section can be used directly as planning context
 
 **Expected:**
-- [ ] Returns assembled context with information relevant to the today skill
-- [ ] Includes Layer 0 summary, active document summaries, etc.
+- [ ] Successfully reads the aggregated TaskBoard content
+- [ ] Includes "Current Focus", "Active Projects", or "Recent Decisions" sections
 
 ### 4.9 memory_log (skill_completion) — Record Skill Completion
 
@@ -198,7 +191,7 @@ Trigger skills directly in Claude Code using slash commands:
 
 | Command | Expected Behavior |
 |---------|-------------------|
-| `/today` | Generate daily plan, calls memory_skill_context, records skill_completion via memory_log |
+| `/today` | Generate daily plan, prefers TaskBoard aggregated context, records skill_completion via memory_log |
 | `/ask What is quantum entanglement` | Enter Q&A mode, can save as draft |
 | `/brainstorm Personal knowledge management` | Guided brainstorming session |
 | `/knowledge` | Create a knowledge note |
@@ -217,19 +210,19 @@ After exiting Claude Code, check database state:
 
 ```bash
 # Check database file
-ls -la tmp/lifeos-manual-test/memory.db
+ls -la tmp/lifeos-manual-test/90_System/Memory/memory.db
 
 # View table structure
-sqlite3 tmp/lifeos-manual-test/memory.db ".tables"
+sqlite3 tmp/lifeos-manual-test/90_System/Memory/memory.db ".tables"
 
 # View session log
-sqlite3 tmp/lifeos-manual-test/memory.db "SELECT id, type, title, substr(body, 1, 60) FROM session_log ORDER BY created_at DESC LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/90_System/Memory/memory.db "SELECT id, entry_type, summary, substr(detail, 1, 60) FROM session_log ORDER BY timestamp DESC LIMIT 10;"
 
 # View vault index
-sqlite3 tmp/lifeos-manual-test/memory.db "SELECT path, title, type, status FROM vault_index LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/90_System/Memory/memory.db "SELECT file_path, title, type, status FROM vault_index LIMIT 10;"
 
 # View active document entries
-sqlite3 tmp/lifeos-manual-test/memory.db "SELECT slot, key, substr(value, 1, 60) FROM memory_items LIMIT 10;"
+sqlite3 tmp/lifeos-manual-test/90_System/Memory/memory.db "SELECT target, section, slot_key, substr(content, 1, 60) FROM memory_items LIMIT 10;"
 ```
 
 **Verify:**
@@ -274,4 +267,4 @@ rm -rf tmp/lifeos-manual-test
 | First tool call does not return `_layer0` | Check `lifeos.yaml` exists and has valid format; confirm MCP Server is connected |
 | memory_query returns nothing | Call `memory_notify` first to trigger scan; confirm vault_index has data |
 | Skills not recognized | Check `.agents/skills/` directory and `CLAUDE.md` skill table |
-| Database locked | Ensure no other process holds memory.db (`lsof memory.db`) |
+| Database locked | Ensure no other process holds `90_System/Memory/memory.db` (`lsof tmp/lifeos-manual-test/90_System/Memory/memory.db`) |

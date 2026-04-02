@@ -6,6 +6,7 @@
  */
 
 import { type FSWatcher, watch } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -35,16 +36,29 @@ function deepConvertKeys(obj: unknown): unknown {
 
 let startedUp = false;
 let startupResult: StartupResult | null = null;
+let startupVaultRoot: string | undefined;
+let startupSessionId: string | undefined;
+
+function captureStartupContext(params: Record<string, unknown>): {
+	vaultRoot: string | undefined;
+	sessionId: string | undefined;
+} {
+	const vaultRoot = (params.vault_root as string) || (params.vaultRoot as string) || undefined;
+	const sessionId = (params.session_id as string) || (params.sessionId as string) || undefined;
+	if (vaultRoot) startupVaultRoot = vaultRoot;
+	if (sessionId) startupSessionId = sessionId;
+	return { vaultRoot, sessionId };
+}
 
 function ensureStartup(params: Record<string, unknown>): void {
 	if (startedUp) return;
-	const vaultRoot = (params.vault_root as string) || (params.vaultRoot as string) || undefined;
-	const sessionId = (params.session_id as string) || (params.sessionId as string) || undefined;
+	const { vaultRoot, sessionId } = captureStartupContext(params);
 	try {
 		startupResult = core.memoryStartup({ vaultRoot, sessionId });
 		startedUp = true;
 		// 启动文件监听
 		const resolvedVault = vaultRoot || process.env.LIFEOS_VAULT_ROOT;
+		if (resolvedVault) startupVaultRoot = resolvedVault;
 		if (resolvedVault) startVaultWatcher(resolvedVault);
 	} catch (e) {
 		console.warn('[lifeos] Auto-startup failed:', e);
@@ -131,6 +145,19 @@ function flushPendingNotifies(vaultRoot: string): void {
 	pendingNotifies.clear();
 }
 
+function drainNotifyQueue(): void {
+	if (notifyInFlight) return;
+	while (notifyQueue.length > 0) {
+		const item = notifyQueue.shift();
+		if (!item) continue;
+		try {
+			core.memoryNotify({ filePath: item.filename, vaultRoot: item.vaultRoot });
+		} catch (_) {
+			// Best-effort at shutdown
+		}
+	}
+}
+
 let vaultWatcher: FSWatcher | null = null;
 let watchedVaultRoot: string | null = null;
 
@@ -156,21 +183,29 @@ function startVaultWatcher(vaultRoot: string): void {
 
 let checkpointDone = false;
 
-function setupAutoCheckpoint(): void {
-	const doCheckpoint = () => {
-		if (!startedUp || checkpointDone) return;
-		checkpointDone = true;
-		// Flush pending file notifies before checkpoint
-		if (watchedVaultRoot) flushPendingNotifies(watchedVaultRoot);
-		try {
-			core.memoryCheckpoint({});
-		} catch (e) {
-			console.error('[lifeos] Auto-checkpoint failed:', e);
-		}
-	};
+function runAutoCheckpoint(): void {
+	if (!startedUp || checkpointDone) return;
+	checkpointDone = true;
 
+	const checkpointVaultRoot = watchedVaultRoot ?? startupVaultRoot;
+	if (checkpointVaultRoot) {
+		flushPendingNotifies(checkpointVaultRoot);
+	}
+	drainNotifyQueue();
+
+	try {
+		core.memoryCheckpoint({
+			vaultRoot: startupVaultRoot,
+			sessionId: startupSessionId,
+		});
+	} catch (e) {
+		console.error('[lifeos] Auto-checkpoint failed:', e);
+	}
+}
+
+function setupAutoCheckpoint(): void {
 	process.stdin.on('end', () => {
-		doCheckpoint();
+		runAutoCheckpoint();
 		if (vaultWatcher) {
 			vaultWatcher.close();
 			vaultWatcher = null;
@@ -178,7 +213,7 @@ function setupAutoCheckpoint(): void {
 		process.exit(0);
 	});
 
-	process.on('beforeExit', doCheckpoint);
+	process.on('beforeExit', runAutoCheckpoint);
 }
 
 // ─── Tool wrapper ────────────────────────────────────────────────────────────
@@ -417,7 +452,7 @@ server.tool(
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
-async function main() {
+export async function main() {
 	const args = process.argv.slice(2);
 	const vaultRootIdx = args.indexOf('--vault-root');
 	if (vaultRootIdx !== -1 && args[vaultRootIdx + 1]) {
@@ -428,4 +463,33 @@ async function main() {
 	setupAutoCheckpoint();
 }
 
-main().catch(console.error);
+export const __testing = {
+	ensureStartup,
+	debouncedNotify,
+	runAutoCheckpoint,
+	enqueueNotify(item: { vaultRoot: string; filename: string }) {
+		notifyQueue.push(item);
+	},
+	resetState() {
+		for (const timer of pendingNotifies.values()) {
+			clearTimeout(timer);
+		}
+		pendingNotifies.clear();
+		notifyQueue.length = 0;
+		notifyInFlight = false;
+		checkpointDone = false;
+		startedUp = false;
+		startupResult = null;
+		startupVaultRoot = undefined;
+		startupSessionId = undefined;
+		watchedVaultRoot = null;
+		if (vaultWatcher) {
+			vaultWatcher.close();
+			vaultWatcher = null;
+		}
+	},
+};
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+	main().catch(console.error);
+}
