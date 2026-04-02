@@ -3,9 +3,8 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { existsSync, readFileSync, mkdtempSync, rmSync } from 'fs';
+import { existsSync, readFileSync, rmSync } from 'fs';
 import { join } from 'path';
-import { tmpdir } from 'os';
 import { createTempVault, writeTestNote } from './setup.js';
 import {
   memoryStartup,
@@ -97,6 +96,7 @@ describe('memoryLog', () => {
   it('logs an event and returns eventId and timestamp', () => {
     const result = memoryLog({
       dbPath: vault.dbPath,
+      vaultRoot: vault.root,
       entryType: 'milestone',
       importance: 3,
       summary: '完成 core.ts 实现',
@@ -110,6 +110,7 @@ describe('memoryLog', () => {
   it('logs a decision event with scope', () => {
     const result = memoryLog({
       dbPath: vault.dbPath,
+      vaultRoot: vault.root,
       entryType: 'decision',
       importance: 4,
       summary: '决定使用 TypeScript 重写全部模块',
@@ -123,6 +124,7 @@ describe('memoryLog', () => {
   it('logs a skill_completion event with skillName', () => {
     const result = memoryLog({
       dbPath: vault.dbPath,
+      vaultRoot: vault.root,
       entryType: 'skill_completion',
       importance: 4,
       summary: '/knowledge 完成知识整理',
@@ -137,6 +139,7 @@ describe('memoryLog', () => {
     expect(() =>
       memoryLog({
         dbPath: vault.dbPath,
+        vaultRoot: vault.root,
         entryType: 'invalid_type',
         importance: 3,
         summary: '测试',
@@ -148,6 +151,7 @@ describe('memoryLog', () => {
     expect(() =>
       memoryLog({
         dbPath: vault.dbPath,
+        vaultRoot: vault.root,
         entryType: 'milestone',
         importance,
         summary: '测试',
@@ -200,6 +204,7 @@ describe('memoryRecent', () => {
 
     memoryLog({
       dbPath: vault.dbPath,
+      vaultRoot: vault.root,
       entryType: 'milestone',
       importance: 3,
       summary: '完成测试阶段',
@@ -225,6 +230,7 @@ describe('memoryRecent', () => {
 
     memoryLog({
       dbPath: vault.dbPath,
+      vaultRoot: vault.root,
       entryType: 'decision',
       importance: 4,
       summary: '决定架构方案',
@@ -248,12 +254,28 @@ describe('memoryRecent', () => {
 // ─── memoryAutoCapture ────────────────────────────────────────────────────────
 
 describe('memoryAutoCapture', () => {
+  it('writes active docs into the temp vault when vaultRoot is provided', () => {
+    const repoSystemDir = join(process.cwd(), '90_系统');
+    rmSync(repoSystemDir, { recursive: true, force: true });
+
+    const result = memoryAutoCapture({
+      dbPath: vault.dbPath,
+      vaultRoot: vault.root,
+      corrections: [{ summary: '活跃文档应该写入临时 Vault' }],
+    });
+
+    expect(result.capturedCount).toBe(1);
+    expect(existsSync(join(vault.root, '90_系统', '记忆', 'UserProfile.md'))).toBe(true);
+    expect(existsSync(repoSystemDir)).toBe(false);
+  });
+
   it('captures corrections, decisions, and preferences', () => {
     memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
     _resetDefaultInstance();
 
     const result = memoryAutoCapture({
       dbPath: vault.dbPath,
+      vaultRoot: vault.root,
       corrections: [{ summary: '不要使用英文输出' }],
       decisions: [{ summary: '选用 better-sqlite3 作为数据库驱动' }],
       preferences: [{ summary: '偏好简洁的代码风格' }],
@@ -273,6 +295,7 @@ describe('memoryAutoCapture', () => {
 
     const result = memoryAutoCapture({
       dbPath: vault.dbPath,
+      vaultRoot: vault.root,
       corrections: [{ summary: '重复的纠错' }, { summary: '重复的纠错' }],
     });
 
@@ -285,6 +308,7 @@ describe('memoryAutoCapture', () => {
 
     const result = memoryAutoCapture({
       dbPath: vault.dbPath,
+      vaultRoot: vault.root,
     });
 
     expect(result.capturedCount).toBe(0);
@@ -370,4 +394,3 @@ describe('memoryCheckpoint', () => {
     expect(Array.isArray(result.warnings)).toBe(true);
   });
 });
-

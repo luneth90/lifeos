@@ -1,6 +1,5 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { join } from 'path';
-import { tmpdir } from 'os';
 import Database from 'better-sqlite3';
 
 export interface TempVault {
@@ -13,7 +12,9 @@ export interface TempVault {
  * Creates a temporary Vault directory with standard LifeOS structure and lifeos.yaml.
  */
 export function createTempVault(): TempVault {
-  const root = mkdtempSync(join(tmpdir(), 'lifeos-test-'));
+  const tempRoot = join(process.cwd(), 'tmp');
+  mkdirSync(tempRoot, { recursive: true });
+  const root = mkdtempSync(join(tempRoot, 'lifeos-test-'));
 
   // Create standard directories
   const dirs = [
