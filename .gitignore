@@ -32,3 +32,31 @@ tmp/
 # npm package
 *.tgz
 .worktrees/
+
+# Local vault artifacts generated when running LifeOS from repo root
+/lifeos.yaml
+/.mcp.json
+/opencode.json
+/.codex/
+/.claude/
+/.agents/
+/00_草稿/
+/10_日记/
+/20_项目/
+/30_研究/
+/40_知识/
+/50_产出/
+/60_计划/
+/70_资源/
+/80_复盘/
+/90_系统/
+/00_Drafts/
+/10_Diary/
+/20_Projects/
+/30_Research/
+/40_Knowledge/
+/50_Outputs/
+/60_Plans/
+/70_Resources/
+/80_Reflection/
+/90_System/
