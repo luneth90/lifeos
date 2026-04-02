@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process';
+import { cpSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createTempVault } from './setup.js';
 
@@ -19,14 +21,35 @@ function createInitializeMessage(): string {
 	return `${payload}\n`;
 }
 
+function createSourceEntrySandbox(): {
+	root: string;
+	entry: string;
+	cleanup: () => void;
+} {
+	const repoRoot = process.cwd();
+	const tempRoot = join(repoRoot, 'tmp');
+	mkdirSync(tempRoot, { recursive: true });
+	const root = mkdtempSync(join(tempRoot, 'lifeos-bin-entry-'));
+
+	cpSync(join(repoRoot, 'bin'), join(root, 'bin'), { recursive: true });
+	cpSync(join(repoRoot, 'src'), join(root, 'src'), { recursive: true });
+
+	return {
+		root,
+		entry: join(root, 'bin', 'lifeos.js'),
+		cleanup: () => rmSync(root, { recursive: true, force: true }),
+	};
+}
+
 describe('lifeos bin entry', () => {
 	it('通过 bin/lifeos.js 启动时会返回 initialize 响应', async () => {
 		const vault = createTempVault();
+		const sandbox = createSourceEntrySandbox();
 
 		try {
 			const responseText = await new Promise<string>((resolve, reject) => {
-				const child = spawn(process.execPath, ['bin/lifeos.js', '--vault-root', vault.root], {
-					cwd: process.cwd(),
+				const child = spawn(process.execPath, [sandbox.entry, '--vault-root', vault.root], {
+					cwd: sandbox.root,
 					stdio: ['pipe', 'pipe', 'pipe'],
 				});
 
@@ -86,6 +109,7 @@ describe('lifeos bin entry', () => {
 
 			expect(response.result?.serverInfo?.name).toBe('lifeos');
 		} finally {
+			sandbox.cleanup();
 			vault.cleanup();
 		}
 	});
