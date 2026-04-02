@@ -5,7 +5,7 @@
  * Automatically handles startup, file watching, and checkpoint.
  */
 
-import { watch, type FSWatcher } from 'node:fs';
+import { type FSWatcher, watch } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -57,19 +57,17 @@ function ensureStartup(params: Record<string, unknown>): void {
  * Path segments that cause a file event to be ignored.
  * Checked against each segment of the relative path (split by `/`).
  */
-const IGNORE_SEGMENTS = new Set([
-	'.git', '.obsidian', '.trash', 'node_modules',
-]);
+const IGNORE_SEGMENTS = new Set(['.git', '.obsidian', '.trash', 'node_modules']);
 
 /**
  * File-level ignore patterns — checked against the full relative path.
  */
 const IGNORE_FILE_PATTERNS = [
-	/\.sqlite/,          // DB files and WAL/journal
+	/\.sqlite/, // DB files and WAL/journal
 	/\.DS_Store$/,
-	/~$/,                // editor backup files (file.md~)
-	/\.tmp$/,            // temporary files
-	/\.swp$/,            // vim swap files
+	/~$/, // editor backup files (file.md~)
+	/\.tmp$/, // temporary files
+	/\.swp$/, // vim swap files
 ];
 
 function shouldIgnore(filename: string): boolean {
@@ -90,7 +88,9 @@ const notifyQueue: Array<{ vaultRoot: string; filename: string }> = [];
 function processNotifyQueue(): void {
 	if (notifyInFlight || notifyQueue.length === 0) return;
 	notifyInFlight = true;
-	const { vaultRoot, filename } = notifyQueue.shift()!;
+	const item = notifyQueue.shift();
+	if (!item) return;
+	const { vaultRoot, filename } = item;
 	try {
 		core.memoryNotify({ filePath: filename, vaultRoot });
 	} catch (e) {
@@ -201,9 +201,10 @@ function handleTool<P extends Record<string, unknown>>(
 		// 首次调用时附带 Layer 0 摘要
 		let output: unknown;
 		if (wasFirstCall && startupResult) {
-			output = typeof result === 'object' && result !== null
-				? { _layer0: startupResult.layer0_summary, ...(result as Record<string, unknown>) }
-				: { _layer0: startupResult.layer0_summary, result };
+			output =
+				typeof result === 'object' && result !== null
+					? { _layer0: startupResult.layer0_summary, ...(result as Record<string, unknown>) }
+					: { _layer0: startupResult.layer0_summary, result };
 		} else {
 			output = result;
 		}
@@ -216,7 +217,7 @@ function handleTool<P extends Record<string, unknown>>(
 
 const server = new McpServer({
 	name: 'lifeos',
-	version: '1.2.0',
+	version: '1.3.0',
 });
 
 // ─── Tool registrations ───────────────────────────────────────────────────────
@@ -275,7 +276,9 @@ server.tool(
 		vault_root: z
 			.string()
 			.default('')
-			.describe('Optional. Auto-resolved from environment. Used for instant active-doc refresh on preference/correction/decision writes.'),
+			.describe(
+				'Optional. Auto-resolved from environment. Used for instant active-doc refresh on preference/correction/decision writes.',
+			),
 		entry_type: z.enum([
 			'skill_completion',
 			'decision',
@@ -323,7 +326,9 @@ server.tool(
 		vault_root: z
 			.string()
 			.default('')
-			.describe('Optional. Auto-resolved from environment. Used for instant active-doc refresh after batch capture.'),
+			.describe(
+				'Optional. Auto-resolved from environment. Used for instant active-doc refresh after batch capture.',
+			),
 		corrections: z
 			.array(
 				z.object({

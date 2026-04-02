@@ -100,12 +100,7 @@ export function memoryQuery(opts: {
 	vaultRoot?: string;
 }): { results: VaultQueryResult[] } {
 	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db }) => {
-		return queryVaultIndex(
-			db,
-			opts.query || '',
-			opts.filters || null,
-			opts.limit || 10,
-		);
+		return queryVaultIndex(db, opts.query || '', opts.filters || null, opts.limit || 10);
 	});
 }
 
@@ -207,7 +202,8 @@ export function memoryAutoCapture(opts: {
 		);
 
 		// 批量写入后统一刷新活文档
-		const hasPrefsOrCorrs = (opts.preferences?.length ?? 0) > 0 || (opts.corrections?.length ?? 0) > 0;
+		const hasPrefsOrCorrs =
+			(opts.preferences?.length ?? 0) > 0 || (opts.corrections?.length ?? 0) > 0;
 		const hasDecisions = (opts.decisions?.length ?? 0) > 0;
 
 		if (hasPrefsOrCorrs) {
@@ -307,4 +303,3 @@ export function memoryCitations(opts: {
 		});
 	});
 }
-

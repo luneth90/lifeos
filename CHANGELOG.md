@@ -1,5 +1,64 @@
 # 更新日志
 
+## 1.3.0 (2026-04-02)
+
+### 重大变更：记忆系统架构重构
+
+本版本对记忆系统的三文件架构（ContextPolicy / TaskBoard / UserProfile）进行了全面重构，MCP 工具从 11 个精简到 6 个，3 个关键生命周期操作实现内部自动化。
+
+**Layer 0 偏好可达性保障：**
+- 偏好和纠错现在直接包含在 Layer 0 摘要中，使用独立的 1000 token 预算，确保 Agent 在任何场景下都能获取用户行为约束
+- Layer 0 总预算从 1200 提升至 2000 token，新增"行为约束"section
+- 偏好/纠错/决策写入后即时刷新对应活文档 section，compaction 后不再丢失新偏好
+
+**MCP 生命周期自动化：**
+- `memory_startup` → 首次工具调用时自动触发，首次返回结果附带 `_layer0` 摘要字段
+- `memory_checkpoint` → 会话结束（stdin 关闭）时自动执行
+- `memory_notify` → `fs.watch` 自动监听 Vault `.md` 文件变更，500ms 防抖自动索引（手动调用保留为同步入口）
+- `memory_skill_complete` → 合并至 `memory_log(entry_type="skill_completion")`
+
+**ContextPolicy 精简：**
+- 移除场景策略、技能画像策略、强制引用场景（均为未被消费的死代码）
+- ContextPolicy.md 从 5 个 section 精简为 2 个：Layer 0 预算 + 活文档体积约束
+
+**TaskBoard / UserProfile 职责清晰化：**
+- TaskBoard = "做什么"：项目信息唯一来源
+- UserProfile = "怎么做"：偏好、纠错、统计、知识掌握度
+- UserProfile 移除活跃项目列表和近期决策 section，消除与 TaskBoard 的信息重复
+
+### 删除的 MCP 工具
+
+| 工具 | 替代方式 |
+|------|----------|
+| `memory_startup` | MCP server 自动触发 |
+| `memory_checkpoint` | MCP server 自动触发 |
+| `memory_skill_complete` | `memory_log(entry_type="skill_completion")` |
+| `memory_refresh` | 即时刷新 + fs.watch |
+| `memory_skill_context` | 死代码，直接删除 |
+
+### 保留的 MCP 工具（6 个）
+
+`memory_query` · `memory_recent` · `memory_log` · `memory_auto_capture` · `memory_notify` · `memory_citations`
+
+### 删除的代码模块
+
+- `src/skill-context/` 整个目录（7 个文件）：`buildSkillContext`、seed profiles、reranking 逻辑
+- `context-policy.ts` 中的 `resolveScenePolicy`、`resolveSkillProfilePolicy`、`DEFAULT_SKILL_PROFILE_POLICIES` 及相关类型
+
+### 协议文档同步
+
+- `lifeos-rules`（中英）：分层协议从三层精简为两层，新增 `_layer0` 上下文说明
+- `memory-protocol`（中英）：`memory_skill_complete` → `memory_log`，checkpoint 自动化
+- `/revise`、`/digest`、`/read-pdf` SKILL（中英）：同步更新技能完成调用方式
+- 测试指南（中英）：startup/checkpoint 改为验证自动触发行为
+
+### 内部
+
+- 净删除约 1150 行代码（+431/-1562 across 35 files）
+- `fs.watch` 防抖串行化（`notifyQueue` + `notifyInFlight` 防并发 SQLite 锁）
+- 进程退出前 `flushPendingNotifies` 确保不丢失待处理文件通知
+- `checkpointDone` 防重入，避免 `stdin.on('end')` 和 `beforeExit` 重复触发
+
 ## 1.2.0 (2026-04-01)
 
 ### 新功能
