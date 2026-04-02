@@ -72,12 +72,14 @@ claude
 
 以下测试在 Claude Code 会话中执行。每一步直接告诉 Claude 要调用的工具即可。
 
-### 4.1 memory_startup — 启动会话
+### 4.1 自动启动验证 — 首次工具调用触发 memory_startup
 
-> 对 Claude 说：调用 memory_startup
+> `memory_startup` 已内部化，不再作为 MCP 工具暴露。MCP Server 会在首次工具调用时自动触发。
+
+> 对 Claude 说：调用 memory_query 搜索"测试"
 
 **预期：**
-- [ ] 返回 Layer 0 摘要（首次使用时内容较少）
+- [ ] 返回结果中包含 `_layer0` 字段（说明自动启动已触发）
 - [ ] `tmp/lifeos-manual-test/memory.db` 已创建
 - [ ] 无报错
 
@@ -95,7 +97,7 @@ claude
 
 **预期：**
 - [ ] 返回列表中包含 5.2 刚记录的事件
-- [ ] 包含 memory_startup 产生的会话事件
+- [ ] 包含自动启动产生的会话事件
 
 ### 4.4 memory_query — 搜索 Vault
 
@@ -168,21 +170,24 @@ EOF
 - [ ] 返回组装后的上下文，包含与 today 技能相关的信息
 - [ ] 包含 Layer 0 摘要、活跃文档摘要等
 
-### 4.9 memory_skill_complete — 标记技能完成
+### 4.9 memory_log（skill_completion）— 记录技能完成
 
-> 对 Claude 说：调用 memory_skill_complete，标记 today 技能已完成
+> `memory_skill_complete` 已删除，改用 `memory_log(entry_type="skill_completion", ...)` 替代。
+
+> 对 Claude 说：调用 memory_log，entry_type 为 "skill_completion"，记录 today 技能已完成
 
 **预期：**
 - [ ] 返回成功
 - [ ] 该事件可通过 memory_recent 查询到
 
-### 4.10 memory_checkpoint — 关闭会话
+### 4.10 自动 checkpoint 验证 — 会话结束时自动执行
 
-> 对 Claude 说：调用 memory_checkpoint
+> `memory_checkpoint` 已内部化，不再作为 MCP 工具暴露。MCP Server 会在会话结束（stdin end / beforeExit）时自动执行。
+
+**操作：** 退出 Claude Code 会话（输入 `/exit` 或 Ctrl+C）
 
 **预期：**
-- [ ] 返回会话摘要
-- [ ] 活跃文档已刷新
+- [ ] 退出后检查活跃文档已刷新（见第 6 节数据持久化验证）
 - [ ] enhance_queue 已处理
 
 ---
@@ -193,7 +198,7 @@ EOF
 
 | 命令 | 预期行为 |
 |------|---------|
-| `/today` | 生成今日计划，调用 memory_skill_context |
+| `/today` | 生成今日计划，调用 memory_skill_context，完成后通过 memory_log 记录 skill_completion |
 | `/ask 什么是量子纠缠` | 进入问答模式，可保存为草稿 |
 | `/brainstorm 个人知识管理方案` | 引导式头脑风暴 |
 | `/knowledge` | 创建知识笔记 |
@@ -244,9 +249,10 @@ cd tmp/lifeos-manual-test
 claude
 ```
 
-> 对 Claude 说：调用 memory_startup，然后调用 memory_recent
+> 对 Claude 说：调用 memory_query 搜索"测试"，然后调用 memory_recent
 
 **验证：**
+- [ ] memory_query 返回结果中包含 `_layer0` 字段（自动启动已触发）
 - [ ] Layer 0 摘要包含上一会话的信息
 - [ ] memory_recent 能查到上一会话的事件
 
@@ -265,7 +271,7 @@ rm -rf tmp/lifeos-manual-test
 | 问题 | 排查方法 |
 |------|---------|
 | MCP Server 未连接 | 检查 `.mcp.json` 路径是否正确；`node dist/server.js` 能否正常启动 |
-| memory_startup 报错 | 检查 `lifeos.yaml` 是否存在且格式正确 |
+| 首次工具调用未返回 `_layer0` | 检查 `lifeos.yaml` 是否存在且格式正确；确认 MCP Server 已正确连接 |
 | memory_query 无结果 | 先调用 `memory_notify` 触发扫描，确认 vault_index 有数据 |
 | 技能未识别 | 检查 `.agents/skills/` 目录和 `CLAUDE.md` 技能表 |
 | 数据库锁定 | 确保没有其他进程持有 memory.db（`lsof memory.db`） |

@@ -189,12 +189,13 @@ memory_notify(file_path="{drafts directory}/<TopicName>-MMDD-MMDD.md")
 ### Skill Completion
 
 ```text
-memory_skill_complete(
+memory_log(
+  entry_type="skill_completion",
   skill_name="digest",
   summary="Generated {topic} weekly digest MMDD-MMDD",
   related_files=["{drafts directory}/<TopicName>-MMDD-MMDD.md"],
   scope="digest",
-  refresh_targets=["TaskBoard", "UserProfile"]
+  importance=4
 )
 ```
 

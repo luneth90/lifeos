@@ -72,12 +72,14 @@ After startup, confirm the MCP Server is connected — lifeos tools should be av
 
 Run the following tests inside the Claude Code session. Simply tell Claude which tool to call.
 
-### 4.1 memory_startup — Start Session
+### 4.1 Auto-Startup Verification — First Tool Call Triggers memory_startup
 
-> Tell Claude: Call memory_startup
+> `memory_startup` has been internalized and is no longer exposed as an MCP tool. The MCP Server automatically triggers it on the first tool call.
+
+> Tell Claude: Call memory_query to search for "test"
 
 **Expected:**
-- [ ] Returns Layer 0 summary (minimal content on first use)
+- [ ] Response contains `_layer0` field (confirming auto-startup was triggered)
 - [ ] `tmp/lifeos-manual-test/memory.db` created
 - [ ] No errors
 
@@ -95,7 +97,7 @@ Run the following tests inside the Claude Code session. Simply tell Claude which
 
 **Expected:**
 - [ ] Results include the event recorded in 4.2
-- [ ] Includes session events from memory_startup
+- [ ] Includes session events from auto-startup
 
 ### 4.4 memory_query — Search Vault
 
@@ -168,21 +170,24 @@ EOF
 - [ ] Returns assembled context with information relevant to the today skill
 - [ ] Includes Layer 0 summary, active document summaries, etc.
 
-### 4.9 memory_skill_complete — Mark Skill Complete
+### 4.9 memory_log (skill_completion) — Record Skill Completion
 
-> Tell Claude: Call memory_skill_complete to mark the today skill as completed
+> `memory_skill_complete` has been removed. Use `memory_log(entry_type="skill_completion", ...)` instead.
+
+> Tell Claude: Call memory_log with entry_type "skill_completion" to record that the today skill is completed
 
 **Expected:**
 - [ ] Returns success
 - [ ] Event can be found via memory_recent
 
-### 4.10 memory_checkpoint — Close Session
+### 4.10 Auto-Checkpoint Verification — Runs Automatically on Session End
 
-> Tell Claude: Call memory_checkpoint
+> `memory_checkpoint` has been internalized and is no longer exposed as an MCP tool. The MCP Server automatically executes it on session end (stdin end / beforeExit).
+
+**Action:** Exit the Claude Code session (type `/exit` or Ctrl+C)
 
 **Expected:**
-- [ ] Returns session summary
-- [ ] Active documents refreshed
+- [ ] After exit, verify active documents have been refreshed (see Section 6 Data Persistence Verification)
 - [ ] enhance_queue processed
 
 ---
@@ -193,7 +198,7 @@ Trigger skills directly in Claude Code using slash commands:
 
 | Command | Expected Behavior |
 |---------|-------------------|
-| `/today` | Generate daily plan, calls memory_skill_context |
+| `/today` | Generate daily plan, calls memory_skill_context, records skill_completion via memory_log |
 | `/ask What is quantum entanglement` | Enter Q&A mode, can save as draft |
 | `/brainstorm Personal knowledge management` | Guided brainstorming session |
 | `/knowledge` | Create a knowledge note |
@@ -244,9 +249,10 @@ cd tmp/lifeos-manual-test
 claude
 ```
 
-> Tell Claude: Call memory_startup, then call memory_recent
+> Tell Claude: Call memory_query to search for "test", then call memory_recent
 
 **Verify:**
+- [ ] memory_query response contains `_layer0` field (auto-startup triggered)
 - [ ] Layer 0 summary includes information from previous session
 - [ ] memory_recent returns events from the previous session
 
@@ -265,7 +271,7 @@ rm -rf tmp/lifeos-manual-test
 | Issue | How to Investigate |
 |-------|-------------------|
 | MCP Server not connected | Check `.mcp.json` paths; verify `node dist/server.js` starts normally |
-| memory_startup errors | Check `lifeos.yaml` exists and has valid format |
+| First tool call does not return `_layer0` | Check `lifeos.yaml` exists and has valid format; confirm MCP Server is connected |
 | memory_query returns nothing | Call `memory_notify` first to trigger scan; confirm vault_index has data |
 | Skills not recognized | Check `.agents/skills/` directory and `CLAUDE.md` skill table |
 | Database locked | Ensure no other process holds memory.db (`lsof memory.db`) |

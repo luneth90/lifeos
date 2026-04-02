@@ -184,12 +184,13 @@ memory_notify(file_path="{草稿目录}/<TopicName>-MMDD-MMDD.md")
 ### 技能完成
 
 ```text
-memory_skill_complete(
+memory_log(
+  entry_type="skill_completion",
   skill_name="digest",
   summary="生成 {主题} 周报 MMDD-MMDD",
   related_files=["{草稿目录}/<TopicName>-MMDD-MMDD.md"],
   scope="digest",
-  refresh_targets=["TaskBoard", "UserProfile"]
+  importance=4
 )
 ```
 

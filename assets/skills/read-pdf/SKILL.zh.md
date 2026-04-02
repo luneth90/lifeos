@@ -190,10 +190,11 @@ for page_num in range(start - 1, end):
 ### 技能完成（仅限用户直接调用）
 
 ```
-memory_skill_complete(
+memory_log(
+  entry_type="skill_completion",
   skill_name="read-pdf",
   summary="提取 PDF <文件名> 第 X-Y 页",
   scope="read-pdf",
-  refresh_targets=[]
+  importance=3
 )
 ```

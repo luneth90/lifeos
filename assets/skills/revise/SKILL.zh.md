@@ -230,29 +230,31 @@ memory_recent(entry_type="correction", query="<章节主题或原书约定关键
 
 ### 技能完成（两个触发点）
 
-> 与通用协议不同，`/revise` 需要调用两次 `memory_skill_complete`，分别对应不同阶段：
+> 与通用协议不同，`/revise` 需要调用两次 `memory_log(entry_type=”skill_completion”)`，分别对应不同阶段：
 
 **1. 复习文件生成后：**
 
 ```
-memory_skill_complete(
+memory_log(
+  entry_type=”skill_completion”,
   skill_name=”review”,
   summary=”生成《章节名称》复习文件”,
   related_files=[“<复习文件相对路径>”, “<章节笔记相对路径>”],
   scope=”review”,
-  refresh_targets=[“TaskBoard”, “UserProfile”]
+  importance=4
 )
 ```
 
 **2. 批改完成并写回 status 后：**
 
 ```
-memory_skill_complete(
+memory_log(
+  entry_type=”skill_completion”,
   skill_name=”review”,
   summary=”完成《章节名称》复习批改”,
   related_files=[“<复习文件相对路径>”, “<章节笔记相对路径>”],
   scope=”review”,
-  detail='{“score”:”<X/N>”,”weak_concepts”:[“<薄弱概念>”],”partial_concepts”:[“<部分掌握概念>”],”mastered_concepts”:[“<已掌握概念>”]}',
-  refresh_targets=[“TaskBoard”, “UserProfile”]
+  importance=4,
+  detail='{“score”:”<X/N>”,”weak_concepts”:[“<薄弱概念>”],”partial_concepts”:[“<部分掌握概念>”],”mastered_concepts”:[“<已掌握概念>”]}'
 )
 ```

@@ -569,20 +569,23 @@ LIFEOS_DIR="$(cd "$(dirname "$0")/../.." && pwd)"    # Adjust to actual project 
 - [ ] First response contains `"result"` and `"serverInfo"` (initialize success)
 - [ ] Second response contains `"tools"` array listing all LifeOS MCP tools
 
-#### 7.3.2 Call memory_startup Tool
+#### 7.3.2 Call memory_query Tool (Verify Auto-Startup)
+
+> `memory_startup` has been internalized and is no longer exposed as an MCP tool. The MCP Server automatically triggers it on the first tool call.
+> Here we call `memory_query` to verify the first call automatically completes startup and returns the `_layer0` field.
 
 ```bash
 {
   echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"integration-test","version":"0.1"}}}'
   echo '{"jsonrpc":"2.0","method":"notifications/initialized"}'
-  echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_startup","arguments":{}}}'
+  echo '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"memory_query","arguments":{"query":"test"}}}'
 } | LIFEOS_VAULT_ROOT=tmp/test-mcp node "$LIFEOS_DIR/dist/server.js" 2>/dev/null | head -10
 ```
 
 **Verify:**
 - [ ] Response contains `"result"` and `"content"` (tool call success)
 - [ ] No `"error"` present
-- [ ] Content includes Layer 0 summary or empty vault message
+- [ ] Content includes `_layer0` field (confirming auto-startup was triggered)
 
 #### 7.3.3 Via CLI Tool (optional)
 
@@ -591,17 +594,18 @@ If CLI tools are installed, further verify indirect MCP tool calls through CLI:
 **Claude Code:**
 ```bash
 cd tmp/test-mcp
-# Trigger memory_startup in Claude Code session (interactive, requires manual observation)
-claude "Call the memory_startup tool"
+# Trigger memory_query in Claude Code session (interactive, requires manual observation)
+# The first tool call automatically triggers memory_startup
+claude "Call memory_query to search for 'test'"
 ```
 
 **Codex:**
 ```bash
 cd tmp/test-mcp
-codex "Call the memory_startup tool"
+codex "Call memory_query to search for 'test'"
 ```
 
-- [ ] Agent successfully calls `memory_startup` and returns results
+- [ ] Agent successfully calls `memory_query` and returns results containing `_layer0` (auto-startup triggered)
 - [ ] Agent recognizes skills and rules defined in CLAUDE.md / AGENTS.md
 
 ---

@@ -81,7 +81,7 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 
 ### Layered Activation Rules
 
-Memory operations are organized into three layers with different activation conditions:
+Memory operations are organized into two layers. Session initialization (startup) and wrap-up (checkpoint) are handled automatically by the MCP server — agents do not need to manage them.
 
 #### Layer 1: Always Active
 
@@ -89,10 +89,11 @@ The following operations must be performed in **any conversation**, regardless o
 
 | Operation | When | Description |
 | --- | --- | --- |
-| `memory_startup` | Session start | Retrieve Layer 0 summary, load user preferences and context |
 | `memory_log` / `memory_auto_capture` | When user expresses persistent rules | Capture preferences, corrections, decisions — **must include `slot_key`** (see "Preference & Decision Capture" below) |
 
 **Judgment criteria:** Will the user's statement **still need to be followed in the next conversation**? If yes, regardless of what you're currently doing, it must be written to LifeOS immediately.
+
+> **Layer 0 context:** On the first call to any LifeOS MCP tool, the response includes a `_layer0` field containing user preferences, corrections, and current focus summary. The agent should read and follow the behavioral constraints within it.
 
 #### Layer 2: Skill Workflows
 
@@ -100,18 +101,9 @@ Activated only when executing a LifeOS skill (`/today`, `/knowledge`, `/revise`,
 
 | Operation | When | Description |
 | --- | --- | --- |
-| `memory_notify` | After creating or modifying a Vault file | Update file index |
-| `memory_skill_complete` | After all skill file writes are complete | Record skill event, refresh active docs |
+| `memory_notify` | After creating or modifying a Vault file | Update file index (fs.watch provides automatic backup, but call explicitly when immediate query is needed) |
+| `memory_log` | After all skill file writes are complete | Use `entry_type="skill_completion"` to record skill completion event |
 | `memory_query` / `memory_recent` | When context is needed | Query user preferences, historical decisions, learning progress |
-
-#### Layer 3: Session Lifecycle
-
-Executed before each session ends, regardless of whether skills were used:
-
-| Operation | When | Description |
-| --- | --- | --- |
-| `memory_log` (session_bridge) | First step of session wrap-up | Write session summary |
-| `memory_checkpoint` | Last step of session wrap-up | Refresh active docs, process enhance queue |
 
 #### Noise Protection
 

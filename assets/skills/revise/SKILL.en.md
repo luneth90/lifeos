@@ -230,29 +230,31 @@ See Phase 0 for query code.
 
 ### Skill Completion (Two Trigger Points)
 
-> Unlike the shared protocol, `/revise` calls `memory_skill_complete` twice, corresponding to different phases:
+> Unlike the shared protocol, `/revise` calls `memory_log(entry_type="skill_completion")` twice, corresponding to different phases:
 
 **1. After review file generation:**
 
 ```
-memory_skill_complete(
+memory_log(
+  entry_type="skill_completion",
   skill_name="review",
   summary="Generated review file for chapter name",
   related_files=["<review file relative path>", "<chapter note relative path>"],
   scope="review",
-  refresh_targets=["TaskBoard", "UserProfile"]
+  importance=4
 )
 ```
 
 **2. After grading is complete and status is written back:**
 
 ```
-memory_skill_complete(
+memory_log(
+  entry_type="skill_completion",
   skill_name="review",
   summary="Completed review grading for chapter name",
   related_files=["<review file relative path>", "<chapter note relative path>"],
   scope="review",
-  detail='{"score":"<X/N>","weak_concepts":["<weak concept>"],"partial_concepts":["<partially mastered concept>"],"mastered_concepts":["<mastered concept>"]}',
-  refresh_targets=["TaskBoard", "UserProfile"]
+  importance=4,
+  detail='{"score":"<X/N>","weak_concepts":["<weak concept>"],"partial_concepts":["<partially mastered concept>"],"mastered_concepts":["<mastered concept>"]}'
 )
 ```

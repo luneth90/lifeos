@@ -190,10 +190,11 @@ Output path: `/tmp/read-pdf-<timestamp>.json`
 ### Skill Completion (direct invocation only)
 
 ```
-memory_skill_complete(
+memory_log(
+  entry_type="skill_completion",
   skill_name="read-pdf",
   summary="Extracted PDF <filename> pages X-Y",
   scope="read-pdf",
-  refresh_targets=[]
+  importance=3
 )
 ```
