@@ -106,7 +106,7 @@ describe('buildLayer0Summary', () => {
   });
 
   it('returns empty string when no files exist', () => {
-    const policy = { layer0_total: 1200, userprofile_summary: 400, taskboard_focus: 800 };
+    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
     const result = buildLayer0Summary(vault.root, policy);
     expect(result).toBe('');
   });
@@ -118,7 +118,7 @@ describe('buildLayer0Summary', () => {
       `# UserProfile\n<!-- BEGIN AUTO:profile-summary -->\n用户偏好：简洁风格\n<!-- END AUTO:profile-summary -->`,
       'utf-8',
     );
-    const policy = { layer0_total: 1200, userprofile_summary: 400, taskboard_focus: 800 };
+    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
     const result = buildLayer0Summary(vault.root, policy);
     expect(result).toContain('UserProfile 速览');
     expect(result).toContain('用户偏好：简洁风格');
@@ -131,17 +131,43 @@ describe('buildLayer0Summary', () => {
       `# TaskBoard\n<!-- BEGIN AUTO:focus -->\n当前焦点：完成测试套件\n<!-- END AUTO:focus -->`,
       'utf-8',
     );
-    const policy = { layer0_total: 1200, userprofile_summary: 400, taskboard_focus: 800 };
+    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
     const result = buildLayer0Summary(vault.root, policy);
     expect(result).toContain('TaskBoard 当前焦点');
     expect(result).toContain('当前焦点：完成测试套件');
   });
 
   it('appends session bridge when provided', () => {
-    const policy = { layer0_total: 1200, userprofile_summary: 400, taskboard_focus: 800 };
+    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
     const result = buildLayer0Summary(vault.root, policy, '上次完成了核心功能');
     expect(result).toContain('上次会话桥接');
     expect(result).toContain('上次完成了核心功能');
+  });
+
+  it('includes 行为约束 section when preferences/corrections AUTO blocks exist', () => {
+    const memoryDir = join(vault.root, '90_系统', '记忆');
+    writeFileSync(
+      join(memoryDir, 'UserProfile.md'),
+      [
+        '# UserProfile',
+        '<!-- BEGIN AUTO:profile-summary -->',
+        '用户偏好：简洁风格',
+        '<!-- END AUTO:profile-summary -->',
+        '<!-- BEGIN AUTO:preferences -->',
+        '- 输出语言：中文',
+        '<!-- END AUTO:preferences -->',
+        '<!-- BEGIN AUTO:corrections -->',
+        '- 不要用英文回复',
+        '<!-- END AUTO:corrections -->',
+      ].join('\n'),
+      'utf-8',
+    );
+    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
+    const result = buildLayer0Summary(vault.root, policy);
+    expect(result).toContain('行为约束');
+    expect(result).toContain('输出语言：中文');
+    expect(result).toContain('不要用英文回复');
+    expect(result).toContain('UserProfile 速览');
   });
 });
 

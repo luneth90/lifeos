@@ -1,13 +1,16 @@
 /**
  * server.ts — MCP Server 入口。
  *
- * Registers 11 memory tools and starts the stdio transport.
+ * Registers 6 memory tools and starts the stdio transport.
+ * Automatically handles startup, file watching, and checkpoint.
  */
 
+import { watch, type FSWatcher } from 'node:fs';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import * as core from './core.js';
+import type { StartupResult } from './types.js';
 
 // ─── Key conversion helpers ──────────────────────────────────────────────────
 
@@ -28,6 +31,158 @@ function deepConvertKeys(obj: unknown): unknown {
 	return obj;
 }
 
+// ─── Auto startup guard ─────────────────────────────────────────────────────
+
+let startedUp = false;
+let startupResult: StartupResult | null = null;
+
+function ensureStartup(params: Record<string, unknown>): void {
+	if (startedUp) return;
+	const vaultRoot = (params.vault_root as string) || (params.vaultRoot as string) || undefined;
+	const sessionId = (params.session_id as string) || (params.sessionId as string) || undefined;
+	try {
+		startupResult = core.memoryStartup({ vaultRoot, sessionId });
+		startedUp = true;
+		// 启动文件监听
+		const resolvedVault = vaultRoot || process.env.LIFEOS_VAULT_ROOT;
+		if (resolvedVault) startVaultWatcher(resolvedVault);
+	} catch (e) {
+		console.warn('[lifeos] Auto-startup failed:', e);
+	}
+}
+
+// ─── Vault watcher ──────────────────────────────────────────────────────────
+
+/**
+ * Path segments that cause a file event to be ignored.
+ * Checked against each segment of the relative path (split by `/`).
+ */
+const IGNORE_SEGMENTS = new Set([
+	'.git', '.obsidian', '.trash', 'node_modules',
+]);
+
+/**
+ * File-level ignore patterns — checked against the full relative path.
+ */
+const IGNORE_FILE_PATTERNS = [
+	/\.sqlite/,          // DB files and WAL/journal
+	/\.DS_Store$/,
+	/~$/,                // editor backup files (file.md~)
+	/\.tmp$/,            // temporary files
+	/\.swp$/,            // vim swap files
+];
+
+function shouldIgnore(filename: string): boolean {
+	// Check path segments (handles .git, .obsidian etc. anywhere in path)
+	const segments = filename.split('/');
+	if (segments.some((s) => s.startsWith('.') || IGNORE_SEGMENTS.has(s))) return true;
+	// Check file-level patterns
+	return IGNORE_FILE_PATTERNS.some((p) => p.test(filename));
+}
+
+const pendingNotifies = new Map<string, NodeJS.Timeout>();
+const DEBOUNCE_MS = 500;
+
+/** Serialization guard — prevents concurrent memoryNotify calls on the same tick */
+let notifyInFlight = false;
+const notifyQueue: Array<{ vaultRoot: string; filename: string }> = [];
+
+function processNotifyQueue(): void {
+	if (notifyInFlight || notifyQueue.length === 0) return;
+	notifyInFlight = true;
+	const { vaultRoot, filename } = notifyQueue.shift()!;
+	try {
+		core.memoryNotify({ filePath: filename, vaultRoot });
+	} catch (e) {
+		console.warn(`[lifeos] Auto-notify failed for ${filename}:`, e);
+	} finally {
+		notifyInFlight = false;
+		// Process next item if any
+		if (notifyQueue.length > 0) {
+			setImmediate(processNotifyQueue);
+		}
+	}
+}
+
+function debouncedNotify(vaultRoot: string, filename: string): void {
+	const existing = pendingNotifies.get(filename);
+	if (existing) clearTimeout(existing);
+
+	pendingNotifies.set(
+		filename,
+		setTimeout(() => {
+			pendingNotifies.delete(filename);
+			notifyQueue.push({ vaultRoot, filename });
+			processNotifyQueue();
+		}, DEBOUNCE_MS),
+	);
+}
+
+/** Flush all pending debounced notifies synchronously (used at shutdown). */
+function flushPendingNotifies(vaultRoot: string): void {
+	for (const [filename, timer] of pendingNotifies) {
+		clearTimeout(timer);
+		try {
+			core.memoryNotify({ filePath: filename, vaultRoot });
+		} catch (_) {
+			// Best-effort at shutdown
+		}
+	}
+	pendingNotifies.clear();
+}
+
+let vaultWatcher: FSWatcher | null = null;
+let watchedVaultRoot: string | null = null;
+
+function startVaultWatcher(vaultRoot: string): void {
+	if (vaultWatcher) return;
+	watchedVaultRoot = vaultRoot;
+	try {
+		vaultWatcher = watch(vaultRoot, { recursive: true }, (_event, filename) => {
+			if (!filename || shouldIgnore(filename)) return;
+			if (!filename.endsWith('.md')) return;
+			debouncedNotify(vaultRoot, filename);
+		});
+		vaultWatcher.on('error', (err) => {
+			console.warn('[lifeos] Vault watcher error:', err);
+			// Don't crash — watcher errors are non-fatal
+		});
+	} catch (e) {
+		console.warn('[lifeos] Failed to start vault watcher:', e);
+	}
+}
+
+// ─── Auto checkpoint ────────────────────────────────────────────────────────
+
+let checkpointDone = false;
+
+function setupAutoCheckpoint(): void {
+	const doCheckpoint = () => {
+		if (!startedUp || checkpointDone) return;
+		checkpointDone = true;
+		// Flush pending file notifies before checkpoint
+		if (watchedVaultRoot) flushPendingNotifies(watchedVaultRoot);
+		try {
+			core.memoryCheckpoint({});
+		} catch (e) {
+			console.error('[lifeos] Auto-checkpoint failed:', e);
+		}
+	};
+
+	process.stdin.on('end', () => {
+		doCheckpoint();
+		if (vaultWatcher) {
+			vaultWatcher.close();
+			vaultWatcher = null;
+		}
+		process.exit(0);
+	});
+
+	process.on('beforeExit', doCheckpoint);
+}
+
+// ─── Tool wrapper ────────────────────────────────────────────────────────────
+
 function handleTool<P extends Record<string, unknown>>(
 	// biome-ignore lint/suspicious/noExplicitAny: core functions have varied signatures
 	coreFn: (params: any) => unknown,
@@ -38,8 +193,22 @@ function handleTool<P extends Record<string, unknown>>(
 		if (converted.vaultRoot === '') converted.vaultRoot = undefined;
 		// filters contains SQL column names — must stay snake_case
 		if ('filters' in params) converted.filters = params.filters;
+
+		const wasFirstCall = !startedUp;
+		ensureStartup(params);
 		const result = coreFn(converted);
-		return { content: [{ type: 'text' as const, text: JSON.stringify(result) }] };
+
+		// 首次调用时附带 Layer 0 摘要
+		let output: unknown;
+		if (wasFirstCall && startupResult) {
+			output = typeof result === 'object' && result !== null
+				? { _layer0: startupResult.layer0_summary, ...(result as Record<string, unknown>) }
+				: { _layer0: startupResult.layer0_summary, result };
+		} else {
+			output = result;
+		}
+
+		return { content: [{ type: 'text' as const, text: JSON.stringify(output) }] };
 	};
 }
 
@@ -52,24 +221,7 @@ const server = new McpServer({
 
 // ─── Tool registrations ───────────────────────────────────────────────────────
 
-// 1. memory_startup
-server.tool(
-	'memory_startup',
-	'Start session: scan vault, build Layer 0 summary.',
-	{
-		db_path: z
-			.string()
-			.default('')
-			.describe(
-				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
-			),
-		vault_root: z.string().default(''),
-		session_id: z.string().optional(),
-	},
-	handleTool(core.memoryStartup),
-);
-
-// 2. memory_query
+// 1. memory_query
 server.tool(
 	'memory_query',
 	'Search vault index for notes, projects, and knowledge.',
@@ -84,12 +236,11 @@ server.tool(
 		query: z.string().default(''),
 		filters: z.record(z.string()).optional(),
 		limit: z.number().int().min(1).max(50).default(10),
-		scene: z.string().optional(),
 	},
 	handleTool(core.memoryQuery),
 );
 
-// 3. memory_recent
+// 2. memory_recent
 server.tool(
 	'memory_recent',
 	'Query recent session log events (decisions, corrections, milestones, etc.).',
@@ -106,12 +257,11 @@ server.tool(
 		scope: z.string().optional(),
 		query: z.string().optional(),
 		limit: z.number().int().min(1).max(100).default(20),
-		scene: z.string().optional(),
 	},
 	handleTool(core.memoryRecent),
 );
 
-// 4. memory_log
+// 3. memory_log
 server.tool(
 	'memory_log',
 	'Log a single memory event (decision, correction, preference, milestone, etc.).',
@@ -122,6 +272,10 @@ server.tool(
 			.describe(
 				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
 			),
+		vault_root: z
+			.string()
+			.default('')
+			.describe('Optional. Auto-resolved from environment. Used for instant active-doc refresh on preference/correction/decision writes.'),
 		entry_type: z.enum([
 			'skill_completion',
 			'decision',
@@ -155,7 +309,7 @@ server.tool(
 	handleTool(core.memoryLog),
 );
 
-// 5. memory_auto_capture
+// 4. memory_auto_capture
 server.tool(
 	'memory_auto_capture',
 	'Batch capture corrections, decisions, and preferences from the current session.',
@@ -166,6 +320,10 @@ server.tool(
 			.describe(
 				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
 			),
+		vault_root: z
+			.string()
+			.default('')
+			.describe('Optional. Auto-resolved from environment. Used for instant active-doc refresh after batch capture.'),
 		corrections: z
 			.array(
 				z.object({
@@ -216,7 +374,7 @@ server.tool(
 	handleTool(core.memoryAutoCapture),
 );
 
-// 6. memory_notify
+// 5. memory_notify
 server.tool(
 	'memory_notify',
 	'Notify the memory system that a vault file has been created or modified.',
@@ -233,68 +391,7 @@ server.tool(
 	handleTool(core.memoryNotify),
 );
 
-// 7. memory_checkpoint
-server.tool(
-	'memory_checkpoint',
-	'Close the current session: refresh active docs, process enhance queue, write session bridge.',
-	{
-		db_path: z
-			.string()
-			.default('')
-			.describe(
-				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
-			),
-		vault_root: z.string().default(''),
-		session_id: z.string().optional(),
-	},
-	handleTool(core.memoryCheckpoint),
-);
-
-// 8. memory_skill_complete
-server.tool(
-	'memory_skill_complete',
-	'Record that a LifeOS skill has completed its execution.',
-	{
-		db_path: z
-			.string()
-			.default('')
-			.describe(
-				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
-			),
-		vault_root: z.string().default(''),
-		skill_name: z.string().min(1),
-		summary: z.string().min(1),
-		scope: z.string().optional(),
-		importance: z.number().int().min(1).max(5).optional(),
-		detail: z.string().optional(),
-		related_files: z.array(z.string()).optional(),
-		related_entities: z.array(z.string()).optional(),
-		context_sources: z.array(z.string()).optional(),
-		refresh_targets: z.array(z.string()).optional(),
-	},
-	handleTool(core.memorySkillComplete),
-);
-
-// 9. memory_refresh
-server.tool(
-	'memory_refresh',
-	'Rebuild AUTO sections of an active doc (TaskBoard or UserProfile) from DB data.',
-	{
-		db_path: z
-			.string()
-			.default('')
-			.describe(
-				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
-			),
-		vault_root: z.string().default(''),
-		target: z.enum(['TaskBoard', 'UserProfile']),
-		section: z.string().optional(),
-		preserve_manual: z.boolean().optional(),
-	},
-	handleTool(core.memoryRefresh),
-);
-
-// 10. memory_citations
+// 6. memory_citations
 server.tool(
 	'memory_citations',
 	'Get source event citations for items in TaskBoard or UserProfile.',
@@ -313,26 +410,6 @@ server.tool(
 	handleTool(core.memoryCitations),
 );
 
-// 11. memory_skill_context
-server.tool(
-	'memory_skill_context',
-	'Assemble skill execution context using a named seed profile.',
-	{
-		db_path: z
-			.string()
-			.default('')
-			.describe(
-				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
-			),
-		vault_root: z.string().default(''),
-		skill_profile: z.string().min(1),
-		related_files: z.array(z.string()).optional(),
-		query: z.string().optional(),
-		limit: z.number().int().min(1).max(50).optional(),
-	},
-	handleTool(core.memorySkillContext),
-);
-
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 async function main() {
@@ -343,6 +420,7 @@ async function main() {
 	}
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
+	setupAutoCheckpoint();
 }
 
 main().catch(console.error);

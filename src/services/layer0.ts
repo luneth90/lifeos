@@ -77,22 +77,33 @@ export function buildLayer0Summary(
 	const upContent = existsSync(upPath) ? readFileSync(upPath, 'utf-8') : '';
 	const tbContent = existsSync(tbPath) ? readFileSync(tbPath, 'utf-8') : '';
 
-	const upBudget = Number(policy.userprofile_summary ?? 400);
+	const upBudget = Number(policy.userprofile_summary ?? 200);
+	const rulesBudget = Number(policy.userprofile_rules ?? 1000);
 	const tbBudget = Number(policy.taskboard_focus ?? 800);
-	const totalBudget = Number(policy.layer0_total ?? upBudget + tbBudget);
+	const totalBudget = Number(policy.layer0_total ?? upBudget + rulesBudget + tbBudget);
 
 	let upSummary = trimToBudget(extractAutoSection(upContent, 'profile-summary'), upBudget);
+
+	// 偏好+纠错独立提取
+	const prefsRaw = extractAutoSection(upContent, 'preferences');
+	const corrsRaw = extractAutoSection(upContent, 'corrections');
+	const rulesRaw = [prefsRaw, corrsRaw].filter(Boolean).join('\n');
+	let upRules = trimToBudget(rulesRaw, rulesBudget);
+
 	let tbFocus = trimToBudget(extractAutoSection(tbContent, 'focus'), tbBudget);
 
-	// Trim to total budget if combined exceeds it
-	if (estimateTokens(upSummary) + estimateTokens(tbFocus) > totalBudget) {
-		tbFocus = trimToBudget(tbFocus, Math.min(tbBudget, totalBudget));
-		const remaining = Math.max(totalBudget - estimateTokens(tbFocus), 0);
-		upSummary = trimToBudget(upSummary, remaining);
+	// 总预算裁剪（优先级：rules > focus > summary）
+	const combined = estimateTokens(upSummary) + estimateTokens(upRules) + estimateTokens(tbFocus);
+	if (combined > totalBudget) {
+		upSummary = trimToBudget(upSummary, Math.min(upBudget, Math.floor(totalBudget * 0.1)));
+		const remaining = totalBudget - estimateTokens(upSummary);
+		upRules = trimToBudget(upRules, Math.min(rulesBudget, Math.floor(remaining * 0.55)));
+		tbFocus = trimToBudget(tbFocus, remaining - estimateTokens(upRules));
 	}
 
 	const sections: string[] = [];
 	if (upSummary) sections.push(`## UserProfile 速览\n${upSummary}`);
+	if (upRules) sections.push(`## 行为约束\n${upRules}`);
 	if (tbFocus) sections.push(`## TaskBoard 当前焦点\n${tbFocus}`);
 	if (lastSessionBridge) {
 		const bridgeBudget = Math.min(Math.max(Math.floor(totalBudget / 4), 120), 240);

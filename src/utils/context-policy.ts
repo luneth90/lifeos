@@ -2,7 +2,7 @@
  * context-policy.ts — ContextPolicy.md 读取与策略解析。
  *
  * Reads the ContextPolicy markdown file from the vault memory directory
- * and provides runtime policy resolution for scenes and skill profiles.
+ * and provides runtime policy for Layer 0 budgets and active doc constraints.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -11,76 +11,14 @@ import { VaultConfig, getVaultConfig, resolveConfig } from '../config.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface SkillProfilePolicy {
-	skill_profile: string;
-	load_taskboard: boolean;
-	allow_domain_tag_fallback: boolean;
-	ranking_bias: Record<string, number>;
-	recent_event_bias: Record<string, number>;
-}
-
-export interface ScenePolicy {
-	scene: string;
-	citation_required: boolean;
-	load_taskboard: boolean;
-	ranking_bias: Record<string, number>;
-	recent_event_bias: Record<string, number>;
-}
-
 export interface ContextPolicy {
 	layer0_total: number;
 	userprofile_summary: number;
+	userprofile_rules: number;
 	taskboard_focus: number;
 	userprofile_doc_limit: number;
 	taskboard_doc_limit: number;
-	scenes: Record<string, string>;
-	citation_required: string[];
-	skill_profiles: Record<string, Partial<SkillProfilePolicy>>;
 }
-
-// ─── Default skill profile policies ──────────────────────────────────────────
-
-export const DEFAULT_SKILL_PROFILE_POLICIES: Record<
-	string,
-	Omit<SkillProfilePolicy, 'skill_profile'>
-> = {
-	revise_strict: {
-		load_taskboard: false,
-		allow_domain_tag_fallback: false,
-		ranking_bias: { revise: 50, knowledge: 30, correction: 90 },
-		recent_event_bias: { correction: 40, skill_completion: 20, milestone: 15 },
-	},
-	ask_global: {
-		load_taskboard: false,
-		allow_domain_tag_fallback: true,
-		ranking_bias: {},
-		recent_event_bias: { decision: 20, correction: 20, preference: 10 },
-	},
-	daily_global: {
-		load_taskboard: false,
-		allow_domain_tag_fallback: false,
-		ranking_bias: { project: 60, revise: 45, daily: 30 },
-		recent_event_bias: { decision: 35, skill_completion: 15, milestone: 10 },
-	},
-	research_seed: {
-		load_taskboard: false,
-		allow_domain_tag_fallback: true,
-		ranking_bias: { draft: 60, research: 50, resource: 40 },
-		recent_event_bias: { decision: 20, preference: 15, skill_completion: 15, milestone: 10 },
-	},
-	project_seed: {
-		load_taskboard: false,
-		allow_domain_tag_fallback: true,
-		ranking_bias: { project: 60, research: 45, resource: 35, draft: 20 },
-		recent_event_bias: { decision: 30, milestone: 20, skill_completion: 15, correction: 10 },
-	},
-	knowledge_strict: {
-		load_taskboard: false,
-		allow_domain_tag_fallback: false,
-		ranking_bias: { knowledge: 70, project: 35, resource: 25 },
-		recent_event_bias: { correction: 35, decision: 15, skill_completion: 10 },
-	},
-};
 
 // ─── Default policy markdown template ────────────────────────────────────────
 
@@ -92,42 +30,17 @@ created: "${created}"
 
 # ContextPolicy
 
-本文件由 LifeOS 记忆系统自动生成，用于控制 Layer 0 上下文的预算和场景策略。
+本文件由 LifeOS 记忆系统自动生成，用于控制 Layer 0 上下文的预算和活文档体积约束。
 可手动编辑以调整行为。
 
 ## Layer 0 预算
 
-layer0_total: 1200
-userprofile_summary: 400
+layer0_total: 2000
+userprofile_summary: 200
+userprofile_rules: 1000
 taskboard_focus: 800
 userprofile_doc_limit: 2000
 taskboard_doc_limit: 3000
-
-## 场景策略
-
-/today: citation_required taskboard
-/research: domain_fallback research draft resource
-/project: domain_fallback project research resource draft
-/knowledge: knowledge project resource
-/revise: citation_required revise knowledge correction
-/ask: domain_fallback
-/brainstorm: domain_fallback draft research
-/publish: knowledge project research
-/ppt: knowledge project research
-
-## 技能画像策略
-
-revise_strict: load_taskboard=false domain_fallback=false
-ask_global: load_taskboard=false domain_fallback=true
-daily_global: load_taskboard=false domain_fallback=false
-research_seed: load_taskboard=false domain_fallback=true
-project_seed: load_taskboard=false domain_fallback=true
-knowledge_strict: load_taskboard=false domain_fallback=false
-
-## 强制引用场景
-
-/today
-/revise
 
 ## 活文档体积约束
 
@@ -228,25 +141,6 @@ function loadContextBudgets(content: string, vaultRoot: string): Record<string, 
 	return { ...defaults, ...parsed };
 }
 
-// ─── Skill profile parsing ────────────────────────────────────────────────────
-
-/**
- * Parse a skill profile rule string into a partial SkillProfilePolicy.
- * Recognises tokens: load_taskboard=true/false, domain_fallback=true/false
- */
-function parseSkillProfileRule(rule: string): Partial<SkillProfilePolicy> {
-	const result: Partial<SkillProfilePolicy> = {};
-	const tokens = rule.split(/\s+/);
-	for (const token of tokens) {
-		if (token.startsWith('load_taskboard=')) {
-			result.load_taskboard = token.endsWith('true');
-		} else if (token.startsWith('domain_fallback=')) {
-			result.allow_domain_tag_fallback = token.endsWith('true');
-		}
-	}
-	return result;
-}
-
 // ─── Load ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -257,140 +151,15 @@ export function loadContextPolicy(vaultRoot: string): ContextPolicy {
 	const path = ensureContextPolicyExists(vaultRoot);
 	const content = readFileSync(path, 'utf-8');
 
-	// Parse scenes
-	const scenes: Record<string, string> = {};
-	for (const line of extractSectionLines(content, '场景策略')) {
-		if (!line.includes(':')) continue;
-		const colonIdx = line.indexOf(':');
-		const name = line.slice(0, colonIdx).trim();
-		const rule = line.slice(colonIdx + 1).trim();
-		if (name) scenes[name] = rule;
-	}
-
-	// Parse skill profiles
-	const skillProfiles: Record<string, Partial<SkillProfilePolicy>> = {};
-	for (const line of extractSectionLines(content, '技能画像策略')) {
-		if (!line.includes(':')) continue;
-		const colonIdx = line.indexOf(':');
-		const name = line.slice(0, colonIdx).trim();
-		const rule = line.slice(colonIdx + 1).trim();
-		if (name) skillProfiles[name] = parseSkillProfileRule(rule);
-	}
-
-	// Parse citation_required lines
-	const citationRequired = extractSectionLines(content, '强制引用场景');
-
 	// Parse budgets
 	const budgets = loadContextBudgets(content, vaultRoot);
 
 	return {
-		layer0_total: budgets.layer0_total ?? 1200,
-		userprofile_summary: budgets.userprofile_summary ?? 400,
+		layer0_total: budgets.layer0_total ?? 2000,
+		userprofile_summary: budgets.userprofile_summary ?? 200,
+		userprofile_rules: budgets.userprofile_rules ?? 1000,
 		taskboard_focus: budgets.taskboard_focus ?? 800,
 		userprofile_doc_limit: budgets.userprofile_doc_limit ?? 2000,
 		taskboard_doc_limit: budgets.taskboard_doc_limit ?? 3000,
-		scenes,
-		citation_required: citationRequired,
-		skill_profiles: skillProfiles,
-	};
-}
-
-// ─── Scene policy resolution ──────────────────────────────────────────────────
-
-/**
- * Keyword → bias bucket mappings for scene rule text.
- * Each keyword maps to a { bucket: weight } pair to inject into ranking_bias
- * or recent_event_bias.
- */
-const SCENE_RANKING_KEYWORDS: Record<string, Record<string, number>> = {
-	taskboard: { project: 40, daily: 20 },
-	project: { project: 50 },
-	research: { research: 50 },
-	draft: { draft: 40 },
-	resource: { resource: 35 },
-	knowledge: { knowledge: 50 },
-	revise: { revise: 45 },
-	daily: { daily: 30 },
-};
-
-const SCENE_EVENT_KEYWORDS: Record<string, Record<string, number>> = {
-	citation_required: { correction: 30, decision: 25 },
-	taskboard: { skill_completion: 15, milestone: 10 },
-	project: { decision: 30, milestone: 20 },
-	research: { decision: 20, preference: 15 },
-	revise: { correction: 40, skill_completion: 20 },
-};
-
-/**
- * Derive a runtime ScenePolicy from the stored rule text for a given scene name.
- */
-export function resolveScenePolicy(policy: ContextPolicy, scene: string): ScenePolicy {
-	const sceneName = String(scene);
-	const rule = String(policy.scenes?.[sceneName] ?? '').trim();
-
-	if (!rule) {
-		return {
-			scene: sceneName,
-			citation_required: false,
-			load_taskboard: false,
-			ranking_bias: {},
-			recent_event_bias: {},
-		};
-	}
-
-	const tokens = rule.split(/\s+/).filter(Boolean);
-	const citationRequired = tokens.includes('citation_required');
-	const loadTaskboard = tokens.includes('taskboard');
-	const rankingBias: Record<string, number> = {};
-	const recentEventBias: Record<string, number> = {};
-
-	for (const token of tokens) {
-		const rb = SCENE_RANKING_KEYWORDS[token];
-		if (rb) {
-			for (const [k, v] of Object.entries(rb)) {
-				rankingBias[k] = Math.max(rankingBias[k] ?? 0, v);
-			}
-		}
-		const eb = SCENE_EVENT_KEYWORDS[token];
-		if (eb) {
-			for (const [k, v] of Object.entries(eb)) {
-				recentEventBias[k] = Math.max(recentEventBias[k] ?? 0, v);
-			}
-		}
-	}
-
-	return {
-		scene: sceneName,
-		citation_required: citationRequired,
-		load_taskboard: loadTaskboard,
-		ranking_bias: rankingBias,
-		recent_event_bias: recentEventBias,
-	};
-}
-
-// ─── Skill profile policy resolution ─────────────────────────────────────────
-
-/**
- * Merge loaded skill profile settings with built-in defaults.
- * Loaded values take precedence over defaults.
- */
-export function resolveSkillProfilePolicy(
-	policy: ContextPolicy,
-	skillProfile: string,
-): SkillProfilePolicy {
-	const loaded = policy.skill_profiles?.[skillProfile] ?? {};
-	const base = DEFAULT_SKILL_PROFILE_POLICIES[skillProfile] ?? {
-		load_taskboard: false,
-		allow_domain_tag_fallback: false,
-		ranking_bias: {},
-		recent_event_bias: {},
-	};
-
-	return {
-		skill_profile: skillProfile,
-		load_taskboard: loaded.load_taskboard ?? base.load_taskboard,
-		allow_domain_tag_fallback: loaded.allow_domain_tag_fallback ?? base.allow_domain_tag_fallback,
-		ranking_bias: { ...base.ranking_bias, ...(loaded.ranking_bias ?? {}) },
-		recent_event_bias: { ...base.recent_event_bias, ...(loaded.recent_event_bias ?? {}) },
 	};
 }

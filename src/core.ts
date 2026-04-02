@@ -31,23 +31,14 @@ import {
 	queryVaultIndex,
 } from './services/retrieval.js';
 import { runStartup } from './services/startup.js';
-import { type SkillContextResult, buildSkillContext } from './skill-context/index.js';
 import {
-	ACTIVE_DOC_TARGETS,
 	type ActiveDocTarget,
 	type CheckpointResult,
 	type CitationsResult,
-	type RefreshResult,
-	type SkillCompleteResult,
 	type StartupResult,
 	VALID_ENTRY_TYPES,
 } from './types.js';
-import {
-	type ScenePolicy,
-	ensureContextPolicyExists,
-	loadContextPolicy,
-	resolveScenePolicy,
-} from './utils/context-policy.js';
+import { ensureContextPolicyExists } from './utils/context-policy.js';
 import { resolveSessionId } from './utils/shared.js';
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
@@ -85,12 +76,6 @@ function withResolvedDb<T>(
 	}
 }
 
-function resolveScene(vault: string, scene?: string): ScenePolicy | null {
-	if (!scene) return null;
-	const policy = loadContextPolicy(vault);
-	return resolveScenePolicy(policy, scene);
-}
-
 // ─── 1. memory_startup ────────────────────────────────────────────────────────
 
 export function memoryStartup(opts: {
@@ -112,19 +97,15 @@ export function memoryQuery(opts: {
 	query?: string;
 	filters?: Record<string, string>;
 	limit?: number;
-	scene?: string;
 	vaultRoot?: string;
-}): { results: VaultQueryResult[]; scene_policy?: ScenePolicy } {
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
-		const scenePolicy = resolveScene(vault, opts.scene);
-		const result = queryVaultIndex(
+}): { results: VaultQueryResult[] } {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db }) => {
+		return queryVaultIndex(
 			db,
 			opts.query || '',
 			opts.filters || null,
 			opts.limit || 10,
-			scenePolicy,
 		);
-		return scenePolicy ? { ...result, scene_policy: scenePolicy } : result;
 	});
 }
 
@@ -137,20 +118,16 @@ export function memoryRecent(opts: {
 	scope?: string;
 	query?: string;
 	limit?: number;
-	scene?: string;
 	vaultRoot?: string;
-}): { events: SessionEvent[]; scene_policy?: ScenePolicy } {
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
-		const scenePolicy = resolveScene(vault, opts.scene);
-		const result = queryRecentEvents(db, {
+}): { events: SessionEvent[] } {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db }) => {
+		return queryRecentEvents(db, {
 			days: opts.days || 14,
 			entryType: opts.entryType || null,
 			scope: opts.scope || null,
 			query: opts.query || null,
 			limit: opts.limit || 20,
-			scenePolicy,
 		});
-		return scenePolicy ? { ...result, scene_policy: scenePolicy } : result;
 	});
 }
 
@@ -158,6 +135,7 @@ export function memoryRecent(opts: {
 
 export function memoryLog(opts: {
 	dbPath?: string;
+	vaultRoot?: string;
 	entryType: string;
 	importance: number;
 	summary: string;
@@ -177,8 +155,8 @@ export function memoryLog(opts: {
 	if (opts.importance < 1 || opts.importance > 5) {
 		throw new Error(`importance must be 1-5, got: ${opts.importance}`);
 	}
-	return withResolvedDb(opts.dbPath, undefined, ({ db }) => {
-		return logEvent(db, {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
+		const result = logEvent(db, {
 			entryType: opts.entryType,
 			importance: opts.importance,
 			summary: opts.summary,
@@ -192,6 +170,18 @@ export function memoryLog(opts: {
 			supersedes: opts.supersedes,
 			slotKey: opts.slotKey,
 		});
+
+		// 即时刷新：仅对有 slotKey 的偏好/纠错/决策触发
+		if (opts.slotKey && ['decision', 'correction', 'preference'].includes(opts.entryType)) {
+			if (opts.entryType === 'decision') {
+				refreshActiveDoc(db, vault, 'TaskBoard', { section: 'decisions' });
+			} else {
+				const section = opts.entryType === 'preference' ? 'preferences' : 'corrections';
+				refreshActiveDoc(db, vault, 'UserProfile', { section });
+			}
+		}
+
+		return result;
 	});
 }
 
@@ -199,13 +189,14 @@ export function memoryLog(opts: {
 
 export function memoryAutoCapture(opts: {
 	dbPath?: string;
+	vaultRoot?: string;
 	corrections?: AutoCaptureItem[];
 	decisions?: AutoCaptureItem[];
 	preferences?: AutoCaptureItem[];
 	sessionId?: string;
 }): AutoCaptureResult {
-	return withResolvedDb(opts.dbPath, undefined, ({ db }) => {
-		return autoCaptureEvents(
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
+		const result = autoCaptureEvents(
 			db,
 			{
 				corrections: opts.corrections,
@@ -214,6 +205,20 @@ export function memoryAutoCapture(opts: {
 			},
 			opts.sessionId,
 		);
+
+		// 批量写入后统一刷新活文档
+		const hasPrefsOrCorrs = (opts.preferences?.length ?? 0) > 0 || (opts.corrections?.length ?? 0) > 0;
+		const hasDecisions = (opts.decisions?.length ?? 0) > 0;
+
+		if (hasPrefsOrCorrs) {
+			refreshActiveDoc(db, vault, 'UserProfile', { section: 'preferences' });
+			refreshActiveDoc(db, vault, 'UserProfile', { section: 'corrections' });
+		}
+		if (hasDecisions) {
+			refreshActiveDoc(db, vault, 'TaskBoard', { section: 'decisions' });
+		}
+
+		return result;
 	});
 }
 
@@ -286,78 +291,7 @@ export function memoryCheckpoint(opts: {
 	});
 }
 
-// ─── 8. memory_skill_complete ─────────────────────────────────────────────────
-
-export function memorySkillComplete(opts: {
-	dbPath?: string;
-	vaultRoot?: string;
-	skillName: string;
-	summary: string;
-	scope?: string;
-	importance?: number;
-	detail?: string;
-	relatedFiles?: string[];
-	relatedEntities?: string[];
-	contextSources?: string[];
-	refreshTargets?: string[];
-}): SkillCompleteResult {
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
-		const logResult = logEvent(db, {
-			entryType: 'skill_completion',
-			importance: opts.importance || 4,
-			summary: opts.summary,
-			scope: opts.scope,
-			skillName: opts.skillName,
-			detail: opts.detail,
-			relatedFiles: opts.relatedFiles,
-			relatedEntities: opts.relatedEntities,
-		});
-
-		// Notify related files
-		for (const fp of opts.relatedFiles || []) {
-			notifyFileChanged(db, vault, fp);
-		}
-
-		// Refresh targets
-		const targets = opts.refreshTargets || ['TaskBoard', 'UserProfile'];
-		for (const target of targets) {
-			if (target === 'TaskBoard' || target === 'UserProfile') {
-				refreshActiveDoc(db, vault, target);
-			}
-		}
-
-		return {
-			event_id: logResult.eventId,
-			timestamp: logResult.timestamp,
-			logged: true,
-			skill_name: opts.skillName,
-		};
-	});
-}
-
-// ─── 9. memory_refresh ────────────────────────────────────────────────────────
-
-export function memoryRefresh(opts: {
-	dbPath?: string;
-	vaultRoot?: string;
-	target: ActiveDocTarget;
-	section?: string;
-	preserveManual?: boolean;
-}): RefreshResult {
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
-		if (!ACTIVE_DOC_TARGETS.has(opts.target)) {
-			throw new Error(
-				`Unsupported target: ${opts.target}. Supported: ${[...ACTIVE_DOC_TARGETS].join(', ')}`,
-			);
-		}
-		return refreshActiveDoc(db, vault, opts.target, {
-			section: opts.section,
-			preserveManual: opts.preserveManual,
-		});
-	});
-}
-
-// ─── 10. memory_citations ─────────────────────────────────────────────────────
+// ─── 8. memory_citations ─────────────────────────────────────────────────────
 
 export function memoryCitations(opts: {
 	dbPath?: string;
@@ -374,22 +308,3 @@ export function memoryCitations(opts: {
 	});
 }
 
-// ─── 11. memory_skill_context ─────────────────────────────────────────────────
-
-export function memorySkillContext(opts: {
-	dbPath?: string;
-	vaultRoot?: string;
-	skillProfile: string;
-	relatedFiles?: string[];
-	query?: string;
-	limit?: number;
-}): SkillContextResult {
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
-		return buildSkillContext(db, vault, {
-			skillProfile: opts.skillProfile,
-			relatedFiles: opts.relatedFiles,
-			query: opts.query,
-			limit: opts.limit,
-		});
-	});
-}

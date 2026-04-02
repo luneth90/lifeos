@@ -251,29 +251,6 @@ describe('queryVaultIndex', () => {
     expect(results).toHaveLength(0);
   });
 
-  it('applies scene_policy ranking_bias', () => {
-    insertVaultNote(db, {
-      filePath: '20_项目/proj.md',
-      title: 'Project Note',
-      type: 'project',
-      summary: 'test rerank content',
-    });
-    insertVaultNote(db, {
-      filePath: '40_知识/knowledge.md',
-      title: 'Knowledge Note',
-      type: 'knowledge',
-      summary: 'test rerank content',
-    });
-
-    const policy = { ranking_bias: { project: 50 }, recent_event_bias: {} };
-    const { results } = queryVaultIndex(db, 'rerank', null, 10, policy);
-    // With bias, project should rank first
-    const projectIdx = results.findIndex(r => r.type === 'project');
-    const knowledgeIdx = results.findIndex(r => r.type === 'knowledge');
-    if (projectIdx !== -1 && knowledgeIdx !== -1) {
-      expect(projectIdx).toBeLessThan(knowledgeIdx);
-    }
-  });
 });
 
 // ─── queryRecentEvents ────────────────────────────────────────────────────────

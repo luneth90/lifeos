@@ -6,7 +6,6 @@ import type Database from 'better-sqlite3';
 import { inClause, queryAll } from '../db/index.js';
 import type { MatchSource, MemoryItemRow, SessionSelectRow, VaultSelectRow } from '../types.js';
 import { daysAgo } from '../types.js';
-import type { ScenePolicy } from '../utils/context-policy.js';
 import { tokenize } from '../utils/segmenter.js';
 import { compactText, containsCjk, loadsJsonList } from '../utils/shared.js';
 
@@ -216,53 +215,6 @@ function mergeAndDedupe<T>(primary: T[], secondary: T[], keyFn: (item: T) => str
 	return merged;
 }
 
-/**
- * Rerank vault query results using scene policy.
- */
-function rerankQueryResults(
-	results: VaultQueryResult[],
-	scenePolicy?: ScenePolicy | null,
-): VaultQueryResult[] {
-	if (!scenePolicy) return results;
-
-	const rankingBias = scenePolicy.ranking_bias;
-	if (!rankingBias || Object.keys(rankingBias).length === 0) return results;
-
-	const scored = results.map((r) => {
-		let bonus = 0;
-		if (r.type && rankingBias[r.type] != null) {
-			bonus += rankingBias[r.type];
-		}
-		if (r.domain && rankingBias[r.domain] != null) {
-			bonus += rankingBias[r.domain];
-		}
-		return { result: r, finalScore: r.score + bonus };
-	});
-
-	scored.sort((a, b) => b.finalScore - a.finalScore);
-	return scored.map((s) => s.result);
-}
-
-/**
- * Rerank session events using scene policy.
- */
-function rerankRecentEvents(
-	events: SessionEvent[],
-	scenePolicy?: ScenePolicy | null,
-): SessionEvent[] {
-	if (!scenePolicy) return events;
-
-	const bias = scenePolicy.recent_event_bias;
-	if (!bias || Object.keys(bias).length === 0) return events;
-
-	const scored = events.map((e) => ({
-		event: e,
-		bonus: bias[e.entryType] ?? 0,
-	}));
-	scored.sort((a, b) => b.bonus - a.bonus);
-	return scored.map((s) => s.event);
-}
-
 // ─── Vault index SELECT fragment ──────────────────────────────────────────────
 
 const VAULT_SELECT = `
@@ -282,7 +234,6 @@ export function queryVaultIndex(
 	query: string,
 	filters: Record<string, string> | null,
 	limit: number,
-	scenePolicy?: ScenePolicy | null,
 ): { results: VaultQueryResult[] } {
 	const q = (query ?? '').trim();
 	const hasQuery = q.length > 0;
@@ -315,7 +266,7 @@ export function queryVaultIndex(
     `;
 		const rows = queryAll<VaultSelectRow>(db, sql, ...filterParams, limit);
 		const results = rows.map((row) => buildQueryResult(row, 'exact_filter', matchedFields(q, row)));
-		return { results: rerankQueryResults(results, scenePolicy) };
+		return { results };
 	}
 
 	// Case 3: Has query — try FTS5 first
@@ -355,7 +306,7 @@ export function queryVaultIndex(
 		const results = ftsRows
 			.slice(0, limit)
 			.map((row) => buildQueryResult(row, 'fts5', matchedFields(q, row)));
-		return { results: rerankQueryResults(results, scenePolicy) };
+		return { results };
 	}
 
 	// Case 4: LIKE fallback (CJK with few FTS results, or FTS error)
@@ -395,7 +346,7 @@ export function queryVaultIndex(
 	const results = merged
 		.slice(0, limit)
 		.map(({ row, source }) => buildQueryResult(row, source, matchedFields(q, row)));
-	return { results: rerankQueryResults(results, scenePolicy) };
+	return { results };
 }
 
 /**
@@ -409,10 +360,9 @@ export function queryRecentEvents(
 		scope?: string | null;
 		query?: string | null;
 		limit: number;
-		scenePolicy?: ScenePolicy | null;
 	},
 ): { events: SessionEvent[] } {
-	const { days, entryType, scope, query, limit, scenePolicy } = opts;
+	const { days, entryType, scope, query, limit } = opts;
 
 	const cutoff = daysAgo(days);
 	const q = (query ?? '').trim();
@@ -450,7 +400,7 @@ export function queryRecentEvents(
     `;
 		const rows = queryAll<SessionSelectRow>(db, sql, ...baseParams, limit);
 		const events = rows.map(buildSessionEvent);
-		return { events: rerankRecentEvents(events, scenePolicy) };
+		return { events };
 	}
 
 	// Has query → try FTS5
@@ -480,7 +430,7 @@ export function queryRecentEvents(
 
 	if (!needsFallback && ftsRows.length > 0) {
 		const events = ftsRows.slice(0, limit).map(buildSessionEvent);
-		return { events: rerankRecentEvents(events, scenePolicy) };
+		return { events };
 	}
 
 	// LIKE fallback
@@ -508,7 +458,7 @@ export function queryRecentEvents(
 	const merged = mergeAndDedupe(ftsRows, likeRows, (row) => String(row.event_id));
 
 	const events = merged.slice(0, limit).map(buildSessionEvent);
-	return { events: rerankRecentEvents(events, scenePolicy) };
+	return { events };
 }
 
 /**

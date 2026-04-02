@@ -15,7 +15,6 @@ import {
   memoryAutoCapture,
   memoryNotify,
   memoryCheckpoint,
-  memorySkillComplete,
 } from '../src/core.js';
 import { _resetDefaultInstance } from '../src/config.js';
 
@@ -372,29 +371,3 @@ describe('memoryCheckpoint', () => {
   });
 });
 
-// ─── memorySkillComplete ─────────────────────────────────────────────────────
-
-describe('memorySkillComplete', () => {
-  it('refreshes UserProfile by default so new preferences are written out', () => {
-    memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
-    _resetDefaultInstance();
-
-    memoryAutoCapture({
-      dbPath: vault.dbPath,
-      preferences: [{ summary: '偏好简洁中文风格' }],
-    });
-    _resetDefaultInstance();
-
-    memorySkillComplete({
-      dbPath: vault.dbPath,
-      vaultRoot: vault.root,
-      skillName: '/test',
-      summary: '完成一次技能执行',
-    });
-
-    const userProfilePath = join(vault.root, '90_系统', '记忆', 'UserProfile.md');
-    const content = readFileSync(userProfilePath, 'utf-8');
-
-    expect(content).toContain('偏好简洁中文风格');
-  });
-});

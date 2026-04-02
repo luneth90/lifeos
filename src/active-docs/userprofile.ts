@@ -188,17 +188,7 @@ function buildDecisionsSection(_db: Database.Database): string {
 }
 
 function buildLearningProgressSection(db: Database.Database): string {
-	// Active learning projects
-	const projectRows = db
-		.prepare(
-			`SELECT title, status, domain FROM vault_index
-       WHERE type = 'project' AND category = 'learning' AND status = 'active'
-       ORDER BY modified_at DESC
-       LIMIT 5`,
-		)
-		.all() as Array<{ title: string; status: string; domain: string | null }>;
-
-	// Knowledge mastery summary
+	// Knowledge mastery summary (active projects live in TaskBoard only)
 	const masteryRows = db
 		.prepare(
 			`SELECT status, COUNT(*) as cnt FROM vault_index
@@ -207,29 +197,15 @@ function buildLearningProgressSection(db: Database.Database): string {
 		)
 		.all() as Array<{ status: string; cnt: number }>;
 
-	const lines: string[] = [];
-
-	if (projectRows.length > 0) {
-		lines.push('**学习中的项目：**');
-		for (const p of projectRows) {
-			const domain = p.domain ? ` [${p.domain}]` : '';
-			lines.push(`- ${p.title}${domain}`);
-		}
+	if (masteryRows.length === 0) {
+		return '暂无知识掌握度记录。';
 	}
 
-	if (masteryRows.length > 0) {
-		if (lines.length > 0) lines.push('');
-		lines.push('**知识掌握度：**');
-		for (const r of masteryRows) {
-			const label = r.status == null ? '⚪ 未标注' : (MASTERY_STATUS_LABELS[r.status] ?? r.status);
-			lines.push(`- ${label}: ${r.cnt} 篇`);
-		}
+	const lines: string[] = ['**知识掌握度：**'];
+	for (const r of masteryRows) {
+		const label = r.status == null ? '⚪ 未标注' : (MASTERY_STATUS_LABELS[r.status] ?? r.status);
+		lines.push(`- ${label}: ${r.cnt} 篇`);
 	}
-
-	if (lines.length === 0) {
-		return '暂无学习进度记录。';
-	}
-
 	return lines.join('\n');
 }
 

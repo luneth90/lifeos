@@ -171,13 +171,6 @@ export interface CheckpointResult {
 	warnings: string[];
 }
 
-export interface SkillCompleteResult {
-	event_id: string;
-	timestamp: string;
-	logged: boolean;
-	skill_name: string;
-}
-
 export interface RefreshResult {
 	status: 'ok';
 	path: string;

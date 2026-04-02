@@ -111,8 +111,9 @@ const ZH_PRESET: LifeOSConfig = {
 		excluded_prefixes: ['system'],
 		enhance_priority: { projects: 8, knowledge: 6 },
 		context_budgets: {
-			layer0_total: 1200,
-			userprofile_summary: 400,
+			layer0_total: 2000,
+			userprofile_summary: 200,
+			userprofile_rules: 1000,
 			taskboard_focus: 800,
 			userprofile_doc_limit: 2000,
 			taskboard_doc_limit: 3000,
@@ -168,8 +169,9 @@ const EN_PRESET: LifeOSConfig = {
 		excluded_prefixes: ['system'],
 		enhance_priority: { projects: 8, knowledge: 6 },
 		context_budgets: {
-			layer0_total: 1200,
-			userprofile_summary: 400,
+			layer0_total: 2000,
+			userprofile_summary: 200,
+			userprofile_rules: 1000,
 			taskboard_focus: 800,
 			userprofile_doc_limit: 2000,
 			taskboard_doc_limit: 3000,
