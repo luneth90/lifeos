@@ -20,11 +20,6 @@ created: "2026-04-02"
 - [2026-04-02] 重复的纠错
 <!-- END AUTO:corrections -->
 
-## 近期决策
-<!-- BEGIN AUTO:decisions -->
-暂无数据
-<!-- END AUTO:decisions -->
-
 ## 学习进度
 <!-- BEGIN AUTO:learning-progress -->
 暂无数据
