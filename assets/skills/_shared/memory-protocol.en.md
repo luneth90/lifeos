@@ -15,17 +15,16 @@ memory_notify(file_path="<relative path of changed file>")
 
 ### Behavior Rule Logging
 
-When the user expresses a persistent preference or correction, call:
+When the user expresses a persistent rule, call:
 
 ```
 memory_log(
   slot_key="<category>:<topic>",
-  content="<rule content>",
-  source="preference"
+  content="<rule content>"
 )
 ```
 
-**`slot_key` convention:** Each preference/correction must include a `slot_key` in the format `<category>:<topic>`. Subsequent writes with the same `slot_key` automatically overwrite the old value.
+**`slot_key` convention:** Each rule must include a `slot_key` in the format `<category>:<topic>`. Subsequent writes with the same `slot_key` automatically overwrite the old value.
 
 | category | Meaning | Examples |
 | --- | --- | --- |
@@ -40,16 +39,13 @@ memory_log(
 ```
 memory_log(
   slot_key="format:latex",
-  content="Math formulas must use LaTeX format",
-  source="preference"
+  content="Math formulas must use LaTeX format"
 )
 
 memory_log(
   slot_key="workflow:revise-latex",
-  content="Do not use obsidian append to write LaTeX content in review Q&A",
-  source="correction"
+  content="Do not use obsidian append to write LaTeX content in review Q&A"
 )
 ```
 
-> `source` values: `preference` (user preference) or `correction` (user correction).
 > Optional parameters: `related_files` (array of related file paths), `expires_at` (expiration time).

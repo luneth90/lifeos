@@ -13,19 +13,18 @@ memory_notify(file_path="<变更文件相对路径>")
 
 > fs.watch 会自动兜底索引 .md 文件变更，但需要立即查询新文件时应显式调用。
 
-### 行为约束写入
+### 行为规则写入
 
-当用户表达需要持久遵守的偏好或纠错时，调用：
+当用户表达需要持久遵守的规则时，调用：
 
 ```
 memory_log(
   slot_key="<category>:<topic>",
-  content="<规则内容>",
-  source="preference"
+  content="<规则内容>"
 )
 ```
 
-**`slot_key` 规范：** 每条偏好/纠错必须附带 `slot_key`，格式为 `<category>:<topic>`。同一 `slot_key` 的后续写入会自动覆盖旧值。
+**`slot_key` 规范：** 每条规则必须附带 `slot_key`，格式为 `<category>:<topic>`。同一 `slot_key` 的后续写入会自动覆盖旧值。
 
 | category | 含义 | 示例 |
 | --- | --- | --- |
@@ -40,16 +39,13 @@ memory_log(
 ```
 memory_log(
   slot_key="format:latex",
-  content="数学公式必须用 LaTeX 格式",
-  source="preference"
+  content="数学公式必须用 LaTeX 格式"
 )
 
 memory_log(
   slot_key="workflow:revise-latex",
-  content="复习问答中禁止用 obsidian append 写入含 LaTeX 的内容",
-  source="correction"
+  content="复习问答中禁止用 obsidian append 写入含 LaTeX 的内容"
 )
 ```
 
-> `source` 取值：`preference`（用户偏好）或 `correction`（用户纠错）。
 > 可选参数：`related_files`（关联文件路径数组）、`expires_at`（过期时间）。

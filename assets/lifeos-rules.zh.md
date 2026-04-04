@@ -89,7 +89,7 @@ Compaction 后重新继续任务前，必须：
 
 | 操作 | 时机 | 说明 |
 | --- | --- | --- |
-| `memory_log` | 用户表达持久规则时 | 写入行为约束（偏好、纠错），**必须附带 `slot_key`** 和 `content`（详见下方「偏好捕获」） |
+| `memory_log` | 用户表达持久规则时 | 写入行为规则，**必须附带 `slot_key`** 和 `content`（详见下方「规则捕获」） |
 
 **判断标准：** 用户说的内容**下次对话还需要遵守**吗？如果是，无论当前在做什么，都必须立即写入 LifeOS。
 
@@ -110,22 +110,22 @@ Compaction 后重新继续任务前，必须：
 - 闲聊、代码讨论、与 Vault 无关的对话
 - 一次性技术问答
 
-### 偏好捕获
+### 规则捕获
 
-每条偏好/纠错**必须附带 `slot_key`**（格式 `<category>:<topic>`）。系统会根据 `slot_key` 自动持久化到 UserProfile，同一 `slot_key` 的后续写入会覆盖旧值。
+每条规则**必须附带 `slot_key`**（格式 `<category>:<topic>`）。系统会根据 `slot_key` 自动持久化到 UserProfile，同一 `slot_key` 的后续写入会覆盖旧值。
 
 **category 参考：** `format`（输出格式）、`workflow`（工作流）、`tool`（工具使用）、`content`（内容风格）、`schedule`（时间安排）
 
 **必须捕获的场景：**
-- 用户纠正 Agent 行为（"不要用英文"、"别加 emoji"、"以后…"）→ `memory_log(slot_key="content:language", content="规则内容", source="correction")`
-- 用户表达持久偏好（"我喜欢简洁的提交信息"、"复习间隔设为两周"）→ `memory_log(slot_key="format:commit-msg", content="规则内容", source="preference")`
+- 用户纠正 Agent 行为（"不要用英文"、"别加 emoji"、"以后…"）→ `memory_log(slot_key="content:language", content="规则内容")`
+- 用户表达持久偏好（"我喜欢简洁的提交信息"、"复习间隔设为两周"）→ `memory_log(slot_key="format:commit-msg", content="规则内容")`
 
 **禁止捕获的场景：**
 - 一次性的技术讨论（"这个 bug 的原因是什么"）
 - 代码层面已固化的约定（已写入配置文件的参数）
 - 从代码或 git 历史可直接推导的信息
 
-> `slot_key` 的完整命名规范和调用示例见 `.agents/skills/_shared/memory-protocol.md`。
+> `slot_key` 的完整命名规范和调用示例见 `memory-protocol.md`。
 
 ---
 

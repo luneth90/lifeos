@@ -89,7 +89,7 @@ The following operations must be performed in **any conversation**, regardless o
 
 | Operation | When | Description |
 | --- | --- | --- |
-| `memory_log` | When user expresses persistent rules | Write behavior rules (preferences, corrections) — **must include `slot_key`** and `content` (see "Preference Capture" below) |
+| `memory_log` | When user expresses persistent rules | Write behavior rules — **must include `slot_key`** and `content` (see "Rule Capture" below) |
 
 **Judgment criteria:** Will the user's statement **still need to be followed in the next conversation**? If yes, regardless of what you're currently doing, it must be written to LifeOS immediately.
 
@@ -110,22 +110,22 @@ The following scenarios **do not trigger Layer 2 operations** (but Layer 1 remai
 - Casual chat, code discussions, conversations unrelated to the Vault
 - One-off technical Q&A
 
-### Preference Capture
+### Rule Capture
 
-Each preference/correction **must include a `slot_key`** (format: `<category>:<topic>`). The system automatically persists it to UserProfile; subsequent writes with the same `slot_key` overwrite the old value.
+Each rule **must include a `slot_key`** (format: `<category>:<topic>`). The system automatically persists it to UserProfile; subsequent writes with the same `slot_key` overwrite the old value.
 
 **Category reference:** `format` (output format), `workflow` (workflow), `tool` (tool usage), `content` (content style), `schedule` (scheduling)
 
 **Must capture scenarios:**
-- User corrects Agent behavior ("don't use English", "no emoji", "from now on...") → `memory_log(slot_key="content:language", content="rule content", source="correction")`
-- User expresses a persistent preference ("I prefer concise commit messages", "set review interval to two weeks") → `memory_log(slot_key="format:commit-msg", content="rule content", source="preference")`
+- User corrects Agent behavior ("don't use English", "no emoji", "from now on...") → `memory_log(slot_key="content:language", content="rule content")`
+- User expresses a persistent preference ("I prefer concise commit messages", "set review interval to two weeks") → `memory_log(slot_key="format:commit-msg", content="rule content")`
 
 **Forbidden capture scenarios:**
 - One-off technical discussions ("what caused this bug")
 - Conventions already codified in code (parameters in config files)
 - Information directly derivable from code or git history
 
-> For the full `slot_key` naming convention and usage examples, see `.agents/skills/_shared/memory-protocol.md`.
+> For the full `slot_key` naming convention and usage examples, see `memory-protocol.md`.
 
 ---
 
