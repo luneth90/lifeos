@@ -27,7 +27,7 @@ npm link                     # 全局注册 lifeos 命令
 
 **验证注册成功：**
 ```bash
-lifeos --version             # 应输出与 package.json 一致的版本号（当前为 1.3.0）
+lifeos --version             # 应输出与 package.json 一致的版本号（当前为 1.4.0）
 which lifeos                 # 应指向全局 node_modules 的 symlink
 ```
 

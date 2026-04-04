@@ -1,7 +1,7 @@
 ---
 name: today
 description: "Daily planning entry point: review yesterday's progress and incomplete tasks, scan active projects and notes pending review, collect the user's goals and new ideas for today, and generate today's diary file. Automatically suggests follow-up skills (/review, /research, /project, etc.)."
-version: 1.3.0
+version: 1.4.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Daily_Template.md"

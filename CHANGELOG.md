@@ -1,5 +1,72 @@
 # 更新日志
 
+## 1.4.0 (2026-04-04)
+
+### 重大变更：记忆系统 V2 精简重构
+
+本版本对记忆系统进行了大幅精简，从 7 张数据表/6 个 MCP 工具缩减到 4 张表/3 个工具，净删除约 4000 行代码。核心目标：移除所有无活跃消费方的数据结构和工具，保留真正被使用的偏好/纠错持久化能力。
+
+**Schema 精简（7 表 → 4 表）：**
+- 删除 `session_log`、`session_state`、`session_fts` 三张表及全部会话级日志机制
+- `memory_items` 重构为以 `slot_key` 为主键的扁平结构，移除 `target`/`section`/`id` 三元组
+- 新增 V1→V2 原子迁移：仅保留 preferences/corrections 规则数据，自动回滚保护
+
+**MCP 工具精简（6 → 3）：**
+
+| 删除的工具 | 原因 |
+|------------|------|
+| `memory_recent` | 依赖 session_log，已无数据源 |
+| `memory_auto_capture` | 语义抓取无消费方，偏好捕获由 `memory_log` 承担 |
+| `memory_citations` | 引用追溯功能无实际使用场景 |
+
+保留：`memory_query` · `memory_log` · `memory_notify`
+
+**偏好/纠错统一为规则（Rules）：**
+- UserProfile 的 preferences 和 corrections 两个 AUTO section 合并为单一 `rules` section
+- `upsertRule()` 替代 `logEvent()`，correction 永远不会被 preference 降级覆盖
+- 源头去重：同一 `slot_key` 全局唯一，消除跨 section 重复
+
+**frozen 项目状态：**
+- 新增 `frozen` 状态：`active ⇄ frozen → done → archived`
+- 冻结的项目不出现在 TaskBoard 焦点/活跃项目/待复习面板
+- 关联知识笔记自动从复习列表中隐藏
+- 知识笔记新增 `project` frontmatter 字段标记所属项目
+
+**活文档精简：**
+- TaskBoard：5 sections → 3（移除 decisions、update-log）
+- UserProfile：4 sections → 3（preferences + corrections 合并为 rules）
+
+**Layer 0 优化：**
+- 移除 session_bridge 机制（生产数据 92% 失败率）
+- 预算调整：layer0_total 1800、taskboard_focus 500、revises_summary 100
+- 新增待复习概况摘要
+
+**运行时改进：**
+- startup 自动清理过期规则（`cleanupMemoryItems`），防止过期规则泄漏到 UserProfile
+- ContextPolicy 接口补齐 `revises_summary` 字段
+
+### 删除的代码模块
+
+- `src/services/maintenance.ts` — 维护任务调度（无消费方）
+- `src/active-docs/citations.ts` — 引用追溯
+- `src/active-docs/long-term-profile.ts` — 长期画像
+- `src/db/consolidation.ts` — 数据合并
+
+### 协议文档同步
+
+- `lifeos-rules`（中英）：记忆工具从 6 个更新为 3 个，新增 frozen 状态说明
+- `memory-protocol`（中英）：完全重写，精简为 `memory_log` + `slot_key` 规范
+- `lifecycle`（中英）：新增 frozen 状态流转规则
+- `Frontmatter_Schema`（中英）：新增 frozen 状态和 project 字段
+- 全部 10 个技能文件（中英共 20 个）：同步更新记忆调用方式
+
+### 内部
+
+- 净删除约 4000 行代码（+765/-4736 across 60 files）
+- V1→V2 迁移包在 SQLite 事务中，崩溃安全
+- 迁移测试覆盖数据映射、slot_key 冲突优先级、非规则行丢弃、旧表清理
+- 408 个测试全部通过
+
 ## 1.3.0 (2026-04-02)
 
 ### 重大变更：记忆系统架构重构

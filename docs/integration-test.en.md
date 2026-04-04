@@ -326,7 +326,7 @@ cd tmp/test-mcp && opencode mcp list
 
 ```bash
 lifeos help           # Show help information
-lifeos --version      # Show version (should match package.json, currently 1.3.0)
+lifeos --version      # Show version (should match package.json, currently 1.4.0)
 lifeos --help         # Same as help
 lifeos unknown        # Show "Unknown command" error
 ```
