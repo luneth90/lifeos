@@ -16,6 +16,7 @@ import { ensureContextPolicyExists, loadContextPolicy } from '../utils/context-p
 import { loadCustomDict } from '../utils/segmenter.js';
 import { countRows } from '../utils/shared.js';
 import { fullScan } from '../utils/vault-indexer.js';
+import { cleanupMemoryItems } from '../active-docs/derived-memory.js';
 import { processEnhanceQueue } from './enhance.js';
 import { buildLayer0Summary } from './layer0.js';
 
@@ -72,15 +73,18 @@ export function runStartup(
 	// 4. Enhance queue processing
 	const enhanceResult = processEnhanceQueue(db, vaultRoot, 5);
 
-	// 5. Refresh active docs before building Layer 0 from their AUTO sections.
+	// 5. Expire stale rules before refreshing active docs
+	cleanupMemoryItems(db);
+
+	// 6. Refresh active docs before building Layer 0 from their AUTO sections.
 	refreshTaskboard(db, vaultRoot);
 	refreshUserprofile(db, vaultRoot);
 
-	// 6. Load context policy and build Layer 0
+	// 7. Load context policy and build Layer 0
 	ensureContextPolicyExists(vaultRoot);
 	const policy = loadContextPolicy(vaultRoot);
 
-	// 7. Stats
+	// 8. Stats
 	const totalFiles = countRows(db, 'vault_index');
 	const enhanceQueueSize = countRows(db, 'enhance_queue', "status = 'pending'");
 

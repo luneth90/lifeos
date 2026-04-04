@@ -124,7 +124,7 @@ function tableExists(db: Database.Database, table: string): boolean {
  * - Adds project column to vault_index if missing
  */
 function migrateV1toV2(db: Database.Database): void {
-	// 1. Read existing memory_items WHERE status='active'
+	// 1. Read only rule rows (preferences/corrections) from old memory_items
 	interface OldMemoryItem {
 		slot_key: string;
 		content: string;
@@ -141,7 +141,8 @@ function migrateV1toV2(db: Database.Database): void {
 			migratedItems = db
 				.prepare(
 					`SELECT slot_key, content, section, related_files, manual_flag, updated_at, expires_at
-					 FROM memory_items WHERE status = 'active'
+					 FROM memory_items
+					 WHERE status = 'active' AND section IN ('corrections', 'preferences')
 					 ORDER BY CASE section WHEN 'corrections' THEN 0 ELSE 1 END`,
 				)
 				.all() as OldMemoryItem[];
@@ -151,58 +152,54 @@ function migrateV1toV2(db: Database.Database): void {
 		}
 	}
 
-	// 2. Drop old tables (order matters for triggers/FTS)
-	const dropStatements = [
-		// Drop triggers first
-		'DROP TRIGGER IF EXISTS session_fts_ai',
-		'DROP TRIGGER IF EXISTS session_fts_ad',
-		'DROP TRIGGER IF EXISTS session_fts_au',
-		// Drop FTS table
-		'DROP TABLE IF EXISTS session_fts',
-		// Drop indexes
-		'DROP INDEX IF EXISTS idx_session_log_time',
-		'DROP INDEX IF EXISTS idx_session_log_type',
-		'DROP INDEX IF EXISTS idx_session_log_scope',
-		'DROP INDEX IF EXISTS idx_session_log_session_id',
-		'DROP INDEX IF EXISTS idx_session_log_rule_key',
-		'DROP INDEX IF EXISTS idx_session_state_closed_at',
-		'DROP INDEX IF EXISTS idx_session_state_last_seen_at',
-		'DROP INDEX IF EXISTS idx_memory_items_slot',
-		'DROP INDEX IF EXISTS idx_memory_items_target_section_status',
-		// Drop tables
-		'DROP TABLE IF EXISTS session_log',
-		'DROP TABLE IF EXISTS session_state',
-		'DROP TABLE IF EXISTS memory_items',
-	];
+	// 2. Atomic migration: wrap everything in a transaction
+	const migrate = db.transaction(() => {
+		// Drop old tables (order matters for triggers/FTS)
+		const dropStatements = [
+			'DROP TRIGGER IF EXISTS session_fts_ai',
+			'DROP TRIGGER IF EXISTS session_fts_ad',
+			'DROP TRIGGER IF EXISTS session_fts_au',
+			'DROP TABLE IF EXISTS session_fts',
+			'DROP INDEX IF EXISTS idx_session_log_time',
+			'DROP INDEX IF EXISTS idx_session_log_type',
+			'DROP INDEX IF EXISTS idx_session_log_scope',
+			'DROP INDEX IF EXISTS idx_session_log_session_id',
+			'DROP INDEX IF EXISTS idx_session_log_rule_key',
+			'DROP INDEX IF EXISTS idx_session_state_closed_at',
+			'DROP INDEX IF EXISTS idx_session_state_last_seen_at',
+			'DROP INDEX IF EXISTS idx_memory_items_slot',
+			'DROP INDEX IF EXISTS idx_memory_items_target_section_status',
+			'DROP TABLE IF EXISTS session_log',
+			'DROP TABLE IF EXISTS session_state',
+			'DROP TABLE IF EXISTS memory_items',
+		];
 
-	for (const stmt of dropStatements) {
-		db.exec(stmt);
-	}
+		for (const stmt of dropStatements) {
+			db.exec(stmt);
+		}
 
-	// 3. Create new memory_items with new schema
-	db.exec(`
-		CREATE TABLE IF NOT EXISTS memory_items (
-			slot_key TEXT PRIMARY KEY,
-			content TEXT NOT NULL,
-			source TEXT DEFAULT 'preference',
-			related_files TEXT,
-			manual_flag INTEGER DEFAULT 0,
-			status TEXT DEFAULT 'active',
-			updated_at TEXT,
-			expires_at TEXT
-		);
-		CREATE INDEX IF NOT EXISTS idx_memory_items_status ON memory_items (status);
-	`);
-
-	// 4. Re-insert migrated data
-	if (migratedItems.length > 0) {
-		const insert = db.prepare(`
-			INSERT OR IGNORE INTO memory_items (slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at)
-			VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
+		// Create new memory_items with V2 schema
+		db.exec(`
+			CREATE TABLE IF NOT EXISTS memory_items (
+				slot_key TEXT PRIMARY KEY,
+				content TEXT NOT NULL,
+				source TEXT DEFAULT 'preference',
+				related_files TEXT,
+				manual_flag INTEGER DEFAULT 0,
+				status TEXT DEFAULT 'active',
+				updated_at TEXT,
+				expires_at TEXT
+			);
+			CREATE INDEX IF NOT EXISTS idx_memory_items_status ON memory_items (status);
 		`);
-		const tx = db.transaction(() => {
+
+		// Re-insert only rule data (corrections first via ORDER BY, INSERT OR IGNORE keeps first)
+		if (migratedItems.length > 0) {
+			const insert = db.prepare(`
+				INSERT OR IGNORE INTO memory_items (slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at)
+				VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
+			`);
 			for (const item of migratedItems) {
-				// Map old section to new source: corrections→'correction', else 'preference'
 				const source = item.section === 'corrections' ? 'correction' : 'preference';
 				insert.run(
 					item.slot_key,
@@ -214,17 +211,18 @@ function migrateV1toV2(db: Database.Database): void {
 					item.expires_at,
 				);
 			}
-		});
-		tx();
-	}
+		}
 
-	// 5. Add project column to vault_index if missing
-	if (!columnExists(db, 'vault_index', 'project')) {
-		db.exec('ALTER TABLE vault_index ADD COLUMN project TEXT');
-	}
+		// Add project column to vault_index if missing
+		if (!columnExists(db, 'vault_index', 'project')) {
+			db.exec('ALTER TABLE vault_index ADD COLUMN project TEXT');
+		}
 
-	// 6. Update schema_version to 2
-	db.prepare('UPDATE schema_version SET version = ?').run(SCHEMA_VERSION);
+		// Update schema_version
+		db.prepare('UPDATE schema_version SET version = ?').run(SCHEMA_VERSION);
+	});
+
+	migrate();
 }
 
 /**

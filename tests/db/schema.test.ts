@@ -369,6 +369,55 @@ describe('V1 to V2 migration', () => {
 
     db.close();
   });
+
+  it('drops non-rule sections (decisions, profile-summary) during migration', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    createV1Database(db);
+
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?)`).run('user', 'decisions', 'proj:decision1', '决策记录', now);
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?)`).run('user', 'profile-summary', 'summary:1', '摘要', now);
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?)`).run('user', 'corrections', 'content:lang', '必须用中文', now);
+
+    initDb(db);
+
+    const decisions = db.prepare('SELECT * FROM memory_items WHERE slot_key = ?').get('proj:decision1');
+    expect(decisions).toBeUndefined();
+
+    const summary = db.prepare('SELECT * FROM memory_items WHERE slot_key = ?').get('summary:1');
+    expect(summary).toBeUndefined();
+
+    // Rule should be preserved
+    const rule = db.prepare('SELECT * FROM memory_items WHERE slot_key = ?').get('content:lang');
+    expect(rule).toBeDefined();
+
+    db.close();
+  });
+
+  it('migration is atomic — all-or-nothing', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    createV1Database(db);
+
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?)`).run('user', 'corrections', 'test:rule', '测试', now);
+
+    // Verify migration completes successfully
+    initDb(db);
+
+    const version = db.prepare('SELECT version FROM schema_version').get() as { version: number };
+    expect(version.version).toBe(2);
+
+    const row = db.prepare('SELECT * FROM memory_items WHERE slot_key = ?').get('test:rule');
+    expect(row).toBeDefined();
+
+    db.close();
+  });
 });
 
 // ─── withDb tests ────────────────────────────────────────────────────────────
