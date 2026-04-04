@@ -187,6 +187,190 @@ describe('initDb', () => {
   });
 });
 
+// ─── V1 to V2 migration tests ───────────────────────────────────────────────
+
+/**
+ * Create a V1 schema database for migration testing.
+ * Includes session_log, session_state, session_fts, and the old memory_items schema.
+ */
+function createV1Database(db: Database.Database): void {
+  db.exec(`
+    CREATE TABLE schema_version (version INTEGER NOT NULL);
+    INSERT INTO schema_version (version) VALUES (1);
+
+    CREATE TABLE vault_index (
+      file_path TEXT PRIMARY KEY,
+      title TEXT,
+      type TEXT,
+      status TEXT,
+      domain TEXT,
+      category TEXT,
+      tags TEXT,
+      aliases TEXT,
+      summary TEXT,
+      semantic_summary TEXT,
+      search_hints TEXT,
+      wikilinks TEXT,
+      backlinks TEXT,
+      section_heads TEXT,
+      content_hash TEXT,
+      file_size INTEGER,
+      created_at TEXT,
+      modified_at TEXT,
+      indexed_at TEXT
+    );
+
+    CREATE TABLE session_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT,
+      entry_type TEXT,
+      target TEXT,
+      section TEXT,
+      slot_key TEXT,
+      content TEXT,
+      importance TEXT,
+      scope TEXT,
+      rule_key TEXT,
+      source TEXT,
+      created_at TEXT
+    );
+
+    CREATE TABLE session_state (
+      session_id TEXT PRIMARY KEY,
+      opened_at TEXT,
+      closed_at TEXT,
+      last_seen_at TEXT
+    );
+
+    CREATE VIRTUAL TABLE session_fts USING fts5(content, entry_type, target);
+
+    CREATE TABLE memory_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      target TEXT,
+      section TEXT,
+      slot_key TEXT,
+      content TEXT NOT NULL,
+      related_files TEXT,
+      manual_flag INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'active',
+      updated_at TEXT,
+      expires_at TEXT
+    );
+    CREATE INDEX idx_memory_items_slot ON memory_items (target, section, slot_key);
+  `);
+}
+
+describe('V1 to V2 migration', () => {
+  it('migrates memory_items data and maps sections to sources', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    createV1Database(db);
+
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?)`).run('user', 'corrections', 'content:language', '必须使用中文', now);
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?)`).run('user', 'preferences', 'format:latex', '数学公式用 LaTeX', now);
+
+    initDb(db);
+
+    const row1 = db.prepare('SELECT source, content FROM memory_items WHERE slot_key = ?')
+      .get('content:language') as { source: string; content: string };
+    expect(row1.source).toBe('correction');
+    expect(row1.content).toBe('必须使用中文');
+
+    const row2 = db.prepare('SELECT source FROM memory_items WHERE slot_key = ?')
+      .get('format:latex') as { source: string };
+    expect(row2.source).toBe('preference');
+
+    db.close();
+  });
+
+  it('correction wins over preference for same slot_key', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    createV1Database(db);
+
+    const now = new Date().toISOString();
+    // Same slot_key in both sections — correction should win due to ORDER BY
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?)`).run('user', 'preferences', 'content:lang', '中文优先', now);
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?)`).run('user', 'corrections', 'content:lang', '必须用中文', now);
+
+    initDb(db);
+
+    const row = db.prepare('SELECT source, content FROM memory_items WHERE slot_key = ?')
+      .get('content:lang') as { source: string; content: string };
+    expect(row.source).toBe('correction');
+    expect(row.content).toBe('必须用中文');
+
+    db.close();
+  });
+
+  it('drops V1 tables after migration', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    createV1Database(db);
+    initDb(db);
+
+    const tables = getTableNames(db);
+    expect(tables).not.toContain('session_log');
+    expect(tables).not.toContain('session_state');
+    expect(tables).not.toContain('session_fts');
+
+    db.close();
+  });
+
+  it('updates schema_version to 2', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    createV1Database(db);
+    initDb(db);
+
+    const row = db.prepare('SELECT version FROM schema_version').get() as { version: number };
+    expect(row.version).toBe(2);
+
+    db.close();
+  });
+
+  it('adds project column to vault_index during migration', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    createV1Database(db);
+    initDb(db);
+
+    // Should not throw — project column exists
+    expect(() => {
+      db.prepare(`UPDATE vault_index SET project = ? WHERE file_path = 'test'`).run('[[Test]]');
+    }).not.toThrow();
+
+    db.close();
+  });
+
+  it('skips expired items during migration', () => {
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    createV1Database(db);
+
+    const now = new Date().toISOString();
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'expired', ?)`).run('user', 'preferences', 'old:rule', '过期规则', now);
+    db.prepare(`INSERT INTO memory_items (target, section, slot_key, content, status, updated_at)
+      VALUES (?, ?, ?, ?, 'active', ?)`).run('user', 'preferences', 'active:rule', '有效规则', now);
+
+    initDb(db);
+
+    const expired = db.prepare('SELECT * FROM memory_items WHERE slot_key = ?').get('old:rule');
+    expect(expired).toBeUndefined();
+
+    const active = db.prepare('SELECT * FROM memory_items WHERE slot_key = ?').get('active:rule');
+    expect(active).toBeDefined();
+
+    db.close();
+  });
+});
+
 // ─── withDb tests ────────────────────────────────────────────────────────────
 
 describe('withDb', () => {

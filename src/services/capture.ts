@@ -4,7 +4,6 @@
  * Handles file change notifications and rule upserts (preferences/corrections).
  */
 
-import { existsSync, statSync } from 'node:fs';
 import { relative } from 'node:path';
 import type Database from 'better-sqlite3';
 import { indexSingleFile } from '../utils/vault-indexer.js';

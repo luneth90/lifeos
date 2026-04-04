@@ -16,6 +16,7 @@ export interface ContextPolicy {
 	userprofile_summary: number;
 	userprofile_rules: number;
 	taskboard_focus: number;
+	revises_summary: number;
 	userprofile_doc_limit: number;
 	taskboard_doc_limit: number;
 }
@@ -160,6 +161,7 @@ export function loadContextPolicy(vaultRoot: string): ContextPolicy {
 		userprofile_summary: budgets.userprofile_summary ?? 200,
 		userprofile_rules: budgets.userprofile_rules ?? 1000,
 		taskboard_focus: budgets.taskboard_focus ?? 500,
+		revises_summary: budgets.revises_summary ?? 100,
 		userprofile_doc_limit: budgets.userprofile_doc_limit ?? 2000,
 		taskboard_doc_limit: budgets.taskboard_doc_limit ?? 3000,
 	};

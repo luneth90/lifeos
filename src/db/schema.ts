@@ -141,7 +141,8 @@ function migrateV1toV2(db: Database.Database): void {
 			migratedItems = db
 				.prepare(
 					`SELECT slot_key, content, section, related_files, manual_flag, updated_at, expires_at
-					 FROM memory_items WHERE status = 'active'`,
+					 FROM memory_items WHERE status = 'active'
+					 ORDER BY CASE section WHEN 'corrections' THEN 0 ELSE 1 END`,
 				)
 				.all() as OldMemoryItem[];
 		} catch {
