@@ -44,15 +44,12 @@ draft ──/revise(≥50%)──→ revise ──/revise(≥80%)──→ maste
 
 ```
 active ⇄ frozen ──→ done ──/archive──→ archived
-  │                  ↑
-  └──→ on-hold ──────┘
 ```
 
 | 状态 | 含义 | 设置者 |
 |------|------|--------|
 | `active` | 正在进行中 | /project |
 | `frozen` | 短期冻结，保留所有数据，不出现在 TaskBoard 焦点/活跃项目/待复习面板 | 手动 |
-| `on-hold` | 已暂停 | 手动 |
 | `done` | 已完成，可归档 | 手动 |
 | `archived` | 已被 /archive 移入归档目录 | /archive |
 

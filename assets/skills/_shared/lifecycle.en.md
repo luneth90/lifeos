@@ -44,15 +44,12 @@ draft ──/revise(≥50%)──→ revise ──/revise(≥80%)──→ maste
 
 ```
 active ⇄ frozen ──→ done ──/archive──→ archived
-  │                  ↑
-  └──→ on-hold ──────┘
 ```
 
 | Status | Meaning | Set by |
 |--------|---------|--------|
 | `active` | Currently being worked on | /project |
 | `frozen` | Short-term freeze — retains all data, hidden from TaskBoard focus/active-projects/revise panels | Manual |
-| `on-hold` | Paused | Manual |
 | `done` | Completed, ready for archival | Manual |
 | `archived` | Moved to archive directory by /archive | /archive |
 

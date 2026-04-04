@@ -103,12 +103,11 @@ export const ACTIVE_DOC_TARGETS: ReadonlySet<string> = new Set<ActiveDocTarget>(
 
 export const STATUS_LABELS: Readonly<Record<string, string>> = {
 	active: '进行中',
-	'on-hold': '搁置中',
+	frozen: '🔒 封存',
 	done: '已完成',
 	draft: '草稿',
 	revise: '待复习',
 	mastered: '已掌握',
-	frozen: '🔒 封存',
 };
 
 export const NOTE_TYPE_LABELS: Readonly<Record<string, string>> = {
@@ -121,11 +120,11 @@ export const NOTE_TYPE_LABELS: Readonly<Record<string, string>> = {
 
 export const ENHANCE_STATUS_LABELS: Readonly<Record<string, string>> = {
 	active: '正在推进',
+	frozen: '🔒 封存',
 	done: '已完成',
 	draft: '处于草稿阶段',
 	revise: '待复习巩固',
 	mastered: '已掌握',
-	'on-hold': '当前搁置',
 };
 
 export const MASTERY_STATUS_LABELS: Readonly<Record<string, string>> = {

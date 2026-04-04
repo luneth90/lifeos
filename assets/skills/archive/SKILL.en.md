@@ -194,7 +194,7 @@ After user confirmation, for each item to archive:
 - Archived diary entries (total): [N]
 
 **Suggestions:**
-- [ ] Check on-hold projects to see if they need archiving
+- [ ] Check frozen projects to see if they need archiving
 - [ ] Process remaining pending drafts with /research, /project, or /knowledge
 ```
 
@@ -295,6 +295,6 @@ See Step 0 for query code.
 After archival is complete, suggestions:
 
 1. Run `/archive` periodically (weekly/monthly) to keep the vault tidy
-2. Check on-hold projects and consider reactivating or archiving them
+2. Check frozen projects and consider reactivating or archiving them
 3. Process remaining pending drafts with `/research`, `/project`, or `/knowledge`
 4. Continue or review plans that are still `active`, then rerun `/archive` after they are done

@@ -118,7 +118,7 @@ If the project category is `development`, after the Execution Agent returns, ver
 
 # Follow-up Handling
 
-When the user requests modifications after project creation: edit directly, do not create duplicate files. Update status as needed (`active → on-hold → done`).
+When the user requests modifications after project creation: edit directly, do not create duplicate files. Update status as needed (`active ⇄ frozen → done`).
 
 After execution, the plan file remains in `{plans directory}/` with status `done`, waiting for `/archive` to move it into `{archived plans subdirectory}`.
 
