@@ -1,22 +1,10 @@
 /**
- * types.ts — 中央类型定义。
+ * types.ts — Central type definitions.
  *
  * Shared types, unions, and DB row interfaces used across the project.
- * This eliminates stringly-typed code and Record<string, unknown> casts.
  */
 
-// ─── Entry types ──────────────────────────────────────────────────────────────
-
-export type EntryType =
-	| 'skill_completion'
-	| 'decision'
-	| 'preference'
-	| 'correction'
-	| 'blocker'
-	| 'milestone'
-	| 'session_bridge';
-
-export type KeyEntryType = 'decision' | 'correction' | 'preference';
+// ─── Core types ──────────────────────────────────────────────────────────────
 
 export type ActiveDocTarget = 'TaskBoard' | 'UserProfile';
 
@@ -45,42 +33,16 @@ export interface VaultIndexRow {
 	created_at: string | null;
 	modified_at: string | null;
 	indexed_at: string | null;
-}
-
-export interface SessionLogRow {
-	id: number;
-	event_id: string;
-	session_id: string;
-	timestamp: string;
-	entry_type: string;
-	importance: number;
-	scope: string | null;
-	skill_name: string | null;
-	summary: string;
-	detail: string | null;
-	source_refs: string | null;
-	related_files: string | null;
-	related_entities: string | null;
-	supersedes: string | null;
-	entry_hash: string | null;
-	search_hints: string | null;
-	rule_key: string | null;
+	project: string | null;
 }
 
 export interface MemoryItemRow {
-	item_id: string;
-	target: string;
-	section: string;
 	slot_key: string;
 	content: string;
-	confidence: string | null;
-	source_event_ids: string | null;
-	source_refs: string | null;
+	source: string | null;
 	related_files: string | null;
 	manual_flag: number;
 	status: string;
-	superseded_by: string | null;
-	last_confirmed_at: string | null;
 	updated_at: string;
 	expires_at: string | null;
 }
@@ -94,14 +56,6 @@ export interface EnhanceQueueRow {
 	attempts: number;
 	last_attempt_at: string | null;
 	error_message: string | null;
-}
-
-export interface SessionStateRow {
-	session_id: string;
-	started_at: string;
-	last_seen_at: string;
-	closed_at: string | null;
-	close_status: string | null;
 }
 
 // ─── Partial row types for SELECT subsets ──────────────────────────────────────
@@ -124,22 +78,6 @@ export type VaultSelectRow = Pick<
 	| 'modified_at'
 >;
 
-/** The columns selected by SESSION_SELECT in retrieval.ts */
-export type SessionSelectRow = Pick<
-	SessionLogRow,
-	| 'event_id'
-	| 'timestamp'
-	| 'entry_type'
-	| 'importance'
-	| 'scope'
-	| 'skill_name'
-	| 'summary'
-	| 'detail'
-	| 'source_refs'
-	| 'related_files'
-	| 'related_entities'
->;
-
 // ─── Result types for core.ts ──────────────────────────────────────────────────
 
 export interface StartupResult {
@@ -147,28 +85,6 @@ export interface StartupResult {
 	vault_stats: { total_files: number; updated_since_last: number; removed: number };
 	enhance_queue_size: number;
 	enhanced_files: number;
-	last_session_bridge: string | null;
-	recovered_from_unclean_shutdown: boolean;
-	previous_unclean_session_id: string | null;
-	maintenance: MaintenanceResult | null;
-}
-
-export interface MaintenanceResult {
-	deleted: number;
-	compressed_groups: number;
-	compressed_events: number;
-	memory_items_merged: number;
-	memory_items_deleted: number;
-	expired_items_deleted: number;
-	dry_run: boolean;
-}
-
-export interface CheckpointResult {
-	session_bridge_found: boolean;
-	enhanced_files: number;
-	active_docs_updated: boolean;
-	session_closed: boolean;
-	warnings: string[];
 }
 
 export interface RefreshResult {
@@ -178,67 +94,12 @@ export interface RefreshResult {
 	updatedSection: string;
 }
 
-export interface CitationsResult {
-	target: string;
-	section: string | null;
-	keyword: string | null;
-	total: number;
-	items: CitationItem[];
-	sourceEvents: CitationSourceEvent[];
-}
-
-export interface CitationItem {
-	itemId: string;
-	section: string;
-	slotKey: string;
-	content: string;
-	sourceEventIds: string[];
-	sourceRefs: string[];
-	updatedAt: string;
-}
-
-export interface CitationSourceEvent {
-	eventId: string;
-	entryType: string;
-	summary: string;
-	timestamp: string;
-	skillName: string | null;
-}
-
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-export const VALID_ENTRY_TYPES: ReadonlySet<string> = new Set<EntryType>([
-	'skill_completion',
-	'decision',
-	'preference',
-	'correction',
-	'blocker',
-	'milestone',
-	'session_bridge',
-]);
-
-export const KEY_ENTRY_TYPES: ReadonlySet<string> = new Set<KeyEntryType>([
-	'decision',
-	'correction',
-	'preference',
-]);
 
 export const ACTIVE_DOC_TARGETS: ReadonlySet<string> = new Set<ActiveDocTarget>([
 	'TaskBoard',
 	'UserProfile',
 ]);
-
-// ─── Shared label maps ────────────────────────────────────────────────────────
-
-export const ENTRY_TYPE_LABELS: Readonly<Record<string, string>> = {
-	decision: '决策',
-	correction: '纠错',
-	preference: '偏好',
-	milestone: '里程碑',
-	skill_completion: '技能完成',
-	blocker: '阻塞',
-	session_bridge: '会话桥接',
-};
 
 export const STATUS_LABELS: Readonly<Record<string, string>> = {
 	active: '进行中',
@@ -247,6 +108,7 @@ export const STATUS_LABELS: Readonly<Record<string, string>> = {
 	draft: '草稿',
 	revise: '待复习',
 	mastered: '已掌握',
+	frozen: '🔒 封存',
 };
 
 export const NOTE_TYPE_LABELS: Readonly<Record<string, string>> = {

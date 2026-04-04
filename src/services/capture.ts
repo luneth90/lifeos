@@ -1,358 +1,70 @@
 /**
- * capture.ts — 捕获服务。
+ * capture.ts — Capture service.
  *
- * Handles event logging, file change notifications, auto-capture,
- * and session bridge helpers.
+ * Handles file change notifications and rule upserts (preferences/corrections).
  */
 
-import { createHash, randomUUID } from 'node:crypto';
-import { readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, statSync } from 'node:fs';
+import { relative } from 'node:path';
 import type Database from 'better-sqlite3';
-import { upsertMemoryItem } from '../active-docs/derived-memory.js';
-import { ENTRY_TYPE_LABELS, KEY_ENTRY_TYPES, daysAgo } from '../types.js';
-import { buildSearchTokens } from '../utils/segmenter.js';
-import {
-	inferTemporaryPreference,
-	normalizeRuleSummary,
-	parseDetailObject,
-	resolveRuleKey,
-	resolveSessionId,
-} from '../utils/shared.js';
 import { indexSingleFile } from '../utils/vault-indexer.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface LogEventOpts {
-	entryType: string;
-	importance: number;
-	summary: string;
-	scope?: string;
-	sessionId?: string;
-	skillName?: string;
-	detail?: string | null;
-	sourceRefs?: string[] | null;
-	relatedFiles?: string[] | null;
-	relatedEntities?: string[] | null;
-	supersedes?: string | null;
-	slotKey?: string;
-}
-
-export interface LogEventResult {
-	eventId: string;
-	timestamp: string;
-	status: string;
-}
-
-export interface AutoCaptureItem {
-	summary: string;
-	detail?: string;
-	importance?: number;
-	scope?: string;
+export interface UpsertRuleOpts {
+	slotKey: string;
+	content: string;
+	source?: 'preference' | 'correction';
 	relatedFiles?: string[];
-	slotKey?: string;
+	expiresAt?: string | null;
 }
 
-export interface AutoCapturePayload {
-	corrections?: AutoCaptureItem[];
-	decisions?: AutoCaptureItem[];
-	preferences?: AutoCaptureItem[];
+export interface UpsertRuleResult {
+	slotKey: string;
+	action: 'created' | 'updated';
 }
-
-export interface CapturedEventRef {
-	eventId: string;
-	entryType: string;
-	summary: string;
-}
-
-export interface AutoCaptureResult {
-	capturedCount: number;
-	events: CapturedEventRef[];
-}
-
-export interface SessionBridgeRow {
-	eventId: string;
-	sessionId: string;
-	summary: string;
-	detail: string | null;
-	timestamp: string;
-}
-
-export interface SeedEvent {
-	entryType: string;
-	summary: string;
-	importance?: number;
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Build a 16-char entry hash from entry type, summary, and normalized detail.
- */
-function buildEntryHash(entryType: string, summary: string, normalizedDetail: string): string {
-	const raw = `${entryType}:${summary}:${normalizedDetail}`;
-	return createHash('sha256').update(raw, 'utf-8').digest('hex').slice(0, 16);
-}
-
-/**
- * Normalize detail for rule events (decision/correction/preference).
- * Adds content, normalized_summary, rule_key, structured_by fields.
- * For preferences, also adds temporary inference fields.
- */
-function normalizeRuleEventDetail(
-	entryType: string,
-	summary: string,
-	rawDetail: string | null | undefined,
-): { detailStr: string; ruleKey: string | null } {
-	const detailObj = parseDetailObject(rawDetail);
-	const normalizedSummary = normalizeRuleSummary(summary);
-	const ruleKey = resolveRuleKey(entryType, summary, detailObj);
-
-	const normalized: Record<string, unknown> = {
-		...detailObj,
-		content: rawDetail ?? summary,
-		normalized_summary: normalizedSummary,
-		rule_key: ruleKey,
-		structured_by: 'service_v05',
-	};
-
-	// For preference events, infer temporary status
-	if (entryType === 'preference') {
-		const tempResult = inferTemporaryPreference(summary, detailObj);
-		normalized.temporary = tempResult.temporary;
-		if (tempResult.expiresInDays != null) {
-			normalized.expires_in_days = tempResult.expiresInDays;
-		}
-		if (tempResult.expiresAt != null) {
-			normalized.expires_at = tempResult.expiresAt;
-		}
-		if (tempResult.temporarySource != null) {
-			normalized.temporary_source = tempResult.temporarySource;
-		}
-	}
-
-	return { detailStr: JSON.stringify(normalized), ruleKey };
-}
-
-/**
- * Find the latest event_id with the given rule_key (excluding superseded ones).
- */
-function findLatestByRuleKey(
-	db: Database.Database,
-	ruleKey: string,
-	excludeEventId?: string,
-): string | null {
-	let sql = `
-    SELECT event_id FROM session_log
-    WHERE rule_key = ?
-  `;
-	const params: unknown[] = [ruleKey];
-
-	if (excludeEventId) {
-		sql += ' AND event_id != ?';
-		params.push(excludeEventId);
-	}
-
-	sql += ' ORDER BY timestamp DESC LIMIT 1';
-
-	const row = db.prepare(sql).get(params) as { event_id: string } | undefined;
-	return row ? row.event_id : null;
-}
-
-// ─── logEvent ─────────────────────────────────────────────────────────────────
-
-/**
- * Log a single event into session_log.
- * Handles detail normalization for rule events and auto-supersedes.
- */
-export function logEvent(db: Database.Database, opts: LogEventOpts): LogEventResult {
-	const {
-		entryType,
-		importance,
-		summary,
-		scope,
-		sessionId,
-		skillName,
-		sourceRefs,
-		relatedFiles,
-		relatedEntities,
-		supersedes: explicitSupersedes,
-	} = opts;
-
-	const resolvedSessionId = resolveSessionId(sessionId);
-	const eventId = randomUUID();
-	const timestamp = new Date().toISOString();
-
-	// Normalize detail and resolve rule_key for rule events
-	let finalDetail: string | null = opts.detail ?? null;
-	let ruleKey: string | null = null;
-
-	if (KEY_ENTRY_TYPES.has(entryType)) {
-		const normalized = normalizeRuleEventDetail(entryType, summary, opts.detail);
-		finalDetail = normalized.detailStr;
-		ruleKey = normalized.ruleKey;
-	}
-
-	// Build entry hash
-	const entryHash = buildEntryHash(entryType, summary, finalDetail ?? '');
-
-	// Build search hints
-	const searchHints = buildSearchTokens(
-		summary,
-		finalDetail,
-		relatedEntities ?? null,
-		scope ?? null,
-	);
-
-	// Serialize arrays
-	const sourceRefsJson = sourceRefs ? JSON.stringify(sourceRefs) : null;
-	const relatedFilesJson = relatedFiles ? JSON.stringify(relatedFiles) : null;
-	const relatedEntitiesJson = relatedEntities ? JSON.stringify(relatedEntities) : null;
-
-	// Auto-supersede: find latest event with same rule_key
-	let supersedesId = explicitSupersedes ?? null;
-	if (!supersedesId && ruleKey) {
-		supersedesId = findLatestByRuleKey(db, ruleKey, eventId);
-	}
-
-	db.prepare(`
-    INSERT INTO session_log
-    (event_id, session_id, timestamp, entry_type, importance, scope, skill_name,
-     summary, detail, source_refs, related_files, related_entities,
-     supersedes, entry_hash, search_hints, rule_key)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-		eventId,
-		resolvedSessionId,
-		timestamp,
-		entryType,
-		importance,
-		scope ?? null,
-		skillName ?? null,
-		summary,
-		finalDetail,
-		sourceRefsJson,
-		relatedFilesJson,
-		relatedEntitiesJson,
-		supersedesId,
-		entryHash,
-		searchHints,
-		ruleKey,
-	);
-
-	// Sync to memory_items when slot_key is provided for preference/correction/decision
-	const slotKey = opts.slotKey;
-	if (
-		slotKey &&
-		(entryType === 'preference' || entryType === 'correction' || entryType === 'decision')
-	) {
-		const target = entryType === 'decision' ? 'TaskBoard' : 'UserProfile';
-		const section =
-			entryType === 'decision'
-				? 'decisions'
-				: entryType === 'correction'
-					? 'corrections'
-					: 'preferences';
-		upsertMemoryItem(db, {
-			itemId: randomUUID(),
-			target,
-			section,
-			slotKey,
-			content: summary,
-			confidence: null,
-			sourceEventIds: [eventId],
-			sourceRefs: sourceRefs ?? [],
-			relatedFiles: relatedFiles ?? [],
-			manualFlag: false,
-			status: 'active',
-			supersededBy: null,
-			lastConfirmedAt: null,
-			updatedAt: timestamp,
-			expiresAt: null,
-		});
-	}
-
-	return { eventId, timestamp, status: 'ok' };
-}
-
-// ─── autoCaptureEvents ────────────────────────────────────────────────────────
-
-/** Default importance per bucket type */
-const BUCKET_IMPORTANCE: Record<string, number> = {
-	correction: 4,
-	decision: 4,
-	preference: 3,
-};
-
-/**
- * Batch capture corrections/decisions/preferences.
- * Deduplicates by entry_hash across both existing DB records and current batch.
- */
-export function autoCaptureEvents(
-	db: Database.Database,
-	payload: AutoCapturePayload,
-	sessionId?: string,
-): AutoCaptureResult {
-	const buckets: Array<{ entryType: string; items: AutoCaptureItem[] }> = [
-		{ entryType: 'correction', items: payload.corrections ?? [] },
-		{ entryType: 'decision', items: payload.decisions ?? [] },
-		{ entryType: 'preference', items: payload.preferences ?? [] },
-	];
-
-	const captured: CapturedEventRef[] = [];
-	// Track hashes seen in this batch to deduplicate within the same call
-	const batchHashes = new Set<string>();
-
-	for (const { entryType, items } of buckets) {
-		for (const item of items) {
-			const summary = (item.summary ?? '').trim();
-			if (!summary) continue;
-
-			const importance = item.importance ?? BUCKET_IMPORTANCE[entryType] ?? 3;
-
-			// Pre-compute the hash to check for duplicates
-			// For rule events, detail gets normalized — compute approximate hash
-			let previewDetail = item.detail ?? null;
-			if (KEY_ENTRY_TYPES.has(entryType)) {
-				const normalized = normalizeRuleEventDetail(entryType, summary, previewDetail);
-				previewDetail = normalized.detailStr;
-			}
-			const hash = buildEntryHash(entryType, summary, previewDetail ?? '');
-
-			// Skip if already seen in this batch
-			if (batchHashes.has(hash)) continue;
-			batchHashes.add(hash);
-
-			// Skip if already exists in DB
-			const existing = db
-				.prepare('SELECT event_id FROM session_log WHERE entry_hash = ? LIMIT 1')
-				.get([hash]) as { event_id: string } | undefined;
-			if (existing) continue;
-
-			const result = logEvent(db, {
-				entryType,
-				importance,
-				summary,
-				detail: item.detail,
-				scope: item.scope,
-				relatedFiles: item.relatedFiles,
-				sessionId,
-				slotKey: item.slotKey,
-			});
-
-			captured.push({ eventId: result.eventId, entryType, summary });
-		}
-	}
-
-	return { capturedCount: captured.length, events: captured };
-}
-
-// ─── notifyFileChanged ────────────────────────────────────────────────────────
 
 export interface NotifyFileChangedResult {
 	action: string;
 	filePath: string;
 }
+
+// ─── upsertRule ──────────────────────────────────────────────────────────────
+
+/**
+ * Upsert a rule (preference or correction) into memory_items.
+ * If a rule with the same slot_key already exists, update it.
+ * Don't downgrade: if existing is correction and new is preference, keep correction source.
+ */
+export function upsertRule(db: Database.Database, opts: UpsertRuleOpts): UpsertRuleResult {
+	const now = new Date().toISOString();
+	const source = opts.source ?? 'preference';
+	const relatedFilesJson = JSON.stringify(opts.relatedFiles ?? []);
+
+	const existing = db
+		.prepare(
+			`SELECT slot_key, source FROM memory_items WHERE slot_key = ? AND status = 'active' LIMIT 1`,
+		)
+		.get(opts.slotKey) as { slot_key: string; source: string } | undefined;
+
+	if (existing) {
+		// Don't downgrade: if existing is correction and new is preference, keep correction source but update content
+		const finalSource =
+			existing.source === 'correction' && source === 'preference' ? 'correction' : source;
+		db.prepare(
+			`UPDATE memory_items SET content = ?, source = ?, related_files = ?, updated_at = ?, expires_at = ? WHERE slot_key = ?`,
+		).run(opts.content, finalSource, relatedFilesJson, now, opts.expiresAt ?? null, opts.slotKey);
+		return { slotKey: opts.slotKey, action: 'updated' };
+	}
+
+	db.prepare(
+		`INSERT INTO memory_items (slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at)
+     VALUES (?, ?, ?, ?, 0, 'active', ?, ?)`,
+	).run(opts.slotKey, opts.content, source, relatedFilesJson, now, opts.expiresAt ?? null);
+	return { slotKey: opts.slotKey, action: 'created' };
+}
+
+// ─── notifyFileChanged ────────────────────────────────────────────────────────
 
 /**
  * Notify the system that a file has changed.
@@ -406,132 +118,4 @@ export function notifyFileChanged(
 	}
 
 	return { action: 'unchanged', filePath: relPath };
-}
-
-// ─── latestSessionBridge ─────────────────────────────────────────────────────
-
-/**
- * Query the most recent session_bridge event.
- * Optionally filter by session_id.
- */
-export function latestSessionBridge(
-	db: Database.Database,
-	sessionId?: string,
-): SessionBridgeRow | null {
-	let sql = `
-    SELECT event_id, session_id, summary, detail, timestamp
-    FROM session_log
-    WHERE entry_type = 'session_bridge'
-  `;
-	const params: unknown[] = [];
-
-	if (sessionId) {
-		sql += ' AND session_id = ?';
-		params.push(sessionId);
-	}
-
-	sql += ' ORDER BY timestamp DESC LIMIT 1';
-
-	const row = db.prepare(sql).get(params) as
-		| {
-				event_id: string;
-				session_id: string;
-				summary: string;
-				detail: string | null;
-				timestamp: string;
-		  }
-		| undefined;
-
-	if (!row) return null;
-
-	return {
-		eventId: row.event_id,
-		sessionId: row.session_id,
-		summary: row.summary,
-		detail: row.detail,
-		timestamp: row.timestamp,
-	};
-}
-
-// ─── collectSessionBridgeSeedEvents ──────────────────────────────────────────
-
-/**
- * Collect the most recent key events for a session to use as bridge seeds.
- * Returns decisions, corrections, milestones, and skill_completions.
- */
-export function collectSessionBridgeSeedEvents(
-	db: Database.Database,
-	sessionId: string,
-	limit = 10,
-): SeedEvent[] {
-	const sql = `
-    SELECT entry_type, summary, importance
-    FROM session_log
-    WHERE session_id = ?
-      AND entry_type IN ('decision', 'correction', 'preference', 'milestone', 'skill_completion')
-    ORDER BY importance DESC, timestamp DESC
-    LIMIT ?
-  `;
-
-	const rows = db.prepare(sql).all([sessionId, limit]) as Array<{
-		entry_type: string;
-		summary: string;
-		importance: number;
-	}>;
-
-	return rows.map((r) => ({
-		entryType: r.entry_type,
-		summary: r.summary,
-		importance: r.importance,
-	}));
-}
-
-// ─── buildAutoSessionBridge ───────────────────────────────────────────────────
-
-/**
- * Generate a bridge text summary from a list of seed events.
- * Used to create session_bridge entries that persist context across sessions.
- */
-export function buildAutoSessionBridge(events: SeedEvent[]): string {
-	if (events.length === 0) {
-		return '上次会话无关键事件记录。';
-	}
-
-	const lines: string[] = ['上次会话关键事件：'];
-
-	for (const event of events) {
-		const label = ENTRY_TYPE_LABELS[event.entryType] ?? event.entryType;
-		lines.push(`- [${label}] ${event.summary}`);
-	}
-
-	return lines.join('\n');
-}
-
-// ─── scanRecentlyModifiedFiles ────────────────────────────────────────────────
-
-export interface RecentlyModifiedFile {
-	filePath: string;
-	modifiedAt: string;
-}
-
-/**
- * Scan for files in the vault that have been modified in the last 24 hours.
- * Uses the vault_index table modified_at field.
- */
-export function scanRecentlyModifiedFiles(db: Database.Database): RecentlyModifiedFile[] {
-	const cutoff = daysAgo(1);
-
-	const rows = db
-		.prepare(`
-      SELECT file_path, modified_at
-      FROM vault_index
-      WHERE modified_at >= ?
-      ORDER BY modified_at DESC
-    `)
-		.all([cutoff]) as Array<{ file_path: string; modified_at: string }>;
-
-	return rows.map((r) => ({
-		filePath: r.file_path,
-		modifiedAt: r.modified_at,
-	}));
 }

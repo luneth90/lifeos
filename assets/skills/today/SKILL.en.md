@@ -34,7 +34,7 @@ Help the user start a new day: review yesterday's progress, create today's diary
 ## Step 1: Gather Context (Silent Execution)
 
 > **Performance optimization:** Use VaultIndex queries instead of full file scans to significantly reduce token cost.
-> Query tools: MCP `memory_query` / `memory_recent`
+> Query tools: MCP `memory_query`
 
 1. **Get today's date**
    - Determine the current date (YYYY-MM-DD format)
@@ -46,8 +46,8 @@ Help the user start a new day: review yesterday's progress, create today's diary
 
 3. **Read TaskBoard** (priority, already refreshed during startup)
    - Read `{system directory}/{memory subdirectory}/TaskBoard.md`
-   - Prefer the "Current Focus", "Active Projects", "Pending Reviews", and "Recent Decisions" sections
-   - If TaskBoard does not exist, is empty, or has abnormal content, fall back to VaultIndex / SessionLog queries below
+   - Prefer the "Current Focus", "Active Projects", and "Pending Reviews" sections
+   - If TaskBoard does not exist, is empty, or has abnormal content, fall back to VaultIndex queries below
 
 4. **Query active projects** (via VaultIndex, as fallback)
    ```
@@ -78,16 +78,11 @@ Help the user start a new day: review yesterday's progress, create today's diary
    - Filter results where `file_path` starts with `{drafts directory}/`
    - Count pending items
 
-7. **Query recent events** (via SessionLog, optional)
-   ```
-   memory_recent(days=7, limit=10)
-   ```
-   - Get high-value events from the last 7 days to assist with priority sorting
-
-8. **Analyze and prioritize**
+7. **Analyze and prioritize**
    - Identify time-sensitive items (deadlines, appointments)
-   - Prefer the "Current Focus" and "Recent Decisions" aggregated in TaskBoard
+   - Prefer the "Current Focus" and "Active Projects" aggregated in TaskBoard
    - Find stalled projects with no updates for 3+ days (via modified_at field)
+   - Projects with `status: frozen` and their linked knowledge notes are excluded from active task lists and review recommendations
    - Determine a reasonable next step for each active project
 
 ## Step 2: Collect User Input (Interactive)
@@ -205,4 +200,4 @@ Use `{system directory}/{templates subdirectory}/Daily_Template.md` as the base 
 
 # Memory System Integration
 
-> Common protocol (file change notifications, skill completion, session wrap-up) is in `_shared/memory-protocol.md`. This skill has no skill-specific pre-check queries (context gathering is already defined in Step 1).
+> Common protocol (file change notifications, behavior rule logging) is in `_shared/memory-protocol.md`. This skill has no skill-specific pre-check queries (context gathering is already defined in Step 1).

@@ -1,5 +1,5 @@
 /**
- * active-docs/index.ts — 活文档路由与刷新入口。
+ * active-docs/index.ts — Active document routing and refresh entry point.
  *
  * Orchestrates reading existing markdown files, rebuilding AUTO sections
  * from DB data, and writing back. Preserves manual content outside AUTO markers.
@@ -9,8 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { getVaultConfig, resolveConfig } from '../config.js';
-import type { ActiveDocTarget, CitationsResult, RefreshResult } from '../types.js';
-import { getCitations } from './citations.js';
+import type { ActiveDocTarget, RefreshResult } from '../types.js';
 import { buildTaskboardSections } from './taskboard.js';
 import { buildUserprofileSections } from './userprofile.js';
 
@@ -101,16 +100,13 @@ function buildTaskboardSkeleton(): string {
 		{ heading: '当前焦点', marker: 'focus' },
 		{ heading: '活跃项目', marker: 'active-projects' },
 		{ heading: '待复习', marker: 'revises' },
-		{ heading: '近期决策', marker: 'decisions' },
-		{ heading: '活动日志', marker: 'update-log' },
 	]);
 }
 
 function buildUserprofileSkeleton(): string {
 	return buildSkeleton('userprofile', 'UserProfile', [
 		{ heading: '用户摘要', marker: 'profile-summary' },
-		{ heading: '偏好设置', marker: 'preferences' },
-		{ heading: '纠错记录', marker: 'corrections' },
+		{ heading: '行为约束', marker: 'rules' },
 		{ heading: '学习进度', marker: 'learning-progress' },
 	]);
 }
@@ -227,33 +223,4 @@ export function refreshUserprofile(
 	opts?: { section?: string; preserveManual?: boolean },
 ): RefreshResult {
 	return refreshActiveDoc(db, vaultRoot, 'UserProfile', opts);
-}
-
-// ─── Unified citations ──────────────────────────────────────────────────────
-
-/**
- * Get citations for any active doc target.
- */
-export function activeDocCitations(
-	db: Database.Database,
-	target: ActiveDocTarget,
-	opts?: { section?: string; keyword?: string },
-): CitationsResult {
-	return getCitations(db, target, opts);
-}
-
-/** Backward-compatible wrapper for TaskBoard citations. */
-export function taskboardCitations(
-	db: Database.Database,
-	opts?: { section?: string; keyword?: string },
-): CitationsResult {
-	return activeDocCitations(db, 'TaskBoard', opts);
-}
-
-/** Backward-compatible wrapper for UserProfile citations. */
-export function userprofileCitations(
-	db: Database.Database,
-	opts?: { section?: string; keyword?: string },
-): CitationsResult {
-	return activeDocCitations(db, 'UserProfile', opts);
 }

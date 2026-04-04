@@ -1,20 +1,13 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
-  resolveSessionId,
   coerceNow,
   loadsJsonList,
   estimateTokens,
   containsCjk,
   normalizeWikilinkValue,
   compactText,
-  normalizeRuleSummary,
-  resolveRuleKey,
-  inferTemporaryPreference,
   parseDetailObject,
-  isArchiveSummary,
-  SESSION_ID_ENV_KEYS,
   ALLOWED_COUNT_TABLES,
-  DEFAULT_TEMPORARY_PREFERENCE_DAYS,
   BUCKET_TYPE_MAP,
 } from '../../src/utils/shared.js';
 
@@ -24,7 +17,6 @@ describe('constants', () => {
   it('ALLOWED_COUNT_TABLES contains correct tables', () => {
     expect(ALLOWED_COUNT_TABLES.has('vault_index')).toBe(true);
     expect(ALLOWED_COUNT_TABLES.has('enhance_queue')).toBe(true);
-    expect(ALLOWED_COUNT_TABLES.has('session_log')).toBe(true);
     expect(ALLOWED_COUNT_TABLES.has('unknown_table')).toBe(false);
   });
 
@@ -36,62 +28,6 @@ describe('constants', () => {
     expect(BUCKET_TYPE_MAP['knowledge'].has('knowledge')).toBe(true);
     expect(BUCKET_TYPE_MAP['knowledge'].has('note')).toBe(true);
     expect(BUCKET_TYPE_MAP['knowledge'].has('revise-record')).toBe(true);
-  });
-});
-
-// ─── resolveSessionId ─────────────────────────────────────────────────────────
-
-describe('resolveSessionId', () => {
-  const originalEnv = { ...process.env };
-
-  afterEach(() => {
-    // Restore env
-    for (const key of SESSION_ID_ENV_KEYS) {
-      delete process.env[key];
-    }
-    Object.assign(process.env, originalEnv);
-  });
-
-  it('returns the provided session_id when given', () => {
-    expect(resolveSessionId('my-session-123')).toBe('my-session-123');
-  });
-
-  it('trims whitespace from provided session_id', () => {
-    expect(resolveSessionId('  abc  ')).toBe('abc');
-  });
-
-  it('returns untracked when no session_id and no env vars', () => {
-    for (const key of SESSION_ID_ENV_KEYS) delete process.env[key];
-    expect(resolveSessionId()).toBe('untracked');
-  });
-
-  it('falls back to LIFEOS_SESSION_ID env var', () => {
-    for (const key of SESSION_ID_ENV_KEYS) delete process.env[key];
-    process.env['LIFEOS_SESSION_ID'] = 'env-session-abc';
-    expect(resolveSessionId()).toBe('env-session-abc');
-  });
-
-  it('falls back to CLAUDE_SESSION_ID when LIFEOS_SESSION_ID not set', () => {
-    for (const key of SESSION_ID_ENV_KEYS) delete process.env[key];
-    process.env['CLAUDE_SESSION_ID'] = 'claude-session-xyz';
-    expect(resolveSessionId()).toBe('claude-session-xyz');
-  });
-
-  it('prefers earlier env var when multiple are set', () => {
-    for (const key of SESSION_ID_ENV_KEYS) delete process.env[key];
-    process.env['LIFEOS_SESSION_ID'] = 'first';
-    process.env['CLAUDE_SESSION_ID'] = 'second';
-    expect(resolveSessionId()).toBe('first');
-  });
-
-  it('returns untracked when session_id is empty string', () => {
-    for (const key of SESSION_ID_ENV_KEYS) delete process.env[key];
-    expect(resolveSessionId('')).toBe('untracked');
-  });
-
-  it('returns untracked when session_id is whitespace only', () => {
-    for (const key of SESSION_ID_ENV_KEYS) delete process.env[key];
-    expect(resolveSessionId('   ')).toBe('untracked');
   });
 });
 
@@ -275,110 +211,6 @@ describe('compactText', () => {
   });
 });
 
-// ─── normalizeRuleSummary ─────────────────────────────────────────────────────
-
-describe('normalizeRuleSummary', () => {
-  it('returns empty string for empty input', () => {
-    expect(normalizeRuleSummary('')).toBe('');
-    expect(normalizeRuleSummary(null)).toBe('');
-  });
-
-  it('normalizes whitespace', () => {
-    expect(normalizeRuleSummary('hello   world')).toBe('hello world');
-  });
-
-  it('truncates to limit without ellipsis', () => {
-    const text = 'c'.repeat(200);
-    const result = normalizeRuleSummary(text, 100);
-    expect(result.length).toBeLessThanOrEqual(100);
-    expect(result.endsWith('...')).toBe(false);
-  });
-});
-
-// ─── resolveRuleKey ───────────────────────────────────────────────────────────
-
-describe('resolveRuleKey', () => {
-  it('returns null when entry type has no prefix and no explicit key', () => {
-    expect(resolveRuleKey('blocker', 'some text')).toBeNull();
-  });
-
-  it('builds default rule key for decision type', () => {
-    const result = resolveRuleKey('decision', 'use TypeScript for all modules');
-    expect(result).toBe('decision:use TypeScript for all modules');
-  });
-
-  it('builds default rule key for preference type', () => {
-    const result = resolveRuleKey('preference', 'keep notes concise');
-    expect(result).toBe('prefer:keep notes concise');
-  });
-
-  it('uses explicit rule_key from detail_obj', () => {
-    const result = resolveRuleKey('decision', 'some text', { rule_key: 'custom:key' });
-    expect(result).toBe('custom:key');
-  });
-
-  it('uses preference_slot from detail_obj', () => {
-    const result = resolveRuleKey('preference', 'some text', { preference_slot: 'format:note-style' });
-    expect(result).toBe('format:note-style');
-  });
-
-  it('uses constraint_key from detail_obj', () => {
-    const result = resolveRuleKey('correction', 'some text', { constraint_key: 'no-english' });
-    expect(result).toBe('no-english');
-  });
-
-  it('returns null when entry type has no prefix and summary is empty', () => {
-    expect(resolveRuleKey('decision', '')).toBeNull();
-  });
-});
-
-// ─── inferTemporaryPreference ─────────────────────────────────────────────────
-
-describe('inferTemporaryPreference', () => {
-  it('detects stable keywords and returns temporary: false', () => {
-    const result = inferTemporaryPreference('长期使用简洁风格');
-    expect(result.temporary).toBe(false);
-  });
-
-  it('detects temporary keywords and returns temporary: true with expiresInDays', () => {
-    const result = inferTemporaryPreference('这次先用英文');
-    expect(result.temporary).toBe(true);
-    expect(result.expiresInDays).toBe(DEFAULT_TEMPORARY_PREFERENCE_DAYS);
-    expect(result.temporarySource).toBe('keyword_fallback');
-  });
-
-  it('respects explicit temporary: true in detail_obj', () => {
-    const result = inferTemporaryPreference('some text', { temporary: true });
-    expect(result.temporary).toBe(true);
-    expect(result.temporarySource).toBe('explicit');
-  });
-
-  it('respects explicit temporary: false in detail_obj', () => {
-    const result = inferTemporaryPreference('这次先用英文', { temporary: false });
-    expect(result.temporary).toBe(false);
-  });
-
-  it('uses expiresInDays from detail_obj', () => {
-    const result = inferTemporaryPreference('some text', { temporary: true, expires_in_days: 7 });
-    expect(result.expiresInDays).toBe(7);
-  });
-
-  it('uses expiresAt from detail_obj', () => {
-    const result = inferTemporaryPreference('some text', { temporary: true, expires_at: '2025-01-01' });
-    expect(result.expiresAt).toBe('2025-01-01');
-  });
-
-  it('detects 暂时 as temporary keyword', () => {
-    const result = inferTemporaryPreference('暂时不用这个格式');
-    expect(result.temporary).toBe(true);
-  });
-
-  it('detects 默认 as stable keyword', () => {
-    const result = inferTemporaryPreference('默认使用简洁风格');
-    expect(result.temporary).toBe(false);
-  });
-});
-
 // ─── parseDetailObject ────────────────────────────────────────────────────────
 
 describe('parseDetailObject', () => {
@@ -407,24 +239,3 @@ describe('parseDetailObject', () => {
     expect(parseDetailObject('"hello"')).toEqual({});
   });
 });
-
-// ─── isArchiveSummary ─────────────────────────────────────────────────────────
-
-describe('isArchiveSummary', () => {
-  it('returns true when entry_type is archive_summary', () => {
-    expect(isArchiveSummary('anything', 'archive_summary')).toBe(true);
-  });
-
-  it('returns true when summary starts with 归档摘要：', () => {
-    expect(isArchiveSummary('归档摘要：some content')).toBe(true);
-  });
-
-  it('returns false for normal summary', () => {
-    expect(isArchiveSummary('normal summary')).toBe(false);
-  });
-
-  it('returns false for null summary without archive_summary type', () => {
-    expect(isArchiveSummary(null)).toBe(false);
-  });
-});
-

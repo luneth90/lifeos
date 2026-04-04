@@ -47,13 +47,12 @@ dependencies:
 ```
 memory_query(query="<章节名称>", filters={"type": "knowledge", "status": "draft"}, limit=5)
 memory_query(query="<章节名称>", filters={"type": "knowledge", "status": "review"}, limit=5)
-memory_recent(entry_type="skill_completion", query="<章节名称> 复习 批改", limit=5)
-memory_recent(entry_type="correction", query="<章节主题或原书约定关键词>", limit=5)
+memory_query(query="<章节主题或原书约定关键词> 纠错", limit=5)
 ```
 
 2. 若用户触发时已提供范围（如 `/revise VGT 第4章`），直接读取对应笔记
 3. 否则：
-   - 扫描 `{项目目录}/` 中 `status: active` 的项目，获取章节列表
+   - 扫描 `{项目目录}/` 中 `status: active` 的项目，获取章节列表（跳过 `status: frozen` 的项目及其关联知识笔记）
    - 扫描 `{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` 中 `status: draft` 或 `status: revise` 的笔记（优先加载未 mastered）
 4. 扫描章节目录下已有的复习文件（`复习_*.md`），获取历史复习表现
 5. 统计可复习内容：
@@ -222,39 +221,8 @@ memory_recent(entry_type="correction", query="<章节主题或原书约定关键
 
 # 记忆系统集成
 
-> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
+> 通用协议（文件变更通知、行为约束写入）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
 ### 前置查询
 
 见阶段 0 中的查询代码。
-
-### 技能完成（两个触发点）
-
-> 与通用协议不同，`/revise` 需要调用两次 `memory_log(entry_type=”skill_completion”)`，分别对应不同阶段：
-
-**1. 复习文件生成后：**
-
-```
-memory_log(
-  entry_type=”skill_completion”,
-  skill_name=”review”,
-  summary=”生成《章节名称》复习文件”,
-  related_files=[“<复习文件相对路径>”, “<章节笔记相对路径>”],
-  scope=”review”,
-  importance=4
-)
-```
-
-**2. 批改完成并写回 status 后：**
-
-```
-memory_log(
-  entry_type=”skill_completion”,
-  skill_name=”review”,
-  summary=”完成《章节名称》复习批改”,
-  related_files=[“<复习文件相对路径>”, “<章节笔记相对路径>”],
-  scope=”review”,
-  importance=4,
-  detail='{“score”:”<X/N>”,”weak_concepts”:[“<薄弱概念>”],”partial_concepts”:[“<部分掌握概念>”],”mastered_concepts”:[“<已掌握概念>”]}'
-)
-```

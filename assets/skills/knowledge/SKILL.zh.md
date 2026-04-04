@@ -47,7 +47,6 @@ dependencies:
 ```
 memory_query(query="<项目名或章节关键词>", filters={"type": "project"}, limit=5)
 memory_query(query="<章节关键词>", filters={"type": "knowledge"}, limit=5)
-memory_recent(query="<章节或主题关键词>", limit=5)
 ```
 
 记忆检查只用于确定当前上下文和避免重复整理，**不替代原文阅读**。
@@ -195,8 +194,16 @@ memory_recent(query="<章节或主题关键词>", limit=5)
 
 # 记忆系统集成
 
-> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
+> 通用协议（文件变更通知、行为约束写入）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
 ### 前置查询
 
 见阶段 0 中的查询代码。
+
+### 知识笔记 `project` 字段
+
+生成知识笔记时，必须在 frontmatter 中写入 `project` 字段，链接到父项目文件。格式为 wikilink，例如：
+
+```yaml
+project: "[[Visual-Group-Theory学习]]"
+```

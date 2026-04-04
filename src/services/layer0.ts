@@ -1,5 +1,5 @@
 /**
- * layer0.ts — Layer 0 上下文摘要构建器。
+ * layer0.ts — Layer 0 context summary builder.
  *
  * Builds the Layer 0 summary from UserProfile.md and TaskBoard.md,
  * trimmed to configured token budgets.
@@ -60,13 +60,11 @@ export function trimToBudget(text: string, budget: number): string {
 
 /**
  * Build the Layer 0 summary string from UserProfile.md and TaskBoard.md.
- * Reads AUTO sections, trims to configured token budgets, and optionally
- * appends the last session bridge text.
+ * Reads AUTO sections and trims to configured token budgets.
  */
 export function buildLayer0Summary(
 	vaultRoot: string,
 	policy: ContextPolicy,
-	lastSessionBridge?: string | null,
 ): string {
 	const vc = getVaultConfig() ?? resolveConfig(vaultRoot);
 	const memoryDir = vc.memoryDir();
@@ -79,20 +77,23 @@ export function buildLayer0Summary(
 
 	const upBudget = Number(policy.userprofile_summary ?? 200);
 	const rulesBudget = Number(policy.userprofile_rules ?? 1000);
-	const tbBudget = Number(policy.taskboard_focus ?? 800);
-	const totalBudget = Number(policy.layer0_total ?? upBudget + rulesBudget + tbBudget);
+	const tbBudget = Number(policy.taskboard_focus ?? 500);
+	const totalBudget = Number(policy.layer0_total ?? 1800);
 
 	let upSummary = trimToBudget(extractAutoSection(upContent, 'profile-summary'), upBudget);
 
-	// 偏好+纠错独立提取
-	const prefsRaw = extractAutoSection(upContent, 'preferences');
-	const corrsRaw = extractAutoSection(upContent, 'corrections');
-	const rulesRaw = [prefsRaw, corrsRaw].filter(Boolean).join('\n');
+	// Rules section (unified preferences + corrections)
+	const rulesRaw = extractAutoSection(upContent, 'rules');
 	let upRules = trimToBudget(rulesRaw, rulesBudget);
 
 	let tbFocus = trimToBudget(extractAutoSection(tbContent, 'focus'), tbBudget);
 
-	// 总预算裁剪（优先级：rules > focus > summary）
+	// Revises summary
+	const revisesRaw = extractAutoSection(tbContent, 'revises');
+	const revisesCount = (revisesRaw.match(/^- /gm) || []).length;
+	const revisesLine = revisesCount > 0 ? `待复习笔记：${revisesCount} 篇` : '';
+
+	// Total budget trimming (priority: rules > focus > summary)
 	const combined = estimateTokens(upSummary) + estimateTokens(upRules) + estimateTokens(tbFocus);
 	if (combined > totalBudget) {
 		upSummary = trimToBudget(upSummary, Math.min(upBudget, Math.floor(totalBudget * 0.1)));
@@ -105,10 +106,6 @@ export function buildLayer0Summary(
 	if (upSummary) sections.push(`## UserProfile 速览\n${upSummary}`);
 	if (upRules) sections.push(`## 行为约束\n${upRules}`);
 	if (tbFocus) sections.push(`## TaskBoard 当前焦点\n${tbFocus}`);
-	if (lastSessionBridge) {
-		const bridgeBudget = Math.min(Math.max(Math.floor(totalBudget / 4), 120), 240);
-		const bridgeSummary = trimToBudget(lastSessionBridge, bridgeBudget);
-		if (bridgeSummary) sections.push(`## 上次会话桥接\n- ${bridgeSummary}`);
-	}
+	if (revisesLine) sections.push(`## 复习提醒\n${revisesLine}`);
 	return sections.join('\n\n').trim();
 }

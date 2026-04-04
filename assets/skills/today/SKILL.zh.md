@@ -34,7 +34,7 @@ dependencies:
 ## 步骤一：收集上下文（静默执行）
 
 > **性能优化：** 使用 VaultIndex 查询替代全量文件扫描，大幅降低 token 成本。
-> 查询工具：MCP `memory_query` / `memory_recent`
+> 查询工具：MCP `memory_query`
 
 1. **获取今日日期**
    - 确定当前日期（YYYY-MM-DD 格式）
@@ -46,8 +46,8 @@ dependencies:
 
 3. **读取 TaskBoard**（优先，startup 已自动刷新）
    - 读取 `{系统目录}/{记忆子目录}/TaskBoard.md`
-   - 优先使用其中的“当前焦点”“活跃项目”“待复习清单”“近期决策”区块
-   - 若 TaskBoard 不存在、为空或内容异常，再退回到下面的 VaultIndex / SessionLog 查询
+   - 优先使用其中的”当前焦点””活跃项目””待复习清单”区块
+   - 若 TaskBoard 不存在、为空或内容异常，再退回到下面的 VaultIndex 查询
 
 4. **查询活跃项目**（通过 VaultIndex，作为兜底）
    ```
@@ -78,16 +78,11 @@ dependencies:
    - 从结果中筛选 `file_path` 以 `{草稿目录}/` 开头的条目
    - 统计待处理数量
 
-7. **查询最近事件**（通过 SessionLog，可选）
-   ```
-   memory_recent(days=7, limit=10)
-   ```
-   - 获取最近 7 天的高价值事件，辅助优先级排序
-
-8. **分析与优先排序**
+7. **分析与优先排序**
    - 识别时间敏感事项（截止日期、约定）
-   - 优先参考 TaskBoard 中已聚合的“当前焦点”和“近期决策”
+   - 优先参考 TaskBoard 中已聚合的”当前焦点”和”活跃项目”
    - 找出超过 3 天未更新的停滞项目（通过 modified_at 字段判断）
+   - `status: frozen` 的项目及其关联知识笔记不纳入活跃任务列表和复习推荐
    - 为每个活跃项目确定合理的下一步
 
 ## 步骤二：收集用户输入（交互）
@@ -205,4 +200,4 @@ domain: math
 
 # 记忆系统集成
 
-> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。本技能无特有的前置查询（上下文收集已在步骤一中定义）。
+> 通用协议（文件变更通知、行为约束写入）见 `_shared/memory-protocol.md`。本技能无特有的前置查询（上下文收集已在步骤一中定义）。

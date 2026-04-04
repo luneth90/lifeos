@@ -284,7 +284,7 @@ After user confirmation, for each item to archive:
 
 # Memory System Integration
 
-> Shared protocol (file change notifications, skill completion, session wrap-up) in `_shared/memory-protocol.md`. Below are only queries and behaviors specific to this skill.
+> Shared protocol (file change notifications, behavior rule logging) in `_shared/memory-protocol.md`. Below are only queries and behaviors specific to this skill.
 
 ### Pre-query
 

@@ -35,10 +35,11 @@ created: "${created}"
 
 ## Layer 0 预算
 
-layer0_total: 2000
+layer0_total: 1800
 userprofile_summary: 200
 userprofile_rules: 1000
-taskboard_focus: 800
+taskboard_focus: 500
+revises_summary: 100
 userprofile_doc_limit: 2000
 taskboard_doc_limit: 3000
 
@@ -155,10 +156,10 @@ export function loadContextPolicy(vaultRoot: string): ContextPolicy {
 	const budgets = loadContextBudgets(content, vaultRoot);
 
 	return {
-		layer0_total: budgets.layer0_total ?? 2000,
+		layer0_total: budgets.layer0_total ?? 1800,
 		userprofile_summary: budgets.userprofile_summary ?? 200,
 		userprofile_rules: budgets.userprofile_rules ?? 1000,
-		taskboard_focus: budgets.taskboard_focus ?? 800,
+		taskboard_focus: budgets.taskboard_focus ?? 500,
 		userprofile_doc_limit: budgets.userprofile_doc_limit ?? 2000,
 		taskboard_doc_limit: budgets.taskboard_doc_limit ?? 3000,
 	};

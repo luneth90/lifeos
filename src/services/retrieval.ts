@@ -1,11 +1,10 @@
 /**
- * retrieval.ts — 检索服务。
+ * retrieval.ts — Retrieval service.
  */
 
 import type Database from 'better-sqlite3';
 import { inClause, queryAll } from '../db/index.js';
-import type { MatchSource, MemoryItemRow, SessionSelectRow, VaultSelectRow } from '../types.js';
-import { daysAgo } from '../types.js';
+import type { MatchSource, MemoryItemRow, VaultSelectRow } from '../types.js';
 import { tokenize } from '../utils/segmenter.js';
 import { compactText, containsCjk, loadsJsonList } from '../utils/shared.js';
 
@@ -30,34 +29,13 @@ export interface VaultQueryResult {
 	backlinks?: string[];
 }
 
-export interface SessionEvent {
-	eventId: string;
-	timestamp: string;
-	entryType: string;
-	importance: number;
-	scope: string | null;
-	skillName: string | null;
-	summary: string;
-	detail: string | null;
-	sourceRefs: string[];
-	relatedFiles: string[];
-	relatedEntities: string[];
-}
-
 export interface MemoryItem {
-	itemId: string;
-	target: string;
-	section: string;
 	slotKey: string;
 	content: string;
-	confidence: string | null;
-	sourceEventIds: string[];
-	sourceRefs: string[];
+	source: string;
 	relatedFiles: string[];
 	manualFlag: boolean;
 	status: string;
-	supersededBy: string | null;
-	lastConfirmedAt: string | null;
 	updatedAt: string;
 	expiresAt: string | null;
 }
@@ -176,25 +154,6 @@ function buildQueryResult(
 		aliases: loadsJsonList(row.aliases),
 		wikilinks: loadsJsonList(row.wikilinks),
 		backlinks: loadsJsonList(row.backlinks),
-	};
-}
-
-/**
- * Build a SessionEvent from a database row.
- */
-function buildSessionEvent(row: SessionSelectRow): SessionEvent {
-	return {
-		eventId: String(row.event_id),
-		timestamp: String(row.timestamp),
-		entryType: String(row.entry_type),
-		importance: Number(row.importance),
-		scope: row.scope != null ? String(row.scope) : null,
-		skillName: row.skill_name != null ? String(row.skill_name) : null,
-		summary: String(row.summary),
-		detail: row.detail != null ? String(row.detail) : null,
-		sourceRefs: loadsJsonList(row.source_refs),
-		relatedFiles: loadsJsonList(row.related_files),
-		relatedEntities: loadsJsonList(row.related_entities),
 	};
 }
 
@@ -347,118 +306,6 @@ export function queryVaultIndex(
 		.slice(0, limit)
 		.map(({ row, source }) => buildQueryResult(row, source, matchedFields(q, row)));
 	return { results };
-}
-
-/**
- * Query recent session log events.
- */
-export function queryRecentEvents(
-	db: Database.Database,
-	opts: {
-		days: number;
-		entryType?: string | null;
-		scope?: string | null;
-		query?: string | null;
-		limit: number;
-	},
-): { events: SessionEvent[] } {
-	const { days, entryType, scope, query, limit } = opts;
-
-	const cutoff = daysAgo(days);
-	const q = (query ?? '').trim();
-	const hasQuery = q.length > 0;
-
-	// Build base conditions
-	const baseConds: string[] = ['sl.timestamp >= ?'];
-	const baseParams: unknown[] = [cutoff];
-
-	if (entryType) {
-		baseConds.push('sl.entry_type = ?');
-		baseParams.push(entryType);
-	}
-	if (scope) {
-		baseConds.push('sl.scope = ?');
-		baseParams.push(scope);
-	}
-
-	const baseWhere = baseConds.join(' AND ');
-
-	const SESSION_SELECT = `
-    sl.event_id, sl.timestamp, sl.entry_type, sl.importance,
-    sl.scope, sl.skill_name, sl.summary, sl.detail,
-    sl.source_refs, sl.related_files, sl.related_entities
-  `.trim();
-
-	// No query → direct filter
-	if (!hasQuery) {
-		const sql = `
-      SELECT ${SESSION_SELECT}
-      FROM session_log sl
-      WHERE ${baseWhere}
-      ORDER BY sl.timestamp DESC
-      LIMIT ?
-    `;
-		const rows = queryAll<SessionSelectRow>(db, sql, ...baseParams, limit);
-		const events = rows.map(buildSessionEvent);
-		return { events };
-	}
-
-	// Has query → try FTS5
-	const ftsQ = ftsQuery(q);
-	let ftsRows: SessionSelectRow[] = [];
-	let ftsError = false;
-
-	if (ftsQ) {
-		try {
-			const sql = `
-        SELECT ${SESSION_SELECT}
-        FROM session_log sl
-        JOIN session_fts sf ON sf.rowid = sl.id
-        WHERE session_fts MATCH ?
-          AND ${baseWhere}
-        ORDER BY sl.timestamp DESC
-        LIMIT ?
-      `;
-			ftsRows = queryAll<SessionSelectRow>(db, sql, ftsQ, ...baseParams, limit * 2);
-		} catch {
-			ftsError = true;
-		}
-	}
-
-	const hasCjk = containsCjk(q);
-	const needsFallback = ftsError || (hasCjk && ftsRows.length < 3);
-
-	if (!needsFallback && ftsRows.length > 0) {
-		const events = ftsRows.slice(0, limit).map(buildSessionEvent);
-		return { events };
-	}
-
-	// LIKE fallback
-	const likePattern = `%${q}%`;
-	const likeWhere = `(
-    sl.summary LIKE ? OR
-    sl.detail LIKE ? OR
-    sl.related_entities LIKE ? OR
-    sl.search_hints LIKE ?
-  )`;
-	const likeParams: unknown[] = [likePattern, likePattern, likePattern, likePattern, ...baseParams];
-
-	const likeSql = `
-    SELECT ${SESSION_SELECT}
-    FROM session_log sl
-    WHERE ${likeWhere} AND ${baseWhere}
-    ORDER BY sl.timestamp DESC
-    LIMIT ?
-  `;
-	likeParams.push(limit);
-
-	const likeRows = queryAll<SessionSelectRow>(db, likeSql, ...likeParams);
-
-	// Merge FTS + LIKE rows, deduplicate by event_id
-	const merged = mergeAndDedupe(ftsRows, likeRows, (row) => String(row.event_id));
-
-	const events = merged.slice(0, limit).map(buildSessionEvent);
-	return { events };
 }
 
 /**
@@ -632,35 +479,28 @@ export function queryVaultIndexByDomainsOrTags(
 }
 
 /**
- * Query memory items.
+ * Query memory items by slot_key pattern or status.
  */
 export function queryMemoryItems(
 	db: Database.Database,
 	opts: {
-		target?: string | null;
-		section?: string | null;
 		slotKey?: string | null;
 		statusFilter?: string | null;
 		limit?: number;
 	},
 ): { items: MemoryItem[] } {
-	const { target, section, slotKey, statusFilter, limit = 100 } = opts;
+	const { slotKey, statusFilter, limit = 100 } = opts;
 
 	const conditions: string[] = [];
 	const params: unknown[] = [];
 
-	if (target) {
-		conditions.push('target = ?');
-		params.push(target);
-	}
-
-	if (section) {
-		conditions.push('section = ?');
-		params.push(section);
-	}
-
 	if (slotKey) {
-		conditions.push('slot_key = ?');
+		// Support pattern matching with % wildcard
+		if (slotKey.includes('%')) {
+			conditions.push('slot_key LIKE ?');
+		} else {
+			conditions.push('slot_key = ?');
+		}
 		params.push(slotKey);
 	}
 
@@ -672,11 +512,7 @@ export function queryMemoryItems(
 	const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
 	const sql = `
-    SELECT
-      item_id, target, section, slot_key, content,
-      confidence, source_event_ids, source_refs, related_files,
-      manual_flag, status, superseded_by, last_confirmed_at,
-      updated_at, expires_at
+    SELECT slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at
     FROM memory_items
     ${whereClause}
     ORDER BY updated_at DESC
@@ -687,19 +523,12 @@ export function queryMemoryItems(
 	const rows = queryAll<MemoryItemRow>(db, sql, ...params);
 
 	const items: MemoryItem[] = rows.map((row) => ({
-		itemId: String(row.item_id),
-		target: String(row.target),
-		section: String(row.section),
 		slotKey: String(row.slot_key),
 		content: String(row.content),
-		confidence: row.confidence != null ? String(row.confidence) : null,
-		sourceEventIds: loadsJsonList(row.source_event_ids),
-		sourceRefs: loadsJsonList(row.source_refs),
+		source: String(row.source ?? 'preference'),
 		relatedFiles: loadsJsonList(row.related_files),
 		manualFlag: Number(row.manual_flag) !== 0,
 		status: String(row.status),
-		supersededBy: row.superseded_by != null ? String(row.superseded_by) : null,
-		lastConfirmedAt: row.last_confirmed_at != null ? String(row.last_confirmed_at) : null,
 		updatedAt: String(row.updated_at),
 		expiresAt: row.expires_at != null ? String(row.expires_at) : null,
 	}));

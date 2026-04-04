@@ -45,16 +45,12 @@ dependencies:
 
 在开始对话前，**静默**执行以下操作（不要对用户报告检索过程）：
 
-1. 先查最小记忆上下文，确认是否已有相关取舍：
-   - 最近相关 `decision`
-   - 最近相关 `preference`
+1. 先查最小记忆上下文，确认是否已有相关偏好或约束：
 
    推荐命令：
 
 ```
-memory_recent(entry_type="decision", query="<话题关键词>", limit=5)
-
-memory_recent(entry_type="preference", query="<话题关键词>", limit=5)
+memory_query(query="<话题关键词>", limit=5)
 ```
 
 2. 根据用户提供的话题关键词，快速搜索：
@@ -171,11 +167,7 @@ memory_recent(entry_type="preference", query="<话题关键词>", limit=5)
 
 > 各选项的详细执行步骤见 `references/action-options.zh.md`。
 
-如果本轮对话**没有生成正式项目、知识笔记或草稿**，但已经形成明确方向性决策，收尾前必须补记一条 `decision`：
-
-```
-memory_log(entry_type="decision", summary="<本次头脑风暴形成的方向性结论>", scope="brainstorm")
-```
+如果本轮对话中用户确认了需要持久遵守的偏好或规则，收尾前通过 `memory_log` 写入行为约束。
 
 # 注意事项
 
@@ -235,7 +227,7 @@ memory_log(entry_type="decision", summary="<本次头脑风暴形成的方向性
 
 # 记忆系统集成
 
-> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
+> 通用协议（文件变更通知、行为约束写入）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
 ### 前置查询
 

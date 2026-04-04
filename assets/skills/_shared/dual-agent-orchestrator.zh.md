@@ -14,7 +14,6 @@
 ```
 memory_query(query="<主题关键词>", filters={"type": "<实体类型>"}, limit=5)
 memory_query(query="<主题关键词>", limit=10)
-memory_recent(entry_type="decision", query="<主题关键词>", limit=5)
 ```
 
 若命中 {草稿目录}/ 文件，继续读取其 frontmatter 确认是否仍为 status: pending。

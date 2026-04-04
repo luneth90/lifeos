@@ -176,7 +176,7 @@ Organize the body using the configured category system. Each item should have a 
 
 # Memory System Integration
 
-> Common protocols (file change notification, skill completion, session wrap-up) are documented in `_shared/memory-protocol.md`. Only digest-specific behavior is listed here.
+> Common protocols (file change notification, behavior rule logging) are documented in `_shared/memory-protocol.md`. Only digest-specific behavior is listed here.
 
 ### File Change Notification
 
@@ -184,30 +184,4 @@ After the digest file is written into the Vault, call:
 
 ```text
 memory_notify(file_path="{drafts directory}/<TopicName>-MMDD-MMDD.md")
-```
-
-### Skill Completion
-
-```text
-memory_log(
-  entry_type="skill_completion",
-  skill_name="digest",
-  summary="Generated {topic} weekly digest MMDD-MMDD",
-  related_files=["{drafts directory}/<TopicName>-MMDD-MMDD.md"],
-  scope="digest",
-  importance=4
-)
-```
-
-### Setup Mode Completion
-
-After creating the config note, also record a decision:
-
-```text
-memory_log(
-  entry_type="decision",
-  summary="Created {topic} digest subscription config",
-  importance=2,
-  scope="digest"
-)
 ```

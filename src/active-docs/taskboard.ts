@@ -1,19 +1,12 @@
 /**
- * taskboard.ts — TaskBoard 活文档构建器。
+ * taskboard.ts — TaskBoard active document builder.
  *
- * Builds TaskBoard sections from vault_index and session_log data.
+ * Builds TaskBoard sections from vault_index data.
  * Each section is a markdown string keyed by section name.
  */
 
 import type Database from 'better-sqlite3';
-import {
-	ENTRY_TYPE_LABELS,
-	MASTERY_STATUS_LABELS,
-	STATUS_LABELS,
-	daysAgo,
-	formatDateShort,
-} from '../types.js';
-import { loadsJsonList } from '../utils/shared.js';
+import { MASTERY_STATUS_LABELS, STATUS_LABELS, formatDateShort } from '../types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,19 +19,9 @@ interface ActiveProject {
 	modifiedAt: string | null;
 }
 
-interface RecentEvent {
-	eventId: string;
-	entryType: string;
-	importance: number;
-	summary: string;
-	timestamp: string;
-	skillName: string | null;
-	relatedFiles: string[];
-}
-
 // ─── Section builders ─────────────────────────────────────────────────────────
 
-function buildFocusSection(projects: ActiveProject[], events: RecentEvent[]): string {
+function buildFocusSection(projects: ActiveProject[]): string {
 	const lines: string[] = [];
 
 	// Top active projects (max 3)
@@ -51,19 +34,8 @@ function buildFocusSection(projects: ActiveProject[], events: RecentEvent[]): st
 		}
 	}
 
-	// Recent high-importance events (max 5)
-	const highPriority = events.filter((e) => e.importance >= 4).slice(0, 5);
-	if (highPriority.length > 0) {
-		if (lines.length > 0) lines.push('');
-		lines.push('**近期关键事件：**');
-		for (const e of highPriority) {
-			const label = ENTRY_TYPE_LABELS[e.entryType] ?? e.entryType;
-			lines.push(`- [${label}] ${e.summary}`);
-		}
-	}
-
 	if (lines.length === 0) {
-		lines.push('暂无进行中的项目或近期关键事件。');
+		lines.push('暂无进行中的项目。');
 	}
 
 	return lines.join('\n');
@@ -98,13 +70,19 @@ function buildActiveProjectsSection(projects: ActiveProject[]): string {
 
 function buildRevisesSection(db: Database.Database): string {
 	// Find knowledge items needing revision (status = 'draft' or 'revise')
+	// Exclude notes whose parent project has status='frozen'
 	const rows = db
 		.prepare(
-			`SELECT file_path, title, status, domain, modified_at
-       FROM vault_index
-       WHERE type IN ('note', 'knowledge', 'revise-record')
-         AND status IN ('draft', 'revise')
-       ORDER BY modified_at DESC
+			`SELECT vi.file_path, vi.title, vi.status, vi.domain
+       FROM vault_index vi
+       LEFT JOIN vault_index proj
+         ON proj.type = 'project'
+         AND (vi.project = proj.file_path
+              OR vi.project = '[[' || proj.title || ']]')
+       WHERE vi.type IN ('note', 'knowledge')
+         AND vi.status IN ('draft', 'revise')
+         AND (proj.file_path IS NULL OR proj.status != 'frozen')
+       ORDER BY vi.modified_at DESC
        LIMIT 10`,
 		)
 		.all() as Array<{
@@ -112,7 +90,6 @@ function buildRevisesSection(db: Database.Database): string {
 		title: string;
 		status: string;
 		domain: string | null;
-		modified_at: string | null;
 	}>;
 
 	if (rows.length === 0) {
@@ -128,40 +105,11 @@ function buildRevisesSection(db: Database.Database): string {
 	return lines.join('\n');
 }
 
-function buildDecisionsSection(events: RecentEvent[]): string {
-	const decisions = events.filter((e) => e.entryType === 'decision').slice(0, 8);
-
-	if (decisions.length === 0) {
-		return '暂无近期决策记录。';
-	}
-
-	const lines: string[] = [];
-	for (const d of decisions) {
-		const date = formatDateShort(d.timestamp, '未知');
-		lines.push(`- [${date}] ${d.summary}`);
-	}
-	return lines.join('\n');
-}
-
-function buildUpdateLogSection(events: RecentEvent[]): string {
-	if (events.length === 0) {
-		return '暂无近期活动记录。';
-	}
-
-	const lines: string[] = [];
-	for (const e of events.slice(0, 10)) {
-		const date = formatDateShort(e.timestamp, '未知');
-		const label = ENTRY_TYPE_LABELS[e.entryType] ?? e.entryType;
-		lines.push(`- [${date}][${label}] ${e.summary}`);
-	}
-	return lines.join('\n');
-}
-
 // ─── buildTaskboardSections ───────────────────────────────────────────────────
 
 /**
  * Build all TaskBoard sections from DB data.
- * Returns a Record mapping section marker → markdown content.
+ * Returns a Record mapping section marker -> markdown content.
  */
 export function buildTaskboardSections(
 	db: Database.Database,
@@ -194,41 +142,9 @@ export function buildTaskboardSections(
 		modifiedAt: r.modified_at,
 	}));
 
-	// Query recent events (last 30 days)
-	const cutoff = daysAgo(30);
-	const eventRows = db
-		.prepare(
-			`SELECT event_id, entry_type, importance, summary, timestamp, skill_name, related_files
-       FROM session_log
-       WHERE timestamp >= ?
-       ORDER BY importance DESC, timestamp DESC
-       LIMIT 50`,
-		)
-		.all([cutoff]) as Array<{
-		event_id: string;
-		entry_type: string;
-		importance: number;
-		summary: string;
-		timestamp: string;
-		skill_name: string | null;
-		related_files: string | null;
-	}>;
-
-	const events: RecentEvent[] = eventRows.map((r) => ({
-		eventId: r.event_id,
-		entryType: r.entry_type,
-		importance: r.importance,
-		summary: r.summary,
-		timestamp: r.timestamp,
-		skillName: r.skill_name,
-		relatedFiles: loadsJsonList(r.related_files),
-	}));
-
 	return {
-		focus: buildFocusSection(projects, events),
+		focus: buildFocusSection(projects),
 		'active-projects': buildActiveProjectsSection(projects),
 		revises: buildRevisesSection(db),
-		decisions: buildDecisionsSection(events),
-		'update-log': buildUpdateLogSection(events),
 	};
 }

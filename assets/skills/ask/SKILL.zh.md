@@ -37,11 +37,7 @@ dependencies:
 推荐调用顺序：
 
 ```
-memory_recent(entry_type="preference", query="<问题关键词>", limit=5)
-
-memory_recent(entry_type="decision", query="<问题关键词>", limit=5)
-
-memory_recent(entry_type="skill_completion", query="<章节或主题关键词>", limit=5)
+memory_query(query="<问题关键词>", limit=5)
 ```
 
 不属于这三类时，**不要默认先查记忆**，直接进入来源检查。
@@ -155,7 +151,7 @@ tags: [ask]
 
 # 记忆系统集成
 
-> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
+> 通用协议（文件变更通知、行为约束写入）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的查询和行为。
 
 > `/ask` 默认不产出文件，但用户要求保存时会创建草稿。用户的提问是学习轨迹的重要数据入口，应记录到记忆系统中完善用户知识画像。
 

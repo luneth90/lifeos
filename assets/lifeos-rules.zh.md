@@ -81,7 +81,7 @@ Compaction 后重新继续任务前，必须：
 
 ### 分层激活规则
 
-记忆操作按用途分为两层。会话初始化（startup）和收尾（checkpoint）由 MCP server 自动执行，Agent 无需关心。
+记忆操作按用途分为两层。会话初始化（startup）由 MCP server 自动执行，Agent 无需关心。
 
 #### 第一层：始终激活
 
@@ -89,11 +89,11 @@ Compaction 后重新继续任务前，必须：
 
 | 操作 | 时机 | 说明 |
 | --- | --- | --- |
-| `memory_log` / `memory_auto_capture` | 用户表达持久规则时 | 捕获偏好、纠错、决策，**必须附带 `slot_key`**（详见下方「偏好与决策捕获」） |
+| `memory_log` | 用户表达持久规则时 | 写入行为约束（偏好、纠错），**必须附带 `slot_key`** 和 `content`（详见下方「偏好捕获」） |
 
 **判断标准：** 用户说的内容**下次对话还需要遵守**吗？如果是，无论当前在做什么，都必须立即写入 LifeOS。
 
-> **Layer 0 上下文：** 首次调用任何 LifeOS MCP 工具时，返回结果中会附带 `_layer0` 字段，包含用户偏好、纠错和当前焦点摘要。Agent 应读取并遵守其中的行为约束。
+> **Layer 0 上下文：** 首次调用任何 LifeOS MCP 工具时，返回结果中会附带 `_layer0` 字段，包含 UserProfile 速览、行为约束、项目焦点和待复习概况。Agent 应读取并遵守其中的行为约束。
 
 #### 第二层：技能工作流
 
@@ -102,8 +102,7 @@ Compaction 后重新继续任务前，必须：
 | 操作 | 时机 | 说明 |
 | --- | --- | --- |
 | `memory_notify` | 创建或修改 Vault 文件后 | 更新文件索引（fs.watch 自动兜底，但需要立即查询时应显式调用） |
-| `memory_log` | 技能全部文件写入完成后 | 用 `entry_type="skill_completion"` 记录技能完成事件 |
-| `memory_query` / `memory_recent` | 需要上下文时 | 查询用户偏好、历史决策、学习进度 |
+| `memory_query` | 需要上下文时 | 查询用户偏好、学习进度等 |
 
 #### 噪声防护
 
@@ -111,16 +110,15 @@ Compaction 后重新继续任务前，必须：
 - 闲聊、代码讨论、与 Vault 无关的对话
 - 一次性技术问答
 
-### 偏好与决策捕获
+### 偏好捕获
 
-每条偏好/纠错/决策**必须附带 `slot_key`**（格式 `<category>:<topic>`）。系统会根据 `slot_key` 自动持久化到 UserProfile 或 TaskBoard，同一 `slot_key` 的后续写入会覆盖旧值。
+每条偏好/纠错**必须附带 `slot_key`**（格式 `<category>:<topic>`）。系统会根据 `slot_key` 自动持久化到 UserProfile，同一 `slot_key` 的后续写入会覆盖旧值。
 
 **category 参考：** `format`（输出格式）、`workflow`（工作流）、`tool`（工具使用）、`content`（内容风格）、`schedule`（时间安排）
 
 **必须捕获的场景：**
-- 用户纠正 Agent 行为（"不要用英文"、"别加 emoji"、"以后…"）→ `correction`，slot_key 如 `content:language`
-- 用户确认方案或方向（"就用这个结构"、"对，用 TDD"）→ `decision`，slot_key 如 `workflow:tdd`
-- 用户表达持久偏好（"我喜欢简洁的提交信息"、"复习间隔设为两周"）→ `preference`，slot_key 如 `format:commit-msg`
+- 用户纠正 Agent 行为（"不要用英文"、"别加 emoji"、"以后…"）→ `memory_log(slot_key="content:language", content="规则内容", source="correction")`
+- 用户表达持久偏好（"我喜欢简洁的提交信息"、"复习间隔设为两周"）→ `memory_log(slot_key="format:commit-msg", content="规则内容", source="preference")`
 
 **禁止捕获的场景：**
 - 一次性的技术讨论（"这个 bug 的原因是什么"）
@@ -156,6 +154,7 @@ Compaction 后重新继续任务前，必须：
 
 核心约束：
 - `status: pending` 的草稿**绝不**被归档
+- 项目状态按 `active ⇄ frozen → done → archived` 流转：`frozen` 状态的项目短期冻结，不出现在 TaskBoard 焦点/活跃项目/待复习面板；其关联知识笔记也从复习列表中隐藏
 - 计划状态按 `active → done → archived` 流转：`/project`、`/research` 将完成的计划更新为 `done`，`/archive` 负责移动并更新为 `archived`
 - 知识笔记 status **只升不降**（draft → review → mastered）
 

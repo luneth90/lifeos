@@ -31,6 +31,7 @@ export interface ParsedMarkdown {
 	backlinks: string; // JSON array string (always [])
 	sectionHeads: string; // JSON array string
 	contentHash: string;
+	project: string | null;
 }
 
 export interface ScanResult {
@@ -117,6 +118,7 @@ export function parseMarkdown(content: string, fileName: string): ParsedMarkdown
 	const status = (frontmatter.status as string | undefined) ?? null;
 	const domain = (frontmatter.domain as string | undefined) ?? null;
 	const category = (frontmatter.category as string | undefined) ?? null;
+	const project = (frontmatter.project as string | undefined) ?? null;
 
 	// Tags & aliases
 	const tags = toJsonArrayString(frontmatter.tags);
@@ -155,6 +157,7 @@ export function parseMarkdown(content: string, fileName: string): ParsedMarkdown
 		backlinks: JSON.stringify([]),
 		sectionHeads,
 		contentHash,
+		project,
 	};
 }
 
@@ -173,8 +176,8 @@ function upsertIndex(
     INSERT OR REPLACE INTO vault_index
     (file_path, title, type, status, domain, category, tags, aliases,
      summary, semantic_summary, search_hints, wikilinks, backlinks,
-     section_heads, content_hash, file_size, created_at, modified_at, indexed_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     section_heads, content_hash, file_size, created_at, modified_at, indexed_at, project)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
 		filePath,
 		parsed.title,
@@ -195,6 +198,7 @@ function upsertIndex(
 		createdAt,
 		modifiedAt,
 		now,
+		parsed.project,
 	);
 }
 

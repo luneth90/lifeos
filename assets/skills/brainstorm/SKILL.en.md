@@ -45,16 +45,12 @@ This is a **conversational, iterative skill** divided into four phases:
 
 Before starting the conversation, **silently** perform the following (do not report the retrieval process to the user):
 
-1. Check minimal memory context to see if any relevant trade-offs already exist:
-   - Recent related `decision`
-   - Recent related `preference`
+1. Check minimal memory context to see if any relevant preferences or constraints already exist:
 
    Recommended commands:
 
 ```
-memory_recent(entry_type="decision", query="<topic keywords>", limit=5)
-
-memory_recent(entry_type="preference", query="<topic keywords>", limit=5)
+memory_query(query="<topic keywords>", limit=5)
 ```
 
 2. Based on the topic keywords provided by the user, perform a quick search:
@@ -171,11 +167,7 @@ After the summary is confirmed, offer three options:
 
 > Detailed execution steps for each option are in `references/action-options.en.md`.
 
-If this conversation **did not produce a formal project, knowledge note, or draft**, but a clear directional decision was reached, log a `decision` before wrapping up:
-
-```
-memory_log(entry_type="decision", summary="<directional conclusion from this brainstorm>", scope="brainstorm")
-```
+If the user confirmed any persistent preferences or rules during this conversation, log them as behavior rules via `memory_log` before wrapping up.
 
 # Notes
 
@@ -235,7 +227,7 @@ memory_log(entry_type="decision", summary="<directional conclusion from this bra
 
 # Memory System Integration
 
-> Common protocol (file change notifications, skill completion, session wrap-up) is in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
+> Common protocol (file change notifications, behavior rule logging) is in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
 
 ### Pre-check Queries
 

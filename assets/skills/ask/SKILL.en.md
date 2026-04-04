@@ -37,11 +37,7 @@ Only query memory first for the following three types of questions before decidi
 Recommended call order:
 
 ```
-memory_recent(entry_type="preference", query="<question keywords>", limit=5)
-
-memory_recent(entry_type="decision", query="<question keywords>", limit=5)
-
-memory_recent(entry_type="skill_completion", query="<chapter or topic keywords>", limit=5)
+memory_query(query="<question keywords>", limit=5)
 ```
 
 If the question does not fall into these three types, **do not query memory by default** — proceed directly to the source check.
@@ -155,7 +151,7 @@ Follow-up options:
 
 # Memory System Integration
 
-> Common protocol (file change notifications, skill completion, session wrap-up) is in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
+> Common protocol (file change notifications, behavior rule logging) is in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
 
 > `/ask` does not produce files by default, but creates drafts when the user requests saving. User questions are important data entries for the learning trajectory and should be recorded in the memory system to refine the user knowledge profile.
 

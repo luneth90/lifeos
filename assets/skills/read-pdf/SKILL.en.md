@@ -185,16 +185,4 @@ Output path: `/tmp/read-pdf-<timestamp>.json`
 # Memory System Integration
 
 > read-pdf is a tool skill, typically called internally by other skills, and does not need full memory integration.
-> Only records skill completion when invoked directly by the user.
-
-### Skill Completion (direct invocation only)
-
-```
-memory_log(
-  entry_type="skill_completion",
-  skill_name="read-pdf",
-  summary="Extracted PDF <filename> pages X-Y",
-  scope="read-pdf",
-  importance=3
-)
-```
+> Common protocol (file change notifications, behavior rule logging) is in `_shared/memory-protocol.md`.

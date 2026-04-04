@@ -126,7 +126,7 @@ When adding new documents to a development project later, continue placing them 
 
 # Memory System Integration
 
-> Common protocols (file change notification, skill completion, session wrap-up) are documented in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
+> Common protocols (file change notification, behavior rule logging) are documented in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
 
 ### Pre-query
 

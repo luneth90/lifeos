@@ -75,7 +75,7 @@ describe('loadContextPolicy', () => {
   it('parses budget overrides from file content', () => {
     const policyPath = ensureContextPolicyExists(vault.root);
     const content = readFileSync(policyPath, 'utf-8');
-    const updated = content.replace('layer0_total: 2000', 'layer0_total: 9999');
+    const updated = content.replace('layer0_total: 1800', 'layer0_total: 9999');
     writeFileSync(policyPath, updated, 'utf-8');
 
     const policy = loadContextPolicy(vault.root);

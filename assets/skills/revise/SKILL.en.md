@@ -47,13 +47,12 @@ Perform a silent scan before starting — **do not report the process to the use
 ```
 memory_query(query="<chapter name>", filters={"type": "knowledge", "status": "draft"}, limit=5)
 memory_query(query="<chapter name>", filters={"type": "knowledge", "status": "review"}, limit=5)
-memory_recent(entry_type="skill_completion", query="<chapter name> review grading", limit=5)
-memory_recent(entry_type="correction", query="<chapter topic or source book convention keywords>", limit=5)
+memory_query(query="<chapter topic or source book convention keywords> correction", limit=5)
 ```
 
 2. If the user provided a scope when triggering (e.g., `/revise VGT Chapter 4`), directly read the corresponding notes
 3. Otherwise:
-   - Scan projects with `status: active` in `{projects directory}/` to obtain chapter lists
+   - Scan projects with `status: active` in `{projects directory}/` to obtain chapter lists (skip projects with `status: frozen` and their linked knowledge notes)
    - Scan notes with `status: draft` or `status: revise` in `{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` (prioritize loading non-mastered ones)
 4. Scan existing review files (`Review_*.md`) under the chapter directory to obtain historical review performance
 5. Compile reviewable content statistics:
@@ -222,39 +221,8 @@ Triggered when user completes answers (says "grade", "mark", "check review", etc
 
 # Memory System Integration
 
-> Shared protocol (file change notifications, skill completion, session wrap-up) in `_shared/memory-protocol.md`. Below are only queries and behaviors specific to this skill.
+> Shared protocol (file change notifications, behavior rule logging) in `_shared/memory-protocol.md`. Below are only queries and behaviors specific to this skill.
 
 ### Pre-query
 
 See Phase 0 for query code.
-
-### Skill Completion (Two Trigger Points)
-
-> Unlike the shared protocol, `/revise` calls `memory_log(entry_type="skill_completion")` twice, corresponding to different phases:
-
-**1. After review file generation:**
-
-```
-memory_log(
-  entry_type="skill_completion",
-  skill_name="review",
-  summary="Generated review file for chapter name",
-  related_files=["<review file relative path>", "<chapter note relative path>"],
-  scope="review",
-  importance=4
-)
-```
-
-**2. After grading is complete and status is written back:**
-
-```
-memory_log(
-  entry_type="skill_completion",
-  skill_name="review",
-  summary="Completed review grading for chapter name",
-  related_files=["<review file relative path>", "<chapter note relative path>"],
-  scope="review",
-  importance=4,
-  detail='{"score":"<X/N>","weak_concepts":["<weak concept>"],"partial_concepts":["<partially mastered concept>"],"mastered_concepts":["<mastered concept>"]}'
-)
-```

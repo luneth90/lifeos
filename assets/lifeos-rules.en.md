@@ -81,7 +81,7 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 
 ### Layered Activation Rules
 
-Memory operations are organized into two layers. Session initialization (startup) and wrap-up (checkpoint) are handled automatically by the MCP server — agents do not need to manage them.
+Memory operations are organized into two layers. Session initialization (startup) is handled automatically by the MCP server — agents do not need to manage it.
 
 #### Layer 1: Always Active
 
@@ -89,11 +89,11 @@ The following operations must be performed in **any conversation**, regardless o
 
 | Operation | When | Description |
 | --- | --- | --- |
-| `memory_log` / `memory_auto_capture` | When user expresses persistent rules | Capture preferences, corrections, decisions — **must include `slot_key`** (see "Preference & Decision Capture" below) |
+| `memory_log` | When user expresses persistent rules | Write behavior rules (preferences, corrections) — **must include `slot_key`** and `content` (see "Preference Capture" below) |
 
 **Judgment criteria:** Will the user's statement **still need to be followed in the next conversation**? If yes, regardless of what you're currently doing, it must be written to LifeOS immediately.
 
-> **Layer 0 context:** On the first call to any LifeOS MCP tool, the response includes a `_layer0` field containing user preferences, corrections, and current focus summary. The agent should read and follow the behavioral constraints within it.
+> **Layer 0 context:** On the first call to any LifeOS MCP tool, the response includes a `_layer0` field containing UserProfile summary, behavior rules, project focus, and pending review overview. The agent should read and follow the behavioral constraints within it.
 
 #### Layer 2: Skill Workflows
 
@@ -102,8 +102,7 @@ Activated only when executing a LifeOS skill (`/today`, `/knowledge`, `/revise`,
 | Operation | When | Description |
 | --- | --- | --- |
 | `memory_notify` | After creating or modifying a Vault file | Update file index (fs.watch provides automatic backup, but call explicitly when immediate query is needed) |
-| `memory_log` | After all skill file writes are complete | Use `entry_type="skill_completion"` to record skill completion event |
-| `memory_query` / `memory_recent` | When context is needed | Query user preferences, historical decisions, learning progress |
+| `memory_query` | When context is needed | Query user preferences, learning progress, etc. |
 
 #### Noise Protection
 
@@ -111,16 +110,15 @@ The following scenarios **do not trigger Layer 2 operations** (but Layer 1 remai
 - Casual chat, code discussions, conversations unrelated to the Vault
 - One-off technical Q&A
 
-### Preference & Decision Capture
+### Preference Capture
 
-Each preference/correction/decision **must include a `slot_key`** (format: `<category>:<topic>`). The system automatically persists it to UserProfile or TaskBoard; subsequent writes with the same `slot_key` overwrite the old value.
+Each preference/correction **must include a `slot_key`** (format: `<category>:<topic>`). The system automatically persists it to UserProfile; subsequent writes with the same `slot_key` overwrite the old value.
 
 **Category reference:** `format` (output format), `workflow` (workflow), `tool` (tool usage), `content` (content style), `schedule` (scheduling)
 
 **Must capture scenarios:**
-- User corrects Agent behavior ("don't use English", "no emoji", "from now on...") → `correction`, slot_key e.g. `content:language`
-- User confirms an approach or direction ("use this structure", "yes, use TDD") → `decision`, slot_key e.g. `workflow:tdd`
-- User expresses a persistent preference ("I prefer concise commit messages", "set review interval to two weeks") → `preference`, slot_key e.g. `format:commit-msg`
+- User corrects Agent behavior ("don't use English", "no emoji", "from now on...") → `memory_log(slot_key="content:language", content="rule content", source="correction")`
+- User expresses a persistent preference ("I prefer concise commit messages", "set review interval to two weeks") → `memory_log(slot_key="format:commit-msg", content="rule content", source="preference")`
 
 **Forbidden capture scenarios:**
 - One-off technical discussions ("what caused this bug")
@@ -156,6 +154,7 @@ Drafts, knowledge notes, and plans each have independent status lifecycles. See 
 
 Core constraints:
 - Drafts with `status: pending` are **never** archived
+- Projects follow `active ⇄ frozen → done → archived`: projects with `frozen` status are short-term frozen, hidden from TaskBoard focus/active-projects/revise panels; their linked knowledge notes are also hidden from the review list
 - Plans follow `active → done → archived`: `/project` and `/research` update finished plans to `done`, and `/archive` moves them and updates them to `archived`
 - Knowledge note status **only goes up, never down** (draft → review → mastered)
 

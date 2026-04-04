@@ -171,7 +171,7 @@ aliases: []
 
 # 记忆系统集成
 
-> 通用协议（文件变更通知、技能完成、会话收尾）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的行为。
+> 通用协议（文件变更通知、行为约束写入）见 `_shared/memory-protocol.md`。以下仅列出本技能特有的行为。
 
 ### 文件变更通知
 
@@ -179,30 +179,4 @@ aliases: []
 
 ```text
 memory_notify(file_path="{草稿目录}/<TopicName>-MMDD-MMDD.md")
-```
-
-### 技能完成
-
-```text
-memory_log(
-  entry_type="skill_completion",
-  skill_name="digest",
-  summary="生成 {主题} 周报 MMDD-MMDD",
-  related_files=["{草稿目录}/<TopicName>-MMDD-MMDD.md"],
-  scope="digest",
-  importance=4
-)
-```
-
-### Setup 模式完成时
-
-配置文件创建后，额外记录一条决策：
-
-```text
-memory_log(
-  entry_type="decision",
-  summary="创建 {主题} 信息订阅配置",
-  importance=2,
-  scope="digest"
-)
 ```

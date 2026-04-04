@@ -185,16 +185,4 @@ for page_num in range(start - 1, end):
 # 记忆系统集成
 
 > read-pdf 作为工具技能，通常被其他技能内部调用，不需要完整的记忆集成。
-> 仅在用户直接调用时记录技能完成事件。
-
-### 技能完成（仅限用户直接调用）
-
-```
-memory_log(
-  entry_type="skill_completion",
-  skill_name="read-pdf",
-  summary="提取 PDF <文件名> 第 X-Y 页",
-  scope="read-pdf",
-  importance=3
-)
-```
+> 通用协议（文件变更通知、行为约束写入）见 `_shared/memory-protocol.md`。

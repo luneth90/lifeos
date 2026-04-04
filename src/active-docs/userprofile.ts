@@ -1,13 +1,12 @@
 /**
- * userprofile.ts — UserProfile 活文档构建器。
+ * userprofile.ts — UserProfile active document builder.
  *
- * Builds UserProfile sections from memory_items and session_log data.
- * Sections: profile-summary, preferences, corrections, decisions, learning-progress.
+ * Builds UserProfile sections from memory_items and vault_index data.
+ * Sections: profile-summary, rules, learning-progress.
  */
 
 import type Database from 'better-sqlite3';
-import { MASTERY_STATUS_LABELS, daysAgo, formatDateShort } from '../types.js';
-import { loadsJsonList, parseDetailObject } from '../utils/shared.js';
+import { MASTERY_STATUS_LABELS } from '../types.js';
 
 // ─── Section builders ─────────────────────────────────────────────────────────
 
@@ -16,8 +15,8 @@ function buildProfileSummarySection(db: Database.Database): string {
 	const item = db
 		.prepare(
 			`SELECT content FROM memory_items
-       WHERE target = 'UserProfile' AND section = 'profile-summary' AND status = 'active'
-       ORDER BY updated_at DESC LIMIT 1`,
+       WHERE slot_key = 'profile:summary' AND status = 'active'
+       LIMIT 1`,
 		)
 		.get() as { content: string } | undefined;
 
@@ -27,7 +26,6 @@ function buildProfileSummarySection(db: Database.Database): string {
 
 	// Priority 2: auto-aggregate user portrait from DB statistics
 	const lines: string[] = [];
-	const cutoff30 = daysAgo(30);
 
 	// Learning focus: active learning projects by domain
 	const domainRows = db
@@ -42,35 +40,6 @@ function buildProfileSummarySection(db: Database.Database): string {
 		lines.push(`**学习重心：** ${domainRows.map((r) => r.domain).join('、')}`);
 	}
 
-	// Most used skills (last 30 days)
-	const skillRows = db
-		.prepare(
-			`SELECT skill_name, COUNT(*) as cnt FROM session_log
-       WHERE entry_type = 'skill_completion' AND skill_name IS NOT NULL AND timestamp >= ?
-       GROUP BY skill_name ORDER BY cnt DESC LIMIT 5`,
-		)
-		.all([cutoff30]) as Array<{ skill_name: string; cnt: number }>;
-
-	if (skillRows.length > 0) {
-		const skillList = skillRows.map((r) => `/${r.skill_name}（${r.cnt}次）`).join('、');
-		lines.push(`**常用技能：** ${skillList}`);
-	}
-
-	// Activity level (last 30 days)
-	const activityRow = db
-		.prepare(
-			`SELECT COUNT(DISTINCT DATE(timestamp)) as active_days, COUNT(*) as total_events
-       FROM session_log WHERE timestamp >= ?`,
-		)
-		.get([cutoff30]) as { active_days: number; total_events: number } | undefined;
-
-	if (activityRow && activityRow.active_days > 0) {
-		const avgEvents = (activityRow.total_events / activityRow.active_days).toFixed(1);
-		lines.push(`**近30天活跃度：** ${activityRow.active_days}天活跃，日均 ${avgEvents} 个事件`);
-	}
-
-	// Knowledge mastery is shown in learning-progress section, not duplicated here
-
 	if (lines.length === 0) {
 		return '用户画像数据尚未积累。';
 	}
@@ -78,110 +47,26 @@ function buildProfileSummarySection(db: Database.Database): string {
 	return lines.join('\n');
 }
 
-function buildPreferencesSection(db: Database.Database): string {
-	// First check memory_items for stored preferences
+function buildRulesSection(db: Database.Database): string {
 	const items = db
 		.prepare(
-			`SELECT slot_key, content, updated_at FROM memory_items
-       WHERE target = 'UserProfile' AND section = 'preferences' AND status = 'active'
-       ORDER BY updated_at DESC`,
+			`SELECT slot_key, content, source FROM memory_items
+       WHERE status = 'active'
+       ORDER BY CASE source WHEN 'correction' THEN 0 ELSE 1 END, updated_at DESC`,
 		)
-		.all() as Array<{ slot_key: string; content: string; updated_at: string }>;
+		.all() as Array<{ slot_key: string; content: string; source: string }>;
 
-	if (items.length > 0) {
-		const lines: string[] = [];
-		for (const item of items) {
-			lines.push(`- **${item.slot_key}**: ${item.content}`);
-		}
-		return lines.join('\n');
-	}
-
-	// Fall back to session_log preferences
-	const cutoff = daysAgo(90);
-	const rows = db
-		.prepare(
-			`SELECT summary, detail, timestamp, rule_key FROM session_log
-       WHERE entry_type = 'preference' AND timestamp >= ?
-       ORDER BY importance DESC, timestamp DESC
-       LIMIT 15`,
-		)
-		.all([cutoff]) as Array<{
-		summary: string;
-		detail: string | null;
-		timestamp: string;
-		rule_key: string | null;
-	}>;
-
-	if (rows.length === 0) {
-		return '暂无记录的用户偏好。';
-	}
+	if (items.length === 0) return '暂无行为约束。';
 
 	const lines: string[] = [];
-	// Deduplicate by rule_key
-	const seen = new Set<string>();
-	for (const r of rows) {
-		const key = r.rule_key || r.summary;
-		if (seen.has(key)) continue;
-		seen.add(key);
-		const detailObj = parseDetailObject(r.detail);
-		const isTemp = detailObj.temporary === true;
-		const tempMark = isTemp ? ' *(临时)*' : '';
-		lines.push(`- ${r.summary}${tempMark}`);
-	}
-	return lines.join('\n');
-}
-
-function buildCorrectionsSection(db: Database.Database): string {
-	// First check memory_items for stored corrections
-	const items = db
-		.prepare(
-			`SELECT slot_key, content, updated_at FROM memory_items
-       WHERE target = 'UserProfile' AND section = 'corrections' AND status = 'active'
-       ORDER BY updated_at DESC`,
-		)
-		.all() as Array<{ slot_key: string; content: string; updated_at: string }>;
-
-	if (items.length > 0) {
-		const lines: string[] = [];
-		for (const item of items) {
-			lines.push(`- **${item.slot_key}**: ${item.content}`);
-		}
-		return lines.join('\n');
-	}
-
-	// Fall back to session_log corrections
-	const cutoff = daysAgo(60);
-	const rows = db
-		.prepare(
-			`SELECT summary, timestamp, rule_key FROM session_log
-       WHERE entry_type = 'correction' AND timestamp >= ?
-       ORDER BY importance DESC, timestamp DESC
-       LIMIT 10`,
-		)
-		.all([cutoff]) as Array<{
-		summary: string;
-		timestamp: string;
-		rule_key: string | null;
-	}>;
-
-	if (rows.length === 0) {
-		return '近期暂无纠错记录。';
-	}
-
-	const lines: string[] = [];
-	const seen = new Set<string>();
-	for (const r of rows) {
-		const key = r.rule_key || r.summary;
-		if (seen.has(key)) continue;
-		seen.add(key);
-		const date = formatDateShort(r.timestamp);
-		lines.push(`- [${date}] ${r.summary}`);
+	for (const item of items) {
+		lines.push(`- **${item.slot_key}**: ${item.content}`);
 	}
 	return lines.join('\n');
 }
 
 function buildLearningProgressSection(db: Database.Database): string {
-	// Knowledge mastery summary (active projects live in TaskBoard only)
+	// Knowledge mastery summary
 	const masteryRows = db
 		.prepare(
 			`SELECT status, COUNT(*) as cnt FROM vault_index
@@ -206,7 +91,7 @@ function buildLearningProgressSection(db: Database.Database): string {
 
 /**
  * Build all UserProfile sections from DB data.
- * Returns a Record mapping section marker → markdown content.
+ * Returns a Record mapping section marker -> markdown content.
  */
 export function buildUserprofileSections(
 	db: Database.Database,
@@ -214,8 +99,7 @@ export function buildUserprofileSections(
 ): Record<string, string> {
 	return {
 		'profile-summary': buildProfileSummarySection(db),
-		preferences: buildPreferencesSection(db),
-		corrections: buildCorrectionsSection(db),
+		rules: buildRulesSection(db),
 		'learning-progress': buildLearningProgressSection(db),
 	};
 }

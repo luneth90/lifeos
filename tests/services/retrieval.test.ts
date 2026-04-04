@@ -3,7 +3,6 @@ import Database from 'better-sqlite3';
 import { initDb } from '../../src/db/schema.js';
 import {
   queryVaultIndex,
-  queryRecentEvents,
   queryVaultIndexByPaths,
   queryVaultIndexByTitles,
   queryVaultIndexByPrefixes,
@@ -57,47 +56,6 @@ function insertVaultNote(
     opts.wikilinks ?? null,
     opts.backlinks ?? null,
     opts.modifiedAt ?? new Date().toISOString(),
-  );
-}
-
-function insertSessionEvent(
-  db: Database.Database,
-  opts: {
-    eventId: string;
-    sessionId?: string;
-    entryType?: string;
-    importance?: number;
-    scope?: string;
-    skillName?: string;
-    summary: string;
-    detail?: string;
-    timestamp?: string;
-    searchHints?: string;
-    relatedEntities?: string;
-    sourceRefs?: string;
-    relatedFiles?: string;
-  },
-): void {
-  db.prepare(`
-    INSERT INTO session_log (
-      event_id, session_id, timestamp, entry_type, importance,
-      scope, skill_name, summary, detail, search_hints,
-      related_entities, source_refs, related_files
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    opts.eventId,
-    opts.sessionId ?? 'test-session',
-    opts.timestamp ?? new Date().toISOString(),
-    opts.entryType ?? 'milestone',
-    opts.importance ?? 3,
-    opts.scope ?? null,
-    opts.skillName ?? null,
-    opts.summary,
-    opts.detail ?? null,
-    opts.searchHints ?? null,
-    opts.relatedEntities ?? null,
-    opts.sourceRefs ?? null,
-    opts.relatedFiles ?? null,
   );
 }
 
@@ -246,149 +204,8 @@ describe('queryVaultIndex', () => {
       title: 'A Note',
     });
 
-    // No query, no filters → returns empty
     const { results } = queryVaultIndex(db, '', null, 10);
     expect(results).toHaveLength(0);
-  });
-
-});
-
-// ─── queryRecentEvents ────────────────────────────────────────────────────────
-
-describe('queryRecentEvents', () => {
-  let db: Database.Database;
-
-  beforeEach(() => {
-    db = createInMemoryDb();
-  });
-
-  afterEach(() => {
-    db.close();
-  });
-
-  it('returns events within time range', () => {
-    const now = new Date();
-    const recent = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000); // 1 day ago
-    const old = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);   // 10 days ago
-
-    insertSessionEvent(db, {
-      eventId: 'evt-recent',
-      summary: 'Recent event',
-      timestamp: recent.toISOString(),
-    });
-    insertSessionEvent(db, {
-      eventId: 'evt-old',
-      summary: 'Old event',
-      timestamp: old.toISOString(),
-    });
-
-    const { events } = queryRecentEvents(db, { days: 3, limit: 10 });
-    const ids = events.map(e => e.eventId);
-    expect(ids).toContain('evt-recent');
-    expect(ids).not.toContain('evt-old');
-  });
-
-  it.each([
-    ['entry_type', { entryType: 'decision' }, 'evt-decision'],
-    ['scope', { scope: 'project-x' }, 'evt-scoped'],
-  ] as const)('filters by %s', (_field, filter, expectedId) => {
-    const now = new Date();
-    insertSessionEvent(db, { eventId: 'evt-decision', summary: 'Made a decision', entryType: 'decision', timestamp: now.toISOString() });
-    insertSessionEvent(db, { eventId: 'evt-milestone', summary: 'Hit a milestone', entryType: 'milestone', timestamp: now.toISOString() });
-    insertSessionEvent(db, { eventId: 'evt-scoped', summary: 'Scoped event', scope: 'project-x', timestamp: now.toISOString() });
-    insertSessionEvent(db, { eventId: 'evt-other', summary: 'Other scope event', scope: 'project-y', timestamp: now.toISOString() });
-
-    const { events } = queryRecentEvents(db, { days: 1, limit: 10, ...filter });
-    expect(events.length).toBeGreaterThanOrEqual(1);
-    expect(events.map(e => e.eventId)).toContain(expectedId);
-  });
-
-  it('FTS search on session_log', () => {
-    const now = new Date();
-
-    insertSessionEvent(db, {
-      eventId: 'evt-typescript',
-      summary: 'Decided to use TypeScript for the migration',
-      entryType: 'decision',
-      timestamp: now.toISOString(),
-    });
-    insertSessionEvent(db, {
-      eventId: 'evt-unrelated',
-      summary: 'Ate lunch today',
-      entryType: 'milestone',
-      timestamp: now.toISOString(),
-    });
-
-    const { events } = queryRecentEvents(db, { days: 1, query: 'TypeScript', limit: 10 });
-    const ids = events.map(e => e.eventId);
-    expect(ids).toContain('evt-typescript');
-    expect(ids).not.toContain('evt-unrelated');
-  });
-
-  it('Chinese FTS search on session_log', () => {
-    const now = new Date();
-
-    insertSessionEvent(db, {
-      eventId: 'evt-zh',
-      summary: '决定使用四元数来表示旋转',
-      entryType: 'decision',
-      timestamp: now.toISOString(),
-    });
-    insertSessionEvent(db, {
-      eventId: 'evt-unrelated',
-      summary: '今天天气很好',
-      entryType: 'milestone',
-      timestamp: now.toISOString(),
-    });
-
-    const { events } = queryRecentEvents(db, { days: 1, query: '四元数', limit: 10 });
-    const ids = events.map(e => e.eventId);
-    expect(ids).toContain('evt-zh');
-  });
-
-  it('result has expected SessionEvent fields', () => {
-    const now = new Date();
-    insertSessionEvent(db, {
-      eventId: 'evt-full',
-      sessionId: 'sess-1',
-      summary: 'Full event test',
-      entryType: 'decision',
-      importance: 5,
-      scope: 'project-z',
-      skillName: '/project',
-      detail: '{"key": "value"}',
-      relatedEntities: '["EntityA"]',
-      sourceRefs: '["ref1"]',
-      relatedFiles: '["file1.md"]',
-      timestamp: now.toISOString(),
-    });
-
-    const { events } = queryRecentEvents(db, { days: 1, limit: 10 });
-    expect(events.length).toBe(1);
-    const e = events[0];
-    expect(e.eventId).toBe('evt-full');
-    expect(e.entryType).toBe('decision');
-    expect(e.importance).toBe(5);
-    expect(e.scope).toBe('project-z');
-    expect(e.skillName).toBe('/project');
-    expect(e.summary).toBe('Full event test');
-    expect(Array.isArray(e.sourceRefs)).toBe(true);
-    expect(Array.isArray(e.relatedFiles)).toBe(true);
-    expect(Array.isArray(e.relatedEntities)).toBe(true);
-  });
-
-  it('respects limit', () => {
-    const now = new Date();
-    for (let i = 0; i < 5; i++) {
-      insertSessionEvent(db, {
-        eventId: `evt-${i}`,
-        summary: `Event ${i}`,
-        timestamp: new Date(now.getTime() - i * 1000).toISOString(),
-      });
-    }
-
-    const { events } = queryRecentEvents(db, { days: 7, limit: 3 });
-    expect(events.length).toBeLessThanOrEqual(3);
   });
 });
 
@@ -431,7 +248,6 @@ describe('queryVaultIndexByPaths', () => {
     const requestedPaths = ['40_知识/note.md', '20_项目/proj-a.md', '20_项目/proj-b.md'];
     const { results } = queryVaultIndexByPaths(db, requestedPaths);
     expect(results.length).toBe(3);
-    // Results should maintain requested path order
     expect(results[0].filePath).toBe('40_知识/note.md');
     expect(results[1].filePath).toBe('20_项目/proj-a.md');
     expect(results[2].filePath).toBe('20_项目/proj-b.md');
@@ -544,16 +360,8 @@ describe('queryVaultIndexByDomainsOrTags', () => {
   });
 
   it('returns notes matching domain', () => {
-    insertVaultNote(db, {
-      filePath: '40_知识/math.md',
-      title: 'Math Note',
-      domain: 'Math',
-    });
-    insertVaultNote(db, {
-      filePath: '40_知识/history.md',
-      title: 'History Note',
-      domain: 'History',
-    });
+    insertVaultNote(db, { filePath: '40_知识/math.md', title: 'Math Note', domain: 'Math' });
+    insertVaultNote(db, { filePath: '40_知识/history.md', title: 'History Note', domain: 'History' });
 
     const { results } = queryVaultIndexByDomainsOrTags(db, { domains: ['Math'], limit: 10 });
     expect(results.length).toBe(1);
@@ -561,16 +369,8 @@ describe('queryVaultIndexByDomainsOrTags', () => {
   });
 
   it('returns notes matching tags', () => {
-    insertVaultNote(db, {
-      filePath: '40_知识/ts-note.md',
-      title: 'TypeScript Note',
-      tags: '["typescript", "node"]',
-    });
-    insertVaultNote(db, {
-      filePath: '40_知识/other.md',
-      title: 'Other',
-      tags: '["python"]',
-    });
+    insertVaultNote(db, { filePath: '40_知识/ts-note.md', title: 'TypeScript Note', tags: '["typescript", "node"]' });
+    insertVaultNote(db, { filePath: '40_知识/other.md', title: 'Other', tags: '["python"]' });
 
     const { results } = queryVaultIndexByDomainsOrTags(db, { tags: ['typescript'], limit: 10 });
     expect(results.length).toBe(1);
@@ -578,30 +378,11 @@ describe('queryVaultIndexByDomainsOrTags', () => {
   });
 
   it('combines domains and tags with OR logic', () => {
-    insertVaultNote(db, {
-      filePath: '40_知识/math.md',
-      title: 'Math Note',
-      domain: 'Math',
-      tags: '["algebra"]',
-    });
-    insertVaultNote(db, {
-      filePath: '40_知识/ts-note.md',
-      title: 'TypeScript Note',
-      domain: 'Engineering',
-      tags: '["typescript"]',
-    });
-    insertVaultNote(db, {
-      filePath: '40_知识/other.md',
-      title: 'Other',
-      domain: 'Biology',
-      tags: '["cells"]',
-    });
+    insertVaultNote(db, { filePath: '40_知识/math.md', title: 'Math Note', domain: 'Math', tags: '["algebra"]' });
+    insertVaultNote(db, { filePath: '40_知识/ts-note.md', title: 'TypeScript Note', domain: 'Engineering', tags: '["typescript"]' });
+    insertVaultNote(db, { filePath: '40_知识/other.md', title: 'Other', domain: 'Biology', tags: '["cells"]' });
 
-    const { results } = queryVaultIndexByDomainsOrTags(db, {
-      domains: ['Math'],
-      tags: ['typescript'],
-      limit: 10,
-    });
+    const { results } = queryVaultIndexByDomainsOrTags(db, { domains: ['Math'], tags: ['typescript'], limit: 10 });
     expect(results.length).toBe(2);
     const paths = results.map(r => r.filePath);
     expect(paths).toContain('40_知识/math.md');
@@ -625,138 +406,71 @@ describe('queryMemoryItems', () => {
   function insertMemoryItem(
     db: Database.Database,
     opts: {
-      itemId: string;
-      target: string;
-      section: string;
       slotKey: string;
       content: string;
+      source?: string;
       status?: string;
-      confidence?: string;
       updatedAt?: string;
     },
   ): void {
     db.prepare(`
-      INSERT INTO memory_items (item_id, target, section, slot_key, content, status, confidence, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO memory_items (slot_key, content, source, status, updated_at)
+      VALUES (?, ?, ?, ?, ?)
     `).run(
-      opts.itemId,
-      opts.target,
-      opts.section,
       opts.slotKey,
       opts.content,
+      opts.source ?? 'preference',
       opts.status ?? 'active',
-      opts.confidence ?? null,
       opts.updatedAt ?? new Date().toISOString(),
     );
   }
 
   it('returns active memory items', () => {
-    insertMemoryItem(db, {
-      itemId: 'item-1',
-      target: 'UserProfile',
-      section: 'preferences',
-      slotKey: 'format:note-style',
-      content: 'Prefer concise notes',
-      status: 'active',
-    });
-    insertMemoryItem(db, {
-      itemId: 'item-2',
-      target: 'UserProfile',
-      section: 'preferences',
-      slotKey: 'format:commit-msg',
-      content: 'Use conventional commits',
-      status: 'superseded',
-    });
+    insertMemoryItem(db, { slotKey: 'format:note-style', content: 'Prefer concise notes', status: 'active' });
+    insertMemoryItem(db, { slotKey: 'format:commit-msg', content: 'Use conventional commits', status: 'expired' });
 
-    const { items } = queryMemoryItems(db, { target: 'UserProfile', statusFilter: 'active' });
+    const { items } = queryMemoryItems(db, { statusFilter: 'active' });
     expect(items.length).toBe(1);
-    expect(items[0].itemId).toBe('item-1');
+    expect(items[0].slotKey).toBe('format:note-style');
   });
 
-  it('filters by target', () => {
-    insertMemoryItem(db, {
-      itemId: 'item-userprofile',
-      target: 'UserProfile',
-      section: 'preferences',
-      slotKey: 'format:style',
-      content: 'Concise style',
-    });
-    insertMemoryItem(db, {
-      itemId: 'item-taskboard',
-      target: 'TaskBoard',
-      section: 'focus',
-      slotKey: 'current-task',
-      content: 'Working on retrieval service',
-    });
+  it('filters by slot_key', () => {
+    insertMemoryItem(db, { slotKey: 'format:style', content: 'Concise style' });
+    insertMemoryItem(db, { slotKey: 'workflow:tdd', content: 'Use TDD' });
 
-    const { items } = queryMemoryItems(db, { target: 'UserProfile' });
+    const { items } = queryMemoryItems(db, { slotKey: 'format:style' });
     expect(items.length).toBe(1);
-    expect(items[0].itemId).toBe('item-userprofile');
+    expect(items[0].slotKey).toBe('format:style');
   });
 
-  it('filters by section', () => {
-    insertMemoryItem(db, {
-      itemId: 'item-pref',
-      target: 'UserProfile',
-      section: 'preferences',
-      slotKey: 'format:style',
-      content: 'Style preference',
-    });
-    insertMemoryItem(db, {
-      itemId: 'item-decision',
-      target: 'UserProfile',
-      section: 'decisions',
-      slotKey: 'decision:arch',
-      content: 'Use TypeScript',
-    });
+  it('supports pattern matching with %', () => {
+    insertMemoryItem(db, { slotKey: 'format:style', content: 'Concise style' });
+    insertMemoryItem(db, { slotKey: 'format:commit', content: 'Commit style' });
+    insertMemoryItem(db, { slotKey: 'workflow:tdd', content: 'Use TDD' });
 
-    const { items } = queryMemoryItems(db, { target: 'UserProfile', section: 'preferences' });
-    expect(items.length).toBe(1);
-    expect(items[0].itemId).toBe('item-pref');
+    const { items } = queryMemoryItems(db, { slotKey: 'format:%' });
+    expect(items.length).toBe(2);
   });
 
-  it('returns all items when no status filter', () => {
-    insertMemoryItem(db, {
-      itemId: 'item-active',
-      target: 'UserProfile',
-      section: 'preferences',
-      slotKey: 'format:style',
-      content: 'Active item',
-      status: 'active',
-    });
-    insertMemoryItem(db, {
-      itemId: 'item-superseded',
-      target: 'UserProfile',
-      section: 'preferences',
-      slotKey: 'format:old-style',
-      content: 'Old item',
-      status: 'superseded',
-    });
+  it('returns all items when no filters', () => {
+    insertMemoryItem(db, { slotKey: 'format:style', content: 'Active item', status: 'active' });
+    insertMemoryItem(db, { slotKey: 'format:old-style', content: 'Old item', status: 'expired' });
 
-    const { items } = queryMemoryItems(db, { target: 'UserProfile' });
+    const { items } = queryMemoryItems(db, {});
     expect(items.length).toBe(2);
   });
 
   it('returns memory item with expected fields', () => {
-    insertMemoryItem(db, {
-      itemId: 'item-full',
-      target: 'UserProfile',
-      section: 'preferences',
-      slotKey: 'format:note-style',
-      content: 'Prefer bullet points',
-      status: 'active',
-      confidence: 'high',
-    });
+    insertMemoryItem(db, { slotKey: 'format:note-style', content: 'Prefer bullet points', source: 'correction' });
 
-    const { items } = queryMemoryItems(db, { target: 'UserProfile' });
+    const { items } = queryMemoryItems(db, {});
     expect(items.length).toBe(1);
     const item = items[0];
-    expect(item.itemId).toBe('item-full');
-    expect(item.target).toBe('UserProfile');
-    expect(item.section).toBe('preferences');
     expect(item.slotKey).toBe('format:note-style');
     expect(item.content).toBe('Prefer bullet points');
+    expect(item.source).toBe('correction');
     expect(item.status).toBe('active');
-    expect(item.confidence).toBe('high');
+    expect(typeof item.manualFlag).toBe('boolean');
+    expect(typeof item.updatedAt).toBe('string');
   });
 });

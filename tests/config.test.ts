@@ -141,9 +141,11 @@ describe('VaultConfig — zh preset (default)', () => {
     tmp = createTempDir();
     const cfg = new VaultConfig(tmp.root);
     const budgets = cfg.contextBudgets();
-    expect(budgets.layer0_total).toBe(2000);
+    expect(budgets.layer0_total).toBe(1800);
     expect(budgets.userprofile_summary).toBe(200);
     expect(budgets.userprofile_rules).toBe(1000);
+    expect(budgets.taskboard_focus).toBe(500);
+    expect(budgets.revises_summary).toBe(100);
   });
 });
 

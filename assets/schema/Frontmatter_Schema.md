@@ -45,7 +45,7 @@ id: Frontmatter_Schema
 
 ### project
 
-- `active` / `on-hold` / `done`
+- `active` / `frozen` / `on-hold` / `done`
 
 ### project-doc
 

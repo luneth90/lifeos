@@ -1,5 +1,5 @@
 /**
- * shared.ts — 通用工具函数。
+ * shared.ts — Shared utility functions.
  *
  * Provides utility functions used by all other modules.
  */
@@ -8,44 +8,10 @@ import type Database from 'better-sqlite3';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const SESSION_ID_ENV_KEYS = [
-	'LIFEOS_SESSION_ID',
-	'CLAUDE_SESSION_ID',
-	'CODEX_SESSION_ID',
-	'OPENCODE_SESSION_ID',
-] as const;
-
 export const ALLOWED_COUNT_TABLES: Set<string> = new Set([
 	'vault_index',
 	'enhance_queue',
-	'session_log',
 ]);
-
-export const RULE_KEY_DETAIL_FIELDS = ['rule_key', 'preference_slot', 'constraint_key'] as const;
-
-export const RULE_KEY_PREFIXES: Record<string, string> = {
-	decision: 'decision',
-	correction: 'correction',
-	preference: 'prefer',
-};
-
-export const TEMPORARY_PREFERENCE_KEYWORDS = [
-	'这次',
-	'暂时',
-	'先这样',
-	'本周',
-	'今天',
-	'当前先',
-	'这一轮',
-	'这两天',
-] as const;
-
-export const STABLE_PREFERENCE_KEYWORDS = ['长期', '一直', '固定', '习惯', '通常', '默认'] as const;
-
-export const DEFAULT_TEMPORARY_PREFERENCE_DAYS = 14;
-export const ALL_TIME_DAYS = 3650;
-export const FALLBACK_THRESHOLD = 3;
-export const SUMMARY_MAX_LEN = 500;
 
 export const BUCKET_TYPE_MAP: Record<string, Set<string>> = {
 	daily: new Set(['daily', 'diary']),
@@ -55,25 +21,6 @@ export const BUCKET_TYPE_MAP: Record<string, Set<string>> = {
 	knowledge: new Set(['knowledge', 'note', 'revise-record']),
 	resource: new Set(['resource']),
 };
-
-// ─── Session ──────────────────────────────────────────────────────────────────
-
-/**
- * Resolve a session ID from the provided value or environment variables.
- * Returns 'untracked' when no valid session ID can be found.
- */
-export function resolveSessionId(sessionId?: string | null): string {
-	if (sessionId != null && String(sessionId).trim()) {
-		return String(sessionId).trim();
-	}
-	for (const envKey of SESSION_ID_ENV_KEYS) {
-		const value = process.env[envKey];
-		if (value?.trim()) {
-			return value.trim();
-		}
-	}
-	return 'untracked';
-}
 
 // ─── Time ─────────────────────────────────────────────────────────────────────
 
@@ -164,7 +111,7 @@ export function estimateTokens(text: string): number {
 }
 
 /**
- * Return true if the text contains at least one CJK character (U+4E00–U+9FFF).
+ * Return true if the text contains at least one CJK character (U+4E00-U+9FFF).
  */
 export function containsCjk(text: string): boolean {
 	return [...text].some((ch) => ch >= '\u4e00' && ch <= '\u9fff');
@@ -194,131 +141,6 @@ export function compactText(text: string | null | undefined, limit = 160): strin
 	return `${normalized.slice(0, Math.max(limit - 3, 0)).trimEnd()}...`;
 }
 
-/**
- * Normalize whitespace and truncate to `limit` characters (no ellipsis).
- * Returns empty string for empty/null input.
- */
-export function normalizeRuleSummary(text: string | null | undefined, limit = 160): string {
-	const normalized = String(text ?? '')
-		.replace(/\s+/g, ' ')
-		.trim();
-	if (!normalized) return '';
-	if (normalized.length <= limit) return normalized;
-	return normalized.slice(0, limit).trimEnd();
-}
-
-// ─── Rule key helpers ─────────────────────────────────────────────────────────
-
-/**
- * Build a default rule key from entry type and summary text.
- * Returns null if the entry type has no prefix or the summary is empty.
- */
-export function buildDefaultRuleKey(entryType: string, text: string): string | null {
-	const prefix = RULE_KEY_PREFIXES[entryType];
-	const normalized = normalizeRuleSummary(text);
-	if (!prefix || !normalized) return null;
-	return `${prefix}:${normalized}`;
-}
-
-/**
- * Extract an explicit rule key value from a detail object.
- * Checks rule_key, preference_slot, constraint_key in order.
- */
-export function extractRuleKeyValue(
-	detailObj: Record<string, unknown> | null | undefined,
-): string | null {
-	const payload = detailObj ?? {};
-	for (const field of RULE_KEY_DETAIL_FIELDS) {
-		const value = payload[field];
-		if (value) return String(value).trim();
-	}
-	return null;
-}
-
-/**
- * Resolve the final rule key for an entry.
- * Prefers explicit keys in detail_obj, falls back to building from entry type + summary.
- */
-export function resolveRuleKey(
-	entryType: string,
-	summary: string,
-	detailObj?: Record<string, unknown> | null,
-): string | null {
-	const explicit = extractRuleKeyValue(detailObj);
-	if (explicit) return explicit;
-	return buildDefaultRuleKey(entryType, summary);
-}
-
-// ─── Preference inference ─────────────────────────────────────────────────────
-
-type TemporaryPreferenceResult = {
-	temporary: boolean;
-	expiresInDays?: number;
-	expiresAt?: string;
-	temporarySource?: string;
-};
-
-function coerceBoolValue(value: unknown): boolean {
-	if (typeof value === 'boolean') return value;
-	if (typeof value === 'string') {
-		const lower = value.toLowerCase().trim();
-		if (lower === 'false' || lower === '0' || lower === 'no') return false;
-		return Boolean(value);
-	}
-	return Boolean(value);
-}
-
-/**
- * Infer whether a preference entry is temporary based on text keywords
- * or explicit fields in the detail object.
- */
-export function inferTemporaryPreference(
-	text: string,
-	detailObj?: Record<string, unknown> | null,
-): TemporaryPreferenceResult {
-	const payload = detailObj ?? {};
-
-	// Check for explicit fields in detail_obj
-	const hasExplicitFields = ['temporary', 'expires_at', 'expires_in_days', 'temporary_source'].some(
-		(key) => payload[key] != null,
-	);
-
-	if (hasExplicitFields) {
-		const result: TemporaryPreferenceResult = { temporary: true };
-		if (payload.temporary != null) {
-			result.temporary = coerceBoolValue(payload.temporary);
-		}
-		const rawExpiresInDays = payload.expires_in_days;
-		if (rawExpiresInDays != null) {
-			const days = Number.parseInt(String(rawExpiresInDays), 10);
-			if (!Number.isNaN(days)) result.expiresInDays = days;
-		}
-		if (payload.expires_at) {
-			result.expiresAt = String(payload.expires_at);
-		}
-		if (payload.temporary_source) {
-			result.temporarySource = String(payload.temporary_source);
-		} else {
-			result.temporarySource = 'explicit';
-		}
-		return result;
-	}
-
-	// Keyword-based inference
-	const normalized = normalizeRuleSummary(text);
-	if (STABLE_PREFERENCE_KEYWORDS.some((kw) => normalized.includes(kw))) {
-		return { temporary: false };
-	}
-	if (TEMPORARY_PREFERENCE_KEYWORDS.some((kw) => normalized.includes(kw))) {
-		return {
-			temporary: true,
-			expiresInDays: DEFAULT_TEMPORARY_PREFERENCE_DAYS,
-			temporarySource: 'keyword_fallback',
-		};
-	}
-	return { temporary: false };
-}
-
 // ─── Database helpers ─────────────────────────────────────────────────────────
 
 /**
@@ -338,14 +160,4 @@ export function countRows(
 	if (whereSql) sql += ` WHERE ${whereSql}`;
 	const row = conn.prepare(sql).get(params) as { 'COUNT(*)': number } | undefined;
 	return row ? Number(row['COUNT(*)']) : 0;
-}
-
-// ─── Archive helpers ──────────────────────────────────────────────────────────
-
-/**
- * Return true if the summary represents an archive summary entry.
- */
-export function isArchiveSummary(summary: unknown, entryType?: string): boolean {
-	if (entryType === 'archive_summary') return true;
-	return String(summary ?? '').startsWith('归档摘要：');
 }

@@ -47,7 +47,6 @@ Recommended calls:
 ```
 memory_query(query="<project name or chapter keyword>", filters={"type": "project"}, limit=5)
 memory_query(query="<chapter keyword>", filters={"type": "knowledge"}, limit=5)
-memory_recent(query="<chapter or topic keyword>", limit=5)
 ```
 
 Memory checks are only for determining current context and avoiding duplicate curation -- **they do not replace reading the source material**.
@@ -195,8 +194,16 @@ After completion, **do not output full file contents in the conversation** (unle
 
 # Memory System Integration
 
-> Common protocols (file change notification, skill completion, session wrap-up) are documented in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
+> Common protocols (file change notification, behavior rule logging) are documented in `_shared/memory-protocol.md`. Only skill-specific queries and behaviors are listed below.
 
 ### Pre-query
 
 See Phase 0 for query code.
+
+### Knowledge Note `project` Field
+
+When generating knowledge notes, you must write a `project` field in the frontmatter, linking to the parent project file. The format is a wikilink, for example:
+
+```yaml
+project: "[[Visual-Group-Theory-Learning]]"
+```

@@ -43,15 +43,24 @@ draft ──/revise(≥50%)──→ revise ──/revise(≥80%)──→ maste
 ## Project Lifecycle
 
 ```
-active ──→ on-hold ──→ done ──/archive──→ archived
+active ⇄ frozen ──→ done ──/archive──→ archived
+  │                  ↑
+  └──→ on-hold ──────┘
 ```
 
 | Status | Meaning | Set by |
 |--------|---------|--------|
 | `active` | Currently being worked on | /project |
+| `frozen` | Short-term freeze — retains all data, hidden from TaskBoard focus/active-projects/revise panels | Manual |
 | `on-hold` | Paused | Manual |
 | `done` | Completed, ready for archival | Manual |
 | `archived` | Moved to archive directory by /archive | /archive |
+
+**Frozen rules:**
+
+- User manually sets frontmatter `status: frozen` to freeze, changes back to `status: active` to unfreeze
+- Knowledge notes linked to a frozen project (via `project` field) are hidden from the review list
+- A frozen project can transition directly to `done` or be unfrozen back to `active`
 
 ## Plan Lifecycle
 

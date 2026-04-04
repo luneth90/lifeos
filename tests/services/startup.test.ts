@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'path';
-import { mkdirSync, writeFileSync } from 'fs';
+import { writeFileSync } from 'fs';
 import Database from 'better-sqlite3';
 import { createTempVault, createTestDb, writeTestNote } from '../setup.js';
 import type { TempVault } from '../setup.js';
@@ -23,11 +23,6 @@ import {
   matchEnhancePriority,
   enqueueChangedPathsForEnhance,
 } from '../../src/services/enhance.js';
-import {
-  needsMaintenance,
-  pruneSessionLog,
-  maintenanceRun,
-} from '../../src/services/maintenance.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,7 +70,6 @@ describe('trimToBudget', () => {
   });
 
   it('truncates text exceeding budget with continuation marker', () => {
-    // Create text with many lines to exceed a small budget
     const lines = Array.from({ length: 50 }, (_, i) => `这是第${i + 1}行内容`);
     const text = lines.join('\n');
     const result = trimToBudget(text, 10);
@@ -106,7 +100,7 @@ describe('buildLayer0Summary', () => {
   });
 
   it('returns empty string when no files exist', () => {
-    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
+    const policy = { layer0_total: 1800, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 500, userprofile_doc_limit: 2000, taskboard_doc_limit: 3000 };
     const result = buildLayer0Summary(vault.root, policy);
     expect(result).toBe('');
   });
@@ -118,7 +112,7 @@ describe('buildLayer0Summary', () => {
       `# UserProfile\n<!-- BEGIN AUTO:profile-summary -->\n用户偏好：简洁风格\n<!-- END AUTO:profile-summary -->`,
       'utf-8',
     );
-    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
+    const policy = { layer0_total: 1800, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 500, userprofile_doc_limit: 2000, taskboard_doc_limit: 3000 };
     const result = buildLayer0Summary(vault.root, policy);
     expect(result).toContain('UserProfile 速览');
     expect(result).toContain('用户偏好：简洁风格');
@@ -131,20 +125,13 @@ describe('buildLayer0Summary', () => {
       `# TaskBoard\n<!-- BEGIN AUTO:focus -->\n当前焦点：完成测试套件\n<!-- END AUTO:focus -->`,
       'utf-8',
     );
-    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
+    const policy = { layer0_total: 1800, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 500, userprofile_doc_limit: 2000, taskboard_doc_limit: 3000 };
     const result = buildLayer0Summary(vault.root, policy);
     expect(result).toContain('TaskBoard 当前焦点');
     expect(result).toContain('当前焦点：完成测试套件');
   });
 
-  it('appends session bridge when provided', () => {
-    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
-    const result = buildLayer0Summary(vault.root, policy, '上次完成了核心功能');
-    expect(result).toContain('上次会话桥接');
-    expect(result).toContain('上次完成了核心功能');
-  });
-
-  it('includes 行为约束 section when preferences/corrections AUTO blocks exist', () => {
+  it('includes rules section when rules AUTO block exists', () => {
     const memoryDir = join(vault.root, '90_系统', '记忆');
     writeFileSync(
       join(memoryDir, 'UserProfile.md'),
@@ -153,20 +140,17 @@ describe('buildLayer0Summary', () => {
         '<!-- BEGIN AUTO:profile-summary -->',
         '用户偏好：简洁风格',
         '<!-- END AUTO:profile-summary -->',
-        '<!-- BEGIN AUTO:preferences -->',
-        '- 输出语言：中文',
-        '<!-- END AUTO:preferences -->',
-        '<!-- BEGIN AUTO:corrections -->',
-        '- 不要用英文回复',
-        '<!-- END AUTO:corrections -->',
+        '<!-- BEGIN AUTO:rules -->',
+        '- **content:language**: 输出语言使用中文',
+        '- **format:no-emoji**: 不要用英文回复',
+        '<!-- END AUTO:rules -->',
       ].join('\n'),
       'utf-8',
     );
-    const policy = { layer0_total: 2000, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 800 };
+    const policy = { layer0_total: 1800, userprofile_summary: 200, userprofile_rules: 1000, taskboard_focus: 500, userprofile_doc_limit: 2000, taskboard_doc_limit: 3000 };
     const result = buildLayer0Summary(vault.root, policy);
     expect(result).toContain('行为约束');
-    expect(result).toContain('输出语言：中文');
-    expect(result).toContain('不要用英文回复');
+    expect(result).toContain('输出语言使用中文');
     expect(result).toContain('UserProfile 速览');
   });
 });
@@ -213,7 +197,6 @@ describe('generateSemanticSummary', () => {
     const result = generateSemanticSummary({});
     expect(result.length).toBeGreaterThan(0);
     expect(typeof result).toBe('string');
-    // subject falls back to '该条目', type label falls back to '笔记'
     expect(result).toContain('该条目');
   });
 });
@@ -276,7 +259,6 @@ describe('processEnhanceQueue', () => {
   });
 
   it('processes pending items and updates vault_index', () => {
-    // Insert a vault_index record
     const now = new Date().toISOString();
     db.prepare(`
       INSERT INTO vault_index
@@ -290,14 +272,12 @@ describe('processEnhanceQueue', () => {
       'abc123', 1024, now, now, now,
     );
 
-    // Queue the file for enhancement
     queueFileForEnhance(db, '20_项目/my-project.md', 8, 'test');
 
     const result = processEnhanceQueue(db, vault.root, 5);
     expect(result.processed).toBe(1);
     expect(result.errors).toBe(0);
 
-    // Verify semantic_summary was written
     const row = db
       .prepare("SELECT semantic_summary FROM vault_index WHERE file_path = '20_项目/my-project.md'")
       .get() as { semantic_summary: string } | undefined;
@@ -333,7 +313,6 @@ describe('mergeSearchHints', () => {
     expect(parsed).toContain('任务');
     expect(parsed).toContain('进展');
     expect(parsed).toContain('计划');
-    // No duplicates
     expect(parsed.filter(t => t === '任务').length).toBe(1);
   });
 
@@ -386,103 +365,6 @@ describe('enqueueChangedPathsForEnhance', () => {
   });
 });
 
-// ─── maintenance: needsMaintenance ────────────────────────────────────────────
-
-describe('needsMaintenance', () => {
-  let db: Database.Database;
-
-  beforeEach(() => { db = createInMemoryDb(); });
-  afterEach(() => { db.close(); });
-
-  it('returns true when old low-importance non-key entries exist', () => {
-    const oldDate = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`
-      INSERT INTO session_log
-      (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
-      VALUES (?, 'test-session', ?, 'skill_completion', 2, '完成了某技能', 'hash001', '[]')
-    `).run('evt-001', oldDate);
-
-    expect(needsMaintenance(db)).toBe(true);
-  });
-
-  it.each([
-    ['no entries', null, null, null],
-    ['key type (decision)', 'decision', 2, 'hash002'],
-    ['high importance (>=3)', 'skill_completion', 3, 'hash003'],
-  ] as const)('returns false when %s', (_label, entryType, importance, hash) => {
-    if (entryType) {
-      const oldDate = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
-      db.prepare(`
-        INSERT INTO session_log
-        (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
-        VALUES (?, 'test-session', ?, ?, ?, '测试事件', ?, '[]')
-      `).run(`evt-${hash}`, oldDate, entryType, importance, hash);
-    }
-    expect(needsMaintenance(db)).toBe(false);
-  });
-});
-
-// ─── maintenance: pruneSessionLog ─────────────────────────────────────────────
-
-describe('pruneSessionLog', () => {
-  let db: Database.Database;
-
-  beforeEach(() => { db = createInMemoryDb(); });
-  afterEach(() => { db.close(); });
-
-  it('deletes old low-importance non-key entries', () => {
-    const now = new Date();
-    // Entry 45 days old, low importance, pruneable type
-    const old45 = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`
-      INSERT INTO session_log
-      (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
-      VALUES ('evt-1', 'sess-1', ?, 'milestone', 1, '旧里程碑', 'h1', '[]')
-    `).run(old45);
-
-    const result = pruneSessionLog(db, now);
-    expect(result.deleted).toBe(1);
-    expect(result.dryRun).toBe(false);
-
-    const count = db.prepare('SELECT COUNT(*) FROM session_log').get() as { 'COUNT(*)': number };
-    expect(count['COUNT(*)']).toBe(0);
-  });
-
-  it.each([
-    ['recent entries (<30 days old)', 10, 'milestone', 'evt-2', 'h2'],
-    ['key entry types (correction)', 45, 'correction', 'evt-3', 'h3'],
-  ] as const)('preserves %s', (_label, daysOld, entryType, eventId, hash) => {
-    const now = new Date();
-    const ts = new Date(now.getTime() - daysOld * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`
-      INSERT INTO session_log
-      (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
-      VALUES (?, 'sess-1', ?, ?, 1, '保留条目', ?, '[]')
-    `).run(eventId, ts, entryType, hash);
-
-    const result = pruneSessionLog(db, now);
-    expect(result.deleted).toBe(0);
-  });
-
-  it('dry run reports count without deleting', () => {
-    const now = new Date();
-    const old45 = new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000).toISOString();
-    db.prepare(`
-      INSERT INTO session_log
-      (event_id, session_id, timestamp, entry_type, importance, summary, entry_hash, search_hints)
-      VALUES ('evt-4', 'sess-1', ?, 'milestone', 1, '干运行测试', 'h4', '[]')
-    `).run(old45);
-
-    const result = pruneSessionLog(db, now, true);
-    expect(result.deleted).toBe(1);
-    expect(result.dryRun).toBe(true);
-
-    // Row should still exist
-    const count = db.prepare('SELECT COUNT(*) FROM session_log').get() as { 'COUNT(*)': number };
-    expect(count['COUNT(*)']).toBe(1);
-  });
-});
-
 // ─── startup: runStartup ──────────────────────────────────────────────────────
 
 describe('runStartup', () => {
@@ -503,56 +385,19 @@ describe('runStartup', () => {
   });
 
   it('returns expected shape with vault_stats and layer0_summary', () => {
-    const result = runStartup(db, vault.root, 'test-session-001');
+    const result = runStartup(db, vault.root);
     expect(result).toHaveProperty('layer0_summary');
     expect(result).toHaveProperty('vault_stats');
     expect(result).toHaveProperty('enhance_queue_size');
     expect(result).toHaveProperty('enhanced_files');
-    expect(result).toHaveProperty('last_session_bridge');
-    expect(result).toHaveProperty('recovered_from_unclean_shutdown');
-    expect(result).toHaveProperty('previous_unclean_session_id');
-    expect(result).toHaveProperty('maintenance');
     expect(typeof result['layer0_summary']).toBe('string');
     expect(typeof result['vault_stats']['total_files']).toBe('number');
-  });
-
-  it('registers session in session_state', () => {
-    runStartup(db, vault.root, 'test-session-abc');
-    const row = db
-      .prepare("SELECT session_id FROM session_state WHERE session_id = 'test-session-abc'")
-      .get() as { session_id: string } | undefined;
-    expect(row).toBeTruthy();
-    expect(row!['session_id']).toBe('test-session-abc');
-  });
-
-  it('reports recovered_from_unclean_shutdown=false when no prior sessions', () => {
-    const result = runStartup(db, vault.root, 'fresh-session');
-    expect(result['recovered_from_unclean_shutdown']).toBe(false);
-    expect(result['previous_unclean_session_id']).toBeNull();
-  });
-
-  it('detects a previous unclean session', () => {
-    // Register an old unclosed session
-    const oldStart = new Date(Date.now() - 3600_000).toISOString();
-    db.prepare(`
-      INSERT INTO session_state (session_id, started_at, last_seen_at, closed_at, close_status)
-      VALUES ('old-unclosed-session', ?, ?, NULL, NULL)
-    `).run(oldStart, oldStart);
-
-    const result = runStartup(db, vault.root, 'new-session');
-    expect(result['recovered_from_unclean_shutdown']).toBe(true);
-    expect(result['previous_unclean_session_id']).toBe('old-unclosed-session');
   });
 
   it('counts vault files after scan', () => {
     writeTestNote(vault.root, '20_项目/project-a.md', { title: '项目A', type: 'project', status: 'active' });
     writeTestNote(vault.root, '20_项目/project-b.md', { title: '项目B', type: 'project', status: 'done' });
-    const result = runStartup(db, vault.root, 'session-scan');
+    const result = runStartup(db, vault.root);
     expect(result['vault_stats']['total_files']).toBeGreaterThanOrEqual(0);
-  });
-
-  it('maintenance is null when no pruneable entries exist', () => {
-    const result = runStartup(db, vault.root, 'session-maint');
-    expect(result['maintenance']).toBeNull();
   });
 });

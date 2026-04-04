@@ -1,8 +1,8 @@
 /**
- * server.ts — MCP Server 入口。
+ * server.ts — MCP Server entry point.
  *
- * Registers 6 memory tools and starts the stdio transport.
- * Automatically handles startup, file watching, and checkpoint.
+ * Registers memory tools and starts the stdio transport.
+ * Automatically handles startup and file watching.
  */
 
 import { type FSWatcher, watch } from 'node:fs';
@@ -37,26 +37,22 @@ function deepConvertKeys(obj: unknown): unknown {
 let startedUp = false;
 let startupResult: StartupResult | null = null;
 let startupVaultRoot: string | undefined;
-let startupSessionId: string | undefined;
 
 function captureStartupContext(params: Record<string, unknown>): {
 	vaultRoot: string | undefined;
-	sessionId: string | undefined;
 } {
 	const vaultRoot = (params.vault_root as string) || (params.vaultRoot as string) || undefined;
-	const sessionId = (params.session_id as string) || (params.sessionId as string) || undefined;
 	if (vaultRoot) startupVaultRoot = vaultRoot;
-	if (sessionId) startupSessionId = sessionId;
-	return { vaultRoot, sessionId };
+	return { vaultRoot };
 }
 
 function ensureStartup(params: Record<string, unknown>): void {
 	if (startedUp) return;
-	const { vaultRoot, sessionId } = captureStartupContext(params);
+	const { vaultRoot } = captureStartupContext(params);
 	try {
-		startupResult = core.memoryStartup({ vaultRoot, sessionId });
+		startupResult = core.memoryStartup({ vaultRoot });
 		startedUp = true;
-		// 启动文件监听
+		// Start file watcher
 		const resolvedVault = vaultRoot || process.env.LIFEOS_VAULT_ROOT;
 		if (resolvedVault) startupVaultRoot = resolvedVault;
 		if (resolvedVault) startVaultWatcher(resolvedVault);
@@ -132,32 +128,6 @@ function debouncedNotify(vaultRoot: string, filename: string): void {
 	);
 }
 
-/** Flush all pending debounced notifies synchronously (used at shutdown). */
-function flushPendingNotifies(vaultRoot: string): void {
-	for (const [filename, timer] of pendingNotifies) {
-		clearTimeout(timer);
-		try {
-			core.memoryNotify({ filePath: filename, vaultRoot });
-		} catch (_) {
-			// Best-effort at shutdown
-		}
-	}
-	pendingNotifies.clear();
-}
-
-function drainNotifyQueue(): void {
-	if (notifyInFlight) return;
-	while (notifyQueue.length > 0) {
-		const item = notifyQueue.shift();
-		if (!item) continue;
-		try {
-			core.memoryNotify({ filePath: item.filename, vaultRoot: item.vaultRoot });
-		} catch (_) {
-			// Best-effort at shutdown
-		}
-	}
-}
-
 let vaultWatcher: FSWatcher | null = null;
 let watchedVaultRoot: string | null = null;
 
@@ -179,41 +149,16 @@ function startVaultWatcher(vaultRoot: string): void {
 	}
 }
 
-// ─── Auto checkpoint ────────────────────────────────────────────────────────
+// ─── Shutdown cleanup ──────────────────────────────────────────────────────
 
-let checkpointDone = false;
-
-function runAutoCheckpoint(): void {
-	if (!startedUp || checkpointDone) return;
-	checkpointDone = true;
-
-	const checkpointVaultRoot = watchedVaultRoot ?? startupVaultRoot;
-	if (checkpointVaultRoot) {
-		flushPendingNotifies(checkpointVaultRoot);
-	}
-	drainNotifyQueue();
-
-	try {
-		core.memoryCheckpoint({
-			vaultRoot: startupVaultRoot,
-			sessionId: startupSessionId,
-		});
-	} catch (e) {
-		console.error('[lifeos] Auto-checkpoint failed:', e);
-	}
-}
-
-function setupAutoCheckpoint(): void {
+function setupShutdownHandler(): void {
 	process.stdin.on('end', () => {
-		runAutoCheckpoint();
 		if (vaultWatcher) {
 			vaultWatcher.close();
 			vaultWatcher = null;
 		}
 		process.exit(0);
 	});
-
-	process.on('beforeExit', runAutoCheckpoint);
 }
 
 // ─── Tool wrapper ────────────────────────────────────────────────────────────
@@ -233,7 +178,7 @@ function handleTool<P extends Record<string, unknown>>(
 		ensureStartup(params);
 		const result = coreFn(converted);
 
-		// 首次调用时附带 Layer 0 摘要
+		// Attach Layer 0 summary on first call
 		let output: unknown;
 		if (wasFirstCall && startupResult) {
 			output =
@@ -276,31 +221,10 @@ server.tool(
 	handleTool(core.memoryQuery),
 );
 
-// 2. memory_recent
-server.tool(
-	'memory_recent',
-	'Query recent session log events (decisions, corrections, milestones, etc.).',
-	{
-		db_path: z
-			.string()
-			.default('')
-			.describe(
-				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
-			),
-		vault_root: z.string().default(''),
-		days: z.number().int().min(1).max(365).default(14),
-		entry_type: z.string().optional(),
-		scope: z.string().optional(),
-		query: z.string().optional(),
-		limit: z.number().int().min(1).max(100).default(20),
-	},
-	handleTool(core.memoryRecent),
-);
-
-// 3. memory_log
+// 2. memory_log
 server.tool(
 	'memory_log',
-	'Log a single memory event (decision, correction, preference, milestone, etc.).',
+	'Upsert a rule (preference or correction) into memory. Use slot_key format "<category>:<topic>".',
 	{
 		db_path: z
 			.string()
@@ -312,109 +236,32 @@ server.tool(
 			.string()
 			.default('')
 			.describe(
-				'Optional. Auto-resolved from environment. Used for instant active-doc refresh on preference/correction/decision writes.',
+				'Optional. Auto-resolved from environment. Used for instant active-doc refresh.',
 			),
-		entry_type: z.enum([
-			'skill_completion',
-			'decision',
-			'preference',
-			'correction',
-			'blocker',
-			'milestone',
-			'session_bridge',
-		]),
-		importance: z.number().int().min(1).max(5),
-		summary: z.string().min(1),
-		scope: z.string().optional(),
-		session_id: z.string().optional(),
-		skill_name: z.string().optional(),
-		detail: z.string().optional(),
-		source_refs: z.array(z.string()).optional(),
-		related_files: z.array(z.string()).optional(),
-		related_entities: z.array(z.string()).optional(),
-		supersedes: z.string().optional(),
 		slot_key: z
 			.string()
 			.regex(
 				/^[a-z]+:[a-z0-9_-]+$/,
 				'slot_key must be in format "<category>:<topic>", e.g. "format:latex"',
 			)
-			.optional()
 			.describe(
-				'Optional. For preference/correction/decision events, a structured key like "format:latex" that maps to a memory_items slot for cross-agent persistence.',
+				'Required. A structured key like "format:latex" that identifies this rule.',
 			),
+		content: z.string().min(1).describe('The rule content to store.'),
+		source: z
+			.enum(['preference', 'correction'])
+			.optional()
+			.describe('Source type. Defaults to "preference".'),
+		related_files: z.array(z.string()).optional(),
+		expires_at: z
+			.string()
+			.optional()
+			.describe('Optional ISO date string. Rule will be auto-expired after this date.'),
 	},
 	handleTool(core.memoryLog),
 );
 
-// 4. memory_auto_capture
-server.tool(
-	'memory_auto_capture',
-	'Batch capture corrections, decisions, and preferences from the current session.',
-	{
-		db_path: z
-			.string()
-			.default('')
-			.describe(
-				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
-			),
-		vault_root: z
-			.string()
-			.default('')
-			.describe(
-				'Optional. Auto-resolved from environment. Used for instant active-doc refresh after batch capture.',
-			),
-		corrections: z
-			.array(
-				z.object({
-					summary: z.string(),
-					detail: z.string().optional(),
-					importance: z.number().int().min(1).max(5).optional(),
-					scope: z.string().optional(),
-					related_files: z.array(z.string()).optional(),
-					slot_key: z
-						.string()
-						.regex(/^[a-z]+:[a-z0-9_-]+$/)
-						.optional(),
-				}),
-			)
-			.optional(),
-		decisions: z
-			.array(
-				z.object({
-					summary: z.string(),
-					detail: z.string().optional(),
-					importance: z.number().int().min(1).max(5).optional(),
-					scope: z.string().optional(),
-					related_files: z.array(z.string()).optional(),
-					slot_key: z
-						.string()
-						.regex(/^[a-z]+:[a-z0-9_-]+$/)
-						.optional(),
-				}),
-			)
-			.optional(),
-		preferences: z
-			.array(
-				z.object({
-					summary: z.string(),
-					detail: z.string().optional(),
-					importance: z.number().int().min(1).max(5).optional(),
-					scope: z.string().optional(),
-					related_files: z.array(z.string()).optional(),
-					slot_key: z
-						.string()
-						.regex(/^[a-z]+:[a-z0-9_-]+$/)
-						.optional(),
-				}),
-			)
-			.optional(),
-		session_id: z.string().optional(),
-	},
-	handleTool(core.memoryAutoCapture),
-);
-
-// 5. memory_notify
+// 3. memory_notify
 server.tool(
 	'memory_notify',
 	'Notify the memory system that a vault file has been created or modified.',
@@ -431,25 +278,6 @@ server.tool(
 	handleTool(core.memoryNotify),
 );
 
-// 6. memory_citations
-server.tool(
-	'memory_citations',
-	'Get source event citations for items in TaskBoard or UserProfile.',
-	{
-		db_path: z
-			.string()
-			.default('')
-			.describe(
-				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
-			),
-		vault_root: z.string().default(''),
-		target: z.enum(['TaskBoard', 'UserProfile']),
-		section: z.string().optional(),
-		keyword: z.string().optional(),
-	},
-	handleTool(core.memoryCitations),
-);
-
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 export async function main() {
@@ -460,13 +288,12 @@ export async function main() {
 	}
 	const transport = new StdioServerTransport();
 	await server.connect(transport);
-	setupAutoCheckpoint();
+	setupShutdownHandler();
 }
 
 export const __testing = {
 	ensureStartup,
 	debouncedNotify,
-	runAutoCheckpoint,
 	enqueueNotify(item: { vaultRoot: string; filename: string }) {
 		notifyQueue.push(item);
 	},
@@ -477,11 +304,9 @@ export const __testing = {
 		pendingNotifies.clear();
 		notifyQueue.length = 0;
 		notifyInFlight = false;
-		checkpointDone = false;
 		startedUp = false;
 		startupResult = null;
 		startupVaultRoot = undefined;
-		startupSessionId = undefined;
 		watchedVaultRoot = null;
 		if (vaultWatcher) {
 			vaultWatcher.close();

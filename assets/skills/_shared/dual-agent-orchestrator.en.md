@@ -14,7 +14,6 @@ Standard query pattern:
 ```
 memory_query(query="<topic keywords>", filters={"type": "<entity type>"}, limit=5)
 memory_query(query="<topic keywords>", limit=10)
-memory_recent(entry_type="decision", query="<topic keywords>", limit=5)
 ```
 
 If a file under {drafts directory}/ is found, read its frontmatter to confirm whether it is still status: pending.
