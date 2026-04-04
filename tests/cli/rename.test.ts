@@ -1,6 +1,6 @@
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import initCommand from '../../src/cli/commands/init.js';
 import renameCommand from '../../src/cli/commands/rename.js';
@@ -75,9 +75,9 @@ describe('lifeos rename', () => {
 	test('throws when no lifeos.yaml', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {
-			await expect(
-				renameCommand([dir, '--logical', 'drafts', '--name', 'foo']),
-			).rejects.toThrow(/No lifeos.yaml/);
+			await expect(renameCommand([dir, '--logical', 'drafts', '--name', 'foo'])).rejects.toThrow(
+				/No lifeos.yaml/,
+			);
 		} finally {
 			cleanup();
 		}

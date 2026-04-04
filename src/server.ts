@@ -235,18 +235,14 @@ server.tool(
 		vault_root: z
 			.string()
 			.default('')
-			.describe(
-				'Optional. Auto-resolved from environment. Used for instant active-doc refresh.',
-			),
+			.describe('Optional. Auto-resolved from environment. Used for instant active-doc refresh.'),
 		slot_key: z
 			.string()
 			.regex(
 				/^[a-z]+:[a-z0-9_-]+$/,
 				'slot_key must be in format "<category>:<topic>", e.g. "format:latex"',
 			)
-			.describe(
-				'Required. A structured key like "format:latex" that identifies this rule.',
-			),
+			.describe('Required. A structured key like "format:latex" that identifies this rule.'),
 		content: z.string().min(1).describe('The rule content to store.'),
 		source: z
 			.enum(['preference', 'correction'])

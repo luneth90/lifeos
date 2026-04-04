@@ -25,10 +25,7 @@ function readYamlConfig(vaultDir: string) {
 	return parseYaml(readFileSync(yamlPath, 'utf-8')) as Record<string, unknown>;
 }
 
-function updateYamlConfig(
-	vaultDir: string,
-	mutate: (config: Record<string, unknown>) => void,
-) {
+function updateYamlConfig(vaultDir: string, mutate: (config: Record<string, unknown>) => void) {
 	const yamlPath = join(vaultDir, 'lifeos.yaml');
 	const config = readYamlConfig(vaultDir);
 	mutate(config);
@@ -68,55 +65,55 @@ describe('lifeos upgrade', () => {
 		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
 	});
 
-		test('same version: restores missing diary archive directory', async () => {
-			await init([dir, '--lang', 'zh', '--no-mcp']);
+	test('same version: restores missing diary archive directory', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
 
 		const archiveDiaryDir = join(dir, '90_系统', '归档', '日记');
 		rmSync(archiveDiaryDir, { recursive: true, force: true });
 		expect(existsSync(archiveDiaryDir)).toBe(false);
 
-			await upgrade([dir]);
+		await upgrade([dir]);
 
-			expect(existsSync(archiveDiaryDir)).toBe(true);
-		});
+		expect(existsSync(archiveDiaryDir)).toBe(true);
+	});
 
-		test('migrates legacy digest directory to the configured digest path', async () => {
-			await init([dir, '--lang', 'en', '--no-mcp']);
+	test('migrates legacy digest directory to the configured digest path', async () => {
+		await init([dir, '--lang', 'en', '--no-mcp']);
 
-			const targetDigestDir = join(dir, '90_System', 'Digest');
-			const legacyDigestDir = join(dir, '90_System', '信息');
-			rmSync(targetDigestDir, { recursive: true, force: true });
-			mkdirSync(legacyDigestDir, { recursive: true });
-			writeFileSync(join(legacyDigestDir, 'LLM-Agent.md'), '# legacy digest config\n', 'utf-8');
+		const targetDigestDir = join(dir, '90_System', 'Digest');
+		const legacyDigestDir = join(dir, '90_System', '信息');
+		rmSync(targetDigestDir, { recursive: true, force: true });
+		mkdirSync(legacyDigestDir, { recursive: true });
+		writeFileSync(join(legacyDigestDir, 'LLM-Agent.md'), '# legacy digest config\n', 'utf-8');
 
-			patchVersion(dir, '0.0.1');
+		patchVersion(dir, '0.0.1');
 
-			await upgrade([dir]);
+		await upgrade([dir]);
 
-			expect(existsSync(legacyDigestDir)).toBe(false);
-			expect(existsSync(join(targetDigestDir, 'LLM-Agent.md'))).toBe(true);
-			expect(readFileSync(join(targetDigestDir, 'LLM-Agent.md'), 'utf-8')).toBe(
-				'# legacy digest config\n',
-			);
-		});
+		expect(existsSync(legacyDigestDir)).toBe(false);
+		expect(existsSync(join(targetDigestDir, 'LLM-Agent.md'))).toBe(true);
+		expect(readFileSync(join(targetDigestDir, 'LLM-Agent.md'), 'utf-8')).toBe(
+			'# legacy digest config\n',
+		);
+	});
 
-		test('keeps both digest directories when legacy and target paths already exist', async () => {
-			await init([dir, '--lang', 'en', '--no-mcp']);
+	test('keeps both digest directories when legacy and target paths already exist', async () => {
+		await init([dir, '--lang', 'en', '--no-mcp']);
 
-			const targetDigestDir = join(dir, '90_System', 'Digest');
-			const legacyDigestDir = join(dir, '90_System', '信息');
-			mkdirSync(legacyDigestDir, { recursive: true });
-			writeFileSync(join(targetDigestDir, 'current.md'), '# current digest config\n', 'utf-8');
-			writeFileSync(join(legacyDigestDir, 'legacy.md'), '# legacy digest config\n', 'utf-8');
+		const targetDigestDir = join(dir, '90_System', 'Digest');
+		const legacyDigestDir = join(dir, '90_System', '信息');
+		mkdirSync(legacyDigestDir, { recursive: true });
+		writeFileSync(join(targetDigestDir, 'current.md'), '# current digest config\n', 'utf-8');
+		writeFileSync(join(legacyDigestDir, 'legacy.md'), '# legacy digest config\n', 'utf-8');
 
-			patchVersion(dir, '0.0.1');
+		patchVersion(dir, '0.0.1');
 
-			await upgrade([dir]);
+		await upgrade([dir]);
 
-			expect(existsSync(join(targetDigestDir, 'current.md'))).toBe(true);
-			expect(existsSync(join(targetDigestDir, 'legacy.md'))).toBe(false);
-			expect(existsSync(join(legacyDigestDir, 'legacy.md'))).toBe(true);
-		});
+		expect(existsSync(join(targetDigestDir, 'current.md'))).toBe(true);
+		expect(existsSync(join(targetDigestDir, 'legacy.md'))).toBe(false);
+		expect(existsSync(join(legacyDigestDir, 'legacy.md'))).toBe(true);
+	});
 
 	test('skips modified templates during upgrade', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
@@ -416,9 +413,9 @@ describe('lifeos upgrade', () => {
 		expect(result.unchanged.length).toBeGreaterThan(0);
 	});
 
-		test('merges missing zh preset keys from partial lifeos.yaml', async () => {
-			writeFileSync(
-				join(dir, 'lifeos.yaml'),
+	test('merges missing zh preset keys from partial lifeos.yaml', async () => {
+		writeFileSync(
+			join(dir, 'lifeos.yaml'),
 			[
 				"version: '1.0'",
 				'language: zh',
@@ -443,16 +440,13 @@ describe('lifeos upgrade', () => {
 
 		expect(existsSync(join(dir, '90_系统', '模板', 'Daily_Template.md'))).toBe(true);
 		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
-			expect((config.subdirectories as { system?: { templates?: string } }).system?.templates).toBe(
-				'模板',
-			);
-			expect((config.subdirectories as { system?: { digest?: string } }).system?.digest).toBe(
-				'信息',
-			);
-			expect(
-				(
-					config.subdirectories as { system?: { archive?: Record<string, string> } }
-			).system?.archive?.diary,
+		expect((config.subdirectories as { system?: { templates?: string } }).system?.templates).toBe(
+			'模板',
+		);
+		expect((config.subdirectories as { system?: { digest?: string } }).system?.digest).toBe('信息');
+		expect(
+			(config.subdirectories as { system?: { archive?: Record<string, string> } }).system?.archive
+				?.diary,
 		).toBe('归档/日记');
 	});
 
@@ -673,11 +667,11 @@ describe('lifeos upgrade', () => {
 					wiki: 'MyWiki',
 				},
 				system: {
-					...(
-						(config.subdirectories as {
+					...((
+						config.subdirectories as {
 							system?: Record<string, string | Record<string, string>>;
-						}).system ?? {}
-					),
+						}
+					).system ?? {}),
 					templates: 'MyTemplates',
 				},
 			};

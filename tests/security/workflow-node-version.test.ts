@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
-import { parse as parseYaml } from 'yaml';
 import { describe, expect, it } from 'vitest';
+import { parse as parseYaml } from 'yaml';
 
 interface PackageJson {
 	engines?: {
@@ -90,8 +90,8 @@ describe('GitHub workflow Node.js versions', () => {
 		);
 
 		expect(setupNodeStep?.with?.['node-version']).toBeDefined();
-		expect(
-			isVersionAtLeast(String(setupNodeStep?.with?.['node-version']), minimumVersion),
-		).toBe(true);
+		expect(isVersionAtLeast(String(setupNodeStep?.with?.['node-version']), minimumVersion)).toBe(
+			true,
+		);
 	});
 });

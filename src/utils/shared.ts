@@ -8,10 +8,7 @@ import type Database from 'better-sqlite3';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-export const ALLOWED_COUNT_TABLES: Set<string> = new Set([
-	'vault_index',
-	'enhance_queue',
-]);
+export const ALLOWED_COUNT_TABLES: Set<string> = new Set(['vault_index', 'enhance_queue']);
 
 export const BUCKET_TYPE_MAP: Record<string, Set<string>> = {
 	daily: new Set(['daily', 'diary']),

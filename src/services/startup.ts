@@ -8,6 +8,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
+import { cleanupMemoryItems } from '../active-docs/derived-memory.js';
 import { refreshTaskboard, refreshUserprofile } from '../active-docs/index.js';
 import { getVaultConfig } from '../config.js';
 import { initDb } from '../db/schema.js';
@@ -16,7 +17,6 @@ import { ensureContextPolicyExists, loadContextPolicy } from '../utils/context-p
 import { loadCustomDict } from '../utils/segmenter.js';
 import { countRows } from '../utils/shared.js';
 import { fullScan } from '../utils/vault-indexer.js';
-import { cleanupMemoryItems } from '../active-docs/derived-memory.js';
 import { processEnhanceQueue } from './enhance.js';
 import { buildLayer0Summary } from './layer0.js';
 
@@ -37,10 +37,7 @@ import { buildLayer0Summary } from './layer0.js';
  * @param vaultRoot        Absolute path to the vault root
  * @returns                Startup result object with stats and Layer 0 summary
  */
-export function runStartup(
-	db: Database.Database,
-	vaultRoot: string,
-): StartupResult {
+export function runStartup(db: Database.Database, vaultRoot: string): StartupResult {
 	// 1. Init DB schema
 	initDb(db);
 

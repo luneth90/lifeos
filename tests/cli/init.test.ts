@@ -1,6 +1,6 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import init from '../../src/cli/commands/init.js';
 
@@ -89,11 +89,11 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		// Subdirectories
 		expect(existsSync(join(dir, d.knowledge, d.notes))).toBe(true);
 		expect(existsSync(join(dir, d.knowledge, d.wiki))).toBe(true);
-			expect(existsSync(join(dir, d.system, d.templates))).toBe(true);
-			expect(existsSync(join(dir, d.system, d.schema))).toBe(true);
-			expect(existsSync(join(dir, d.system, d.memory))).toBe(true);
-			expect(existsSync(join(dir, d.system, d.digest))).toBe(true);
-			expect(existsSync(join(dir, d.system, d.archiveDiary))).toBe(true);
+		expect(existsSync(join(dir, d.system, d.templates))).toBe(true);
+		expect(existsSync(join(dir, d.system, d.schema))).toBe(true);
+		expect(existsSync(join(dir, d.system, d.memory))).toBe(true);
+		expect(existsSync(join(dir, d.system, d.digest))).toBe(true);
+		expect(existsSync(join(dir, d.system, d.archiveDiary))).toBe(true);
 
 		// Reflection subdirectories
 		for (const sub of d.reflectionSubs) {
@@ -110,12 +110,12 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		const config = parseYaml(readFileSync(yamlPath, 'utf-8')) as Record<string, unknown>;
 		expect(config.language).toBe(lang);
 		expect(config.version).toBe('1.0');
-			expect(config.directories).toBeDefined();
-			expect(config.subdirectories).toBeDefined();
-			expect(config.memory).toBeDefined();
-			expect(
-				(config.subdirectories as { system?: { digest?: string } }).system?.digest,
-			).toBe(d.digest);
+		expect(config.directories).toBeDefined();
+		expect(config.subdirectories).toBeDefined();
+		expect(config.memory).toBeDefined();
+		expect((config.subdirectories as { system?: { digest?: string } }).system?.digest).toBe(
+			d.digest,
+		);
 
 		const versions = config.installed_versions as Record<string, string>;
 		expect(versions.cli).toBe('1.4.0');

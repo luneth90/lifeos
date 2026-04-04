@@ -1,13 +1,13 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { ZH_PRESET } from '../../../src/config.js';
+import { join } from 'node:path';
 import {
 	installPrompts,
 	installSchema,
 	installSkills,
 	installTemplates,
 } from '../../../src/cli/utils/install-assets.js';
+import { ZH_PRESET } from '../../../src/config.js';
 
 function makeTmpDir() {
 	const dir = mkdtempSync(join(tmpdir(), 'lifeos-install-assets-'));
@@ -178,8 +178,14 @@ describe('installSkills', () => {
 			installSkills(zhTmp.dir, 'zh', 'overwrite');
 			installSkills(enTmp.dir, 'en', 'overwrite');
 
-			const zhDigest = readFileSync(join(zhTmp.dir, '.agents', 'skills', 'digest', 'SKILL.md'), 'utf-8');
-			const enDigest = readFileSync(join(enTmp.dir, '.agents', 'skills', 'digest', 'SKILL.md'), 'utf-8');
+			const zhDigest = readFileSync(
+				join(zhTmp.dir, '.agents', 'skills', 'digest', 'SKILL.md'),
+				'utf-8',
+			);
+			const enDigest = readFileSync(
+				join(enTmp.dir, '.agents', 'skills', 'digest', 'SKILL.md'),
+				'utf-8',
+			);
 			const zhConfig = readFileSync(
 				join(zhTmp.dir, '.agents', 'skills', 'digest', 'references', 'config-parser.md'),
 				'utf-8',

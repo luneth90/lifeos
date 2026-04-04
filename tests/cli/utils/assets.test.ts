@@ -1,6 +1,14 @@
-import { Dirent, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import {
+	type Dirent,
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
+import { join, relative } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { assetsDir, copyDir, ensureDir } from '../../../src/cli/utils/assets.js';
 import { parseArgs } from '../../../src/cli/utils/ui.js';
@@ -71,7 +79,9 @@ describe('assetsDir', () => {
 		expect(researchPlanZh).toContain('status: active');
 
 		expect(projectExecZh).toContain('将计划文件的 frontmatter 中 `status` 更新为 `done`');
-		expect(projectExecZh).not.toContain('将计划文件从 `{计划目录}/Plan_YYYY-MM-DD_Project_ProjectName.md` 移动到');
+		expect(projectExecZh).not.toContain(
+			'将计划文件从 `{计划目录}/Plan_YYYY-MM-DD_Project_ProjectName.md` 移动到',
+		);
 		expect(researchExecZh).toContain('将计划文件的 frontmatter 中 `status` 更新为 `done`');
 		expect(researchExecZh).not.toContain('将计划文件从 `{计划目录}/` 移动到');
 

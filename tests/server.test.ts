@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createTempVault, type TempVault } from './setup.js';
+import { type TempVault, createTempVault } from './setup.js';
 
 const coreMock = vi.hoisted(() => ({
 	memoryStartup: vi.fn(() => ({ layer0_summary: 'Layer0' })),

@@ -18,9 +18,7 @@ describe('release check-version helper', () => {
 	it('rejects an invalid tag format', async () => {
 		const { validateReleaseTag } = await loadModule();
 
-		expect(() => validateReleaseTag('1.2.3', '1.2.3')).toThrow(
-			'Release tag must match vX.Y.Z',
-		);
+		expect(() => validateReleaseTag('1.2.3', '1.2.3')).toThrow('Release tag must match vX.Y.Z');
 	});
 
 	it('rejects a tag that does not match package.json', async () => {

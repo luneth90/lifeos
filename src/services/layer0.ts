@@ -62,10 +62,7 @@ export function trimToBudget(text: string, budget: number): string {
  * Build the Layer 0 summary string from UserProfile.md and TaskBoard.md.
  * Reads AUTO sections and trims to configured token budgets.
  */
-export function buildLayer0Summary(
-	vaultRoot: string,
-	policy: ContextPolicy,
-): string {
+export function buildLayer0Summary(vaultRoot: string, policy: ContextPolicy): string {
 	const vc = getVaultConfig() ?? resolveConfig(vaultRoot);
 	const memoryDir = vc.memoryDir();
 

@@ -1,11 +1,11 @@
 import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import initCommand from '../../src/cli/commands/init.js';
+import { join } from 'node:path';
 import doctorCommand, {
 	MIN_NODE_VERSION,
 	isNodeVersionSupported,
 } from '../../src/cli/commands/doctor.js';
+import initCommand from '../../src/cli/commands/init.js';
 
 function makeTmpDir() {
 	const dir = mkdtempSync(join(tmpdir(), 'lifeos-doctor-'));
@@ -36,9 +36,7 @@ describe.each(['zh', 'en'] as const)('lifeos doctor --lang %s', (lang) => {
 			rmSync(join(dir, dirName), { recursive: true });
 			const result = await doctorCommand([dir]);
 			expect(result.passed).toBe(true); // warnings don't fail
-			const warn = result.checks.find(
-				(c) => c.detail === 'missing' && c.name.includes(dirName),
-			);
+			const warn = result.checks.find((c) => c.detail === 'missing' && c.name.includes(dirName));
 			expect(warn).toBeDefined();
 		} finally {
 			cleanup();
@@ -97,7 +95,9 @@ describe('lifeos doctor', () => {
 			const content = readFileSync(yamlPath, 'utf-8');
 			writeFileSync(yamlPath, content.replace(/assets: \S+/, 'assets: 0.0.1'));
 			const result = await doctorCommand([dir]);
-			expect(result.checks.some((c) => c.name === 'assets version' && c.status === 'warn')).toBe(true);
+			expect(result.checks.some((c) => c.name === 'assets version' && c.status === 'warn')).toBe(
+				true,
+			);
 		} finally {
 			cleanup();
 		}
@@ -109,7 +109,9 @@ describe('lifeos doctor', () => {
 			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
 			unlinkSync(join(dir, '90_系统', '模板', 'Daily_Template.md'));
 			const result = await doctorCommand([dir]);
-			expect(result.checks.some((c) => c.name.includes('Daily_Template') && c.status === 'warn')).toBe(true);
+			expect(
+				result.checks.some((c) => c.name.includes('Daily_Template') && c.status === 'warn'),
+			).toBe(true);
 		} finally {
 			cleanup();
 		}
@@ -121,7 +123,9 @@ describe('lifeos doctor', () => {
 			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
 			rmSync(join(dir, '.agents'), { recursive: true });
 			const result = await doctorCommand([dir]);
-			expect(result.checks.some((c) => c.name === '.agents/skills/' && c.status === 'warn')).toBe(true);
+			expect(result.checks.some((c) => c.name === '.agents/skills/' && c.status === 'warn')).toBe(
+				true,
+			);
 		} finally {
 			cleanup();
 		}
@@ -132,9 +136,7 @@ describe('lifeos doctor', () => {
 		try {
 			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
 			const result = await doctorCommand([dir]);
-			expect(result.checks.some((c) => c.name === `Node.js >= ${MIN_NODE_VERSION}`)).toBe(
-				true,
-			);
+			expect(result.checks.some((c) => c.name === `Node.js >= ${MIN_NODE_VERSION}`)).toBe(true);
 		} finally {
 			cleanup();
 		}

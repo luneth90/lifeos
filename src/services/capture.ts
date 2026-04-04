@@ -51,7 +51,7 @@ export function upsertRule(db: Database.Database, opts: UpsertRuleOpts): UpsertR
 		const finalSource =
 			existing.source === 'correction' && source === 'preference' ? 'correction' : source;
 		db.prepare(
-			`UPDATE memory_items SET content = ?, source = ?, related_files = ?, updated_at = ?, expires_at = ? WHERE slot_key = ?`,
+			'UPDATE memory_items SET content = ?, source = ?, related_files = ?, updated_at = ?, expires_at = ? WHERE slot_key = ?',
 		).run(opts.content, finalSource, relatedFilesJson, now, opts.expiresAt ?? null, opts.slotKey);
 		return { slotKey: opts.slotKey, action: 'updated' };
 	}
