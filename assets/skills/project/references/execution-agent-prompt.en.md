@@ -117,7 +117,7 @@ target_version: V0.2
 
 Check the "Source Draft" field in the plan file:
 
-- If a draft file path is listed (not "None"): update the `status` in that draft file's frontmatter to `projected`
+- If a draft file path is listed (not "None"): update the `status` in that draft file's frontmatter to `done`
 - This marks the draft as processed, allowing `/archive` to identify and archive it
 
 ## Step 5: Update Plan Status (Critical)
@@ -138,7 +138,7 @@ After completion, report in English:
 **Project:** [[ProjectName]] has been created
 **Knowledge domain:** [Domain]
 **Linked Vault resources:** [List actually linked notes and resources]
-**Source draft status:** [{drafts directory}/filename.md → status updated to projected, or "No source draft"]
+**Source draft status:** [{drafts directory}/filename.md → status updated to done, or "No source draft"]
 **Plan status:** {plans directory}/Plan_YYYY-MM-DD_Project_ProjectName.md → `status: done` (waiting for `/archive` to move it into `{system directory}/{archived plans subdirectory}/`)
 
 If it is a development project, also include:

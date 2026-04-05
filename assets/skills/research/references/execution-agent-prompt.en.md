@@ -122,7 +122,7 @@ Path: `{research directory}/Domain/Topic/examples/`
 
 For each draft file used from "Local Draft Materials":
 
-- Update the `status` in its frontmatter to `researched`
+- Update the `status` in its frontmatter to `done`
 - This marks the draft as processed, allowing `/archive` to identify and archive it
 
 ## Step 8: Update Today's Diary
@@ -150,7 +150,7 @@ After completion, report in English:
 - Visualization: [Yes/No] (if any)
 
 **Integrated draft sources:**
-- [List draft files used, or "None"] → status updated to researched
+- [List draft files used, or "None"] → status updated to done
 
 **Plan status:** {plans directory}/Plan_YYYY-MM-DD_Research_Topic.md → `status: done` (waiting for `/archive` to move it into `{system directory}/{archived plans subdirectory}/`)
 

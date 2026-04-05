@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: "Distill structured knowledge notes and wiki concepts from book chapters or papers (output to {knowledge directory}/). Requires three inputs: project file (required), source content (required), draft notes (optional fusion). Produces main notes (template-structured) and wiki concepts (Wiki entries), establishing bidirectional Wikilinks. Use this skill when the user wants to organize chapter knowledge, extract wiki concepts, structure source text into notes, or says '/knowledge'. Will prompt to use /project first if no project file exists."
-version: 1.4.0
+version: 1.4.1
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Knowledge_Template.md"
@@ -121,7 +121,7 @@ First, identify from the project file:
 - Merge personal understanding and associated ideas from drafts → fill into the template's `## 💡 Personal Understanding & Insights` block, executing that block's AI instructions
 - Merge unanswered questions and follow-up inquiries from drafts → fill into the template's `## ❓ Questions for Further Exploration` block, executing that block's AI instructions
 - Draft content should be presented as naturally integrated paragraphs; there is no need to preserve the original draft format
-- The original draft is considered digested; you must update the draft file's `status` to `knowledge` so it can be recognized and archived by `/archive`
+- The original draft is considered digested; you must update the draft file's `status` to `done` so it can be recognized and archived by `/archive`
 
 **Image integration rules (when drafts contain images):**
 
@@ -174,7 +174,7 @@ After completion, **do not output full file contents in the conversation** (unle
 
 **📥 Draft Source Processing:**
 
-- Merged personal notes from `[[{drafts directory}/<filename>]]` into the main note; status updated to knowledge
+- Merged personal notes from `[[{drafts directory}/<filename>]]` into the main note; status updated to done
   (If no draft was provided this time, omit this item)
 
 **🔗 Suggested Follow-up Actions:**

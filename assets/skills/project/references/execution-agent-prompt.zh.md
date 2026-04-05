@@ -117,7 +117,7 @@ target_version: V0.2
 
 检查计划文件中的「来源草稿」字段：
 
-- 若列出了草稿文件路径（非"无"）：将该草稿文件的 frontmatter 中 `status` 更新为 `projected`
+- 若列出了草稿文件路径（非"无"）：将该草稿文件的 frontmatter 中 `status` 更新为 `done`
 - 这标记该草稿已被处理，使 `/archive` 可识别并归档
 
 ## 步骤五：更新计划状态（关键）
@@ -138,7 +138,7 @@ target_version: V0.2
 **项目:** [[ProjectName]] 已创建
 **知识领域:** [Domain]
 **已链接的 Vault 资源:** [列出实际链接到的笔记和资源]
-**来源草稿状态:** [{草稿目录}/文件名.md → status 已更新为 projected，或"无来源草稿"]
+**来源草稿状态:** [{草稿目录}/文件名.md → status 已更新为 done，或"无来源草稿"]
 **计划状态:** {计划目录}/Plan_YYYY-MM-DD_Project_ProjectName.md → `status: done`（待 `/archive` 归档到 `{系统目录}/{归档计划子目录}/`）
 
 若为开发类项目，再补充：

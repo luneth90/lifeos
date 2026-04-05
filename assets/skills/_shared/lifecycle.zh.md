@@ -5,22 +5,18 @@
 ## 草稿生命周期 (Draft Lifecycle)
 
 ```
-pending ──/research──→ researched ──┐
-pending ──/project───→ projected  ──┼──/archive──→ archived
-pending ──/knowledge─→ knowledged ──┘
+pending ──/research,/project,/knowledge──→ done ──/archive──→ archived
 ```
 
 | 状态 | 含义 | 设置者 |
 |------|------|--------|
 | `pending` | 由 /brainstorm 或 /today 创建，尚未处理 | /brainstorm, /today |
-| `researched` | 已被 /research 消费，生成研究报告 | /research |
-| `projected` | 已被 /project 消费，生成项目文件 | /project |
-| `knowledged` | 已被 /knowledge 消费，生成知识笔记 | /knowledge |
+| `done` | 已被 /research、/project 或 /knowledge 消费 | /research, /project, /knowledge |
 | `archived` | 已被 /archive 移入归档目录 | /archive |
 
 **规则:**
 
-- /archive 仅归档状态为 `researched`、`projected` 或 `knowledged` 的草稿。
+- /archive 仅归档状态为 `done` 的草稿。
 - /archive 绝不归档 `pending` 状态的草稿。
 
 ## 知识笔记生命周期 (Knowledge Note Lifecycle)
@@ -83,8 +79,8 @@ active ──/project,/research──→ done ──/archive──→ archived
 |------|-------------|-----------------|-------------|-------------|
 | /brainstorm | 创建 `pending` | - | - | - |
 | /today | 创建 `pending` | - | - | - |
-| /research | `pending` → `researched` | - | - | 创建 `active`，执行后更新为 `done` |
-| /project | `pending` → `projected` | - | 创建 `active` | 创建 `active`，执行后更新为 `done` |
-| /knowledge | `pending` → `knowledged` | 创建 `draft` | - | - |
+| /research | `pending` → `done` | - | - | 创建 `active`，执行后更新为 `done` |
+| /project | `pending` → `done` | - | 创建 `active` | 创建 `active`，执行后更新为 `done` |
+| /knowledge | `pending` → `done` | 创建 `draft` | - | - |
 | /revise | - | `draft` → `revise` → `mastered` | 更新掌握度圆点 | - |
-| /archive | `researched/projected/knowledged` → `archived` | - | `done` → `archived` | `done` → `archived` |
+| /archive | `done` → `archived` | - | `done` → `archived` | `done` → `archived` |

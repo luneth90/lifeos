@@ -5,22 +5,18 @@ This document defines the state transition rules for all note types in the LifeO
 ## Draft Lifecycle
 
 ```
-pending ──/research──→ researched ──┐
-pending ──/project───→ projected  ──┼──/archive──→ archived
-pending ──/knowledge─→ knowledged ──┘
+pending ──/research,/project,/knowledge──→ done ──/archive──→ archived
 ```
 
 | Status | Meaning | Set by |
 |--------|---------|--------|
 | `pending` | Created by /brainstorm or /today, not yet processed | /brainstorm, /today |
-| `researched` | Consumed by /research into a research report | /research |
-| `projected` | Consumed by /project into a project file | /project |
-| `knowledged` | Consumed by /knowledge into knowledge notes | /knowledge |
+| `done` | Consumed by /research, /project, or /knowledge | /research, /project, /knowledge |
 | `archived` | Moved to archive directory by /archive | /archive |
 
 **Rules:**
 
-- /archive only archives drafts with status `researched`, `projected`, or `knowledged`.
+- /archive only archives drafts with status `done`.
 - /archive never archives `pending` drafts.
 
 ## Knowledge Note Lifecycle
@@ -83,8 +79,8 @@ active ──/project,/research──→ done ──/archive──→ archived
 |-------|-------------------|---------------------------|---------------------|------------------|
 | /brainstorm | Creates `pending` | - | - | - |
 | /today | Creates `pending` | - | - | - |
-| /research | `pending` → `researched` | - | - | Creates `active`, then updates to `done` after execution |
-| /project | `pending` → `projected` | - | Creates `active` | Creates `active`, then updates to `done` after execution |
-| /knowledge | `pending` → `knowledged` | Creates `draft` | - | - |
+| /research | `pending` → `done` | - | - | Creates `active`, then updates to `done` after execution |
+| /project | `pending` → `done` | - | Creates `active` | Creates `active`, then updates to `done` after execution |
+| /knowledge | `pending` → `done` | Creates `draft` | - | - |
 | /revise | - | `draft` → `revise` → `mastered` | Updates mastery dots | - |
-| /archive | `researched/projected/knowledged` → `archived` | - | `done` → `archived` | `done` → `archived` |
+| /archive | `done` → `archived` | - | `done` → `archived` | `done` → `archived` |

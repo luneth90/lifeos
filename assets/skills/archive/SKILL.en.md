@@ -1,7 +1,7 @@
 ---
 name: archive
-description: "Scan and archive completed projects (status:done), consumed drafts (status:researched/projected/knowledged), completed plans (status: done), and diary entries older than the most recent 7 days, moving them into the unified archive structure and updating frontmatter. Never touches pending drafts, active plans, or the most recent 7 days of diary entries. Use this skill when the user wants to clean up the Vault, archive completed work, tidy up, or says '/archive'."
-version: 1.4.0
+description: "Scan and archive completed projects (status:done), processed drafts (status:done), completed plans (status:done), and diary entries older than the most recent 7 days, moving them into the unified archive structure and updating frontmatter. Never touches pending drafts, active plans, or the most recent 7 days of diary entries. Use this skill when the user wants to clean up the Vault, archive completed work, tidy up, or says '/archive'."
+version: 1.4.1
 dependencies:
   templates: []
   prompts: []
@@ -38,9 +38,7 @@ Query the memory system before scanning to confirm file statuses, reducing per-f
 
 ```
 memory_query(query="", filters={"type":"project","status":"done"})
-memory_query(query="", filters={"status":"researched"}, limit=50)
-memory_query(query="", filters={"status":"projected"}, limit=50)
-memory_query(query="", filters={"status":"knowledged"}, limit=50)
+memory_query(query="", filters={"type":"draft","status":"done"}, limit=50)
 memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 ```
 
@@ -54,10 +52,7 @@ Diary archival does not depend on `status`. In Step 1, determine diary candidate
    - Find all files with `status: done` in `{projects directory}/`
 
 2. **Scan processed drafts:**
-   - Find files in `{drafts directory}/` matching any of the following conditions:
-     - `status: researched` (processed by `/research`)
-     - `status: projected` (converted to a project by `/project`)
-     - `status: knowledged` (organized into knowledge notes by `/knowledge`)
+   - Find files in `{drafts directory}/` with `status: done` (processed by `/research`, `/project`, or `/knowledge`)
    - **Do not archive** drafts with `status: pending` (not yet processed)
 
 3. **Scan completed plans:**
@@ -81,9 +76,8 @@ Diary archival does not depend on `status`. In Step 1, determine diary candidate
 - [[Project2]] - completed on [date]
 
 **Processed drafts ([N]):**
-- [[Draft1]] - digested into [[Research Report]] (researched)
-- [[Draft2]] - converted to [[ProjectName]] (projected)
-- [[Draft3]] - organized into [[Knowledge Note]] (knowledged)
+- [[Draft1]] - processed (done)
+- [[Draft2]] - processed (done)
 
 **Completed plans ([N]):**
 - [[Plan_2026-03-27_Project_LifeOS]] - status: done, waiting for `{archived plans subdirectory}`
@@ -151,7 +145,7 @@ After user confirmation, for each item to archive:
 
 3. **After the move, update frontmatter in place at the destination:**
    - Add `archived: "YYYY-MM-DD"`
-   - For plan files, update `status: done` to `status: archived`
+   - Update `status: done` to `status: archived` (unified for drafts, projects, and plans)
    - Keep other fields unchanged
 
 4. **Update today's diary:**
@@ -171,9 +165,8 @@ After user confirmation, for each item to archive:
 - [[Project2]] → archived/projects/2026/Project2.md
 
 **Archived [N] drafts to `{system directory}/{archived drafts subdirectory}/YYYY/MM/`:**
-- Draft1.md → archived/drafts/2026/02/ (researched)
-- Draft2.md → archived/drafts/2026/02/ (projected)
-- Draft3.md → archived/drafts/2026/02/ (knowledged)
+- Draft1.md → archived/drafts/2026/02/ (done)
+- Draft2.md → archived/drafts/2026/02/ (done)
 
 **Archived [N] plans to `{system directory}/{archived plans subdirectory}/`:**
 - Plan_2026-03-27_Project_LifeOS.md → archived/plans/ (status: archived)

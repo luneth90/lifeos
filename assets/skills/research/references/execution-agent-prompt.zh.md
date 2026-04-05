@@ -122,7 +122,7 @@ aliases: []
 
 对「本地草稿资料」中每个已使用的草稿文件：
 
-- 将 frontmatter 中的 `status` 更新为 `researched`
+- 将 frontmatter 中的 `status` 更新为 `done`
 - 这标记该草稿已被处理，使 `/archive` 可识别并归档
 
 ## 步骤八：更新今日日记
@@ -150,7 +150,7 @@ aliases: []
 - 可视化: [是/否]（如有）
 
 **整合的草稿来源:**
-- [列出使用的草稿文件，或"无"] → 状态已更新为 researched
+- [列出使用的草稿文件，或"无"] → 状态已更新为 done
 
 **计划状态:** {计划目录}/Plan_YYYY-MM-DD_Research_Topic.md → `status: done`（待 `/archive` 归档到 `{系统目录}/{归档计划子目录}/`）
 

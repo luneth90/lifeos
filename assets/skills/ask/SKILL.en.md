@@ -1,7 +1,7 @@
 ---
 name: ask
 description: Quickly answer user questions, retrieving existing Vault notes as needed. Suitable for concept explanations, usage queries, Vault content lookups, PDF page-specific questions, and other single-turn Q&A scenarios. Complex questions will suggest upgrading to /brainstorm or /research.
-version: 1.4.0
+version: 1.4.1
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Draft_Template.md"

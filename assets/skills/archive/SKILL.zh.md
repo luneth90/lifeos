@@ -1,7 +1,7 @@
 ---
 name: archive
-description: '扫描并归档已完成的项目（status:done）、已消化的草稿（status:researched/projected/knowledged）、已完成的计划（status: done）以及超过最近 7 天的日记，按归档规则移入统一归档目录并更新 frontmatter。不会触碰 pending 草稿、active 计划或最近 7 天的日记。当用户想清理 Vault、归档已完成的工作、整理库、或说"/archive"时使用此技能。'
-version: 1.4.0
+description: '扫描并归档已完成的项目（status:done）、已处理的草稿（status:done）、已完成的计划（status:done）以及超过最近 7 天的日记，按归档规则移入统一归档目录并更新 frontmatter。不会触碰 pending 草稿、active 计划或最近 7 天的日记。当用户想清理 Vault、归档已完成的工作、整理库、或说"/archive"时使用此技能。'
+version: 1.4.1
 dependencies:
   templates: []
   prompts: []
@@ -38,9 +38,7 @@ dependencies:
 
 ```
 memory_query(query="", filters={"type":"project","status":"done"})
-memory_query(query="", filters={"status":"researched"}, limit=50)
-memory_query(query="", filters={"status":"projected"}, limit=50)
-memory_query(query="", filters={"status":"knowledged"}, limit=50)
+memory_query(query="", filters={"type":"draft","status":"done"}, limit=50)
 memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 ```
 
@@ -54,10 +52,7 @@ memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
    - 查找 `{项目目录}/` 中所有 `status: done` 的文件
 
 2. **扫描已处理草稿：**
-   - 查找 `{草稿目录}/` 中满足以下任一条件的文件：
-     - `status: researched`（已被 `/research` 消化）
-     - `status: projected`（已被 `/project` 转化为项目）
-     - `status: knowledged`（已被 `/knowledge` 整理为知识笔记）
+   - 查找 `{草稿目录}/` 中 `status: done` 的文件（已被 `/research`、`/project` 或 `/knowledge` 处理）
    - **不归档** `status: pending` 的草稿（尚未处理）
 
 3. **扫描已完成计划：**
@@ -81,9 +76,8 @@ memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 - [[Project2]] - 完成于 [date]
 
 **已处理草稿 ([N]):**
-- [[草稿1]] - 已消化为 [[研究报告]] (researched)
-- [[草稿2]] - 已转化为 [[ProjectName]] (projected)
-- [[草稿3]] - 已整理为 [[知识笔记]] (knowledged)
+- [[草稿1]] - 已处理 (done)
+- [[草稿2]] - 已处理 (done)
 
 **已完成计划 ([N]):**
 - [[Plan_2026-03-27_Project_LifeOS]] - status: done，待归档到 `{归档计划子目录}`
@@ -151,7 +145,7 @@ memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 
 3. **移动完成后，再在目标文件上原地更新 frontmatter：**
    - 新增 `archived: "YYYY-MM-DD"`
-   - 若条目是计划文件，将 `status: done` 更新为 `status: archived`
+   - 将 `status: done` 更新为 `status: archived`（草稿、项目、计划均统一处理）
    - 其他字段保持不变
 
 4. **更新今日日记：**
@@ -171,9 +165,8 @@ memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 - [[Project2]] → 归档/项目/2026/Project2.md
 
 **已归档 [N] 个草稿至 `{系统目录}/{归档草稿子目录}/YYYY/MM/`:**
-- 草稿1.md → 归档/草稿/2026/02/ (researched)
-- 草稿2.md → 归档/草稿/2026/02/ (projected)
-- 草稿3.md → 归档/草稿/2026/02/ (knowledged)
+- 草稿1.md → 归档/草稿/2026/02/ (done)
+- 草稿2.md → 归档/草稿/2026/02/ (done)
 
 **已归档 [N] 个计划至 `{系统目录}/{归档计划子目录}/`:**
 - Plan_2026-03-27_Project_LifeOS.md → 归档/计划/（status: archived）

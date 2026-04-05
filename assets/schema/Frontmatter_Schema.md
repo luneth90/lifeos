@@ -77,7 +77,7 @@ id: Frontmatter_Schema
 
 ### draft
 
-- `pending`（待处理）/ `researched`（已研究）/ `projected`（已转项目）/ `knowledged`（已整理知识）
+- `pending`（待处理）/ `done`（已处理）/ `archived`（已归档）
 
 ### note
 
