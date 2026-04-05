@@ -6,6 +6,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import init from '../../src/cli/commands/init.js';
 import renameCommand from '../../src/cli/commands/rename.js';
 import upgrade from '../../src/cli/commands/upgrade.js';
+import { VERSION } from '../../src/cli/utils/version.js';
 
 function makeTmpDir() {
 	const dir = mkdtempSync(join(tmpdir(), 'lifeos-upgrade-'));
@@ -181,7 +182,7 @@ describe('lifeos upgrade', () => {
 		expect(readFileSync(templatePath, 'utf-8')).toBe(latestTemplate);
 		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
 		expect(config.managed_assets?.['90_系统/模板/Daily_Template.md']).toEqual({
-			version: '1.4.0',
+			version: VERSION,
 			sha256: sha256(latestTemplate),
 		});
 	});
@@ -383,8 +384,8 @@ describe('lifeos upgrade', () => {
 
 		const config = readYamlConfig(dir);
 		const versions = config.installed_versions as Record<string, string>;
-		expect(versions.assets).toBe('1.4.0');
-		expect(versions.cli).toBe('1.4.0');
+		expect(versions.assets).toBe(VERSION);
+		expect(versions.cli).toBe(VERSION);
 	});
 
 	test('en: skips modified English templates', async () => {
