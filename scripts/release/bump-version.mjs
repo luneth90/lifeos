@@ -1,5 +1,5 @@
-import { readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -55,11 +55,10 @@ function updatePackageLock() {
 }
 
 function findSkillFiles() {
-	const output = execFileSync(
-		'find',
-		['assets/skills', '-name', 'SKILL.*.md', '-type', 'f'],
-		{ cwd: repoRoot, encoding: 'utf8' },
-	);
+	const output = execFileSync('find', ['assets/skills', '-name', 'SKILL.*.md', '-type', 'f'], {
+		cwd: repoRoot,
+		encoding: 'utf8',
+	});
 	return output
 		.trim()
 		.split('\n')
@@ -104,7 +103,7 @@ function main() {
 	const skillFiles = findSkillFiles();
 	for (const f of skillFiles) {
 		if (updateSkillFile(f, oldVersion, newVersion)) {
-			updated.push(f.replace(repoRoot + '/', ''));
+			updated.push(f.replace(`${repoRoot}/`, ''));
 		}
 	}
 

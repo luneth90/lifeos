@@ -1,5 +1,32 @@
 # 更新日志
 
+## 1.4.1 (2026-04-05)
+
+### 草稿状态统一
+
+将草稿的三个已消费状态 `researched`/`projected`/`knowledged` 统一为 `done`，与项目和计划的状态词汇对齐。
+
+**状态机变更：**
+```
+# 之前
+pending ──/research──→ researched ──┐
+pending ──/project───→ projected  ──┼──/archive──→ archived
+pending ──/knowledge─→ knowledged ──┘
+
+# 之后
+pending ──/research,/project,/knowledge──→ done ──/archive──→ archived
+```
+
+**变更范围：**
+- `lifecycle`（中英）：状态图、状态表、技能参与矩阵
+- `Frontmatter_Schema`：draft 枚举更新为 `pending / done / archived`
+- `archive` 技能（中英）：三次 query 合并为一次 `status:done`；归档时草稿也统一更新为 `status: archived`
+- `research`/`project`/`knowledge` 技能（中英）：草稿消费后写入 `done`
+
+### 工具链
+
+- 新增 `release:bump` 脚本：自动更新 package.json、package-lock.json 和全部 SKILL 文件的版本号
+
 ## 1.4.0 (2026-04-04)
 
 ### 重大变更：记忆系统 V2 精简重构
