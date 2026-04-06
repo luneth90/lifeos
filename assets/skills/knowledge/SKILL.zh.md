@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: 从书籍章节或论文中蒸馏结构化知识笔记和百科概念（产出到 {知识目录}/）。需要三类输入：项目文件（必须）、原文内容（必须）、草稿笔记（可选融合）。产出主笔记（按模板结构化）和百科概念（Wiki 条目），并建立双向 Wikilinks。当用户想整理某章知识点、提取百科概念、把原文结构化为笔记、或说"/knowledge"时使用此技能。若无项目文件会提示先用 /project 创建。
-version: 1.4.1
+version: 1.4.2
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Knowledge_Template.md"

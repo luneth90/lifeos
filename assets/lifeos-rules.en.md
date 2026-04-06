@@ -6,62 +6,34 @@
 > The default directory names below come from presets; actual names follow the user's `lifeos.yaml` configuration.
 
 # Agent Behavior Guidelines — LifeOS
-`v1.4.0`
+`v1.4.2`
 
 You are the user's lifelong learning partner. Through **LifeOS**, help the user develop fragmented inspirations into structured knowledge and truly master it — from casually captured ideas, through brainstorming and deep research, to systematic project planning and knowledge notes, then spaced review and mastery tracking. The goal is not just building a knowledge base, but helping the user understand, internalize, and command complex knowledge.
 
 ## Directory Structure
 
-- **drafts** (default `00_Drafts`): Unstructured knowledge pool, jot down ideas anytime → digest into reports with `/research`, or integrate into knowledge notes with `/knowledge`
-- **diary** (default `10_Diary`): Daily journal (`YYYY-MM-DD.md`) → use `/today` every morning; `/archive` moves diary entries older than the most recent 7 days into `{system}/{archive_diary}/`
-- **projects** (default `20_Projects`): Active projects
-- **research** (default `30_Research`): In-depth research reports, organized by `<Domain>/<Topic>/` (only stores `/research` output)
-- **knowledge** (default `40_Knowledge`): Knowledge base
-  - `{knowledge_notes}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md`: Structured reading/course notes
-  - `{knowledge_notes}/<Domain>/<BookName>/<ChapterName>/Review_YYYY-MM-DD.md`: Review record files
-  - `{knowledge_wiki}/<Domain>/<ConceptName>`: Wiki concepts
-  - Only stores `/knowledge` output
-- **outputs** (default `50_Outputs`): Externalized outputs from knowledge and projects
-  - Stores articles, tutorials, talk scripts, solutions, presentation outlines, demo materials, and other deliverables
-  - Primarily receives staged expressions from `{projects}` and `{knowledge}`, does not store raw materials
-- **plans** (default `60_Plans`): Execution plan files for `/research` and `/project` (`status: active | done`; kept in `{plans}` after execution and moved into `{system}/{archive_plans}/` later by `/archive`)
-- **resources** (default `70_Resources`): Raw materials (`Books/`, `Literature/`)
-- **reflection** (default `80_Reflection`): Periodic reviews and system calibration
-  - `Weekly/`, `Monthly/`, `Quarterly/`, `Yearly/`, `Projects/`
-  - Focus on priority correction, methodology reflection, rhythm calibration; does not replace `{diary}` daily records
-- **system** (default `90_System`): `Templates/`, `Schema/`, `Prompts/`, `Archive/Projects/YYYY/`, `Archive/Drafts/YYYY/MM/`, `Archive/Plans/`, `Archive/Diary/YYYY/MM/`
+Vault directory layout is defined in `lifeos.yaml` at the root. Default mapping:
+
+| Logical Name | Default Dir | Logical Name | Default Dir |
+| --- | --- | --- | --- |
+| drafts | `00_Drafts` | plans | `60_Plans` |
+| diary | `10_Diary` | resources | `70_Resources` |
+| projects | `20_Projects` | reflection | `80_Reflection` |
+| research | `30_Research` | system | `90_System` |
+| knowledge | `40_Knowledge` | | |
+| outputs | `50_Outputs` | | |
+
+> Each directory's subdirectory structure and detailed purpose are in `lifeos.yaml`. Skills automatically resolve paths at runtime.
 
 ---
 
-## Skill Directory
+## Skills
 
 Skill file location: `.agents/skills/<skill-name>/SKILL.md`
 
-| Skill | Function | When to Use |
-| --- | --- | --- |
-| `/today` | Morning planning: review yesterday, plan today, connect active projects | At the start of the day, when wanting to know what to work on |
-| `/project` | Turn ideas or resources into structured projects | When an idea is ready to formalize, picking up a book to study systematically, or a draft has matured into a project |
-| `/research` | Deep research on a topic, produce structured report | When wanting to deeply understand a topic, needing multi-angle investigation, or expanding a draft into full analysis |
-| `/ask` | Quick Q&A, optionally save as draft | When having a specific question needing a quick answer, without the full research workflow |
-| `/brainstorm` | Interactive brainstorming, explore and deepen ideas | When having an immature idea to discuss, needing divergent thinking, or exploring feasibility |
-| `/knowledge` | Distill structured knowledge notes and wiki concepts from books/papers | After reading a chapter and wanting to organize notes, or structuring source material into a knowledge system |
-| `/revise` | Generate review files, grade and update mastery | When wanting to review learned content, test understanding, or reinforce weak areas |
-| `/archive` | Archive completed projects, processed drafts, completed plans, and diary entries older than the most recent 7 days | When wanting to clean up the Vault or organize completed work |
-| `/digest` | General research digest: generates topic config on first use, then auto-fetches and produces structured weekly digests | When wanting to track latest papers and news in a field, or needing periodic information aggregation |
-| `/read-pdf` | Parse PDF into structured JSON | When needing to convert a PDF file into processable text |
+Available skills: `/today` · `/project` · `/research` · `/ask` · `/brainstorm` · `/knowledge` · `/revise` · `/archive` · `/digest` · `/read-pdf`
 
-**Template Routing:**
-
-| Scenario | Template |
-| --- | --- |
-| Daily journal | `Daily_Template.md` |
-| Draft | `Draft_Template.md` |
-| Wiki | `Wiki_Template.md` |
-| Project file | `Project_Template.md` |
-| Review record | `Revise_Template.md` |
-| General knowledge note | `Knowledge_Template.md` |
-| In-depth research report | `Research_Template.md` |
-| Periodic retrospective | `Retrospective_Template.md` |
+> Each skill's function and usage scenarios are defined in its SKILL.md, loaded on demand. Template routing is in `_shared/template-loading.md`.
 
 ---
 
@@ -77,55 +49,13 @@ Before resuming a task after compaction:
 
 Applies to Vaults with initialized `{system}/{memory}/`.
 
-> **Storage rule:** All memory data must be written into the Vault (`{system}/{memory}/`) through LifeOS MCP memory tools. Do NOT write user preferences, decisions, etc. to platform built-in memory paths (e.g., Claude auto-memory, Gemini memory) — platform memories cannot be shared across agents. Platform built-in memory should only be used for that platform's own operational preferences.
+> **Storage rule:** All memory data must be written into the Vault (`{system}/{memory}/`) through LifeOS MCP memory tools. Do NOT write to platform built-in memory paths (e.g., Claude auto-memory, Gemini memory).
 
-### Layered Activation Rules
+**Always active:** When the user expresses a persistent rule, immediately call `memory_log(slot_key, content)`. Judgment: will it still need to be followed in the next conversation?
 
-Memory operations are organized into two layers. Session initialization (startup) is handled automatically by the MCP server — agents do not need to manage it.
+> **Layer 0 context:** On the first call to any LifeOS MCP tool, the response includes a `_layer0` field (behavior rules, project focus, etc.). The agent should follow the constraints within it.
 
-#### Layer 1: Always Active
-
-The following operations must be performed in **any conversation**, regardless of whether a skill workflow is active:
-
-| Operation | When | Description |
-| --- | --- | --- |
-| `memory_log` | When user expresses persistent rules | Write behavior rules — **must include `slot_key`** and `content` (see "Rule Capture" below) |
-
-**Judgment criteria:** Will the user's statement **still need to be followed in the next conversation**? If yes, regardless of what you're currently doing, it must be written to LifeOS immediately.
-
-> **Layer 0 context:** On the first call to any LifeOS MCP tool, the response includes a `_layer0` field containing UserProfile summary, behavior rules, project focus, and pending review overview. The agent should read and follow the behavioral constraints within it.
-
-#### Layer 2: Skill Workflows
-
-Activated only when executing a LifeOS skill (`/today`, `/knowledge`, `/revise`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, `/digest`) or when the user explicitly requests Vault file operations:
-
-| Operation | When | Description |
-| --- | --- | --- |
-| `memory_notify` | After creating or modifying a Vault file | Update file index (fs.watch provides automatic backup, but call explicitly when immediate query is needed) |
-| `memory_query` | When context is needed | Query user preferences, learning progress, etc. |
-
-#### Noise Protection
-
-The following scenarios **do not trigger Layer 2 operations** (but Layer 1 remains active):
-- Casual chat, code discussions, conversations unrelated to the Vault
-- One-off technical Q&A
-
-### Rule Capture
-
-Each rule **must include a `slot_key`** (format: `<category>:<topic>`). The system automatically persists it to UserProfile; subsequent writes with the same `slot_key` overwrite the old value.
-
-**Category reference:** `format` (output format), `workflow` (workflow), `tool` (tool usage), `content` (content style), `schedule` (scheduling)
-
-**Must capture scenarios:**
-- User corrects Agent behavior ("don't use English", "no emoji", "from now on...") → `memory_log(slot_key="content:language", content="rule content")`
-- User expresses a persistent preference ("I prefer concise commit messages", "set review interval to two weeks") → `memory_log(slot_key="format:commit-msg", content="rule content")`
-
-**Forbidden capture scenarios:**
-- One-off technical discussions ("what caused this bug")
-- Conventions already codified in code (parameters in config files)
-- Information directly derivable from code or git history
-
-> For the full `slot_key` naming convention and usage examples, see `memory-protocol.md`.
+> For the full layered activation rules, rule capture conventions, and noise protection, see `memory-protocol.md`.
 
 ---
 

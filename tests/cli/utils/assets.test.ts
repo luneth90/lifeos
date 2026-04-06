@@ -100,8 +100,7 @@ describe('assetsDir', () => {
 		expect(archiveEn).toContain('filesystem-level move / rename primitive');
 		expect(archiveEn).toContain('writing a new file and then deleting the original file');
 		expect(archiveEn).toContain('status: done');
-		expect(rulesZh).toContain('归档/日记/YYYY/MM/');
-		expect(rulesEn).toContain('Archive/Diary/YYYY/MM/');
+		// 归档目录结构已下沉到 lifeos.yaml（第 88 行已验证），lifeos-rules 只保留精简映射表
 	});
 
 	test('all skill frontmatters are valid yaml', () => {

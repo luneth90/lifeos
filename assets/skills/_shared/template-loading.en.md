@@ -19,6 +19,19 @@ If a template contains AI instructions in HTML comment form (`<!-- AI instructio
 2. The `<!-- AI instruction: ... -->` comment **must never appear** in the final output
 3. Comments must be replaced with the generated content
 
+## Template Routing
+
+| Scenario | Template |
+| --- | --- |
+| Daily journal | `Daily_Template.md` |
+| Draft | `Draft_Template.md` |
+| Wiki | `Wiki_Template.md` |
+| Project file | `Project_Template.md` |
+| Review record | `Revise_Template.md` |
+| General knowledge note | `Knowledge_Template.md` |
+| In-depth research report | `Research_Template.md` |
+| Periodic retrospective | `Retrospective_Template.md` |
+
 ## Template Path Resolution
 
 Template paths are resolved via `lifeos.yaml` configuration:

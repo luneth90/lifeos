@@ -19,6 +19,19 @@
 2. **最终输出中绝对不能保留** `<!-- AI指令：... -->` 注释原文
 3. 注释必须被替换为生成的内容
 
+## 模板路由
+
+| 场景 | 模板 |
+| --- | --- |
+| 每日日记 | `Daily_Template.md` |
+| 草稿 | `Draft_Template.md` |
+| 百科 | `Wiki_Template.md` |
+| 项目文件 | `Project_Template.md` |
+| 复习记录 | `Revise_Template.md` |
+| 通用知识笔记 | `Knowledge_Template.md` |
+| 深度研究报告 | `Research_Template.md` |
+| 周期复盘 | `Retrospective_Template.md` |
+
 ## 模板路径解析
 
 模板路径通过 `lifeos.yaml` 配置解析：
