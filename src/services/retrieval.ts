@@ -51,7 +51,6 @@ const BASE_SCORES: Record<MatchSource, number> = {
 
 const FIELD_SCORES: Record<string, number> = {
 	title: 120,
-	semantic_summary: 90,
 	summary: 70,
 	search_hints: 60,
 	tags: 30,
@@ -105,7 +104,6 @@ function matchedFields(query: string, row: VaultSelectRow): string[] {
 	const fieldMap: Record<string, string> = {
 		title: 'title',
 		summary: 'summary',
-		semantic_summary: 'semantic_summary',
 		search_hints: 'search_hints',
 		tags: 'tags',
 	};
@@ -135,7 +133,6 @@ function buildQueryResult(
 	fields: string[],
 ): VaultQueryResult {
 	const summary = row.summary != null ? String(row.summary) : null;
-	const semanticSummary = row.semantic_summary != null ? String(row.semantic_summary) : null;
 
 	return {
 		filePath: String(row.file_path),
@@ -144,7 +141,7 @@ function buildQueryResult(
 		status: row.status != null ? String(row.status) : null,
 		domain: row.domain != null ? String(row.domain) : null,
 		summary,
-		displaySummary: compactText(semanticSummary ?? summary),
+		displaySummary: compactText(summary),
 		matchSource,
 		matchedFields: fields,
 		score: scoreResult(matchSource, fields),
@@ -178,7 +175,7 @@ function mergeAndDedupe<T>(primary: T[], secondary: T[], keyFn: (item: T) => str
 
 const VAULT_SELECT = `
   vi.file_path, vi.title, vi.type, vi.status, vi.domain,
-  vi.summary, vi.semantic_summary, vi.search_hints,
+  vi.summary, vi.search_hints,
   vi.tags, vi.aliases, vi.wikilinks, vi.backlinks,
   vi.modified_at
 `.trim();
@@ -272,13 +269,12 @@ export function queryVaultIndex(
 	// Try LIKE fallback
 	const likePattern = `%${q}%`;
 	let likeWhere = `(
-      vi.semantic_summary LIKE ? OR
       vi.search_hints LIKE ? OR
       vi.summary LIKE ? OR
       vi.title LIKE ? OR
       vi.tags LIKE ?
     )`;
-	const likeParams: unknown[] = [likePattern, likePattern, likePattern, likePattern, likePattern];
+	const likeParams: unknown[] = [likePattern, likePattern, likePattern, likePattern];
 
 	if (filterWhere) {
 		likeWhere += ` AND ${filterWhere}`;

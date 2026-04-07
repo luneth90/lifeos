@@ -48,7 +48,6 @@ describe('initDb', () => {
 	it('creates all expected regular tables', () => {
 		const tables = getTableNames(db);
 		const expected = [
-			'enhance_queue',
 			'memory_items',
 			'scan_state',
 			'schema_version',
@@ -80,7 +79,6 @@ describe('initDb', () => {
 		const indexes = getIndexNames(db);
 		const expected = [
 			'idx_vault_index_type_status',
-			'idx_enhance_queue_status',
 			'idx_scan_state_last_indexed_at',
 			'idx_memory_items_status',
 		];
@@ -89,11 +87,11 @@ describe('initDb', () => {
 		}
 	});
 
-	it('sets schema_version to 2', () => {
+	it('sets schema_version to current', () => {
 		const row = db.prepare('SELECT version FROM schema_version').get() as { version: number };
 		expect(row).toBeDefined();
 		expect(row.version).toBe(SCHEMA_VERSION);
-		expect(row.version).toBe(2);
+		expect(row.version).toBe(3);
 	});
 
 	it('is idempotent — calling initDb twice does not error or duplicate rows', () => {
@@ -241,7 +239,6 @@ function createV1Database(db: Database.Database): void {
       tags TEXT,
       aliases TEXT,
       summary TEXT,
-      semantic_summary TEXT,
       search_hints TEXT,
       wikilinks TEXT,
       backlinks TEXT,
@@ -382,14 +379,14 @@ describe('V1 to V2 migration', () => {
 		db.close();
 	});
 
-	it('updates schema_version to 2', () => {
+	it('updates schema_version to current after full migration', () => {
 		const db = new Database(':memory:');
 		db.pragma('journal_mode = WAL');
 		createV1Database(db);
 		initDb(db);
 
 		const row = db.prepare('SELECT version FROM schema_version').get() as { version: number };
-		expect(row.version).toBe(2);
+		expect(row.version).toBe(3);
 
 		db.close();
 	});
@@ -485,7 +482,7 @@ describe('V1 to V2 migration', () => {
 		initDb(db);
 
 		const version = db.prepare('SELECT version FROM schema_version').get() as { version: number };
-		expect(version.version).toBe(2);
+		expect(version.version).toBe(3);
 
 		const row = db.prepare('SELECT * FROM memory_items WHERE slot_key = ?').get('test:rule');
 		expect(row).toBeDefined();

@@ -208,8 +208,6 @@ ${longBody}`;
 		expect(result!.searchHints.length).toBeGreaterThan(0);
 		// backlinks default to empty array
 		expect(JSON.parse(result!.backlinks)).toEqual([]);
-		// semanticSummary default to null
-		expect(result!.semanticSummary).toBeNull();
 	});
 });
 

@@ -46,9 +46,6 @@ memory:
   - reflection
   excluded_prefixes:
   - system
-  enhance_priority:
-    projects: 8
-    knowledge: 6
   context_budgets:
     layer0_total: 1800
     userprofile_summary: 200

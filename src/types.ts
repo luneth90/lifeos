@@ -23,7 +23,6 @@ export interface VaultIndexRow {
 	tags: string | null;
 	aliases: string | null;
 	summary: string | null;
-	semantic_summary: string | null;
 	search_hints: string | null;
 	wikilinks: string | null;
 	backlinks: string | null;
@@ -47,17 +46,6 @@ export interface MemoryItemRow {
 	expires_at: string | null;
 }
 
-export interface EnhanceQueueRow {
-	file_path: string;
-	priority: number;
-	queued_at: string;
-	source: string | null;
-	status: string;
-	attempts: number;
-	last_attempt_at: string | null;
-	error_message: string | null;
-}
-
 // ─── Partial row types for SELECT subsets ──────────────────────────────────────
 
 /** The columns selected by VAULT_SELECT in retrieval.ts */
@@ -69,7 +57,6 @@ export type VaultSelectRow = Pick<
 	| 'status'
 	| 'domain'
 	| 'summary'
-	| 'semantic_summary'
 	| 'search_hints'
 	| 'tags'
 	| 'aliases'
@@ -83,8 +70,6 @@ export type VaultSelectRow = Pick<
 export interface StartupResult {
 	layer0_summary: string;
 	vault_stats: { total_files: number; updated_since_last: number; removed: number };
-	enhance_queue_size: number;
-	enhanced_files: number;
 }
 
 export interface RefreshResult {
@@ -116,15 +101,6 @@ export const NOTE_TYPE_LABELS: Readonly<Record<string, string>> = {
 	research: '研究记录',
 	system: '系统文档',
 	output: '成果文档',
-};
-
-export const ENHANCE_STATUS_LABELS: Readonly<Record<string, string>> = {
-	active: '正在推进',
-	frozen: '🔒 封存',
-	done: '已完成',
-	draft: '处于草稿阶段',
-	revise: '待复习巩固',
-	mastered: '已掌握',
 };
 
 export const MASTERY_STATUS_LABELS: Readonly<Record<string, string>> = {

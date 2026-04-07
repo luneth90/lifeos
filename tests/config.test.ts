@@ -129,14 +129,6 @@ describe('VaultConfig — zh preset (default)', () => {
 		expect(cfg.excludedPrefixes()).toContain('90_系统/');
 	});
 
-	it('enhancePriority returns physical prefix → weight map', () => {
-		tmp = createTempDir();
-		const cfg = new VaultConfig(tmp.root);
-		const prio = cfg.enhancePriority();
-		expect(prio['20_项目/']).toBe(8);
-		expect(prio['40_知识/']).toBe(6);
-	});
-
 	it('contextBudgets returns budget object', () => {
 		tmp = createTempDir();
 		const cfg = new VaultConfig(tmp.root);

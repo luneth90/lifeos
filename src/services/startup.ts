@@ -16,7 +16,6 @@ import type { StartupResult } from '../types.js';
 import { loadCustomDict } from '../utils/segmenter.js';
 import { countRows } from '../utils/shared.js';
 import { fullScan } from '../utils/vault-indexer.js';
-import { processEnhanceQueue } from './enhance.js';
 import { buildLayer0Summary } from './layer0.js';
 
 // ─── runStartup ───────────────────────────────────────────────────────────────
@@ -66,25 +65,18 @@ export function runStartup(db: Database.Database, vaultRoot: string): StartupRes
 		scanIndexed = 0;
 	}
 
-	// 4. Enhance queue processing
-	const enhanceResult = processEnhanceQueue(db, vaultRoot, 5);
-
-	// 5. Expire stale rules before refreshing active docs
+	// 4. Expire stale rules before refreshing active docs
 	cleanupMemoryItems(db);
 
-	// 6. Refresh active docs before building Layer 0 from their AUTO sections.
+	// 5. Refresh active docs before building Layer 0 from their AUTO sections.
 	refreshTaskboard(db, vaultRoot);
 	refreshUserprofile(db, vaultRoot);
 
-	// 7. Build Layer 0
-	// 8. Stats
+	// 6. Build Layer 0
 	const totalFiles = countRows(db, 'vault_index');
-	const enhanceQueueSize = countRows(db, 'enhance_queue', "status = 'pending'");
 
 	return {
 		layer0_summary: buildLayer0Summary(vaultRoot),
 		vault_stats: { total_files: totalFiles, updated_since_last: scanIndexed, removed: scanRemoved },
-		enhance_queue_size: enhanceQueueSize,
-		enhanced_files: enhanceResult.processed,
 	};
 }

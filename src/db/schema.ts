@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -17,7 +17,6 @@ CREATE TABLE IF NOT EXISTS vault_index (
     tags TEXT,
     aliases TEXT,
     summary TEXT,
-    semantic_summary TEXT,
     search_hints TEXT,
     wikilinks TEXT,
     backlinks TEXT,
@@ -28,17 +27,6 @@ CREATE TABLE IF NOT EXISTS vault_index (
     modified_at TEXT,
     indexed_at TEXT,
     project TEXT
-);
-
-CREATE TABLE IF NOT EXISTS enhance_queue (
-    file_path TEXT PRIMARY KEY,
-    priority INTEGER NOT NULL DEFAULT 0,
-    queued_at TEXT NOT NULL,
-    source TEXT,
-    status TEXT NOT NULL DEFAULT 'pending',
-    attempts INTEGER NOT NULL DEFAULT 0,
-    last_attempt_at TEXT,
-    error_message TEXT
 );
 
 CREATE TABLE IF NOT EXISTS scan_state (
@@ -65,7 +53,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(
     file_path,
     title,
     summary,
-    semantic_summary,
     search_hints,
     tags,
     content='vault_index',
@@ -74,25 +61,24 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(
 
 -- FTS5 sync triggers for vault_index
 CREATE TRIGGER IF NOT EXISTS vault_fts_ai AFTER INSERT ON vault_index BEGIN
-    INSERT INTO vault_fts(rowid, file_path, title, summary, semantic_summary, search_hints, tags)
-    VALUES (new.rowid, new.file_path, new.title, new.summary, new.semantic_summary, new.search_hints, new.tags);
+    INSERT INTO vault_fts(rowid, file_path, title, summary, search_hints, tags)
+    VALUES (new.rowid, new.file_path, new.title, new.summary, new.search_hints, new.tags);
 END;
 
 CREATE TRIGGER IF NOT EXISTS vault_fts_ad AFTER DELETE ON vault_index BEGIN
-    INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, semantic_summary, search_hints, tags)
-    VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.semantic_summary, old.search_hints, old.tags);
+    INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, search_hints, tags)
+    VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.search_hints, old.tags);
 END;
 
 CREATE TRIGGER IF NOT EXISTS vault_fts_au AFTER UPDATE ON vault_index BEGIN
-    INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, semantic_summary, search_hints, tags)
-    VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.semantic_summary, old.search_hints, old.tags);
-    INSERT INTO vault_fts(rowid, file_path, title, summary, semantic_summary, search_hints, tags)
-    VALUES (new.rowid, new.file_path, new.title, new.summary, new.semantic_summary, new.search_hints, new.tags);
+    INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, search_hints, tags)
+    VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.search_hints, old.tags);
+    INSERT INTO vault_fts(rowid, file_path, title, summary, search_hints, tags)
+    VALUES (new.rowid, new.file_path, new.title, new.summary, new.search_hints, new.tags);
 END;
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_vault_index_type_status ON vault_index (type, status);
-CREATE INDEX IF NOT EXISTS idx_enhance_queue_status ON enhance_queue (status, priority DESC);
 CREATE INDEX IF NOT EXISTS idx_scan_state_last_indexed_at ON scan_state (last_indexed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_memory_items_status ON memory_items (status);
 `;
@@ -226,7 +212,59 @@ function migrateV1toV2(db: Database.Database): void {
 }
 
 /**
- * Initialize the database with the V2 schema.
+ * Migrate from schema V2 to V3.
+ * - Drops enhance_queue table and index
+ * - Drops semantic_summary column from vault_index (recreates FTS)
+ */
+function migrateV2toV3(db: Database.Database): void {
+	const migrate = db.transaction(() => {
+		// Drop enhance_queue
+		db.exec('DROP INDEX IF EXISTS idx_enhance_queue_status');
+		db.exec('DROP TABLE IF EXISTS enhance_queue');
+
+		// Rebuild FTS without semantic_summary:
+		// Drop old triggers and FTS table, then recreate from SCHEMA_SQL
+		db.exec('DROP TRIGGER IF EXISTS vault_fts_ai');
+		db.exec('DROP TRIGGER IF EXISTS vault_fts_ad');
+		db.exec('DROP TRIGGER IF EXISTS vault_fts_au');
+		db.exec('DROP TABLE IF EXISTS vault_fts');
+
+		// SQLite cannot drop columns in older versions, but the column
+		// being present in vault_index is harmless — it just won't be
+		// written to anymore. Recreate FTS and triggers without it.
+		db.exec(`
+			CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(
+				file_path, title, summary, search_hints, tags,
+				content='vault_index', content_rowid='rowid'
+			);
+			CREATE TRIGGER IF NOT EXISTS vault_fts_ai AFTER INSERT ON vault_index BEGIN
+				INSERT INTO vault_fts(rowid, file_path, title, summary, search_hints, tags)
+				VALUES (new.rowid, new.file_path, new.title, new.summary, new.search_hints, new.tags);
+			END;
+			CREATE TRIGGER IF NOT EXISTS vault_fts_ad AFTER DELETE ON vault_index BEGIN
+				INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, search_hints, tags)
+				VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.search_hints, old.tags);
+			END;
+			CREATE TRIGGER IF NOT EXISTS vault_fts_au AFTER UPDATE ON vault_index BEGIN
+				INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, search_hints, tags)
+				VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.search_hints, old.tags);
+				INSERT INTO vault_fts(rowid, file_path, title, summary, search_hints, tags)
+				VALUES (new.rowid, new.file_path, new.title, new.summary, new.search_hints, new.tags);
+			END;
+		`);
+
+		// Rebuild FTS index from existing data
+		db.exec("INSERT INTO vault_fts(vault_fts) VALUES('rebuild')");
+
+		// Update schema version
+		db.prepare('UPDATE schema_version SET version = ?').run(SCHEMA_VERSION);
+	});
+
+	migrate();
+}
+
+/**
+ * Initialize the database with the V3 schema.
  * Handles migration from V1 if needed.
  * Idempotent — safe to call multiple times.
  */
@@ -240,13 +278,22 @@ export function initDb(db: Database.Database): void {
 			| undefined;
 
 		if (row && row.version < 2) {
-			// Need migration from V1 to V2
 			migrateV1toV2(db);
+			// Fall through to V2→V3 check
+		}
+
+		// Re-read version after potential V1→V2 migration
+		const currentRow = db.prepare('SELECT version FROM schema_version').get() as
+			| { version: number }
+			| undefined;
+
+		if (currentRow && currentRow.version === 2) {
+			migrateV2toV3(db);
 			return;
 		}
 
-		if (row && row.version >= 2) {
-			// Already at V2 or higher — just ensure all tables exist
+		if (currentRow && currentRow.version >= 3) {
+			// Already at V3 or higher — just ensure all tables exist
 			db.exec(SCHEMA_SQL);
 			// Ensure project column exists (idempotent)
 			if (!columnExists(db, 'vault_index', 'project')) {

@@ -28,7 +28,6 @@ function insertVaultNote(
 		status?: string;
 		domain?: string;
 		summary?: string;
-		semanticSummary?: string;
 		searchHints?: string;
 		tags?: string;
 		aliases?: string;
@@ -40,8 +39,8 @@ function insertVaultNote(
 	db.prepare(`
     INSERT INTO vault_index (
       file_path, title, type, status, domain, summary,
-      semantic_summary, search_hints, tags, aliases, wikilinks, backlinks, modified_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      search_hints, tags, aliases, wikilinks, backlinks, modified_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
 		opts.filePath,
 		opts.title,
@@ -49,7 +48,6 @@ function insertVaultNote(
 		opts.status ?? 'draft',
 		opts.domain ?? null,
 		opts.summary ?? null,
-		opts.semanticSummary ?? null,
 		opts.searchHints ?? null,
 		opts.tags ?? null,
 		opts.aliases ?? null,

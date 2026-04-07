@@ -39,15 +39,6 @@ describe('memoryStartup', () => {
 		expect(typeof result.layer0_summary).toBe('string');
 	});
 
-	it('returns enhance_queue_size as a number', () => {
-		const result = memoryStartup({
-			dbPath: vault.dbPath,
-			vaultRoot: vault.root,
-		});
-
-		expect(typeof result.enhance_queue_size).toBe('number');
-	});
-
 	it('creates both active docs during startup', () => {
 		memoryStartup({
 			dbPath: vault.dbPath,

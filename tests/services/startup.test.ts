@@ -7,27 +7,10 @@ import { initDb } from '../../src/db/schema.js';
 import { createTempVault, createTestDb, writeTestNote } from '../setup.js';
 import type { TempVault } from '../setup.js';
 
-import {
-	enqueueChangedPathsForEnhance,
-	generateEnhancedSearchTerms,
-	generateSemanticSummary,
-	matchEnhancePriority,
-	mergeSearchHints,
-	processEnhanceQueue,
-	queueFileForEnhance,
-} from '../../src/services/enhance.js';
+import { generateEnhancedSearchTerms, mergeSearchHints } from '../../src/services/enhance.js';
 import { buildLayer0Summary, extractAutoSection, trimToBudget } from '../../src/services/layer0.js';
 // Services under test
 import { runStartup } from '../../src/services/startup.js';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function createInMemoryDb(): Database.Database {
-	const db = new Database(':memory:');
-	db.pragma('journal_mode = WAL');
-	initDb(db);
-	return db;
-}
 
 // ─── layer0: extractAutoSection ───────────────────────────────────────────────
 
@@ -147,172 +130,6 @@ describe('buildLayer0Summary', () => {
 	});
 });
 
-// ─── enhance: generateSemanticSummary ────────────────────────────────────────
-
-describe('generateSemanticSummary', () => {
-	it('generates a summary for a project record', () => {
-		const record = {
-			title: '机器学习项目',
-			type: 'project',
-			domain: '[[AI]]',
-			status: 'active',
-			summary: '',
-		};
-		const result = generateSemanticSummary(record);
-		expect(result).toContain('机器学习项目');
-		expect(result).toContain('项目文件');
-		expect(result).toContain('AI');
-		expect(result).toContain('正在推进');
-	});
-
-	it('generates a summary for a note record without domain', () => {
-		const record = {
-			title: '群论概念',
-			type: 'note',
-			domain: null,
-			status: 'draft',
-			summary: '抽象代数基础概念',
-		};
-		const result = generateSemanticSummary(record);
-		expect(result).toContain('群论概念');
-		expect(result).toContain('知识笔记');
-	});
-
-	it('handles missing title gracefully', () => {
-		const record = { title: null, type: 'research', domain: null, status: 'done', summary: '' };
-		const result = generateSemanticSummary(record);
-		expect(result.length).toBeGreaterThan(0);
-		expect(typeof result).toBe('string');
-	});
-
-	it('returns a non-empty string for empty record', () => {
-		const result = generateSemanticSummary({});
-		expect(result.length).toBeGreaterThan(0);
-		expect(typeof result).toBe('string');
-		expect(result).toContain('该条目');
-	});
-});
-
-// ─── enhance: queueFileForEnhance ────────────────────────────────────────────
-
-describe('queueFileForEnhance', () => {
-	let db: Database.Database;
-
-	beforeEach(() => {
-		db = createInMemoryDb();
-	});
-	afterEach(() => {
-		db.close();
-	});
-
-	it('inserts a new file into enhance_queue', () => {
-		queueFileForEnhance(db, '20_项目/test.md', 8, 'startup_scan');
-		const row = db
-			.prepare("SELECT * FROM enhance_queue WHERE file_path = '20_项目/test.md'")
-			.get() as Record<string, any> | undefined;
-		expect(row).toBeTruthy();
-		expect(row!['priority']).toBe(8);
-		expect(row!['status']).toBe('pending');
-		expect(row!['source']).toBe('startup_scan');
-	});
-
-	it.each([
-		['upgrades priority when higher', [3, 9], 9],
-		['does not downgrade priority when lower', [10, 3], 10],
-	] as const)('%s', (_label, [first, second], expected) => {
-		queueFileForEnhance(db, '20_项目/test.md', first, 'first');
-		queueFileForEnhance(db, '20_项目/test.md', second, 'second');
-		const row = db
-			.prepare("SELECT priority FROM enhance_queue WHERE file_path = '20_项目/test.md'")
-			.get() as { priority: number } | undefined;
-		expect(row!['priority']).toBe(expected);
-	});
-});
-
-// ─── enhance: processEnhanceQueue ────────────────────────────────────────────
-
-describe('processEnhanceQueue', () => {
-	let db: Database.Database;
-	let vault: TempVault;
-
-	beforeEach(() => {
-		vault = createTempVault();
-		db = createTestDb(vault.dbPath);
-		initDb(db);
-		_resetDefaultInstance();
-	});
-
-	afterEach(() => {
-		db.close();
-		vault.cleanup();
-		_resetDefaultInstance();
-	});
-
-	it('returns zero when queue is empty', () => {
-		const result = processEnhanceQueue(db, vault.root, 5);
-		expect(result.processed).toBe(0);
-		expect(result.errors).toBe(0);
-	});
-
-	it('processes pending items and updates vault_index', () => {
-		const now = new Date().toISOString();
-		db.prepare(`
-      INSERT INTO vault_index
-      (file_path, title, type, status, domain, category, tags, aliases,
-       summary, semantic_summary, search_hints, wikilinks, backlinks,
-       section_heads, content_hash, file_size, created_at, modified_at, indexed_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-			'20_项目/my-project.md',
-			'我的项目',
-			'project',
-			'active',
-			'[[AI]]',
-			null,
-			'[]',
-			'[]',
-			'项目摘要',
-			null,
-			'[]',
-			'[]',
-			'[]',
-			'[]',
-			'abc123',
-			1024,
-			now,
-			now,
-			now,
-		);
-
-		queueFileForEnhance(db, '20_项目/my-project.md', 8, 'test');
-
-		const result = processEnhanceQueue(db, vault.root, 5);
-		expect(result.processed).toBe(1);
-		expect(result.errors).toBe(0);
-
-		const row = db
-			.prepare("SELECT semantic_summary FROM vault_index WHERE file_path = '20_项目/my-project.md'")
-			.get() as { semantic_summary: string } | undefined;
-		expect(row!['semantic_summary']).toBeTruthy();
-		expect(row!['semantic_summary']).toContain('我的项目');
-	});
-
-	it('marks item as done when vault_index record not found', () => {
-		db.prepare(`
-      INSERT INTO enhance_queue (file_path, priority, queued_at, source, status, attempts)
-      VALUES ('nonexistent.md', 5, ?, 'test', 'pending', 0)
-    `).run(new Date().toISOString());
-
-		const result = processEnhanceQueue(db, vault.root, 5);
-		expect(result.processed).toBe(0);
-
-		const row = db
-			.prepare("SELECT status FROM enhance_queue WHERE file_path = 'nonexistent.md'")
-			.get() as { status: string } | undefined;
-		expect(row!['status']).toBe('done');
-	});
-});
-
 // ─── enhance: mergeSearchHints ────────────────────────────────────────────────
 
 describe('mergeSearchHints', () => {
@@ -333,47 +150,6 @@ describe('mergeSearchHints', () => {
 		const parsed = JSON.parse(result) as string[];
 		expect(parsed).toContain('term1');
 		expect(parsed).toContain('term2');
-	});
-});
-
-// ─── enhance: matchEnhancePriority ───────────────────────────────────────────
-
-describe('matchEnhancePriority', () => {
-	const priorityMap = { '20_项目/': 8, '40_知识/': 6 };
-
-	it('returns matching priority for known prefix', () => {
-		expect(matchEnhancePriority('20_项目/my-project.md', priorityMap)).toBe(8);
-		expect(matchEnhancePriority('40_知识/笔记/Math/algebra.md', priorityMap)).toBe(6);
-	});
-
-	it('returns null for unmatched path', () => {
-		expect(matchEnhancePriority('00_草稿/note.md', priorityMap)).toBeNull();
-	});
-});
-
-// ─── enhance: enqueueChangedPathsForEnhance ──────────────────────────────────
-
-describe('enqueueChangedPathsForEnhance', () => {
-	let db: Database.Database;
-
-	beforeEach(() => {
-		db = createInMemoryDb();
-	});
-	afterEach(() => {
-		db.close();
-	});
-
-	it('queues matched paths and returns count', () => {
-		const priorityMap = { '20_项目/': 8, '40_知识/': 6 };
-		const paths = ['20_项目/project-a.md', '40_知识/笔记/concept.md', '00_草稿/ignored.md'];
-		const count = enqueueChangedPathsForEnhance(db, paths, priorityMap);
-		expect(count).toBe(2);
-	});
-
-	it('returns zero when no paths match priority map', () => {
-		const priorityMap = { '20_项目/': 8 };
-		const count = enqueueChangedPathsForEnhance(db, ['00_草稿/note.md'], priorityMap);
-		expect(count).toBe(0);
 	});
 });
 
@@ -400,8 +176,6 @@ describe('runStartup', () => {
 		const result = runStartup(db, vault.root);
 		expect(result).toHaveProperty('layer0_summary');
 		expect(result).toHaveProperty('vault_stats');
-		expect(result).toHaveProperty('enhance_queue_size');
-		expect(result).toHaveProperty('enhanced_files');
 		expect(typeof result['layer0_summary']).toBe('string');
 		expect(typeof result['vault_stats']['total_files']).toBe('number');
 	});

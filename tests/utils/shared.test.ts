@@ -16,7 +16,6 @@ import {
 describe('constants', () => {
 	it('ALLOWED_COUNT_TABLES contains correct tables', () => {
 		expect(ALLOWED_COUNT_TABLES.has('vault_index')).toBe(true);
-		expect(ALLOWED_COUNT_TABLES.has('enhance_queue')).toBe(true);
 		expect(ALLOWED_COUNT_TABLES.has('unknown_table')).toBe(false);
 	});
 

@@ -12,6 +12,7 @@ import Database from 'better-sqlite3';
 import { parse as parseYaml } from 'yaml';
 import { VaultConfig, getVaultConfig } from '../config.js';
 import { initDb } from '../db/schema.js';
+import { generateEnhancedSearchTerms, mergeSearchHints } from '../services/enhance.js';
 import { buildSearchTokens } from './segmenter.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,7 +26,6 @@ export interface ParsedMarkdown {
 	tags: string; // JSON array string
 	aliases: string; // JSON array string
 	summary: string;
-	semanticSummary: string | null;
 	searchHints: string;
 	wikilinks: string; // JSON array string
 	backlinks: string; // JSON array string (always [])
@@ -137,7 +137,12 @@ export function parseMarkdown(content: string, fileName: string): ParsedMarkdown
 
 	// Search hints from title + summary + tags + domain
 	const tagsArray = JSON.parse(tags) as string[];
-	const searchHints = buildSearchTokens(title, summary, tagsArray, domain);
+	const baseSearchHints = buildSearchTokens(title, summary, tagsArray, domain);
+
+	// Enhance: merge enhanced search terms into base hints
+	const enhanceInput = { title, type, domain, status, summary, aliases, sectionHeads };
+	const enhancedTerms = generateEnhancedSearchTerms(enhanceInput);
+	const searchHints = mergeSearchHints(baseSearchHints, enhancedTerms);
 
 	// Content hash
 	const contentHash = createHash('md5').update(content, 'utf-8').digest('hex');
@@ -151,7 +156,6 @@ export function parseMarkdown(content: string, fileName: string): ParsedMarkdown
 		tags,
 		aliases,
 		summary,
-		semanticSummary: null,
 		searchHints,
 		wikilinks,
 		backlinks: JSON.stringify([]),
@@ -175,9 +179,9 @@ function upsertIndex(
 	db.prepare(`
     INSERT OR REPLACE INTO vault_index
     (file_path, title, type, status, domain, category, tags, aliases,
-     summary, semantic_summary, search_hints, wikilinks, backlinks,
+     summary, search_hints, wikilinks, backlinks,
      section_heads, content_hash, file_size, created_at, modified_at, indexed_at, project)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
 		filePath,
 		parsed.title,
@@ -188,7 +192,6 @@ function upsertIndex(
 		parsed.tags,
 		parsed.aliases,
 		parsed.summary,
-		parsed.semanticSummary,
 		parsed.searchHints,
 		parsed.wikilinks,
 		parsed.backlinks,

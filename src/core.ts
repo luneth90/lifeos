@@ -17,7 +17,6 @@ import {
 	notifyFileChanged,
 	upsertRule,
 } from './services/capture.js';
-import { processEnhanceQueue } from './services/enhance.js';
 import { type VaultQueryResult, queryVaultIndex } from './services/retrieval.js';
 import { runStartup } from './services/startup.js';
 import type { StartupResult } from './types.js';

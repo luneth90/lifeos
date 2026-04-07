@@ -88,33 +88,8 @@ export function notifyFileChanged(
 	}
 
 	if (indexResult.status === 'removed' || indexResult.status === 'skipped') {
-		// Remove from enhance queue if present
-		db.prepare('DELETE FROM enhance_queue WHERE file_path = ?').run(relPath);
 		return { action: indexResult.status, filePath: relPath };
 	}
 
-	// File was indexed — check if it should be queued for enhancement
-	if (indexResult.status === 'indexed') {
-		try {
-			// Check if file is already pending in enhance queue
-			const existing = db
-				.prepare("SELECT file_path FROM enhance_queue WHERE file_path = ? AND status = 'pending'")
-				.get([relPath]) as { file_path: string } | undefined;
-
-			if (!existing) {
-				const now = new Date().toISOString();
-				db.prepare(`
-          INSERT OR REPLACE INTO enhance_queue
-          (file_path, priority, queued_at, source, status, attempts)
-          VALUES (?, ?, ?, 'notify', 'pending', 0)
-        `).run(relPath, 5, now);
-			}
-		} catch (e) {
-			console.warn('[lifeos] enhance queue update failed:', e);
-		}
-
-		return { action: 'indexed', filePath: relPath };
-	}
-
-	return { action: 'unchanged', filePath: relPath };
+	return { action: indexResult.status === 'indexed' ? 'indexed' : 'unchanged', filePath: relPath };
 }

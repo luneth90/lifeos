@@ -41,7 +41,6 @@ interface MemoryConfig {
 	db_name: string;
 	scan_prefixes: string[];
 	excluded_prefixes: string[];
-	enhance_priority: Record<string, number>;
 	context_budgets: Record<string, number>;
 }
 
@@ -109,7 +108,6 @@ const ZH_PRESET: LifeOSConfig = {
 			'reflection',
 		],
 		excluded_prefixes: ['system'],
-		enhance_priority: { projects: 8, knowledge: 6 },
 		context_budgets: {
 			layer0_total: 1800,
 			userprofile_summary: 200,
@@ -168,7 +166,6 @@ const EN_PRESET: LifeOSConfig = {
 			'reflection',
 		],
 		excluded_prefixes: ['system'],
-		enhance_priority: { projects: 8, knowledge: 6 },
 		context_budgets: {
 			layer0_total: 1800,
 			userprofile_summary: 200,
@@ -345,16 +342,6 @@ export class VaultConfig {
 	dbPath(): string {
 		const dbName = this._config.memory.db_name ?? 'memory.db';
 		return join(this.memoryDir(), dbName);
-	}
-
-	/** Map of physical directory prefix → enhance priority weight. */
-	enhancePriority(): Record<string, number> {
-		const logicalMap = this._config.memory.enhance_priority ?? {};
-		const result: Record<string, number> = {};
-		for (const [logicalName, weight] of Object.entries(logicalMap)) {
-			result[this.dirPrefix(logicalName)] = weight;
-		}
-		return result;
 	}
 
 	/** Context budget configuration object with validated positive numbers. */
