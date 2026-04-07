@@ -127,7 +127,7 @@ describe('buildUserprofileSections', () => {
 	it('returns expected section keys', () => {
 		const sections = buildUserprofileSections(db, '/tmp/vault');
 		expect(Object.keys(sections)).toEqual(
-			expect.arrayContaining(['profile-summary', 'rules', 'learning-progress']),
+			expect.arrayContaining(['profile-summary', 'rules']),
 		);
 	});
 
@@ -141,18 +141,7 @@ describe('buildUserprofileSections', () => {
 		expect(sections['rules']).toContain('format:latex');
 	});
 
-	it('shows missing knowledge status as 未标注 instead of null', () => {
-		db.prepare(`
-      INSERT INTO vault_index (file_path, title, type, status, modified_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run('40_知识/笔记/no-status.md', '未标注笔记', 'note', null, new Date().toISOString());
-
-		const sections = buildUserprofileSections(db, '/tmp/vault');
-		expect(sections['learning-progress']).toContain('未标注');
-		expect(sections['learning-progress']).not.toContain('null:');
-	});
-
-	it('profile-summary shows learning domains from active learning projects', () => {
+it('profile-summary shows learning domains from active learning projects', () => {
 		db.prepare(`
       INSERT INTO vault_index (file_path, title, type, category, status, domain, modified_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -321,7 +310,7 @@ describe('refreshTaskboard', () => {
 			// New sections should exist
 			expect(content).toContain('AUTO:profile-summary');
 			expect(content).toContain('AUTO:rules');
-			expect(content).toContain('AUTO:learning-progress');
+			expect(content).not.toContain('AUTO:learning-progress');
 		} finally {
 			_resetDefaultInstance();
 			vault.cleanup();

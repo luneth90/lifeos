@@ -85,6 +85,15 @@ Help the user start a new day: review yesterday's progress, create today's diary
    - Projects with `status: frozen` and their linked knowledge notes are excluded from active task lists and review recommendations
    - Determine a reasonable next step for each active project
 
+8. **Collect profile data** (for generating user summary)
+   - Aggregate from the steps above:
+     - All projects' domain, status, chapter coverage
+     - Knowledge note status distribution per project (draft/revise/mastered)
+   - Read the following sections from knowledge notes (summary only, not full text):
+     - Exercise solutions: problem records and correctness
+     - Review records: Q&A performance and scores
+     - Personal notes: user's own understanding and annotations
+
 ## Step 2: Collect User Input (Interactive)
 
 Use the AskUserQuestion tool to collect the following information:
@@ -114,6 +123,29 @@ Use the AskUserQuestion tool to collect the following information:
    - **Log**: Leave empty for the user
    - **Notes**: Fill in suggestions (time-sensitive items, stalled project reminders, pending draft count)
    - **Related projects**: List active projects with current status
+
+## Step 3-B: Generate User Profile (Silent Execution)
+
+Based on the profile data collected in Step 1, generate a narrative user knowledge mastery profile:
+
+1. **Comprehensive analysis** across these dimensions:
+   - Progress and completion of each project
+   - Knowledge mastery depth per domain (based on note status distribution and review performance)
+   - Weak areas (concepts with errors during review, notes stuck in draft for a long time)
+   - Unique insights from the user's personal notes
+
+2. **Generate profile description**: A 100-200 word narrative including:
+   - Current learning focus and progress in each domain
+   - Well-mastered knowledge areas
+   - Weak areas that need strengthening
+   - Overall learning pace assessment
+
+3. **Write to memory**:
+   ```
+   memory_log(slot_key="profile:summary", content="<generated profile description>")
+   ```
+
+> Note: If project and note data is insufficient to generate a meaningful profile (e.g., no active projects or notes), skip this step.
 
 ## Step 4: Capture New Ideas (from Question 2)
 

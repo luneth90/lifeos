@@ -2,11 +2,10 @@
  * userprofile.ts — UserProfile active document builder.
  *
  * Builds UserProfile sections from memory_items and vault_index data.
- * Sections: profile-summary, rules, learning-progress.
+ * Sections: profile-summary, rules.
  */
 
 import type Database from 'better-sqlite3';
-import { MASTERY_STATUS_LABELS } from '../types.js';
 
 // ─── Section builders ─────────────────────────────────────────────────────────
 
@@ -65,28 +64,6 @@ function buildRulesSection(db: Database.Database): string {
 	return lines.join('\n');
 }
 
-function buildLearningProgressSection(db: Database.Database): string {
-	// Knowledge mastery summary
-	const masteryRows = db
-		.prepare(
-			`SELECT status, COUNT(*) as cnt FROM vault_index
-       WHERE type IN ('note', 'knowledge')
-       GROUP BY status`,
-		)
-		.all() as Array<{ status: string; cnt: number }>;
-
-	if (masteryRows.length === 0) {
-		return '暂无知识掌握度记录。';
-	}
-
-	const lines: string[] = ['**知识掌握度：**'];
-	for (const r of masteryRows) {
-		const label = r.status == null ? '⚪ 未标注' : (MASTERY_STATUS_LABELS[r.status] ?? r.status);
-		lines.push(`- ${label}: ${r.cnt} 篇`);
-	}
-	return lines.join('\n');
-}
-
 // ─── buildUserprofileSections ─────────────────────────────────────────────────
 
 /**
@@ -100,6 +77,5 @@ export function buildUserprofileSections(
 	return {
 		'profile-summary': buildProfileSummarySection(db),
 		rules: buildRulesSection(db),
-		'learning-progress': buildLearningProgressSection(db),
 	};
 }

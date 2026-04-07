@@ -107,7 +107,6 @@ function buildUserprofileSkeleton(): string {
 	return buildSkeleton('userprofile', 'UserProfile', [
 		{ heading: '用户摘要', marker: 'profile-summary' },
 		{ heading: '行为约束', marker: 'rules' },
-		{ heading: '学习进度', marker: 'learning-progress' },
 	]);
 }
 
