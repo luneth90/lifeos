@@ -76,6 +76,21 @@ function updateSkillFile(filePath, oldVersion, newVersion) {
 	return true;
 }
 
+function updateLifeosRules(oldVersion, newVersion) {
+	const updated = [];
+	const escapedOld = oldVersion.replace(/\./g, '\\.');
+	const pattern = new RegExp(`\`v${escapedOld}\``, 'g');
+
+	for (const lang of ['zh', 'en']) {
+		const filePath = resolve(repoRoot, `assets/lifeos-rules.${lang}.md`);
+		const content = readFileSync(filePath, 'utf8');
+		if (!pattern.test(content)) continue;
+		writeFileSync(filePath, content.replace(pattern, `\`v${newVersion}\``));
+		updated.push(`assets/lifeos-rules.${lang}.md`);
+	}
+	return updated;
+}
+
 function main() {
 	const type = process.argv[2];
 
@@ -106,6 +121,9 @@ function main() {
 			updated.push(f.replace(`${repoRoot}/`, ''));
 		}
 	}
+
+	// 4. lifeos-rules (CLAUDE.md source)
+	updated.push(...updateLifeosRules(oldVersion, newVersion));
 
 	console.log(`Updated ${updated.length} files:`);
 	for (const f of updated) {

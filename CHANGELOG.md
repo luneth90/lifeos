@@ -1,5 +1,39 @@
 # 更新日志
 
+## 1.5.0 (2026-04-07)
+
+### 重大变更：记忆系统 V3 — 架构精简与用户画像重构
+
+本版本完成记忆系统 V3 升级，删除 enhance 队列和 semantic_summary 字段，移除 UserProfile 中无意义的统计式学习进度，将用户画像生成改由 LLM 驱动。
+
+**Schema V3 升级（4 表 → 3 表）：**
+- 删除 `enhance_queue` 表及其索引，语义增强改为解析时内联执行
+- 删除 `semantic_summary` 字段，FTS 触发器和查询同步清理
+- 新增 V2→V3 原子迁移，支持 V1→V2→V3 顺序迁移链
+
+**UserProfile 画像重构：**
+- 移除 `learning-progress` section——纯 `COUNT GROUP BY status` 的数字统计无法反映用户掌握了什么
+- 用户知识掌握画像改由 `/today` 技能在每日规划时生成：收集项目进度、笔记习题解答、复习记录和个人补充，由 LLM 综合分析后写入 `profile:summary`
+- `buildRulesSection` 新增 `profile:` 前缀过滤，防止画像描述污染行为约束区块
+- `memoryLog` 根据 `slotKey` 前缀智能刷新对应 UserProfile section（`profile:` → profile-summary，其余 → rules）
+
+**搜索召回修复：**
+- `searchHints` 补全所有 type/status 中文标签，修复因标签缺失导致的搜索召回回退
+
+**配置健壮性：**
+- `contextBudgets()` 增加非法值校验，防止 NaN 导致 Layer 0 裁剪失效
+- 移除 ContextPolicy.md，预算配置统一收归 `lifeos.yaml` 的 `context_budgets`
+
+### 协议文档同步
+
+- `/today` 技能（中英）：新增画像数据收集步骤和用户画像生成步骤
+
+### 内部
+
+- 净删除约 500 行代码
+- V2→V3 迁移在 SQLite 事务中执行，崩溃安全
+- 新增回归测试：`profile:summary` 不出现在 rules 区块
+
 ## 1.4.2 (2026-04-07)
 
 ### CLAUDE.md 协议瘦身
