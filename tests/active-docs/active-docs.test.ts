@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -90,7 +90,7 @@ describe('buildTaskboardSections', () => {
 		expect(Object.keys(sections)).toEqual(
 			expect.arrayContaining(['focus', 'active-projects', 'revises']),
 		);
-		expect(sections['focus']).toContain('My Project');
+		expect(sections.focus).toContain('My Project');
 		expect(sections['active-projects']).toContain('My Project');
 	});
 
@@ -126,9 +126,7 @@ describe('buildUserprofileSections', () => {
 
 	it('returns expected section keys', () => {
 		const sections = buildUserprofileSections(db, '/tmp/vault');
-		expect(Object.keys(sections)).toEqual(
-			expect.arrayContaining(['profile-summary', 'rules']),
-		);
+		expect(Object.keys(sections)).toEqual(expect.arrayContaining(['profile-summary', 'rules']));
 	});
 
 	it('rules section includes upserted rules', () => {
@@ -136,23 +134,27 @@ describe('buildUserprofileSections', () => {
 		upsertRule(db, { slotKey: 'format:latex', content: '数学公式用 LaTeX', source: 'preference' });
 
 		const sections = buildUserprofileSections(db, '/tmp/vault');
-		expect(sections['rules']).toContain('content:language');
-		expect(sections['rules']).toContain('必须使用中文');
-		expect(sections['rules']).toContain('format:latex');
+		expect(sections.rules).toContain('content:language');
+		expect(sections.rules).toContain('必须使用中文');
+		expect(sections.rules).toContain('format:latex');
 	});
 
-it('rules section excludes profile:summary from memory_items', () => {
+	it('rules section excludes profile:summary from memory_items', () => {
 		upsertRule(db, { slotKey: 'content:language', content: '必须使用中文', source: 'correction' });
-		upsertRule(db, { slotKey: 'profile:summary', content: '用户正在学习抽象代数', source: 'preference' });
+		upsertRule(db, {
+			slotKey: 'profile:summary',
+			content: '用户正在学习抽象代数',
+			source: 'preference',
+		});
 
 		const sections = buildUserprofileSections(db, '/tmp/vault');
-		expect(sections['rules']).toContain('content:language');
-		expect(sections['rules']).not.toContain('profile:summary');
-		expect(sections['rules']).not.toContain('抽象代数');
+		expect(sections.rules).toContain('content:language');
+		expect(sections.rules).not.toContain('profile:summary');
+		expect(sections.rules).not.toContain('抽象代数');
 		expect(sections['profile-summary']).toContain('抽象代数');
 	});
 
-it('profile-summary shows learning domains from active learning projects', () => {
+	it('profile-summary shows learning domains from active learning projects', () => {
 		db.prepare(`
       INSERT INTO vault_index (file_path, title, type, category, status, domain, modified_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -247,7 +249,7 @@ describe('refreshTaskboard', () => {
 
 			const tbPath = join(vc.memoryDir(), 'TaskBoard.md');
 			const existing = readFileSync(tbPath, 'utf-8');
-			const withManual = existing + '\n\n## 手动记录\n我的手动笔记内容\n';
+			const withManual = `${existing}\n\n## 手动记录\n我的手动笔记内容\n`;
 			writeFileSync(tbPath, withManual, 'utf-8');
 
 			refreshTaskboard(db, vault.root);
