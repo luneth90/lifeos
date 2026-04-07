@@ -101,8 +101,9 @@ export function memoryLog(opts: {
 			expiresAt: opts.expiresAt,
 		});
 
-		// Refresh UserProfile rules section after upsert
-		refreshActiveDoc(db, vault, 'UserProfile', { section: 'rules' });
+		// Refresh the matching UserProfile section after upsert
+		const section = opts.slotKey.startsWith('profile:') ? 'profile-summary' : 'rules';
+		refreshActiveDoc(db, vault, 'UserProfile', { section });
 
 		return result;
 	});

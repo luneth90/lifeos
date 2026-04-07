@@ -141,6 +141,17 @@ describe('buildUserprofileSections', () => {
 		expect(sections['rules']).toContain('format:latex');
 	});
 
+it('rules section excludes profile:summary from memory_items', () => {
+		upsertRule(db, { slotKey: 'content:language', content: '必须使用中文', source: 'correction' });
+		upsertRule(db, { slotKey: 'profile:summary', content: '用户正在学习抽象代数', source: 'preference' });
+
+		const sections = buildUserprofileSections(db, '/tmp/vault');
+		expect(sections['rules']).toContain('content:language');
+		expect(sections['rules']).not.toContain('profile:summary');
+		expect(sections['rules']).not.toContain('抽象代数');
+		expect(sections['profile-summary']).toContain('抽象代数');
+	});
+
 it('profile-summary shows learning domains from active learning projects', () => {
 		db.prepare(`
       INSERT INTO vault_index (file_path, title, type, category, status, domain, modified_at)

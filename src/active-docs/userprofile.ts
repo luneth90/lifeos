@@ -50,7 +50,7 @@ function buildRulesSection(db: Database.Database): string {
 	const items = db
 		.prepare(
 			`SELECT slot_key, content, source FROM memory_items
-       WHERE status = 'active'
+       WHERE status = 'active' AND slot_key NOT LIKE 'profile:%'
        ORDER BY CASE source WHEN 'correction' THEN 0 ELSE 1 END, updated_at DESC`,
 		)
 		.all() as Array<{ slot_key: string; content: string; source: string }>;
