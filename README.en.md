@@ -96,6 +96,20 @@ Launch any of these tools in the vault directory to use all skills.
 
 If you want version control for the vault, initialize and manage Git yourself. LifeOS does not create or manage Git metadata for you.
 
+## Upgrading
+
+When a new version of LifeOS is released, upgrade your existing vault in two steps:
+
+```bash
+# Step 1: update the CLI to the latest version
+npm update -g lifeos
+
+# Step 2: upgrade vault assets and scaffold
+lifeos upgrade ./my-vault
+```
+
+`npm update -g lifeos` pulls the latest CLI and built-in resources; `lifeos upgrade` syncs the new templates, skills, and specs into your vault. Both steps are required — updating the CLI alone won't touch vault files, and running upgrade alone won't fetch new built-in resources.
+
 ## CLI Commands
 
 ```bash

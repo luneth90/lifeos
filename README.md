@@ -99,6 +99,20 @@ lifeos init ./my-vault --lang en   # 英文
 
 在 Vault 目录下启动任一工具即可使用所有技能。
 
+## 升级
+
+当 LifeOS 发布新版本后，按以下步骤升级已有 Vault：
+
+```bash
+# 第一步：更新 CLI 到最新版本
+npm update -g lifeos
+
+# 第二步：升级 Vault 资产与脚手架
+lifeos upgrade ./my-vault
+```
+
+`npm update -g lifeos` 会拉取最新的 CLI 和内置资源；`lifeos upgrade` 则将新版本的模板、技能、规范等同步到你的 Vault 中。两步缺一不可——只更新 CLI 不会改动 Vault 文件，只跑 upgrade 也不会获取新版本的内置资源。
+
 ## CLI 命令
 
 ```bash
