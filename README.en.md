@@ -110,6 +110,12 @@ lifeos upgrade ./my-vault
 
 `npm update -g lifeos` pulls the latest CLI and built-in resources; `lifeos upgrade` syncs the new templates, skills, and specs into your vault. Both steps are required — updating the CLI alone won't touch vault files, and running upgrade alone won't fetch new built-in resources.
 
+If you have modified built-in templates, skills, or schema files, `upgrade` will skip them by default to preserve your changes. Add `--override` to force-replace all resource files with the latest version (your notes, resources, `memory.db`, and `lifeos.yaml` config are never affected):
+
+```bash
+lifeos upgrade ./my-vault --override
+```
+
 ## CLI Commands
 
 ```bash
@@ -120,43 +126,6 @@ lifeos rename [path]                                   # Interactive directory r
 lifeos --help                                          # Show help
 lifeos --version                                       # Show version
 ```
-
-### init
-
-Creates a complete LifeOS workspace:
-
-- 10 top-level directories plus nested subdirectories
-- 8 Markdown templates
-- Frontmatter schema
-- 10 AI skills with language-aware assets
-- `CLAUDE.md` agent behavior spec
-- `lifeos.yaml` config
-- MCP server registration (Claude Code / Codex / OpenCode)
-
-### upgrade
-
-Upgrades and re-syncs an initialized vault:
-
-- **Smart merge**: update unmodified templates, schema files, built-in prompts, and skill files; skip modified ones with a warning
-- **Restore missing scaffold**: bring back missing directories and managed files such as the memory directory, `.claude/skills`, `CLAUDE.md`, `AGENTS.md`, and MCP config entries
-- **Preserve user changes**: built-in files already customized by the user are not force-overwritten
-- **`--override` force-refreshes resources**: overwrite templates, schema, prompts, skills, `CLAUDE.md`, `AGENTS.md`, and MCP config entries without deleting user notes, resources, `memory.db`, memory-system data, or custom directory/memory settings in `lifeos.yaml`
-
-By default, `lifeos upgrade` tries to preserve resource files you have already modified, while updating untouched content and restoring anything missing. If you want to explicitly replace those resources with the current built-in templates, skills, schema files, and MCP config entries, use `--override`:
-
-```bash
-lifeos upgrade ./my-vault --override
-```
-
-### doctor
-
-Checks vault integrity: directory structure, templates, schema, skills, config, Node.js version, and asset version.
-
-### rename: Directory Customization
-
-No extra flags are required. Run `lifeos rename [path]` and the CLI will show the directories available in the current vault, then guide you step by step to choose one and enter a new name. It updates `lifeos.yaml`, renames the actual directory, and batch-replaces related wikilinks across the vault.
-
-This means LifeOS does not lock you into fixed directory names. You can freely adapt directory names to your own workflow, language preference, and project structure while keeping configuration and links consistent.
 
 ## Skills
 
