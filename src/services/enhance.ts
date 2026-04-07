@@ -5,6 +5,7 @@
  * Called during indexing to populate search_hints column.
  */
 
+import { NOTE_TYPE_LABELS, STATUS_LABELS } from '../types.js';
 import { tokenize } from '../utils/segmenter.js';
 import { normalizeWikilinkValue } from '../utils/shared.js';
 
@@ -50,8 +51,16 @@ export function generateEnhancedSearchTerms(input: EnhanceInput): string[] {
 	if (title) extras.push(title);
 	extras.push(...aliases);
 	if (domain) extras.push(domain);
-	if (noteType) extras.push(noteType);
-	if (status) extras.push(status);
+	if (noteType) {
+		extras.push(noteType);
+		const typeLabel = NOTE_TYPE_LABELS[noteType];
+		if (typeLabel) extras.push(typeLabel);
+	}
+	if (status) {
+		extras.push(status);
+		const statusLabel = STATUS_LABELS[status];
+		if (statusLabel) extras.push(statusLabel);
+	}
 	extras.push(...sectionHeads.slice(0, 5));
 	extras.push(...summary.split('\n').slice(0, 2));
 
