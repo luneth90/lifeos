@@ -96,15 +96,7 @@ describe('buildLayer0Summary', () => {
 	});
 
 	it('returns empty string when no files exist', () => {
-		const policy = {
-			layer0_total: 1800,
-			userprofile_summary: 200,
-			userprofile_rules: 1000,
-			taskboard_focus: 500,
-			userprofile_doc_limit: 2000,
-			taskboard_doc_limit: 3000,
-		};
-		const result = buildLayer0Summary(vault.root, policy);
+		const result = buildLayer0Summary(vault.root);
 		expect(result).toBe('');
 	});
 
@@ -115,15 +107,7 @@ describe('buildLayer0Summary', () => {
 			`# UserProfile\n<!-- BEGIN AUTO:profile-summary -->\n用户偏好：简洁风格\n<!-- END AUTO:profile-summary -->`,
 			'utf-8',
 		);
-		const policy = {
-			layer0_total: 1800,
-			userprofile_summary: 200,
-			userprofile_rules: 1000,
-			taskboard_focus: 500,
-			userprofile_doc_limit: 2000,
-			taskboard_doc_limit: 3000,
-		};
-		const result = buildLayer0Summary(vault.root, policy);
+		const result = buildLayer0Summary(vault.root);
 		expect(result).toContain('UserProfile 速览');
 		expect(result).toContain('用户偏好：简洁风格');
 	});
@@ -135,15 +119,7 @@ describe('buildLayer0Summary', () => {
 			`# TaskBoard\n<!-- BEGIN AUTO:focus -->\n当前焦点：完成测试套件\n<!-- END AUTO:focus -->`,
 			'utf-8',
 		);
-		const policy = {
-			layer0_total: 1800,
-			userprofile_summary: 200,
-			userprofile_rules: 1000,
-			taskboard_focus: 500,
-			userprofile_doc_limit: 2000,
-			taskboard_doc_limit: 3000,
-		};
-		const result = buildLayer0Summary(vault.root, policy);
+		const result = buildLayer0Summary(vault.root);
 		expect(result).toContain('TaskBoard 当前焦点');
 		expect(result).toContain('当前焦点：完成测试套件');
 	});
@@ -164,15 +140,7 @@ describe('buildLayer0Summary', () => {
 			].join('\n'),
 			'utf-8',
 		);
-		const policy = {
-			layer0_total: 1800,
-			userprofile_summary: 200,
-			userprofile_rules: 1000,
-			taskboard_focus: 500,
-			userprofile_doc_limit: 2000,
-			taskboard_doc_limit: 3000,
-		};
-		const result = buildLayer0Summary(vault.root, policy);
+		const result = buildLayer0Summary(vault.root);
 		expect(result).toContain('行为约束');
 		expect(result).toContain('输出语言使用中文');
 		expect(result).toContain('UserProfile 速览');

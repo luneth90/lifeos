@@ -13,7 +13,6 @@ import { refreshTaskboard, refreshUserprofile } from '../active-docs/index.js';
 import { getVaultConfig } from '../config.js';
 import { initDb } from '../db/schema.js';
 import type { StartupResult } from '../types.js';
-import { ensureContextPolicyExists, loadContextPolicy } from '../utils/context-policy.js';
 import { loadCustomDict } from '../utils/segmenter.js';
 import { countRows } from '../utils/shared.js';
 import { fullScan } from '../utils/vault-indexer.js';
@@ -77,16 +76,13 @@ export function runStartup(db: Database.Database, vaultRoot: string): StartupRes
 	refreshTaskboard(db, vaultRoot);
 	refreshUserprofile(db, vaultRoot);
 
-	// 7. Load context policy and build Layer 0
-	ensureContextPolicyExists(vaultRoot);
-	const policy = loadContextPolicy(vaultRoot);
-
+	// 7. Build Layer 0
 	// 8. Stats
 	const totalFiles = countRows(db, 'vault_index');
 	const enhanceQueueSize = countRows(db, 'enhance_queue', "status = 'pending'");
 
 	return {
-		layer0_summary: buildLayer0Summary(vaultRoot, policy),
+		layer0_summary: buildLayer0Summary(vaultRoot),
 		vault_stats: { total_files: totalFiles, updated_since_last: scanIndexed, removed: scanRemoved },
 		enhance_queue_size: enhanceQueueSize,
 		enhanced_files: enhanceResult.processed,

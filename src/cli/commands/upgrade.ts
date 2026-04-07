@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { resolveConfig } from '../../config.js';
@@ -52,6 +52,7 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	}
 
 	migrateLegacyDigestDirectory(targetPath, config);
+	removeDeprecatedContextPolicy(targetPath, config);
 
 	// 4. Reuse the same vault sync path as init, but in conservative upgrade mode.
 	const syncResult = await syncVault(targetPath, config, {
@@ -84,6 +85,19 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	log('  ', `Unchanged: ${result.unchanged.length} files`);
 
 	return result;
+}
+
+function removeDeprecatedContextPolicy(targetPath: string, config: LifeOSConfig): void {
+	const memoryDir = join(
+		targetPath,
+		config.directories.system,
+		config.subdirectories.system.memory,
+	);
+	const policyPath = join(memoryDir, 'ContextPolicy.md');
+	if (!existsSync(policyPath)) return;
+
+	unlinkSync(policyPath);
+	log(green('✔'), 'Removed deprecated ContextPolicy.md (budgets now in lifeos.yaml)');
 }
 
 function migrateLegacyDigestDirectory(targetPath: string, config: LifeOSConfig): void {

@@ -8,7 +8,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getVaultConfig, resolveConfig } from '../config.js';
-import type { ContextPolicy } from '../utils/context-policy.js';
 import { estimateTokens } from '../utils/shared.js';
 
 // ─── extractAutoSection ───────────────────────────────────────────────────────
@@ -62,9 +61,10 @@ export function trimToBudget(text: string, budget: number): string {
  * Build the Layer 0 summary string from UserProfile.md and TaskBoard.md.
  * Reads AUTO sections and trims to configured token budgets.
  */
-export function buildLayer0Summary(vaultRoot: string, policy: ContextPolicy): string {
+export function buildLayer0Summary(vaultRoot: string): string {
 	const vc = getVaultConfig() ?? resolveConfig(vaultRoot);
 	const memoryDir = vc.memoryDir();
+	const budgets = vc.contextBudgets();
 
 	const upPath = join(memoryDir, 'UserProfile.md');
 	const tbPath = join(memoryDir, 'TaskBoard.md');
@@ -72,10 +72,10 @@ export function buildLayer0Summary(vaultRoot: string, policy: ContextPolicy): st
 	const upContent = existsSync(upPath) ? readFileSync(upPath, 'utf-8') : '';
 	const tbContent = existsSync(tbPath) ? readFileSync(tbPath, 'utf-8') : '';
 
-	const upBudget = Number(policy.userprofile_summary ?? 200);
-	const rulesBudget = Number(policy.userprofile_rules ?? 1000);
-	const tbBudget = Number(policy.taskboard_focus ?? 500);
-	const totalBudget = Number(policy.layer0_total ?? 1800);
+	const upBudget = Number(budgets.userprofile_summary ?? 200);
+	const rulesBudget = Number(budgets.userprofile_rules ?? 1000);
+	const tbBudget = Number(budgets.taskboard_focus ?? 500);
+	const totalBudget = Number(budgets.layer0_total ?? 1800);
 
 	let upSummary = trimToBudget(extractAutoSection(upContent, 'profile-summary'), upBudget);
 

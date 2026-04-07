@@ -21,8 +21,6 @@ import { processEnhanceQueue } from './services/enhance.js';
 import { type VaultQueryResult, queryVaultIndex } from './services/retrieval.js';
 import { runStartup } from './services/startup.js';
 import type { StartupResult } from './types.js';
-import { ensureContextPolicyExists } from './utils/context-policy.js';
-
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 function openDb(dbPath: string): Database.Database {
@@ -66,7 +64,6 @@ export function memoryStartup(opts: {
 	sessionId?: string;
 }): StartupResult {
 	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
-		ensureContextPolicyExists(vault);
 		return runStartup(db, vault);
 	});
 }

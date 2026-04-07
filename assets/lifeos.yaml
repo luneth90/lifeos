@@ -50,8 +50,10 @@ memory:
     projects: 8
     knowledge: 6
   context_budgets:
-    layer0_total: 1200
-    userprofile_summary: 400
-    taskboard_focus: 800
+    layer0_total: 1800
+    userprofile_summary: 200
+    userprofile_rules: 1000
+    taskboard_focus: 500
+    revises_summary: 100
     userprofile_doc_limit: 2000
     taskboard_doc_limit: 3000
