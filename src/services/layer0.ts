@@ -72,10 +72,10 @@ export function buildLayer0Summary(vaultRoot: string): string {
 	const upContent = existsSync(upPath) ? readFileSync(upPath, 'utf-8') : '';
 	const tbContent = existsSync(tbPath) ? readFileSync(tbPath, 'utf-8') : '';
 
-	const upBudget = Number(budgets.userprofile_summary ?? 200);
-	const rulesBudget = Number(budgets.userprofile_rules ?? 1000);
-	const tbBudget = Number(budgets.taskboard_focus ?? 500);
-	const totalBudget = Number(budgets.layer0_total ?? 1800);
+	const upBudget = budgets.userprofile_summary;
+	const rulesBudget = budgets.userprofile_rules;
+	const tbBudget = budgets.taskboard_focus;
+	const totalBudget = budgets.layer0_total;
 
 	let upSummary = trimToBudget(extractAutoSection(upContent, 'profile-summary'), upBudget);
 

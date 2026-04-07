@@ -357,9 +357,24 @@ export class VaultConfig {
 		return result;
 	}
 
-	/** Context budget configuration object. */
+	/** Context budget configuration object with validated positive numbers. */
 	contextBudgets(): Record<string, number> {
-		return { ...(this._config.memory.context_budgets ?? {}) };
+		const raw = this._config.memory.context_budgets ?? {};
+		const defaults: Record<string, number> = {
+			layer0_total: 1800,
+			userprofile_summary: 200,
+			userprofile_rules: 1000,
+			taskboard_focus: 500,
+			revises_summary: 100,
+			userprofile_doc_limit: 2000,
+			taskboard_doc_limit: 3000,
+		};
+		const result: Record<string, number> = {};
+		for (const [k, v] of Object.entries({ ...defaults, ...raw })) {
+			const n = Number(v);
+			result[k] = Number.isFinite(n) && n > 0 ? n : (defaults[k] ?? 1800);
+		}
+		return result;
 	}
 
 	// ── Path inference ─────────────────────────────────────────────────────────
