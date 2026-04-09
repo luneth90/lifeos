@@ -26,7 +26,7 @@ interface DirectoriesConfig {
 
 interface SubdirectoriesConfig {
 	knowledge: { notes: string; wiki: string };
-	resources: { books: string; literature: string };
+	resources: { books: string; literature: string; translations: string };
 	system: {
 		templates: string;
 		schema: string;
@@ -79,7 +79,7 @@ const ZH_PRESET: LifeOSConfig = {
 	},
 	subdirectories: {
 		knowledge: { notes: '笔记', wiki: '百科' },
-		resources: { books: '书籍', literature: '文献' },
+		resources: { books: '书籍', literature: '文献', translations: '翻译' },
 		system: {
 			templates: '模板',
 			schema: '规范',
@@ -137,7 +137,7 @@ const EN_PRESET: LifeOSConfig = {
 	},
 	subdirectories: {
 		knowledge: { notes: 'Notes', wiki: 'Wiki' },
-		resources: { books: 'Books', literature: 'Literature' },
+		resources: { books: 'Books', literature: 'Literature', translations: 'Translations' },
 		system: {
 			templates: 'Templates',
 			schema: 'Schema',
