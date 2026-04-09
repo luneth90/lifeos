@@ -25,8 +25,16 @@ interface ManagedAssetContext {
 	version: string;
 }
 
+interface SyncEntry {
+	srcPath: string;
+	destPath: string;
+	displayPath: string;
+	/** When true, files without a managedAssets record are treated as unmodified on first encounter. */
+	allowUntracked?: boolean;
+}
+
 function syncAssetFiles(
-	entries: Array<{ srcPath: string; destPath: string; displayPath: string }>,
+	entries: SyncEntry[],
 	mode: InstallMode,
 	managedAssetContext?: ManagedAssetContext,
 ): InstallResult {
@@ -69,12 +77,14 @@ function syncAssetFiles(
 		}
 
 		const previousRecord = nextManagedAssets?.[entry.displayPath];
+		const hasRecord = isManagedAssetRecord(previousRecord);
+		const unmodified = hasRecord && sha256Content(existing) === previousRecord.sha256;
+		const allowBootstrap = !hasRecord && entry.allowUntracked === true;
 		if (
 			mode === 'smart-merge' &&
 			managedAssetContext &&
 			nextManagedAssets &&
-			isManagedAssetRecord(previousRecord) &&
-			sha256Content(existing) === previousRecord.sha256
+			(unmodified || allowBootstrap)
 		) {
 			copyFileSync(entry.srcPath, entry.destPath);
 			result.updated.push(entry.displayPath);
@@ -232,6 +242,7 @@ export function installRules(
 		srcPath: rulesSrc,
 		destPath: join(targetPath, fileName),
 		displayPath: fileName,
+		allowUntracked: true,
 	}));
 
 	return syncAssetFiles(entries, mode, managedAssetContext);
