@@ -1,7 +1,7 @@
 ---
 name: digest
 description: "A general weekly digest skill: on first use, guide the user through creating a topic config note (Paper Sources, RSS, Web search, and more), then automatically fetch updates and write a structured weekly digest into the drafts directory. Supports multiple topics with separate configs and separate outputs. Trigger when the user says '/digest', 'digest', or asks for a weekly digest."
-version: 1.5.0
+version: 1.5.1
 dependencies:
   templates: []
   prompts: []

@@ -138,6 +138,7 @@ lifeos --version                                       # Show version
 | `/knowledge` | Book/paper -> knowledge note |
 | `/revise` | Generate quizzes, grade, and track mastery |
 | `/read-pdf` | PDF -> structured notes |
+| `/translate` | English PDF chapters -> Chinese companion notes for dual-pane reading with PDF++ |
 | `/ask` | Quick Q&A |
 | `/brainstorm` | Interactive brainstorming |
 | `/archive` | Archive completed projects, processed drafts, completed plans, and diary entries older than the most recent 7 days |

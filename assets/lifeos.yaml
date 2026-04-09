@@ -20,6 +20,7 @@ subdirectories:
   resources:
     books: "书籍"
     literature: "文献"
+    translations: "翻译"
   system:
     templates: "模板"
     schema: "规范"

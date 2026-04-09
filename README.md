@@ -141,6 +141,7 @@ lifeos --version                                       # 查看版本
 | `/knowledge` | 书籍/论文 → 知识笔记 |
 | `/revise` | 生成复习题、批改、追踪掌握度 |
 | `/read-pdf` | PDF → 结构化笔记 |
+| `/translate` | 英文 PDF 章节 → 中文对照阅读笔记，支持 PDF++ 双窗口阅读 |
 | `/ask` | 快速问答 |
 | `/brainstorm` | 交互式头脑风暴 |
 | `/archive` | 归档已完成的项目、已处理的草稿、已完成的计划，以及超过最近 7 天的日记 |
