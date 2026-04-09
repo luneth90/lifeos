@@ -213,3 +213,26 @@ export function installSkills(
 
 	return syncAssetFiles(entries, mode, managedAssetContext);
 }
+
+/**
+ * Copy lifeos-rules to CLAUDE.md and AGENTS.md.
+ * Uses smart-merge: only updates if the file hasn't been modified by the user.
+ */
+export function installRules(
+	targetPath: string,
+	lang: 'zh' | 'en',
+	mode: InstallMode,
+	managedAssetContext?: ManagedAssetContext,
+): InstallResult {
+	const rulesLangSrc = join(assetsDir(), `lifeos-rules.${lang}.md`);
+	const rulesFallback = join(assetsDir(), 'lifeos-rules.zh.md');
+	const rulesSrc = existsSync(rulesLangSrc) ? rulesLangSrc : rulesFallback;
+
+	const entries = ['CLAUDE.md', 'AGENTS.md'].map((fileName) => ({
+		srcPath: rulesSrc,
+		destPath: join(targetPath, fileName),
+		displayPath: fileName,
+	}));
+
+	return syncAssetFiles(entries, mode, managedAssetContext);
+}

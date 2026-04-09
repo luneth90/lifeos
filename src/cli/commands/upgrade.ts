@@ -61,7 +61,7 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 		skillMode: override ? 'overwrite' : 'smart-merge',
 		ensureMcp: true,
 		mcpMode: override ? 'replace' : 'merge-missing',
-		rulesMode: override ? 'overwrite' : 'preserve',
+		rulesMode: override ? 'overwrite' : 'smart-merge',
 		assetVersion: VERSION,
 	});
 	result.updated.push(...syncResult.updated);

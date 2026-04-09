@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, symlinkSync } from 'node:fs';
+import { existsSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { EN_REFLECTION_SUBS, ZH_REFLECTION_SUBS } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
@@ -7,6 +7,7 @@ import {
 	type InstallMode,
 	type InstallResult,
 	installPrompts,
+	installRules,
 	installSchema,
 	installSkills,
 	installTemplates,
@@ -23,7 +24,7 @@ interface SyncVaultOptions {
 	skillMode: InstallMode;
 	ensureMcp: boolean;
 	mcpMode: MergeMode;
-	rulesMode: 'preserve' | 'overwrite';
+	rulesMode: InstallMode;
 	assetVersion: string;
 }
 
@@ -74,7 +75,15 @@ export async function syncVault(
 	managedAssets = skillResult.managedAssets ?? managedAssets;
 
 	ensureClaudeSkillsLink(targetPath);
-	ensureRulesFiles(targetPath, options.lang, options.rulesMode);
+
+	const rulesResult = installRules(targetPath, options.lang, options.rulesMode, {
+		managedAssets,
+		version: options.assetVersion,
+	});
+	result.updated.push(...rulesResult.updated);
+	result.skipped.push(...rulesResult.skipped);
+	result.unchanged.push(...rulesResult.unchanged);
+	managedAssets = rulesResult.managedAssets ?? managedAssets;
 
 	if (options.ensureMcp) {
 		await registerMcp(targetPath, options.mcpMode);
@@ -125,25 +134,5 @@ function ensureClaudeSkillsLink(targetPath: string): void {
 		symlinkSync(resolve(targetPath, '.agents', 'skills'), claudeSkillsLink, 'junction');
 	} else {
 		symlinkSync(join('..', '.agents', 'skills'), claudeSkillsLink);
-	}
-}
-
-function ensureRulesFiles(
-	targetPath: string,
-	lang: 'zh' | 'en',
-	mode: 'preserve' | 'overwrite',
-): void {
-	const rulesLangSrc = join(assetsDir(), `lifeos-rules.${lang}.md`);
-	const rulesFallback = join(assetsDir(), 'lifeos-rules.zh.md');
-	const rulesSrc = existsSync(rulesLangSrc) ? rulesLangSrc : rulesFallback;
-
-	const claudePath = join(targetPath, 'CLAUDE.md');
-	if (mode === 'overwrite' || !existsSync(claudePath)) {
-		copyFileSync(rulesSrc, claudePath);
-	}
-
-	const agentsPath = join(targetPath, 'AGENTS.md');
-	if (mode === 'overwrite' || !existsSync(agentsPath)) {
-		copyFileSync(rulesSrc, agentsPath);
 	}
 }
