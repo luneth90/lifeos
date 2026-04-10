@@ -1,7 +1,7 @@
 ---
 name: research
 description: '对指定主题或草稿进行深度研究，产出结构化研究报告到 {研究目录}/。使用双 Agent 工作流：规划 Agent 扫描本地草稿、匹配专家人格、生成 `type: plan, status: active` 的研究计划；执行 Agent 结合本地草稿与 WebSearch 外部资料撰写报告，并将计划更新为 `status: done`。支持主题模式（直接给主题）和文件模式（以草稿为锚点展开）。当用户想深入了解某个主题、需要系统性调研、想把草稿扩展为完整报告、或说"/research"时使用此技能。'
-version: 1.5.1
+version: 1.5.2
 dependencies:
   templates: []
   prompts:
