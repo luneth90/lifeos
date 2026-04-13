@@ -1,7 +1,7 @@
 ---
 name: brainstorm
 description: 通过多轮交互式对话探索和深化用户的想法，使用 5 Whys、What if、Devil's Advocate 等思维技巧引导发散。结束后可选择创建项目（调用 /project）、整理为百科笔记、或保存为草稿。当用户想聊一个还不成熟的想法、需要发散思维、探索某个方向的可行性、或说"/brainstorm"时使用此技能。
-version: 1.5.2
+version: 1.5.3
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Wiki_Template.md"

@@ -1,5 +1,5 @@
-import { appendFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -26,7 +26,7 @@ export function extractTarballName(output) {
 
 	const tarball = trimmedOutput
 		.split(/\r?\n/)
-		.map(line => line.trim())
+		.map((line) => line.trim())
 		.filter(Boolean)
 		.at(-1);
 

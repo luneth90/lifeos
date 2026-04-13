@@ -1,7 +1,7 @@
 ---
 name: archive
 description: "Scan and archive completed projects (status:done), processed drafts (status:done), completed plans (status:done), and diary entries older than the most recent 7 days, moving them into the unified archive structure and updating frontmatter. Never touches pending drafts, active plans, or the most recent 7 days of diary entries. Use this skill when the user wants to clean up the Vault, archive completed work, tidy up, or says '/archive'."
-version: 1.5.2
+version: 1.5.3
 dependencies:
   templates: []
   prompts: []

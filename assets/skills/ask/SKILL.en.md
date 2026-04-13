@@ -1,7 +1,7 @@
 ---
 name: ask
 description: "LifeOS's default interaction entry point. Any interactive question from the user (concept explanations, knowledge queries, Vault lookups, PDF questions, learning questions, general questions, etc.) should trigger this skill first. Ask internally decides whether to answer directly or route to /brainstorm, /research, or other specialized skills. Skip only when the user explicitly invokes another LifeOS skill (/today, /project, /revise, etc.) or issues a pure execution command (e.g., 'create project', 'start review', 'archive')."
-version: 1.5.2
+version: 1.5.3
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Draft_Template.md"

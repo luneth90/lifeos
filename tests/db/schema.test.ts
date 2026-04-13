@@ -47,12 +47,7 @@ describe('initDb', () => {
 
 	it('creates all expected regular tables', () => {
 		const tables = getTableNames(db);
-		const expected = [
-			'memory_items',
-			'scan_state',
-			'schema_version',
-			'vault_index',
-		];
+		const expected = ['memory_items', 'scan_state', 'schema_version', 'vault_index'];
 		for (const t of expected) {
 			expect(tables, `missing table: ${t}`).toContain(t);
 		}
