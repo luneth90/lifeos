@@ -33,6 +33,8 @@ Vault 目录布局定义在根目录 `lifeos.yaml` 中。默认映射：
 
 可用技能：`/today` · `/project` · `/research` · `/ask` · `/brainstorm` · `/knowledge` · `/revise` · `/archive` · `/digest` · `/read-pdf` · `/translate`
 
+> **默认入口：** `/ask` 是所有交互式提问的默认入口——用户提出任何问题时应首先触发 ask，由其内部分类后决定直接回答或路由到其他技能。仅在用户显式调用其他技能或发出纯执行指令时跳过。
+
 > 每个技能的功能描述和适用场景在其 SKILL.md 中定义，调用时按需加载。模板路由见 `_shared/template-loading.md`。
 
 ---

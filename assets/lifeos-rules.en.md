@@ -33,6 +33,8 @@ Skill file location: `.agents/skills/<skill-name>/SKILL.md`
 
 Available skills: `/today` · `/project` · `/research` · `/ask` · `/brainstorm` · `/knowledge` · `/revise` · `/archive` · `/digest` · `/read-pdf` · `/translate`
 
+> **Default entry point:** `/ask` is the default entry point for all interactive questions — any user question should trigger ask first, which internally classifies and decides whether to answer directly or route to another skill. Skip only when the user explicitly invokes another skill or issues a pure execution command.
+
 > Each skill's function and usage scenarios are defined in its SKILL.md, loaded on demand. Template routing is in `_shared/template-loading.md`.
 
 ---
