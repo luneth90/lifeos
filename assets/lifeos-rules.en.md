@@ -63,6 +63,10 @@ If the Vault has the corresponding official Obsidian CLI tools configured, prefe
 
 Before creating/modifying any note, must first read `[[Frontmatter_Schema]]` and strictly follow it. When templates conflict with the schema, the schema takes precedence.
 
+### Template Authority
+
+When generating any file (diary, project, knowledge note, draft, plan, etc.), the **latest template** in `{system}/{templates}/` is the single source of structural truth. Do not carry forward the structure of historical files (e.g., deprecated section titles or fields) — historical files are for content continuity, not format copying.
+
 ### Status Flow
 
 See `.agents/skills/_shared/lifecycle.md` for the full state machines for each note type.
