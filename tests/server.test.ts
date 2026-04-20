@@ -12,8 +12,14 @@ const layer0Mock = vi.hoisted(() => ({
 	buildLayer0Summary: vi.fn(() => 'RefreshedLayer0'),
 }));
 
+const activeDocsMock = vi.hoisted(() => ({
+	refreshTaskboard: vi.fn(),
+	refreshUserprofile: vi.fn(),
+}));
+
 vi.mock('../src/core.js', () => coreMock);
 vi.mock('../src/services/layer0.js', () => layer0Mock);
+vi.mock('../src/active-docs/index.js', () => activeDocsMock);
 
 async function loadServerTesting() {
 	vi.resetModules();
@@ -35,6 +41,8 @@ describe('server auto lifecycle', () => {
 		coreMock.memoryStartup.mockReturnValue({ layer0_summary: 'Layer0' });
 		layer0Mock.buildLayer0Summary.mockClear();
 		layer0Mock.buildLayer0Summary.mockReturnValue('RefreshedLayer0');
+		activeDocsMock.refreshTaskboard.mockClear();
+		activeDocsMock.refreshUserprofile.mockClear();
 	});
 
 	afterEach(() => {
@@ -98,6 +106,8 @@ describe('server auto lifecycle', () => {
 		const refreshed = testing.callMemoryBootstrap({ vault_root: vault.root });
 
 		expect(coreMock.memoryStartup).toHaveBeenCalledTimes(1);
+		expect(activeDocsMock.refreshTaskboard).toHaveBeenCalledWith(expect.anything(), vault.root);
+		expect(activeDocsMock.refreshUserprofile).toHaveBeenCalledWith(expect.anything(), vault.root);
 		expect(layer0Mock.buildLayer0Summary).toHaveBeenCalledWith(vault.root);
 		expect(refreshed).toMatchObject({
 			status: 'ok',
@@ -117,6 +127,8 @@ describe('server auto lifecycle', () => {
 		const refreshed = testing.callMemoryBootstrap({ vault_root: vault.root });
 
 		expect(coreMock.memoryStartup).toHaveBeenCalledTimes(1);
+		expect(activeDocsMock.refreshTaskboard).toHaveBeenCalledWith(expect.anything(), vault.root);
+		expect(activeDocsMock.refreshUserprofile).toHaveBeenCalledWith(expect.anything(), vault.root);
 		expect(layer0Mock.buildLayer0Summary).toHaveBeenCalledWith(vault.root);
 		expect(refreshed).toMatchObject({
 			status: 'ok',
@@ -124,5 +136,25 @@ describe('server auto lifecycle', () => {
 			layer0_refreshed: true,
 			_layer0: 'RefreshedLayer0',
 		});
+	});
+
+	it('vault_root 切换后不会复用其他 vault 的 layer0 缓存', async () => {
+		const otherVault = createTempVault();
+		try {
+			coreMock.memoryStartup.mockImplementation(({ vaultRoot }: { vaultRoot?: string }) => ({
+				layer0_summary: `Layer0:${vaultRoot ?? 'unknown'}`,
+			}));
+
+			const first = testing.callMemoryBootstrap({ vault_root: vault.root });
+			const second = testing.callMemoryBootstrap({ vault_root: otherVault.root });
+			const third = testing.callMemoryBootstrap({ vault_root: vault.root });
+
+			expect(first._layer0).toBe(`Layer0:${vault.root}`);
+			expect(second._layer0).toBe(`Layer0:${otherVault.root}`);
+			expect(third._layer0).toBe(`Layer0:${vault.root}`);
+			expect(coreMock.memoryStartup).toHaveBeenCalledTimes(3);
+		} finally {
+			otherVault.cleanup();
+		}
 	});
 });

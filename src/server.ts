@@ -9,8 +9,12 @@ import { type FSWatcher, watch } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import Database from 'better-sqlite3';
 import { z } from 'zod';
+import { refreshTaskboard, refreshUserprofile } from './active-docs/index.js';
+import { getOrCreateVaultConfig } from './config.js';
 import * as core from './core.js';
+import { initDb } from './db/schema.js';
 import { buildLayer0Summary } from './services/layer0.js';
 import type { StartupResult } from './types.js';
 
@@ -40,22 +44,40 @@ let startupResult: StartupResult | null = null;
 let startupVaultRoot: string | undefined;
 let layer0Dirty = false;
 
-function captureStartupContext(params: Record<string, unknown>): {
+function readStartupContext(params: Record<string, unknown>): {
 	vaultRoot: string | undefined;
 } {
 	const vaultRoot = (params.vault_root as string) || (params.vaultRoot as string) || undefined;
-	if (vaultRoot) startupVaultRoot = vaultRoot;
 	return { vaultRoot };
 }
 
+function closeVaultWatcher(): void {
+	if (vaultWatcher) {
+		vaultWatcher.close();
+		vaultWatcher = null;
+	}
+	watchedVaultRoot = null;
+}
+
+function resetStartupState(): void {
+	startedUp = false;
+	startupResult = null;
+	startupVaultRoot = undefined;
+	layer0Dirty = false;
+	closeVaultWatcher();
+}
+
 function ensureStartup(params: Record<string, unknown>): void {
-	const { vaultRoot } = captureStartupContext(params);
+	const { vaultRoot } = readStartupContext(params);
+	if (startedUp && vaultRoot && startupVaultRoot && vaultRoot !== startupVaultRoot) {
+		resetStartupState();
+	}
 	if (startedUp) return;
 	try {
 		startupResult = core.memoryStartup({ vaultRoot });
 		startedUp = true;
 		// Start file watcher
-		const resolvedVault = vaultRoot || startupVaultRoot || process.env.LIFEOS_VAULT_ROOT;
+		const resolvedVault = vaultRoot || process.env.LIFEOS_VAULT_ROOT;
 		if (resolvedVault) startupVaultRoot = resolvedVault;
 		if (resolvedVault) startVaultWatcher(resolvedVault);
 	} catch (e) {
@@ -64,16 +86,31 @@ function ensureStartup(params: Record<string, unknown>): void {
 }
 
 function refreshLayer0Summary(params: Record<string, unknown>): boolean {
-	const { vaultRoot } = captureStartupContext(params);
+	const { vaultRoot } = readStartupContext(params);
 	const resolvedVault = vaultRoot || startupVaultRoot || process.env.LIFEOS_VAULT_ROOT;
 	if (!startupResult || !resolvedVault) return false;
 
-	startupResult = {
-		...startupResult,
-		layer0_summary: buildLayer0Summary(resolvedVault),
-	};
-	layer0Dirty = false;
-	return true;
+	let db: Database.Database | null = null;
+	try {
+		const config = getOrCreateVaultConfig(resolvedVault);
+		db = new Database(config.dbPath().toString());
+		db.pragma('journal_mode = WAL');
+		db.pragma('foreign_keys = ON');
+		initDb(db);
+		refreshTaskboard(db, resolvedVault);
+		refreshUserprofile(db, resolvedVault);
+		startupResult = {
+			...startupResult,
+			layer0_summary: buildLayer0Summary(resolvedVault),
+		};
+		layer0Dirty = false;
+		return true;
+	} catch (e) {
+		console.warn('[lifeos] Layer0 refresh failed:', e);
+		return false;
+	} finally {
+		db?.close();
+	}
 }
 
 // ─── Vault watcher ──────────────────────────────────────────────────────────
@@ -169,10 +206,7 @@ function startVaultWatcher(vaultRoot: string): void {
 
 function setupShutdownHandler(): void {
 	process.stdin.on('end', () => {
-		if (vaultWatcher) {
-			vaultWatcher.close();
-			vaultWatcher = null;
-		}
+		closeVaultWatcher();
 		process.exit(0);
 	});
 }
@@ -396,15 +430,7 @@ export const __testing = {
 		pendingNotifies.clear();
 		notifyQueue.length = 0;
 		notifyInFlight = false;
-		startedUp = false;
-		startupResult = null;
-		startupVaultRoot = undefined;
-		layer0Dirty = false;
-		watchedVaultRoot = null;
-		if (vaultWatcher) {
-			vaultWatcher.close();
-			vaultWatcher = null;
-		}
+		resetStartupState();
 	},
 };
 
