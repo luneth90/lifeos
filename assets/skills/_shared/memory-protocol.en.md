@@ -1,7 +1,7 @@
 # Memory System Integration Protocol
 
 > All memory operations are invoked via MCP tools. `db_path` and `vault_root` are automatically injected at runtime; no need to specify them in the skill.
-> Session initialization (startup) is handled automatically by the MCP server — agents do not need to manage it.
+> Session initialization (startup) is handled automatically by the MCP server, but when entering a Vault session the agent must explicitly call `memory_bootstrap` to trigger and read `_layer0`.
 
 ## Layered Activation Rules
 
@@ -23,6 +23,7 @@ Activated only when executing a LifeOS skill (`/today`, `/knowledge`, `/revise`,
 
 | Operation | When | Description |
 | --- | --- | --- |
+| `memory_bootstrap` | When entering a Vault session | Explicitly trigger startup and read the current `_layer0` |
 | `memory_notify` | After creating or modifying a Vault file | Update file index (fs.watch provides automatic backup, but call explicitly when immediate query is needed) |
 | `memory_query` | When context is needed | Query user preferences, learning progress, etc. |
 

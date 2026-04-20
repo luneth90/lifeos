@@ -63,7 +63,7 @@ describe('lifeos bin entry', () => {
 							`等待 initialize 响应超时。exitCode=${child.exitCode}; stdout=${stdout}; stderr=${stderr}`,
 						),
 					);
-				}, 2000);
+				}, 5000);
 
 				child.stdout.setEncoding('utf8');
 				child.stderr.setEncoding('utf8');

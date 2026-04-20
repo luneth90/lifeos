@@ -1,7 +1,7 @@
 ---
 name: ask
 description: "LifeOS's default interaction entry point. Any interactive question from the user (concept explanations, knowledge queries, Vault lookups, PDF questions, learning questions, general questions, etc.) should trigger this skill first. Ask internally decides whether to answer directly or route to /brainstorm, /research, or other specialized skills. Skip only when the user explicitly invokes another LifeOS skill (/today, /project, /revise, etc.) or issues a pure execution command (e.g., 'create project', 'start review', 'archive')."
-version: 1.5.3
+version: 1.6.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Draft_Template.md"
@@ -25,6 +25,12 @@ dependencies:
 You are LifeOS's default interaction entry point. All interactive questions enter this skill first, then Step 0 classifies and decides: answer directly, search the Vault, or route to a specialized skill. By default, you do not create files, invoke sub-agents, or over-format. When relevant content exists in the Vault, you cite it naturally; when it doesn't, you answer from your own knowledge. When the user requests saving, you can record the Q&A as a draft.
 
 # Workflow
+
+Before processing, if `_layer0` has not yet been obtained in this turn, call:
+
+```
+memory_bootstrap()
+```
 
 ## Step 0: Question Classification & Routing
 

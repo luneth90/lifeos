@@ -76,7 +76,7 @@ Run the following tests inside the Claude Code session. Simply tell Claude which
 
 > `memory_startup` has been internalized and is no longer exposed as an MCP tool. The MCP Server automatically triggers it on the first tool call.
 
-> Tell Claude: Call memory_query to search for "test"
+> Tell Claude: Call memory_bootstrap
 
 **Expected:**
 - [ ] Response contains `_layer0` field (confirming auto-startup was triggered)
@@ -242,12 +242,12 @@ cd tmp/lifeos-manual-test
 claude
 ```
 
-> Tell Claude: Call memory_query to search for "test", then call memory_recent
+> Tell Claude: Call memory_bootstrap first, then call memory_query to search for "test"
 
 **Verify:**
-- [ ] memory_query response contains `_layer0` field (auto-startup triggered)
+- [ ] memory_bootstrap response contains `_layer0`
 - [ ] Layer 0 summary includes information from previous session
-- [ ] memory_recent returns events from the previous session
+- [ ] The following memory_query returns search results normally
 
 ---
 
@@ -264,7 +264,7 @@ rm -rf tmp/lifeos-manual-test
 | Issue | How to Investigate |
 |-------|-------------------|
 | MCP Server not connected | Check `.mcp.json` paths; verify `node dist/server.js` starts normally |
-| First tool call does not return `_layer0` | Check `lifeos.yaml` exists and has valid format; confirm MCP Server is connected |
+| `memory_bootstrap` does not return `_layer0` | Check `lifeos.yaml` exists and has valid format; confirm MCP Server is connected |
 | memory_query returns nothing | Call `memory_notify` first to trigger scan; confirm vault_index has data |
 | Skills not recognized | Check `.agents/skills/` directory and `CLAUDE.md` skill table |
 | Database locked | Ensure no other process holds `90_System/Memory/memory.db` (`lsof tmp/lifeos-manual-test/90_System/Memory/memory.db`) |

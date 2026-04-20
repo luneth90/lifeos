@@ -1,7 +1,7 @@
 # 记忆系统集成协议
 
 > 所有记忆操作通过 MCP 工具调用，`db_path` 和 `vault_root` 由运行时自动注入，技能中无需指定。
-> 会话初始化（startup）由 MCP server 自动执行，Agent 无需关心。
+> 会话初始化（startup）由 MCP server 自动执行，但 Agent 在进入 Vault 会话时必须显式调用 `memory_bootstrap` 触发并读取 `_layer0`。
 
 ## 分层激活规则
 
@@ -23,6 +23,7 @@
 
 | 操作 | 时机 | 说明 |
 | --- | --- | --- |
+| `memory_bootstrap` | 进入 Vault 会话时 | 显式触发 startup，并读取当前 `_layer0` |
 | `memory_notify` | 创建或修改 Vault 文件后 | 更新文件索引（fs.watch 自动兜底，但需要立即查询时应显式调用） |
 | `memory_query` | 需要上下文时 | 查询用户偏好、学习进度等 |
 

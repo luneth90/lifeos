@@ -1,7 +1,7 @@
 ---
 name: translate
 description: Translates English PDF book chapters into Chinese Markdown reading notes, output to {resources directory}/translations/{book name}/. Enables a "PDF++ original + Chinese companion note" dual-pane reading experience in Obsidian, eliminating the English reading barrier. Automatically updates the learning project's mastery overview with a translation column upon completion. Use when the user needs to translate PDF chapters, prepare Chinese reading companions, or says "/translate".
-version: 1.5.3
+version: 1.6.0
 dependencies:
   templates: []
   prompts: []

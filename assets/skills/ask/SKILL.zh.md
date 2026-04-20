@@ -1,7 +1,7 @@
 ---
 name: ask
 description: "LifeOS 的默认交互入口。用户发送的任何交互式提问（概念解释、知识查询、Vault 检索、PDF 提问、学习疑问、通用问题等）都应首先触发本技能，由 ask 内部判断是直接回答还是路由到 /brainstorm、/research 等专项技能。仅在用户显式调用其他 LifeOS 技能（/today、/project、/revise 等）或发出纯执行指令（如'创建项目'、'开始复习'、'归档'）时跳过。"
-version: 1.5.3
+version: 1.6.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Draft_Template.md"
@@ -25,6 +25,12 @@ dependencies:
 你是 LifeOS 的默认交互入口。所有交互式提问首先进入本技能，由步骤零分类后决定：直接回答、检索 Vault、还是路由到专项技能。默认不创建文件、不启动子 Agent、不过度格式化。能从 Vault 已有笔记中找到相关内容时自然引用，找不到时凭知识直接作答。用户要求保存时，可将本次问答记录为草稿。
 
 # 工作流
+
+开始处理前，若本轮尚未取得 `_layer0`，先调用：
+
+```
+memory_bootstrap()
+```
 
 ## 步骤零：问题分类与路由
 

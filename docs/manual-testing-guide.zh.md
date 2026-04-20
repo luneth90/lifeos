@@ -72,11 +72,11 @@ claude
 
 以下测试在 Claude Code 会话中执行。每一步直接告诉 Claude 要调用的工具即可。
 
-### 4.1 自动启动验证 — 首次工具调用触发 memory_startup
+### 4.1 显式 bootstrap 验证 — 调用 memory_bootstrap 获取 Layer 0
 
-> `memory_startup` 已内部化，不再作为 MCP 工具暴露。MCP Server 会在首次工具调用时自动触发。
+> `memory_startup` 已内部化，不再作为 MCP 工具暴露。推荐通过 `memory_bootstrap` 显式触发 startup 并读取 `_layer0`。
 
-> 对 Claude 说：调用 memory_query 搜索"测试"
+> 对 Claude 说：调用 memory_bootstrap
 
 **预期：**
 - [ ] 返回结果中包含 `_layer0` 字段（说明自动启动已触发）
@@ -242,12 +242,12 @@ cd tmp/lifeos-manual-test
 claude
 ```
 
-> 对 Claude 说：调用 memory_query 搜索"测试"，然后调用 memory_recent
+> 对 Claude 说：先调用 memory_bootstrap，然后调用 memory_query 搜索"测试"
 
 **验证：**
-- [ ] memory_query 返回结果中包含 `_layer0` 字段（自动启动已触发）
+- [ ] memory_bootstrap 返回结果中包含 `_layer0` 字段
 - [ ] Layer 0 摘要包含上一会话的信息
-- [ ] memory_recent 能查到上一会话的事件
+- [ ] 随后的 memory_query 可以正常返回检索结果
 
 ---
 
@@ -264,7 +264,7 @@ rm -rf tmp/lifeos-manual-test
 | 问题 | 排查方法 |
 |------|---------|
 | MCP Server 未连接 | 检查 `.mcp.json` 路径是否正确；`node dist/server.js` 能否正常启动 |
-| 首次工具调用未返回 `_layer0` | 检查 `lifeos.yaml` 是否存在且格式正确；确认 MCP Server 已正确连接 |
+| `memory_bootstrap` 未返回 `_layer0` | 检查 `lifeos.yaml` 是否存在且格式正确；确认 MCP Server 已正确连接 |
 | memory_query 无结果 | 先调用 `memory_notify` 触发扫描，确认 vault_index 有数据 |
 | 技能未识别 | 检查 `.agents/skills/` 目录和 `CLAUDE.md` 技能表 |
 | 数据库锁定 | 确保没有其他进程持有 `90_系统/记忆/memory.db`（`lsof tmp/lifeos-manual-test/90_系统/记忆/memory.db`） |

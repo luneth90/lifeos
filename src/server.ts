@@ -11,6 +11,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import * as core from './core.js';
+import { buildLayer0Summary } from './services/layer0.js';
 import type { StartupResult } from './types.js';
 
 // ─── Key conversion helpers ──────────────────────────────────────────────────
@@ -37,6 +38,7 @@ function deepConvertKeys(obj: unknown): unknown {
 let startedUp = false;
 let startupResult: StartupResult | null = null;
 let startupVaultRoot: string | undefined;
+let layer0Dirty = false;
 
 function captureStartupContext(params: Record<string, unknown>): {
 	vaultRoot: string | undefined;
@@ -47,18 +49,31 @@ function captureStartupContext(params: Record<string, unknown>): {
 }
 
 function ensureStartup(params: Record<string, unknown>): void {
-	if (startedUp) return;
 	const { vaultRoot } = captureStartupContext(params);
+	if (startedUp) return;
 	try {
 		startupResult = core.memoryStartup({ vaultRoot });
 		startedUp = true;
 		// Start file watcher
-		const resolvedVault = vaultRoot || process.env.LIFEOS_VAULT_ROOT;
+		const resolvedVault = vaultRoot || startupVaultRoot || process.env.LIFEOS_VAULT_ROOT;
 		if (resolvedVault) startupVaultRoot = resolvedVault;
 		if (resolvedVault) startVaultWatcher(resolvedVault);
 	} catch (e) {
 		console.warn('[lifeos] Auto-startup failed:', e);
 	}
+}
+
+function refreshLayer0Summary(params: Record<string, unknown>): boolean {
+	const { vaultRoot } = captureStartupContext(params);
+	const resolvedVault = vaultRoot || startupVaultRoot || process.env.LIFEOS_VAULT_ROOT;
+	if (!startupResult || !resolvedVault) return false;
+
+	startupResult = {
+		...startupResult,
+		layer0_summary: buildLayer0Summary(resolvedVault),
+	};
+	layer0Dirty = false;
+	return true;
 }
 
 // ─── Vault watcher ──────────────────────────────────────────────────────────
@@ -103,6 +118,7 @@ function processNotifyQueue(): void {
 	const { vaultRoot, filename } = item;
 	try {
 		core.memoryNotify({ filePath: filename, vaultRoot });
+		layer0Dirty = true;
 	} catch (e) {
 		console.warn(`[lifeos] Auto-notify failed for ${filename}:`, e);
 	} finally {
@@ -163,33 +179,82 @@ function setupShutdownHandler(): void {
 
 // ─── Tool wrapper ────────────────────────────────────────────────────────────
 
+function normalizeParams<P extends Record<string, unknown>>(params: P): Record<string, unknown> {
+	const converted = deepConvertKeys(params) as Record<string, unknown>;
+	if (converted.dbPath === '') converted.dbPath = undefined;
+	if (converted.vaultRoot === '') converted.vaultRoot = undefined;
+	// filters contains SQL column names — must stay snake_case
+	if ('filters' in params) converted.filters = params.filters;
+	return converted;
+}
+
+function serializeOutput(output: unknown): { content: { type: 'text'; text: string }[] } {
+	return { content: [{ type: 'text' as const, text: JSON.stringify(output) }] };
+}
+
+function runTool<P extends Record<string, unknown>>(
+	// biome-ignore lint/suspicious/noExplicitAny: core functions have varied signatures
+	coreFn: (params: any) => unknown,
+	params: P,
+	options: { markLayer0DirtyOnSuccess?: boolean } = {},
+): unknown {
+	const converted = normalizeParams(params);
+	const wasFirstCall = !startedUp;
+	ensureStartup(converted);
+	const result = coreFn(converted);
+
+	if (options.markLayer0DirtyOnSuccess) {
+		layer0Dirty = true;
+		if (wasFirstCall && startupResult) {
+			refreshLayer0Summary(converted);
+		}
+	}
+
+	if (wasFirstCall && startupResult) {
+		return typeof result === 'object' && result !== null
+			? { _layer0: startupResult.layer0_summary, ...(result as Record<string, unknown>) }
+			: { _layer0: startupResult.layer0_summary, result };
+	}
+
+	return result;
+}
+
+function runMemoryBootstrap<P extends Record<string, unknown>>(
+	params: P,
+): {
+	status: 'ok';
+	startup_ran: boolean;
+	layer0_refreshed: boolean;
+	_layer0: string;
+} {
+	const converted = normalizeParams(params);
+	const wasFirstCall = !startedUp;
+	ensureStartup(converted);
+	const layer0Refreshed = layer0Dirty ? refreshLayer0Summary(converted) : false;
+
+	return {
+		status: 'ok',
+		startup_ran: wasFirstCall && !!startupResult,
+		layer0_refreshed: layer0Refreshed,
+		_layer0: startupResult?.layer0_summary ?? '',
+	};
+}
+
 function handleTool<P extends Record<string, unknown>>(
 	// biome-ignore lint/suspicious/noExplicitAny: core functions have varied signatures
 	coreFn: (params: any) => unknown,
+	options: { markLayer0DirtyOnSuccess?: boolean } = {},
 ): (params: P) => Promise<{ content: { type: 'text'; text: string }[] }> {
 	return async (params: P) => {
-		const converted = deepConvertKeys(params) as Record<string, unknown>;
-		if (converted.dbPath === '') converted.dbPath = undefined;
-		if (converted.vaultRoot === '') converted.vaultRoot = undefined;
-		// filters contains SQL column names — must stay snake_case
-		if ('filters' in params) converted.filters = params.filters;
+		return serializeOutput(runTool(coreFn, params, options));
+	};
+}
 
-		const wasFirstCall = !startedUp;
-		ensureStartup(params);
-		const result = coreFn(converted);
-
-		// Attach Layer 0 summary on first call
-		let output: unknown;
-		if (wasFirstCall && startupResult) {
-			output =
-				typeof result === 'object' && result !== null
-					? { _layer0: startupResult.layer0_summary, ...(result as Record<string, unknown>) }
-					: { _layer0: startupResult.layer0_summary, result };
-		} else {
-			output = result;
-		}
-
-		return { content: [{ type: 'text' as const, text: JSON.stringify(output) }] };
+function handleBootstrap<P extends Record<string, unknown>>(): (
+	params: P,
+) => Promise<{ content: { type: 'text'; text: string }[] }> {
+	return async (params: P) => {
+		return serializeOutput(runMemoryBootstrap(params));
 	};
 }
 
@@ -197,12 +262,28 @@ function handleTool<P extends Record<string, unknown>>(
 
 const server = new McpServer({
 	name: 'lifeos',
-	version: '1.5.3',
+	version: '1.6.0',
 });
 
 // ─── Tool registrations ───────────────────────────────────────────────────────
 
-// 1. memory_query
+// 1. memory_bootstrap
+server.tool(
+	'memory_bootstrap',
+	'Bootstrap the LifeOS session and return the current Layer 0 context.',
+	{
+		db_path: z
+			.string()
+			.default('')
+			.describe(
+				'Optional. Auto-resolved from vault_root + lifeos.yaml. Do NOT construct manually.',
+			),
+		vault_root: z.string().default(''),
+	},
+	handleBootstrap(),
+);
+
+// 2. memory_query
 server.tool(
 	'memory_query',
 	'Search vault index for notes, projects, and knowledge.',
@@ -221,7 +302,7 @@ server.tool(
 	handleTool(core.memoryQuery),
 );
 
-// 2. memory_log
+// 3. memory_log
 server.tool(
 	'memory_log',
 	'Upsert a rule (preference or correction) into memory. Use slot_key format "<category>:<topic>".',
@@ -254,10 +335,10 @@ server.tool(
 			.optional()
 			.describe('Optional ISO date string. Rule will be auto-expired after this date.'),
 	},
-	handleTool(core.memoryLog),
+	handleTool(core.memoryLog, { markLayer0DirtyOnSuccess: true }),
 );
 
-// 3. memory_notify
+// 4. memory_notify
 server.tool(
 	'memory_notify',
 	'Notify the memory system that a vault file has been created or modified.',
@@ -271,7 +352,7 @@ server.tool(
 		vault_root: z.string().default(''),
 		file_path: z.string().min(1),
 	},
-	handleTool(core.memoryNotify),
+	handleTool(core.memoryNotify, { markLayer0DirtyOnSuccess: true }),
 );
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
@@ -289,6 +370,21 @@ export async function main() {
 
 export const __testing = {
 	ensureStartup,
+	callMemoryBootstrap(params: Record<string, unknown>) {
+		return runMemoryBootstrap(params);
+	},
+	callTool(name: 'memory_query' | 'memory_log' | 'memory_notify', params: Record<string, unknown>) {
+		switch (name) {
+			case 'memory_query':
+				return runTool(core.memoryQuery, params);
+			case 'memory_log':
+				return runTool(core.memoryLog, params, { markLayer0DirtyOnSuccess: true });
+			case 'memory_notify':
+				return runTool(core.memoryNotify, params, { markLayer0DirtyOnSuccess: true });
+			default:
+				throw new Error(`Unknown tool: ${name}`);
+		}
+	},
 	debouncedNotify,
 	enqueueNotify(item: { vaultRoot: string; filename: string }) {
 		notifyQueue.push(item);
@@ -303,6 +399,7 @@ export const __testing = {
 		startedUp = false;
 		startupResult = null;
 		startupVaultRoot = undefined;
+		layer0Dirty = false;
 		watchedVaultRoot = null;
 		if (vaultWatcher) {
 			vaultWatcher.close();
