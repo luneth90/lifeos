@@ -157,4 +157,58 @@ describe('server auto lifecycle', () => {
 			otherVault.cleanup();
 		}
 	});
+
+	it('startup 失败后同一 vault 不会重复重试', async () => {
+		coreMock.memoryStartup.mockImplementation(() => {
+			throw new Error('startup failed');
+		});
+
+		const first = testing.callMemoryBootstrap({ vault_root: vault.root });
+		const second = testing.callMemoryBootstrap({ vault_root: vault.root });
+
+		expect(coreMock.memoryStartup).toHaveBeenCalledTimes(1);
+		expect(first).toMatchObject({
+			status: 'error',
+			startup_ran: false,
+			layer0_refreshed: false,
+			_layer0: '',
+			startup_error: 'startup failed',
+		});
+		expect(second).toMatchObject({
+			status: 'error',
+			startup_ran: false,
+			layer0_refreshed: false,
+			_layer0: '',
+			startup_error: 'startup failed',
+		});
+	});
+
+	it('startup 失败后切换到其他 vault 会重新尝试 startup', async () => {
+		const otherVault = createTempVault();
+		try {
+			coreMock.memoryStartup
+				.mockImplementationOnce(() => {
+					throw new Error('startup failed');
+				})
+				.mockImplementationOnce(({ vaultRoot }: { vaultRoot?: string }) => ({
+					layer0_summary: `Layer0:${vaultRoot ?? 'unknown'}`,
+				}));
+
+			const failed = testing.callMemoryBootstrap({ vault_root: vault.root });
+			const recovered = testing.callMemoryBootstrap({ vault_root: otherVault.root });
+
+			expect(coreMock.memoryStartup).toHaveBeenCalledTimes(2);
+			expect(failed).toMatchObject({
+				status: 'error',
+				startup_error: 'startup failed',
+			});
+			expect(recovered).toMatchObject({
+				status: 'ok',
+				startup_ran: true,
+				_layer0: `Layer0:${otherVault.root}`,
+			});
+		} finally {
+			otherVault.cleanup();
+		}
+	});
 });

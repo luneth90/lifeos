@@ -43,6 +43,7 @@ let startedUp = false;
 let startupResult: StartupResult | null = null;
 let startupVaultRoot: string | undefined;
 let layer0Dirty = false;
+let startupError: string | null = null;
 
 function readStartupContext(params: Record<string, unknown>): {
 	vaultRoot: string | undefined;
@@ -64,24 +65,32 @@ function resetStartupState(): void {
 	startupResult = null;
 	startupVaultRoot = undefined;
 	layer0Dirty = false;
+	startupError = null;
 	closeVaultWatcher();
 }
 
-function ensureStartup(params: Record<string, unknown>): void {
+function ensureStartup(params: Record<string, unknown>): { startedThisCall: boolean } {
 	const { vaultRoot } = readStartupContext(params);
 	if (startedUp && vaultRoot && startupVaultRoot && vaultRoot !== startupVaultRoot) {
 		resetStartupState();
 	}
-	if (startedUp) return;
+	if (startedUp) return { startedThisCall: false };
+	const resolvedVault = vaultRoot || process.env.LIFEOS_VAULT_ROOT;
+	if (resolvedVault) startupVaultRoot = resolvedVault;
 	try {
 		startupResult = core.memoryStartup({ vaultRoot });
+		startupError = null;
 		startedUp = true;
 		// Start file watcher
-		const resolvedVault = vaultRoot || process.env.LIFEOS_VAULT_ROOT;
-		if (resolvedVault) startupVaultRoot = resolvedVault;
 		if (resolvedVault) startVaultWatcher(resolvedVault);
+		return { startedThisCall: true };
 	} catch (e) {
+		startedUp = true;
+		startupResult = null;
+		layer0Dirty = false;
+		startupError = e instanceof Error ? e.message : String(e);
 		console.warn('[lifeos] Auto-startup failed:', e);
+		return { startedThisCall: false };
 	}
 }
 
@@ -233,18 +242,23 @@ function runTool<P extends Record<string, unknown>>(
 	options: { markLayer0DirtyOnSuccess?: boolean } = {},
 ): unknown {
 	const converted = normalizeParams(params);
-	const wasFirstCall = !startedUp;
-	ensureStartup(converted);
+	const { startedThisCall } = ensureStartup(converted);
+	if (startupError) {
+		return {
+			status: 'error' as const,
+			startup_error: startupError,
+		};
+	}
 	const result = coreFn(converted);
 
 	if (options.markLayer0DirtyOnSuccess) {
 		layer0Dirty = true;
-		if (wasFirstCall && startupResult) {
+		if (startedThisCall && startupResult) {
 			refreshLayer0Summary(converted);
 		}
 	}
 
-	if (wasFirstCall && startupResult) {
+	if (startedThisCall && startupResult) {
 		return typeof result === 'object' && result !== null
 			? { _layer0: startupResult.layer0_summary, ...(result as Record<string, unknown>) }
 			: { _layer0: startupResult.layer0_summary, result };
@@ -256,19 +270,28 @@ function runTool<P extends Record<string, unknown>>(
 function runMemoryBootstrap<P extends Record<string, unknown>>(
 	params: P,
 ): {
-	status: 'ok';
+	status: 'ok' | 'error';
 	startup_ran: boolean;
 	layer0_refreshed: boolean;
 	_layer0: string;
+	startup_error?: string;
 } {
 	const converted = normalizeParams(params);
-	const wasFirstCall = !startedUp;
-	ensureStartup(converted);
+	const { startedThisCall } = ensureStartup(converted);
+	if (startupError) {
+		return {
+			status: 'error',
+			startup_ran: false,
+			layer0_refreshed: false,
+			_layer0: '',
+			startup_error: startupError,
+		};
+	}
 	const layer0Refreshed = layer0Dirty ? refreshLayer0Summary(converted) : false;
 
 	return {
 		status: 'ok',
-		startup_ran: wasFirstCall && !!startupResult,
+		startup_ran: startedThisCall && !!startupResult,
 		layer0_refreshed: layer0Refreshed,
 		_layer0: startupResult?.layer0_summary ?? '',
 	};
