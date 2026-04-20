@@ -57,11 +57,9 @@ Compared with a memory model that mixes cross-directory content and global conve
 
 ## Quick Start
 
-LifeOS has been verified to work properly with Claude Code TUI / Codex TUI / OpenCode TUI on macOS, and with OpenCode GUI on Windows. Other desktop GUI apps or platform/client combinations have not been validated yet and may require additional testing.
+Verified setups: Claude Code CLI, Codex (CLI / Desktop), and OpenCode (CLI / Desktop) on macOS; Codex Desktop and OpenCode Desktop on Windows. Other platforms or client combinations have not been validated yet.
 
 ### Prerequisites
-
-Before starting, make sure Obsidian and at least one of Claude Code TUI / Codex TUI / OpenCode TUI / OpenCode GUI are installed locally.
 
 | Dependency | Required | Purpose |
 |---|---|---|
@@ -197,7 +195,7 @@ Create a `.md` file in your vault's Prompts directory (`{system directory}/Promp
 - ✅ LifeOS 1.0 is now basically usable
 - ✅ The CLI supports directory customization
 - ✅ The CLI `upgrade` command supports smart updates
-- ✅ Claude Code TUI / Codex TUI / OpenCode TUI on macOS and OpenCode GUI on Windows have been tested
+- ✅ Verified on macOS (Claude Code CLI, Codex CLI/Desktop, OpenCode CLI/Desktop) and Windows (Codex Desktop, OpenCode Desktop)
 - ✅ The `/digest` skill supports multilingual weekly digests with multi-source paper fetching
 - ☐ Improve memory-system precision
 - ☐ Support custom skills
