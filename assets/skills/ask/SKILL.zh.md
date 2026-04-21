@@ -1,7 +1,7 @@
 ---
 name: ask
 description: "LifeOS 的默认交互入口。用户发送的任何交互式提问（概念解释、知识查询、Vault 检索、PDF 提问、学习疑问、通用问题等）都应首先触发本技能，由 ask 内部判断是直接回答还是路由到 /brainstorm、/research 等专项技能。仅在用户显式调用其他 LifeOS 技能（/today、/project、/revise 等）或发出纯执行指令（如'创建项目'、'开始复习'、'归档'）时跳过。"
-version: 1.6.0
+version: 1.7.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Draft_Template.md"

@@ -326,7 +326,7 @@ function handleBootstrap<P extends Record<string, unknown>>(): (
 
 const server = new McpServer({
 	name: 'lifeos',
-	version: '1.6.0',
+	version: '1.7.0',
 });
 
 // ─── Tool registrations ───────────────────────────────────────────────────────

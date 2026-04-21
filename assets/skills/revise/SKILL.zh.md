@@ -1,7 +1,7 @@
 ---
 name: revise
 description: 对已有知识笔记进行主动回忆复习。生成复习文件（.md），用户在文件中作答后触发批改，自动更新笔记 status（draft→revise→mastered）和项目掌握度。支持三种模式：提问模式（应用题）、费曼模式（用自己的话解释概念）、盲点扫描（自评掌握程度）。当用户想复习、测验掌握程度、说"/revise"时使用此技能。用户说"批改"或"改卷"时触发批改流程。
-version: 1.6.0
+version: 1.7.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Revise_Template.md"

@@ -1,7 +1,7 @@
 ---
 name: translate
 description: 将英文 PDF 书籍章节翻译为中文 Markdown 阅读笔记，产出到 {资源目录}/翻译/{书名}/。用于在 Obsidian 中实现「PDF++ 原书 + 中文对照笔记」的双窗口阅读体验，消除英文阅读障碍。翻译完成后自动回填学习项目掌握度总览的翻译列。当用户需要翻译 PDF 章节、准备中文对照阅读材料、或说"/translate"时使用此技能。
-version: 1.6.0
+version: 1.7.0
 dependencies:
   templates: []
   prompts: []

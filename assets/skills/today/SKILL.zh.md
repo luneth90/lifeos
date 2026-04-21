@@ -1,7 +1,7 @@
 ---
 name: today
 description: 每日规划入口：回顾昨日进展和未完成任务、扫描活跃项目与待复习笔记、收集用户今日目标和新想法、生成今日日记文件。当用户开始新的一天、问"今天做什么"、说"早安"、想规划当日任务、或说"/today"时使用此技能。会自动提示后续可用的技能（/revise、/research、/project 等）。
-version: 1.6.0
+version: 1.7.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Daily_Template.md"
