@@ -226,3 +226,19 @@ Triggered when user completes answers (says "grade", "mark", "check review", etc
 ### Pre-query
 
 See Phase 0 for query code.
+
+### Profile Slot Writes
+
+After grading, if the result reveals a stable signal that should change the next review decision, write a structured profile slot:
+
+- **Weak area**: repeated errors cluster in the same sub-domain, or the related note remains in `draft` for a long time
+  - `memory_log(slot_key="profile:weak.<domain_slug>", content="<fact + evidence + decision impact>", related_files=[...])`
+- **Strong area**: the same sub-domain passes repeatedly at a high level, so basic guidance can be reduced
+  - `memory_log(slot_key="profile:strong.<domain_slug>", content="<fact + evidence + decision impact>", related_files=[...])`
+
+Rules:
+
+- `domain_slug` must be ASCII only; do not write raw Chinese titles into `slot_key`
+- Cap granularity at a second-level domain such as `math_group_theory` or `swift_concurrency`
+- If the trend is not stable, do not write it
+- `/revise` does not generate `profile:summary`

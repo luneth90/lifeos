@@ -226,3 +226,19 @@ memory_query(query="<章节主题或原书约定关键词> 纠错", limit=5)
 ### 前置查询
 
 见阶段 0 中的查询代码。
+
+### 画像写入
+
+批改结束后，若出现会改变下次复习决策的稳定信号，可写入结构化画像槽位：
+
+- **薄弱点**：错题持续集中在同一子领域，或相关笔记长期停留在 `draft`
+  - `memory_log(slot_key="profile:weak.<domain_slug>", content="<事实 + 证据 + 决策影响>", related_files=[...])`
+- **强项**：同一子领域连续多次高质量通过，已明显可以减少基础引导
+  - `memory_log(slot_key="profile:strong.<domain_slug>", content="<事实 + 证据 + 决策影响>", related_files=[...])`
+
+规则：
+
+- `domain_slug` 只用 ASCII slug，不直接写中文标题
+- 粒度上限为二级领域，如 `math_group_theory`、`swift_concurrency`
+- 没有稳定趋势时不要写，宁可漏写也不要泛写
+- `/revise` 不生成 `profile:summary`

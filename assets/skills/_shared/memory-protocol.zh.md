@@ -60,6 +60,22 @@ memory_log(
 
 每条规则必须附带 `slot_key`，格式为 `<category>:<topic>`。同一 `slot_key` 的后续写入会自动覆盖旧值。
 
+画像槽位允许在 `topic` 中继续使用 `.` 表示作用域，例如：
+
+- `profile:work_style`
+- `profile:weak.math_group_theory`
+- `profile:strong.swift_concurrency`
+- `profile:motivation.learningapp`
+- `profile:thinking_preference`
+
+规则：
+
+- `slot_key` 只允许 ASCII slug，避免把中文标题直接写入 key
+- `profile:summary` 视为旧兼容槽位，不再作为推荐写入目标
+- 画像写入优先采用结构化 `profile:*` 槽位
+- 只有当结构化 `profile:*` 槽位不存在时，系统才回退读取旧的 `profile:summary`
+- 未识别的结构化画像槽位可能进入 `其他画像` 兜底分组，此分组仅用于平滑升级，不是推荐写入目标
+
 | category | 含义 | 示例 |
 | --- | --- | --- |
 | `format` | 输出格式 | `format:latex`、`format:note-style` |
@@ -83,6 +99,14 @@ memory_log(
 ```
 
 > 可选参数：`related_files`（关联文件路径数组）、`expires_at`（过期时间）。
+
+### 画像内容写法
+
+当写入结构化 `profile:*` 槽位时，`content` 推荐包含三部分：
+
+1. 事实：这次观察到的稳定信号是什么
+2. 证据：来自哪条用户表述、哪份日记、项目文件或复习记录
+3. 决策影响：下次交互时应如何使用这条画像
 
 ## 规则捕获
 

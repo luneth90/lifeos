@@ -60,6 +60,22 @@ memory_log(
 
 Each rule must include a `slot_key` in the format `<category>:<topic>`. Subsequent writes with the same `slot_key` automatically overwrite the old value.
 
+Profile slots may continue using `.` inside the topic to represent scope, for example:
+
+- `profile:work_style`
+- `profile:weak.math_group_theory`
+- `profile:strong.swift_concurrency`
+- `profile:motivation.learningapp`
+- `profile:thinking_preference`
+
+Rules:
+
+- `slot_key` should stay ASCII-only; do not write raw Chinese titles into keys
+- `profile:summary` is now a legacy compatibility slot, not the recommended write target
+- Prefer structured `profile:*` slots for profile writes
+- The system only falls back to legacy `profile:summary` when no structured `profile:*` slots remain
+- Unrecognized structured profile slots may appear under an "other profile signals" fallback bucket; that bucket exists for smooth upgrades, not as a recommended write target
+
 | category | Meaning | Examples |
 | --- | --- | --- |
 | `format` | Output format | `format:latex`, `format:note-style` |
@@ -83,6 +99,14 @@ memory_log(
 ```
 
 > Optional parameters: `related_files` (array of related file paths), `expires_at` (expiration time).
+
+### Profile Content Shape
+
+When writing structured `profile:*` slots, the `content` should usually include three parts:
+
+1. Fact: what stable signal was observed
+2. Evidence: which user statement, diary, project file, or review record supports it
+3. Decision impact: how the next interaction should use this profile signal
 
 ## Rule Capture
 

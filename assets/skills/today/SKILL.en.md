@@ -85,14 +85,12 @@ Help the user start a new day: review yesterday's progress, create today's diary
    - Projects with `status: frozen` and their linked knowledge notes are excluded from active task lists and review recommendations
    - Determine a reasonable next step for each active project
 
-8. **Collect profile data** (for generating user summary)
-   - Aggregate from the steps above:
-     - All projects' domain, status, chapter coverage
-     - Knowledge note status distribution per project (draft/revise/mastered)
-   - Read the following sections from knowledge notes (summary only, not full text):
-     - Exercise solutions: problem records and correctness
-     - Review records: Q&A performance and scores
-     - Personal notes: user's own understanding and annotations
+8. **Check event-driven profile candidate signals**
+   - Only check whether any profile signal appears that should change the next decision; do not generate a narrative summary
+   - Focus on two candidate event types:
+     - The user actively narrows today into one main line or only a few main lines -> candidate `profile:work_style`
+     - The user explicitly mentions switching cost, or the context makes a high main-line switching cost clear -> candidate `profile:context_switch_pattern`
+   - If no clear event is present, skip profile writes and do not backfill
 
 ## Step 2: Collect User Input (Interactive)
 
@@ -124,28 +122,38 @@ Use the AskUserQuestion tool to collect the following information:
    - **Notes**: Fill in suggestions (time-sensitive items, stalled project reminders, pending draft count)
    - **Related projects**: List active projects with current status
 
-## Step 3-B: Generate User Profile (Silent Execution)
+## Step 3-B: Event-Driven Profile Check (Silent Execution)
 
-Based on the profile data collected in Step 1, generate a narrative user knowledge mastery profile:
+Based on the signals collected in Step 1, only write structured profile slots when a concrete event is present:
 
-1. **Comprehensive analysis** across these dimensions:
-   - Progress and completion of each project
-   - Knowledge mastery depth per domain (based on note status distribution and review performance)
-   - Weak areas (concepts with errors during review, notes stuck in draft for a long time)
-   - Unique insights from the user's personal notes
-
-2. **Generate profile description**: A 100-200 word narrative including:
-   - Current learning focus and progress in each domain
-   - Well-mastered knowledge areas
-   - Weak areas that need strengthening
-   - Overall learning pace assessment
-
-3. **Write to memory**:
+1. **Work style event**
+   - Condition: the user explicitly narrows today to a single main line, rejects parallel main lines, or repeatedly asks to keep the day tightly scoped
+   - Write:
    ```
-   memory_log(slot_key="profile:summary", content="<generated profile description>")
+   memory_log(
+     slot_key="profile:work_style",
+     content="<fact + evidence + decision impact>",
+     related_files=["<today note or related project file>"]
+   )
    ```
 
-> Note: If project and note data is insufficient to generate a meaningful profile (e.g., no active projects or notes), skip this step.
+2. **Context-switch cost event**
+   - Condition: the user explicitly reports switching fatigue, or the context makes the switching cost clear enough to act on
+   - Write:
+   ```
+   memory_log(
+     slot_key="profile:context_switch_pattern",
+     content="<fact + evidence + decision impact>",
+     related_files=["<today note or related project file>"]
+   )
+   ```
+
+3. **Content format**
+   - First sentence: the observed fact
+   - Second part: evidence
+   - Final part: how the next decision should use it
+
+> Note: `/today` no longer generates or backfills `profile:summary`. If no clear event is present, skip this step.
 
 ## Step 4: Capture New Ideas (from Question 2)
 

@@ -27,6 +27,11 @@ async function loadServerTesting() {
 	return mod.__testing;
 }
 
+async function loadServerModule() {
+	vi.resetModules();
+	return import('../src/server.js');
+}
+
 describe('server auto lifecycle', () => {
 	let vault: TempVault;
 	let testing: Awaited<ReturnType<typeof loadServerTesting>>;
@@ -210,5 +215,18 @@ describe('server auto lifecycle', () => {
 		} finally {
 			otherVault.cleanup();
 		}
+	});
+
+	it('slot_key schema accepts structured profile topics with dot scope', async () => {
+		const mod = await loadServerModule();
+		expect(() => mod.slotKeySchema.parse('profile:weak.math_group_theory')).not.toThrow();
+		expect(() => mod.slotKeySchema.parse('profile:motivation.learningapp')).not.toThrow();
+	});
+
+	it('slot_key schema rejects invalid structured profile topics', async () => {
+		const mod = await loadServerModule();
+		expect(() => mod.slotKeySchema.parse('profile:动机.learningapp')).toThrow();
+		expect(() => mod.slotKeySchema.parse('profile::bad')).toThrow();
+		expect(() => mod.slotKeySchema.parse('profile:')).toThrow();
 	});
 });

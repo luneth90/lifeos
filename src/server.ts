@@ -20,6 +20,13 @@ import type { StartupResult } from './types.js';
 
 // ─── Key conversion helpers ──────────────────────────────────────────────────
 
+export const slotKeySchema = z
+	.string()
+	.regex(
+		/^[a-z]+:[a-z0-9_.-]+$/,
+		'slot_key must be in format "<category>:<topic>", e.g. "format:latex"',
+	);
+
 function snakeToCamel(key: string): string {
 	return key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 }
@@ -374,13 +381,9 @@ server.tool(
 			.string()
 			.default('')
 			.describe('Optional. Auto-resolved from environment. Used for instant active-doc refresh.'),
-		slot_key: z
-			.string()
-			.regex(
-				/^[a-z]+:[a-z0-9_-]+$/,
-				'slot_key must be in format "<category>:<topic>", e.g. "format:latex"',
-			)
-			.describe('Required. A structured key like "format:latex" that identifies this rule.'),
+		slot_key: slotKeySchema.describe(
+			'Required. A structured key like "format:latex" that identifies this rule.',
+		),
 		content: z.string().min(1).describe('The rule content to store.'),
 		source: z
 			.enum(['preference', 'correction'])

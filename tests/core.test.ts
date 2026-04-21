@@ -121,6 +121,23 @@ describe('memoryLog', () => {
 		expect(upContent).toContain('format:latex');
 		expect(upContent).toContain('Always use LaTeX');
 	});
+
+	it('refreshes UserProfile profile-summary section after structured profile upsert', () => {
+		memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
+		_resetDefaultInstance();
+
+		memoryLog({
+			dbPath: vault.dbPath,
+			vaultRoot: vault.root,
+			slotKey: 'profile:work_style',
+			content: '偏好单主线推进',
+		});
+
+		const memoryDir = join(vault.root, '90_系统', '记忆');
+		const upContent = readFileSync(join(memoryDir, 'UserProfile.md'), 'utf-8');
+		expect(upContent).toContain('工作方式');
+		expect(upContent).toContain('偏好单主线推进');
+	});
 });
 
 // ─── memoryQuery ──────────────────────────────────────────────────────────────

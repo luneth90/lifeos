@@ -169,6 +169,17 @@ After the summary is confirmed, offer three options:
 
 If the user confirmed any persistent preferences or rules during this conversation, log them as behavior rules via `memory_log` before wrapping up.
 
+If the conversation also reveals a stable thinking-style preference that should change how future questioning or divergence works, write:
+
+```
+memory_log(
+  slot_key="profile:thinking_preference",
+  content="<fact + evidence + decision impact>"
+)
+```
+
+Do not write this from a single style preference; require repeated confirmation or an explicit correction.
+
 # Notes
 
 ## Conversation Phase

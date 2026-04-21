@@ -9,6 +9,7 @@ import type { TempVault } from '../setup.js';
 
 import { generateEnhancedSearchTerms, mergeSearchHints } from '../../src/services/enhance.js';
 import { buildLayer0Summary, extractAutoSection, trimToBudget } from '../../src/services/layer0.js';
+import { upsertRule } from '../../src/services/capture.js';
 // Services under test
 import { runStartup } from '../../src/services/startup.js';
 
@@ -193,5 +194,25 @@ describe('runStartup', () => {
 		});
 		const result = runStartup(db, vault.root);
 		expect(result['vault_stats']['total_files']).toBeGreaterThanOrEqual(0);
+	});
+
+	it('includes structured profile slots in layer0 summary after startup refresh', () => {
+		upsertRule(db, {
+			slotKey: 'profile:work_style',
+			content: '偏好单主线收敛',
+			source: 'preference',
+		});
+		upsertRule(db, {
+			slotKey: 'profile:context_switch_pattern',
+			content: '主线切换时损耗明显',
+			source: 'correction',
+		});
+
+		const result = runStartup(db, vault.root);
+		expect(result.layer0_summary).toContain('UserProfile 速览');
+		expect(result.layer0_summary).toContain('工作方式');
+		expect(result.layer0_summary).toContain('偏好单主线收敛');
+		expect(result.layer0_summary).toContain('切换模式');
+		expect(result.layer0_summary).toContain('主线切换时损耗明显');
 	});
 });

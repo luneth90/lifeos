@@ -131,3 +131,21 @@ When adding new documents to a development project later, continue placing them 
 ### Pre-query
 
 See Phase 0 for query code.
+
+### Profile Slot Writes
+
+If the user clearly states why this project matters, and that motivation is durable enough to affect later tradeoffs, write:
+
+```
+memory_log(
+  slot_key="profile:motivation.<project_slug>",
+  content="<fact + evidence + decision impact>",
+  related_files=["<plan file or project file>"]
+)
+```
+
+Rules:
+
+- `project_slug` must be ASCII only
+- Only capture durable project motivation that will affect future tradeoffs
+- `/project` does not generate `profile:summary`

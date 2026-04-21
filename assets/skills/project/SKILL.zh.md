@@ -131,3 +131,21 @@ Planning Agent 返回后，用中文通知用户：
 ### 前置查询
 
 见阶段 0 中的查询代码。
+
+### 画像写入
+
+若用户在项目创建过程中明确说明“为什么做这个项目”，且该动机会影响后续取舍，可在确认后写入：
+
+```
+memory_log(
+  slot_key="profile:motivation.<project_slug>",
+  content="<事实 + 证据 + 决策影响>",
+  related_files=["<计划文件或项目文件>"]
+)
+```
+
+规则：
+
+- `project_slug` 只用 ASCII slug
+- 仅记录会影响后续项目取舍的稳定动机，不记录一次性的情绪表达
+- `/project` 不生成 `profile:summary`

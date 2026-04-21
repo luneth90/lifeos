@@ -1,5 +1,20 @@
 # 更新日志
 
+## Unreleased
+
+### 事件驱动用户画像系统落地
+
+- `memory_log` 的 `slot_key` 现在支持结构化画像槽位，如 `profile:weak.math_group_theory`
+- `UserProfile` 的 `profile-summary` AUTO section 改为优先聚合结构化 `profile:*`，`profile:summary` 退化为兼容性回退
+- `Layer 0` 现在会带出结构化画像摘要，不再只依赖旧的综合 `profile:summary`
+
+### 技能协议同步
+
+- `/today` 改为只在明确事件出现时写入 `profile:work_style` / `profile:context_switch_pattern`
+- `/revise` 新增 `profile:weak.*` / `profile:strong.*` 写入约定
+- `/project`、`/brainstorm`、`/ask` 新增结构化画像写入规范
+- `memory-protocol`（中英）补充结构化 `profile:*` 槽位命名与 content 写法
+
 ## 1.6.0 (2026-04-20)
 
 ### 显式 Layer 0 Bootstrap

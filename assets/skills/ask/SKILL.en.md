@@ -186,3 +186,20 @@ Follow-up options:
 ### Pre-check Queries
 
 See Step 1 for query code (limited to three question types).
+
+### Profile Slot Writes
+
+If the user repeatedly corrects the questioning style across adjacent turns, and that preference should change future Q&A behavior, write:
+
+```
+memory_log(
+  slot_key="profile:thinking_preference",
+  content="<fact + evidence + decision impact>"
+)
+```
+
+Rules:
+
+- Require repeated confirmation or correction before writing
+- Do not write one-off tone preferences
+- `/ask` does not generate `profile:summary`

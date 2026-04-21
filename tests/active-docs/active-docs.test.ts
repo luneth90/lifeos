@@ -171,6 +171,45 @@ describe('buildUserprofileSections', () => {
 		const sections = buildUserprofileSections(db, '/tmp/vault');
 		expect(sections['profile-summary']).toContain('Math');
 	});
+
+	it('profile-summary prefers structured profile slots over legacy profile:summary', () => {
+		upsertRule(db, {
+			slotKey: 'profile:summary',
+			content: '旧的综合画像',
+			source: 'preference',
+		});
+		upsertRule(db, {
+			slotKey: 'profile:work_style',
+			content: '偏好单日单主线收敛',
+			source: 'preference',
+		});
+		upsertRule(db, {
+			slotKey: 'profile:weak.math_group_theory',
+			content: '子群判定条件容易混淆',
+			source: 'correction',
+		});
+
+		const sections = buildUserprofileSections(db, '/tmp/vault');
+		expect(sections['profile-summary']).toContain('工作方式');
+		expect(sections['profile-summary']).toContain('偏好单日单主线收敛');
+		expect(sections['profile-summary']).toContain('薄弱点');
+		expect(sections['profile-summary']).toContain('math_group_theory');
+		expect(sections['profile-summary']).toContain('子群判定条件容易混淆');
+		expect(sections['profile-summary']).not.toContain('旧的综合画像');
+	});
+
+	it('profile-summary keeps unrecognized structured profile slots visible', () => {
+		upsertRule(db, {
+			slotKey: 'profile:custom_signal',
+			content: '这是未来扩展用的画像信号',
+			source: 'preference',
+		});
+
+		const sections = buildUserprofileSections(db, '/tmp/vault');
+		expect(sections['profile-summary']).toContain('其他画像');
+		expect(sections['profile-summary']).toContain('custom_signal');
+		expect(sections['profile-summary']).toContain('这是未来扩展用的画像信号');
+	});
 });
 
 // ─── refreshTaskboard ─────────────────────────────────────────────────────────
