@@ -1,7 +1,7 @@
 ---
 name: project
-description: '将想法、草稿或学习资源转化为结构化的项目文件（产出到 {项目目录}/）。使用双 Agent 工作流：规划 Agent 生成 `type: plan, status: active` 的计划文件供用户审核，确认后执行 Agent 创建正式项目并将计划更新为 `status: done`。支持四种项目类型：学习（章节式规划）、开发（单主项目+文档目录）、创作（里程碑式）、通用。当用户想创建项目、规划一本书的学习、把草稿想法正式化、或说"/project"时使用此技能。'
-version: 1.7.0
+description: '把想法、草稿或学习资源转成正式项目时使用；支持学习、开发、创作和通用项目。'
+version: 1.7.1
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Project_Template.md"

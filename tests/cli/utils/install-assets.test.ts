@@ -196,8 +196,8 @@ describe('installSkills', () => {
 			);
 
 			expect(zhDigest).not.toBe(enDigest);
-			expect(zhDigest).toContain('通用信息周报');
-			expect(enDigest).toContain('general weekly digest');
+			expect(zhDigest).toContain('你是 LifeOS 的信息汇总助手');
+			expect(enDigest).toContain("You are LifeOS's digest assistant");
 			expect(zhDigest).toContain('Paper Sources');
 			expect(enDigest).toContain('Paper Sources');
 			expect(zhConfig).toContain('Paper Sources');

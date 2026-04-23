@@ -1,7 +1,7 @@
 ---
 name: revise
-description: "Conduct active recall review of existing knowledge notes. Generates review files (.md) for the user to answer, then triggers grading upon completion, automatically updating note status (draft\u2192review\u2192mastered) and project mastery levels. Supports three modes: quiz mode (application questions), Feynman mode (explain concepts in own words), blind spot scan (self-assess mastery). Use this skill when the user wants to review, test mastery, or says '/revise'. Triggers grading flow when user says 'grade' or 'mark my review'."
-version: 1.7.0
+description: "Review knowledge notes with active recall; generate questions, grade answers, and update mastery status."
+version: 1.7.1
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Revise_Template.md"

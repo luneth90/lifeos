@@ -1,7 +1,7 @@
 ---
 name: read-pdf
-description: "Extract text, charts (Vision analysis), math formulas (to LaTeX), and tables (to Markdown) from PDF files, producing JSON intermediate data for /knowledge, /ask, /revise and other skills to consume. Supports page ranges and chapter name positioning. Use this skill when the user needs to read PDF content, extract specific pages, parse book chapters, or says '/read-pdf'. Also called internally by other skills."
-version: 1.7.0
+description: "Extract PDF text, figures, formulas, and tables by page range or chapter for use by other LifeOS skills."
+version: 1.7.1
 dependencies:
   templates: []
   prompts: []
