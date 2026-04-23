@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: "Build knowledge notes and wiki concepts from a project, source chapter or paper, and optional draft notes."
-version: 1.7.1
+version: 1.7.2
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Knowledge_Template.md"

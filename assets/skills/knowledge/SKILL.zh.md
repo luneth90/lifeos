@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: '整理书章或论文知识时使用；从项目、原文和可选草稿生成知识笔记与 Wiki 概念。'
-version: 1.7.1
+version: 1.7.2
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Knowledge_Template.md"

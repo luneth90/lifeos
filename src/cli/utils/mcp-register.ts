@@ -155,7 +155,9 @@ function replaceTomlSection(
 	range: { start: number; end: number },
 	section: string,
 ): string {
-	return `${content.slice(0, range.start)}${section}${content.slice(range.end)}`;
+	const suffix = content.slice(range.end);
+	const normalizedSection = suffix.length > 0 && !section.endsWith('\n') ? `${section}\n` : section;
+	return `${content.slice(0, range.start)}${normalizedSection}${suffix}`;
 }
 
 function ensureTrailingNewline(content: string): string {

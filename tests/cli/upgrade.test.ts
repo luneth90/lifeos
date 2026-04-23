@@ -576,6 +576,35 @@ describe('lifeos upgrade', () => {
 		expect(openCodeConfig.mcp?.existing).toEqual({ type: 'local', command: ['keep-me'] });
 	});
 
+	test('keeps Codex tool sections on a new line when filling missing MCP fields', async () => {
+		await init([dir, '--lang', 'zh', '--no-mcp']);
+
+		ensureDirForTest(join(dir, '.codex'));
+		writeFileSync(
+			join(dir, '.codex', 'config.toml'),
+			[
+				'[mcp_servers.lifeos]',
+				'command = "lifeos"',
+				'',
+				'[mcp_servers.lifeos.tools.memory_bootstrap]',
+				'approval_mode = "approve"',
+				'',
+			].join('\n'),
+			'utf-8',
+		);
+
+		await upgrade([dir]);
+
+		const codexConfig = readFileSync(join(dir, '.codex', 'config.toml'), 'utf-8');
+		expect(codexConfig).toContain(`args = ["--vault-root", "${dir}"]`);
+		expect(codexConfig).toContain(
+			`args = ["--vault-root", "${dir}"]\n[mcp_servers.lifeos.tools.memory_bootstrap]`,
+		);
+		expect(codexConfig).not.toContain(
+			`args = ["--vault-root", "${dir}"][mcp_servers.lifeos.tools.memory_bootstrap]`,
+		);
+	});
+
 	test('override replaces existing lifeos MCP config entries', async () => {
 		await init([dir, '--lang', 'zh', '--no-mcp']);
 

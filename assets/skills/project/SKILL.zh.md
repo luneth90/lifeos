@@ -1,7 +1,7 @@
 ---
 name: project
 description: '把想法、草稿或学习资源转成正式项目时使用；支持学习、开发、创作和通用项目。'
-version: 1.7.1
+version: 1.7.2
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Project_Template.md"

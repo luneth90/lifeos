@@ -1,7 +1,7 @@
 ---
 name: research
 description: '深入研究主题或草稿时使用；产出研究计划与结构化研究报告。'
-version: 1.7.1
+version: 1.7.2
 dependencies:
   templates: []
   prompts:

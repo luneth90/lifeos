@@ -1,7 +1,7 @@
 ---
 name: ask
 description: 'LifeOS 默认问答入口。用户提出概念、检索、PDF、学习或通用问题时使用，显式调用其他技能时跳过。'
-version: 1.7.1
+version: 1.7.2
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Draft_Template.md"

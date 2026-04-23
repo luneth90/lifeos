@@ -1,5 +1,13 @@
 # 更新日志
 
+## 1.7.2 (2026-04-24)
+
+### Codex MCP 配置修复
+
+- 修复 `lifeos upgrade` 更新 `.codex/config.toml` 时可能把 `args = [...]` 与后续 `[mcp_servers.*]` table header 拼到同一行的问题
+- 该问题会导致 Codex 启动时报 TOML parse error，典型错误形态是 `args = [...][mcp_servers.lifeos.tools.memory_bootstrap]`
+- 新增回归测试，覆盖已有 Codex tool section 时补齐 `lifeos` MCP 字段的换行保留行为
+
 ## 1.7.1 (2026-04-24)
 
 ### 技能描述瘦身

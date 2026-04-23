@@ -1,7 +1,7 @@
 ---
 name: digest
 description: '生成信息周报时使用；按主题配置抓取 Paper、RSS、Web 等来源并输出到草稿。'
-version: 1.7.1
+version: 1.7.2
 dependencies:
   templates: []
   prompts: []

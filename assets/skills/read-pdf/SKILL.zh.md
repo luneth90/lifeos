@@ -1,7 +1,7 @@
 ---
 name: read-pdf
 description: '读取 PDF 内容时使用；按页码或章节提取文本、图表、公式和表格，供其他技能复用。'
-version: 1.7.1
+version: 1.7.2
 dependencies:
   templates: []
   prompts: []
