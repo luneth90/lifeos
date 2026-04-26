@@ -119,10 +119,20 @@ memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
    - 先根据归档规则计算目标路径，并确保目标父目录存在
    - **不要**为了归档先把整篇文档内容读入上下文；只有在需要更新 frontmatter 时，才在移动后读取目标文件
 
-2. **使用底层移动/重命名能力完成归档：**
-   - 优先使用底层文件系统 move / rename 原语，或等价的 Vault/平台原生移动能力
-   - Windows 环境使用等价的原生命令或 API，不要假设 Unix `mv`
-   - **严禁**通过“写入新文件，再删除原文件”的方式模拟移动；这会浪费 token，也更容易破坏元数据或链接关系
+2. **使用 Obsidian CLI 移动文件（自动更新 wikilink）：**
+   - **优先使用 `obsidian move`** — 内部调用 `app.fileManager.renameFile()`，自动更新全库 wikilink 引用
+   - 前提：Obsidian 必须正在运行
+   - 命令格式：
+     ```
+     # 单文件
+     obsidian move path="源路径/文件.md" to="目标目录/"
+     # 文件夹项目（整体移动）
+     obsidian move path="源路径/项目文件夹" to="目标目录/2026/"
+     ```
+   - 每次操作前先确保目标父目录已存在（`mkdir -p`）
+   - **回退：** 若 `obsidian` CLI 不可用（命令不存在或 Obsidian 未运行），回退到系统 `mv`
+     - 回退后需在完成报告中标注「⚠️ 使用了 mv 回退，wikilink 可能未更新，建议运行 `obsidian unresolved` 检查」
+   - **严禁**通过"写入新文件，再删除原文件"的方式模拟移动
    - 文件夹项目必须整体移动目录，不要逐文件复制重建
 
    **项目归档：**
@@ -197,7 +207,8 @@ memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 - **只归档已完成的计划** — `status: done` 的计划才可归档，`status: active` 绝不归档
 - **只归档超出最近 7 天的日记** — `{日记目录}/` 始终保留最近 7 天（含今天）的日记
 - **永不删除** — 只移动，不销毁内容
-- **必须使用原生移动/重命名** — 归档动作必须调用底层 move / rename 能力；禁止通过“写新文件 + 删除原文件”模拟移动
+- **优先使用 Obsidian CLI 移动** — `obsidian move` 自动更新 wikilink；不可用时回退到 `mv`，并标注链接断裂风险
+- **禁止模拟移动** — 禁止通过“写新文件 + 删除原文件”模拟移动
 - **按规则组织** — 项目按完成年，草稿和日记按归档年月，计划统一放入 `{归档计划子目录}`
 - **归档前确认** — 让用户审核列表后再执行
 - **更新 frontmatter** — 写入 `archived` 日期；计划同步更新为 `status: archived`
@@ -213,6 +224,7 @@ memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
 - **大型项目含资源：** 确认是否一并归档 `{资源目录}/` 中的关联资源
 - **刚完成的项目：** 提醒用户可先做项目复盘，再归档
 - **文件移动失败：** 停止当前条目归档，告知用户具体失败文件，继续处理其余条目，最后汇报失败列表
+- **Obsidian CLI 不可用：** 回退到系统 `mv`，归档完成后在报告中标注「wikilink 可能未更新」，建议用户用 `obsidian unresolved` 检查失效链接
 
 # 归档结构
 

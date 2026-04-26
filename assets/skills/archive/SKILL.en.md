@@ -119,10 +119,20 @@ After user confirmation, for each item to archive:
    - Compute the destination path from the archive rule and ensure the destination parent directory exists
    - **Do not** read the full document into context just to archive it; only read the destination file after the move if a frontmatter update is needed
 
-2. **Use a native move/rename primitive for the archival move:**
-   - Prefer a filesystem-level move / rename primitive, or the equivalent native Vault/platform move capability
-   - On Windows, use the equivalent native command or API instead of assuming Unix `mv`
-   - **Never** simulate a move by writing a new file and then deleting the original file; that wastes tokens and is more likely to damage metadata or links
+2. **Use Obsidian CLI to move files (auto-updates wikilinks):**
+   - **Prefer `obsidian move`** — internally calls `app.fileManager.renameFile()`, auto-updating all wikilink references vault-wide
+   - Requires Obsidian to be running
+   - Command format:
+     ```
+     # Single file
+     obsidian move path="source-path/file.md" to="target-directory/"
+     # Folder project (move whole directory)
+     obsidian move path="source-path/project-folder" to="target-directory/2026/"
+     ```
+   - Ensure the destination parent directory exists before each operation (`mkdir -p`)
+   - **Fallback:** If `obsidian` CLI is unavailable (command not found or Obsidian not running), fall back to system `mv`
+     - After fallback, mark the completion report with "⚠️ mv fallback used; wikilinks may not be updated. Run `obsidian unresolved` to check"
+   - **Never** simulate a move by writing a new file and then deleting the original file
    - Folder projects must be moved as whole directories, not rebuilt file-by-file
 
    **Project archival:**
@@ -197,7 +207,8 @@ After user confirmation, for each item to archive:
 - **Only archive completed plans** — only plans with `status: done` can be archived; plans with `status: active` are never archived
 - **Only archive diary entries older than the most recent 7 days** — `{diary directory}/` always keeps the most recent 7 days, including today
 - **Never delete** — only move, never destroy content
-- **Must use native move/rename semantics** — archival must call a real move / rename capability; do not simulate it with “write new file + delete old file”
+- **Prefer Obsidian CLI for moves** — `obsidian move` auto-updates wikilinks; fall back to `mv` when unavailable, noting link breakage risk
+- **No simulated moves** — do not simulate a move with “write new file + delete old file”
 - **Organize by archive rule** — projects by completion year, drafts and diary entries by archival year and month, plans in `{archived plans subdirectory}`
 - **Confirm before archiving** — let the user review the list before execution
 - **Update frontmatter** — write the `archived` date; for plans also set `status: archived`
@@ -213,6 +224,7 @@ After user confirmation, for each item to archive:
 - **Large project with resources:** Confirm whether to also archive associated resources in `{resources directory}/`
 - **Recently completed project:** Remind the user they may want to do a project retrospective before archiving
 - **File move failure:** Stop archiving the current item, inform the user of the specific failed file, continue processing remaining items, and report the failure list at the end
+- **Obsidian CLI unavailable:** Fall back to system `mv`; after completion, note in the report that "wikilinks may not be updated" and suggest running `obsidian unresolved` to check broken links
 
 # Archive Structure
 
