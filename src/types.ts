@@ -69,7 +69,15 @@ export type VaultSelectRow = Pick<
 
 export interface StartupResult {
 	layer0_summary: string;
-	vault_stats: { total_files: number; updated_since_last: number; removed: number };
+	vault_stats: {
+		total_files: number;
+		updated_since_last: number;
+		unchanged: number;
+		removed: number;
+		scan_error?: string;
+	};
+	dict_loaded?: boolean;
+	dict_error?: string;
 }
 
 export interface RefreshResult {

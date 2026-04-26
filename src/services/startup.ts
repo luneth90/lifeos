@@ -40,28 +40,36 @@ export function runStartup(db: Database.Database, vaultRoot: string): StartupRes
 	initDb(db);
 
 	// 2. Load custom dictionary (before scan so tokens use updated segmenter)
+	let dictLoaded: boolean | undefined;
+	let dictError: string | undefined;
 	const config = getVaultConfig();
 	if (config) {
 		const dictPath = join(config.subDirPath('system', 'memory'), 'custom_dict.txt');
 		if (existsSync(dictPath)) {
 			try {
 				loadCustomDict(dictPath);
+				dictLoaded = true;
 			} catch (e) {
 				console.warn(`[lifeos] Failed to load custom dict ${dictPath}:`, e);
+				dictLoaded = false;
+				dictError = e instanceof Error ? e.message : String(e);
 			}
 		}
 	}
 
 	// 3. Full vault scan — reuses existing DB connection
 	let scanIndexed = 0;
+	let scanUnchanged = 0;
 	let scanRemoved = 0;
+	let scanError: string | undefined;
 	try {
 		const scanResult = fullScan(vaultRoot, db);
 		scanIndexed = scanResult.indexed;
+		scanUnchanged = scanResult.unchanged;
 		scanRemoved = scanResult.removed;
 	} catch (e) {
 		console.warn('[lifeos] vault scan failed:', e);
-		scanIndexed = 0;
+		scanError = e instanceof Error ? e.message : String(e);
 	}
 
 	// 4. Expire stale rules before refreshing active docs
@@ -74,8 +82,18 @@ export function runStartup(db: Database.Database, vaultRoot: string): StartupRes
 	// 6. Build Layer 0
 	const totalFiles = countRows(db, 'vault_index');
 
-	return {
+	const result: StartupResult = {
 		layer0_summary: buildLayer0Summary(vaultRoot),
-		vault_stats: { total_files: totalFiles, updated_since_last: scanIndexed, removed: scanRemoved },
+		vault_stats: {
+			total_files: totalFiles,
+			updated_since_last: scanIndexed,
+			unchanged: scanUnchanged,
+			removed: scanRemoved,
+		},
+		dict_loaded: dictLoaded,
+		dict_error: dictError,
 	};
+	if (scanError) result.vault_stats.scan_error = scanError;
+
+	return result;
 }

@@ -205,6 +205,25 @@ function debouncedNotify(vaultRoot: string, filename: string): void {
 	}, DEBOUNCE_MS);
 }
 
+// ─── Debounced Layer 0 refresh after memory_log ──────────────────────────────
+
+let layer0RefreshTimer: NodeJS.Timeout | null = null;
+let pendingLayer0Params: Record<string, unknown> | null = null;
+
+function scheduleLayer0Refresh(params: Record<string, unknown>): void {
+	pendingLayer0Params = params;
+
+	if (layer0RefreshTimer) clearTimeout(layer0RefreshTimer);
+
+	layer0RefreshTimer = setTimeout(() => {
+		layer0RefreshTimer = null;
+		const p = pendingLayer0Params;
+		pendingLayer0Params = null;
+		if (!p) return;
+		refreshLayer0Summary(p);
+	}, DEBOUNCE_MS);
+}
+
 let vaultWatcher: FSWatcher | null = null;
 let watchedVaultRoot: string | null = null;
 
@@ -270,6 +289,8 @@ function runTool<P extends Record<string, unknown>>(
 		layer0Dirty = true;
 		if (startedThisCall && startupResult) {
 			refreshLayer0Summary(converted);
+		} else {
+			scheduleLayer0Refresh(converted);
 		}
 	}
 
@@ -479,6 +500,11 @@ export const __testing = {
 			clearTimeout(batchTimer);
 			batchTimer = null;
 		}
+		if (layer0RefreshTimer) {
+			clearTimeout(layer0RefreshTimer);
+			layer0RefreshTimer = null;
+		}
+		pendingLayer0Params = null;
 		pendingFiles.clear();
 		notifyQueue.length = 0;
 		notifyInFlight = false;

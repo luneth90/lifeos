@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import Database from 'better-sqlite3';
 import { parse as parseYaml } from 'yaml';
 import { resolveConfig } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
@@ -168,8 +169,65 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 		check('assets version', 'warn', 'no installed_versions in lifeos.yaml');
 	}
 
+	// 10. Database health
+	checkDbHealth(targetPath, resolvedConfig, check);
+
 	printSummary(result);
 	return result;
+}
+
+function checkDbHealth(
+	targetPath: string,
+	config: LifeOSConfig,
+	check: (name: string, status: 'pass' | 'warn' | 'fail', detail?: string) => void,
+): void {
+	const dbName = config.memory?.db_name ?? 'memory.db';
+	const memorySub = config.subdirectories?.system?.memory ?? '记忆';
+	const systemDir = config.directories?.system ?? '90_系统';
+	const dbPath = join(targetPath, systemDir, memorySub, dbName);
+
+	if (!existsSync(dbPath)) {
+		check('database', 'pass', 'not yet initialized (expected for new vaults)');
+		return;
+	}
+
+	let db: Database.Database | null = null;
+	try {
+		db = new Database(dbPath, { readonly: true });
+
+		// Integrity check
+		try {
+			const integrity = db.pragma('integrity_check') as Array<{ integrity_check: string }>;
+			const ok = integrity.length === 1 && integrity[0].integrity_check === 'ok';
+			check('database integrity', ok ? 'pass' : 'fail', ok ? 'ok' : JSON.stringify(integrity));
+		} catch {
+			check('database integrity', 'fail', 'pragma failed');
+		}
+
+		// Row counts
+		try {
+			const viCount = (db.prepare('SELECT COUNT(*) as n FROM vault_index').get() as { n: number })
+				.n;
+			const ftsCount = (db.prepare('SELECT COUNT(*) as n FROM vault_fts').get() as { n: number }).n;
+			const miCount = (db.prepare('SELECT COUNT(*) as n FROM memory_items').get() as { n: number })
+				.n;
+
+			const ftsOk = viCount === ftsCount;
+			check(
+				`database rows: vault=${viCount} fts=${ftsCount} memory=${miCount}`,
+				ftsOk ? 'pass' : 'warn',
+				ftsOk
+					? undefined
+					: 'vault_index and vault_fts row counts differ — FTS index may be out of sync',
+			);
+		} catch {
+			check('database rows', 'fail', 'query failed');
+		}
+	} catch {
+		check('database', 'fail', 'could not open memory.db');
+	} finally {
+		db?.close();
+	}
 }
 
 function printSummary(result: DoctorResult) {

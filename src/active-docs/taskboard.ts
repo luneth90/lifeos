@@ -7,6 +7,7 @@
 
 import type Database from 'better-sqlite3';
 import { MASTERY_STATUS_LABELS, STATUS_LABELS, formatDateShort } from '../types.js';
+import { normalizeWikilink } from '../utils/wikilink.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -78,7 +79,8 @@ function buildRevisesSection(db: Database.Database): string {
        LEFT JOIN vault_index proj
          ON proj.type = 'project'
          AND (vi.project = proj.file_path
-              OR vi.project = '[[' || proj.title || ']]')
+               OR vi.project = '[[' || proj.title || ']]'
+               OR vi.project = proj.title)
        WHERE vi.type IN ('note', 'knowledge')
          AND vi.status IN ('draft', 'revise')
          AND (proj.file_path IS NULL OR proj.status != 'frozen')

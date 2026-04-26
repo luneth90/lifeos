@@ -23,6 +23,7 @@ import {
 	upsertScanStateRows,
 } from './scan-state.js';
 import { buildSearchTokens } from './segmenter.js';
+import { extractWikilinks } from './wikilink.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -135,8 +136,7 @@ export function parseMarkdown(content: string, fileName: string): ParsedMarkdown
 	const aliases = toJsonArrayString(frontmatter.aliases);
 
 	// Wikilinks from body
-	const wikilinkMatches = [...body.matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => m[1]);
-	const wikilinks = JSON.stringify(wikilinkMatches);
+	const wikilinks = JSON.stringify(extractWikilinks(body));
 
 	// Section heads from body
 	const sectionHeadMatches = [...body.matchAll(/^#{1,6}\s+(.+)$/gm)].map((m) => m[1].trim());
