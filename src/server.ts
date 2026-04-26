@@ -12,6 +12,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import Database from 'better-sqlite3';
 import { z } from 'zod';
 import { refreshTaskboard, refreshUserprofile } from './active-docs/index.js';
+import { VERSION } from './cli/utils/version.js';
 import { getOrCreateVaultConfig } from './config.js';
 import * as core from './core.js';
 import { initDb } from './db/schema.js';
@@ -326,7 +327,7 @@ function handleBootstrap<P extends Record<string, unknown>>(): (
 
 const server = new McpServer({
 	name: 'lifeos',
-	version: '1.7.0',
+	version: VERSION,
 });
 
 // ─── Tool registrations ───────────────────────────────────────────────────────

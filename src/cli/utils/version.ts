@@ -2,4 +2,12 @@ import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 
-export const VERSION: string = require('../../../package.json').version;
+function resolveVersion(): string {
+	try {
+		return (require('../../../package.json') as { version: string }).version;
+	} catch {
+		return '0.0.0-dev';
+	}
+}
+
+export const VERSION: string = resolveVersion();

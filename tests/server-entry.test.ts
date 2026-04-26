@@ -33,6 +33,7 @@ function createSourceEntrySandbox(): {
 
 	cpSync(join(repoRoot, 'bin'), join(root, 'bin'), { recursive: true });
 	cpSync(join(repoRoot, 'src'), join(root, 'src'), { recursive: true });
+	cpSync(join(repoRoot, 'package.json'), join(root, 'package.json'));
 
 	return {
 		root,
