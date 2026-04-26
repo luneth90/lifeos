@@ -52,12 +52,11 @@ export function runStartup(db: Database.Database, vaultRoot: string): StartupRes
 		}
 	}
 
-	// 3. Full vault scan — vault-indexer opens its own DB connection via dbPath
+	// 3. Full vault scan — reuses existing DB connection
 	let scanIndexed = 0;
 	let scanRemoved = 0;
 	try {
-		const dbPath = db.name; // better-sqlite3 exposes .name as the db file path
-		const scanResult = fullScan(vaultRoot, dbPath);
+		const scanResult = fullScan(vaultRoot, db);
 		scanIndexed = scanResult.indexed;
 		scanRemoved = scanResult.removed;
 	} catch (e) {

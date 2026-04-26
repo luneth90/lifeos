@@ -2,7 +2,8 @@
  * vault-indexer.ts — Vault 索引器。
  *
  * Scans Vault markdown files, parses frontmatter, and writes to the
- * SQLite index.
+ * SQLite index. Supports full scans, single-file indexing, incremental
+ * scans via scan-state, and backlinks computation.
  */
 
 import { createHash } from 'node:crypto';
@@ -13,6 +14,14 @@ import { parse as parseYaml } from 'yaml';
 import { VaultConfig, getVaultConfig } from '../config.js';
 import { initDb } from '../db/schema.js';
 import { generateEnhancedSearchTerms, mergeSearchHints } from '../services/enhance.js';
+import {
+	type ScanStateRow,
+	buildScanStateRow,
+	deleteScanStateRows,
+	isSameObservedState,
+	loadScanState,
+	upsertScanStateRows,
+} from './scan-state.js';
 import { buildSearchTokens } from './segmenter.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -37,6 +46,7 @@ export interface ParsedMarkdown {
 export interface ScanResult {
 	indexed: number;
 	skipped: number;
+	unchanged: number;
 	removed: number;
 }
 
@@ -270,22 +280,149 @@ function* walkMdFiles(dir: string): Generator<string> {
 	}
 }
 
+// ─── Backlinks ────────────────────────────────────────────────────────────────
+
+/**
+ * Recompute backlinks for all indexed files based on current wikilinks.
+ *
+ * Reads every row's wikilinks, builds a reverse index (target → list of
+ * sources), then writes the aggregated backlinks back to each target's
+ * row. Files with no incoming links get an empty array.
+ */
+function recomputeAllBacklinks(db: Database.Database): void {
+	// Reset all backlinks first
+	db.prepare("UPDATE vault_index SET backlinks = '[]'").run();
+
+	const rows = db
+		.prepare("SELECT file_path, wikilinks FROM vault_index WHERE wikilinks != '[]'")
+		.all() as Array<{ file_path: string; wikilinks: string }>;
+
+	if (rows.length === 0) return;
+
+	const linkMap = new Map<string, string[]>();
+	for (const row of rows) {
+		let targets: string[];
+		try {
+			targets = JSON.parse(row.wikilinks);
+		} catch {
+			continue;
+		}
+		if (!Array.isArray(targets)) continue;
+
+		for (const target of targets) {
+			if (!linkMap.has(target)) linkMap.set(target, []);
+			linkMap.get(target)?.push(row.file_path);
+		}
+	}
+
+	if (linkMap.size === 0) return;
+
+	const stmt = db.prepare('UPDATE vault_index SET backlinks = ? WHERE file_path = ?');
+	for (const [target, sources] of linkMap) {
+		stmt.run(JSON.stringify(sources), target);
+	}
+}
+
+/** Update backlinks for files affected by a single file's wikilinks change.
+ *  Recomputes backlinks only for targets still linked PLUS targets the file
+ *  previously linked to (from old wikilinks). */
+function recomputeBacklinksForFile(
+	db: Database.Database,
+	filePath: string,
+	oldWikilinks: string[],
+	newWikilinks: string[],
+): void {
+	const oldSet = new Set(oldWikilinks);
+	const newSet = new Set(newWikilinks);
+	const affected = new Set([...oldSet, ...newSet]);
+	if (affected.size === 0) return;
+
+	// Remove self from each affected target's current backlinks
+	for (const target of affected) {
+		const row = db.prepare('SELECT backlinks FROM vault_index WHERE file_path = ?').get(target) as
+			| { backlinks: string }
+			| undefined;
+		if (!row) continue;
+
+		let backlinks: string[];
+		try {
+			backlinks = JSON.parse(row.backlinks);
+		} catch {
+			continue;
+		}
+		if (!Array.isArray(backlinks)) continue;
+
+		const filtered = backlinks.filter((s) => s !== filePath);
+		db.prepare('UPDATE vault_index SET backlinks = ? WHERE file_path = ?').run(
+			JSON.stringify(filtered),
+			target,
+		);
+	}
+
+	// Add self to targets the file now links to
+	for (const target of newSet) {
+		const row = db.prepare('SELECT backlinks FROM vault_index WHERE file_path = ?').get(target) as
+			| { backlinks: string }
+			| undefined;
+		if (!row) continue;
+
+		let backlinks: string[];
+		try {
+			backlinks = JSON.parse(row.backlinks);
+		} catch {
+			continue;
+		}
+		if (!Array.isArray(backlinks)) continue;
+
+		if (!backlinks.includes(filePath)) {
+			backlinks.push(filePath);
+			db.prepare('UPDATE vault_index SET backlinks = ? WHERE file_path = ?').run(
+				JSON.stringify(backlinks),
+				target,
+			);
+		}
+	}
+
+	// Update self's backlinks (recompute fully)
+	recomputeAllBacklinks(db);
+}
+
 // ─── Full scan ────────────────────────────────────────────────────────────────
 
 /**
  * Scan all .md files in the vault and index them into the SQLite database.
- * Skips files that don't match scan rules or lack valid frontmatter.
+ *
+ * Supports incremental scans: when a scan_state table is available, files
+ * whose mtime + size match the last indexed state are skipped.
+ *
+ * @param vaultRoot   Absolute path to the vault root
+ * @param dbOrPath    SQLite database path (string) or an already-open
+ *                     better-sqlite3 Database. When a Database is passed,
+ *                     the caller retains ownership (no initDb / close).
+ * @param config      Optional pre-resolved VaultConfig
+ * @returns           Counts of indexed, skipped, unchanged, and removed files
  */
-export function fullScan(vaultRoot: string, dbPath: string, config?: VaultConfig): ScanResult {
+export function fullScan(
+	vaultRoot: string,
+	dbOrPath: string | Database.Database,
+	config?: VaultConfig,
+): ScanResult {
 	const cfg = config ?? getVaultConfig() ?? new VaultConfig(vaultRoot);
 
-	const db = new Database(dbPath);
-	db.pragma('journal_mode = WAL');
-	initDb(db);
+	const ownDb = typeof dbOrPath === 'string';
+	const db: Database.Database = ownDb ? new Database(dbOrPath) : dbOrPath;
+	if (ownDb) {
+		db.pragma('journal_mode = WAL');
+		initDb(db);
+	}
 
 	try {
+		const scanState = loadScanState(db);
+		const newScanRows: ScanStateRow[] = [];
+		const now = new Date().toISOString();
 		let indexed = 0;
 		let skipped = 0;
+		let unchanged = 0;
 		const seenPaths = new Set<string>();
 
 		for (const absPath of walkMdFiles(vaultRoot)) {
@@ -295,6 +432,24 @@ export function fullScan(vaultRoot: string, dbPath: string, config?: VaultConfig
 			if (!shouldIndex(relPath, cfg)) {
 				skipped++;
 				continue;
+			}
+
+			let stat: ReturnType<typeof statSync>;
+			try {
+				stat = statSync(absPath);
+			} catch {
+				skipped++;
+				continue;
+			}
+
+			// Incremental: skip unchanged files
+			const state = scanState[relPath];
+			if (state && isSameObservedState(state, stat.mtimeMs, stat.size)) {
+				const idxRow = db.prepare('SELECT 1 FROM vault_index WHERE file_path = ?').get(relPath);
+				if (idxRow) {
+					unchanged++;
+					continue;
+				}
 			}
 
 			let content: string;
@@ -311,35 +466,44 @@ export function fullScan(vaultRoot: string, dbPath: string, config?: VaultConfig
 				continue;
 			}
 
-			const stat = statSync(absPath);
 			const fileSize = stat.size;
 			const modifiedAt = new Date(stat.mtimeMs).toISOString();
 			const createdAt = modifiedAt;
 
 			upsertIndex(db, relPath, parsed, fileSize, createdAt, modifiedAt);
+			newScanRows.push(buildScanStateRow(relPath, parsed.contentHash, stat.mtimeMs, fileSize, now));
 			indexed++;
 		}
 
+		// Batch upsert scan state for changed/new files
+		upsertScanStateRows(db, newScanRows);
+
+		// Compute backlinks (after all files are indexed)
+		recomputeAllBacklinks(db);
+
 		// Remove stale entries for files confirmed deleted from disk.
-		// Safety: only prune when the vault looks genuine — root is readable
-		// and at least one scan-prefix directory exists. This prevents
-		// mass-deletion on unmounted volumes or empty mountpoints.
 		let removed = 0;
 		if (isVaultIntact(vaultRoot, cfg)) {
 			const rows = db.prepare('SELECT file_path FROM vault_index').all() as Array<{
 				file_path: string;
 			}>;
+			const removedPaths: string[] = [];
 			for (const { file_path } of rows) {
 				if (!seenPaths.has(file_path) && isConfirmedMissing(join(vaultRoot, file_path))) {
 					removeIndexEntry(db, file_path);
+					removedPaths.push(file_path);
 					removed++;
 				}
 			}
+			// Clean up scan_state for removed files
+			if (removedPaths.length > 0) {
+				deleteScanStateRows(db, removedPaths);
+			}
 		}
 
-		return { indexed, skipped, removed };
+		return { indexed, skipped, unchanged, removed };
 	} finally {
-		db.close();
+		if (ownDb) db.close();
 	}
 }
 
@@ -368,13 +532,25 @@ export function indexSingleFile(
 
 	const fullPath = join(vaultRoot, relPath);
 
+	let stat: ReturnType<typeof statSync>;
+
 	if (!existsSync(fullPath)) {
-		// File was deleted — remove from index
+		// File was deleted — remove from index and recompute backlinks
 		const db = new Database(dbPath);
 		db.pragma('journal_mode = WAL');
 		initDb(db);
 		try {
+			// Read old wikilinks before removing
+			const oldRow = db
+				.prepare('SELECT wikilinks FROM vault_index WHERE file_path = ?')
+				.get(relPath) as { wikilinks: string } | undefined;
+			const oldWikilinks: string[] = oldRow ? safeParseArray(oldRow.wikilinks) : [];
+
 			removeIndexEntry(db, relPath);
+			deleteScanStateRows(db, [relPath]);
+
+			// Recompute backlinks for files the deleted file linked to
+			recomputeAllBacklinks(db);
 		} finally {
 			db.close();
 		}
@@ -393,7 +569,7 @@ export function indexSingleFile(
 		return { status: 'skipped', reason: 'no valid frontmatter' };
 	}
 
-	const stat = statSync(fullPath);
+	stat = statSync(fullPath);
 	const fileSize = stat.size;
 	const modifiedAt = new Date(stat.mtimeMs).toISOString();
 	const createdAt = modifiedAt;
@@ -402,10 +578,41 @@ export function indexSingleFile(
 	db.pragma('journal_mode = WAL');
 	initDb(db);
 	try {
+		// Read old wikilinks before upsert for backlink delta
+		const oldRow = db
+			.prepare('SELECT wikilinks FROM vault_index WHERE file_path = ?')
+			.get(relPath) as { wikilinks: string } | undefined;
+		const oldWikilinks: string[] = oldRow ? safeParseArray(oldRow.wikilinks) : [];
+		const newWikilinks: string[] = parsed.wikilinks ? safeParseArray(parsed.wikilinks) : [];
+
 		upsertIndex(db, relPath, parsed, fileSize, createdAt, modifiedAt);
+
+		// Persist scan state
+		upsertScanStateRows(db, [
+			buildScanStateRow(
+				relPath,
+				parsed.contentHash,
+				stat.mtimeMs,
+				fileSize,
+				new Date().toISOString(),
+			),
+		]);
+
+		// Update backlinks for affected files
+		recomputeBacklinksForFile(db, relPath, oldWikilinks, newWikilinks);
 	} finally {
 		db.close();
 	}
 
 	return { status: 'indexed', filePath: relPath };
+}
+
+/** Safely parse a JSON array string; returns [] on failure. */
+function safeParseArray(raw: string): string[] {
+	try {
+		const parsed = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed : [];
+	} catch {
+		return [];
+	}
 }

@@ -326,13 +326,14 @@ describe('fullScan()', () => {
 		// First scan indexes both
 		const first = fullScan(vault.root, vault.dbPath);
 		expect(first.indexed).toBe(2);
+		expect(first.unchanged).toBe(0);
 		expect(first.removed).toBe(0);
 
-		// Delete one file, then rescan
+		// Delete one file, then rescan — keep.md is unchanged (incremental skip)
 		unlinkSync(join(vault.root, '00_草稿/delete-me.md'));
 		const second = fullScan(vault.root, vault.dbPath);
 
-		expect(second.indexed).toBe(1);
+		expect(second.unchanged).toBe(1);
 		expect(second.removed).toBe(1);
 
 		const rows = db.prepare('SELECT file_path FROM vault_index').all() as Array<{
