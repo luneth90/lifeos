@@ -25,7 +25,18 @@
 ### 内部
 
 - 版本号统一来源：消除 `src/index.ts`、`src/server.ts` 中的硬编码版本号字符串，统一从 `package.json` 读取
-- 更新 13 个文件，净增约 572 行
+- 更新 13 个文件，净增约 572 行（后续补提交于 4 文件 +40/-14）
+
+### lifeos-rules 增强
+
+- **启动规则醒目提升**：将会话启动 `memory_bootstrap` 规则从记忆系统协议区块提升到 `lifeos-rules` 文件顶部（语言规则之后），用 `[!CAUTION]` 标记，并明确"简单查询（文件路径、源码位置）也不得跳过"
+- 同步删除原记忆系统规则区块中的重复描述，消除歧义
+
+### 归档技能增强
+
+- **优先使用 Obsidian CLI 移动文件**：archive 技能改为优先调用 `obsidian move`（内部使用 `app.fileManager.renameFile()`），归档时自动更新 vault 内所有 wikilink 引用
+- 不可用时（命令不存在或 Obsidian 未运行）回退到系统 `mv`，在完成报告中标注「⚠️ mv 回退，wikilink 可能未更新，建议运行 `obsidian unresolved` 检查」
+- 新增文件夹项目的整体目录移动支持，禁止逐文件复制重建
 
 ## 1.7.2 (2026-04-24)
 
