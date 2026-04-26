@@ -52,6 +52,7 @@ let startupResult: StartupResult | null = null;
 let startupVaultRoot: string | undefined;
 let layer0Dirty = false;
 let startupError: string | null = null;
+let lastActiveDocRefresh = 0;
 
 function readStartupContext(params: Record<string, unknown>): {
 	vaultRoot: string | undefined;
@@ -74,6 +75,7 @@ function resetStartupState(): void {
 	startupVaultRoot = undefined;
 	layer0Dirty = false;
 	startupError = null;
+	lastActiveDocRefresh = 0;
 	closeVaultWatcher();
 }
 
@@ -89,6 +91,7 @@ function ensureStartup(params: Record<string, unknown>): { startedThisCall: bool
 		startupResult = core.memoryStartup({ vaultRoot });
 		startupError = null;
 		startedUp = true;
+		lastActiveDocRefresh = Date.now();
 		// Start file watcher
 		if (resolvedVault) startVaultWatcher(resolvedVault);
 		return { startedThisCall: true };
@@ -121,6 +124,7 @@ function refreshLayer0Summary(params: Record<string, unknown>): boolean {
 			layer0_summary: buildLayer0Summary(resolvedVault),
 		};
 		layer0Dirty = false;
+		lastActiveDocRefresh = Date.now();
 		return true;
 	} catch (e) {
 		console.warn('[lifeos] Layer0 refresh failed:', e);
@@ -157,7 +161,8 @@ function shouldIgnore(filename: string): boolean {
 	return IGNORE_FILE_PATTERNS.some((p) => p.test(filename));
 }
 
-const pendingNotifies = new Map<string, NodeJS.Timeout>();
+let batchTimer: NodeJS.Timeout | null = null;
+const pendingFiles = new Set<string>();
 const DEBOUNCE_MS = 500;
 
 /** Serialization guard — prevents concurrent memoryNotify calls on the same tick */
@@ -167,35 +172,37 @@ const notifyQueue: Array<{ vaultRoot: string; filename: string }> = [];
 function processNotifyQueue(): void {
 	if (notifyInFlight || notifyQueue.length === 0) return;
 	notifyInFlight = true;
-	const item = notifyQueue.shift();
-	if (!item) return;
-	const { vaultRoot, filename } = item;
-	try {
-		core.memoryNotify({ filePath: filename, vaultRoot });
-		layer0Dirty = true;
-	} catch (e) {
-		console.warn(`[lifeos] Auto-notify failed for ${filename}:`, e);
-	} finally {
-		notifyInFlight = false;
-		// Process next item if any
-		if (notifyQueue.length > 0) {
-			setImmediate(processNotifyQueue);
+
+	let batchCount = 0;
+	while (notifyQueue.length > 0) {
+		const item = notifyQueue.shift();
+		if (!item) break;
+		const { vaultRoot, filename } = item;
+		try {
+			core.memoryNotify({ filePath: filename, vaultRoot });
+			layer0Dirty = true;
+			batchCount++;
+		} catch (e) {
+			console.warn(`[lifeos] Auto-notify failed for ${filename}:`, e);
 		}
 	}
+
+	notifyInFlight = false;
 }
 
 function debouncedNotify(vaultRoot: string, filename: string): void {
-	const existing = pendingNotifies.get(filename);
-	if (existing) clearTimeout(existing);
+	pendingFiles.add(filename);
 
-	pendingNotifies.set(
-		filename,
-		setTimeout(() => {
-			pendingNotifies.delete(filename);
-			notifyQueue.push({ vaultRoot, filename });
-			processNotifyQueue();
-		}, DEBOUNCE_MS),
-	);
+	if (batchTimer) clearTimeout(batchTimer);
+
+	batchTimer = setTimeout(() => {
+		batchTimer = null;
+		for (const f of pendingFiles) {
+			notifyQueue.push({ vaultRoot, filename: f });
+		}
+		pendingFiles.clear();
+		processNotifyQueue();
+	}, DEBOUNCE_MS);
 }
 
 let vaultWatcher: FSWatcher | null = null;
@@ -295,7 +302,11 @@ function runMemoryBootstrap<P extends Record<string, unknown>>(
 			startup_error: startupError,
 		};
 	}
-	const layer0Refreshed = layer0Dirty ? refreshLayer0Summary(converted) : false;
+
+	// Refresh if dirty, or if last refresh was > 5s ago and bootstrap was called
+	const isStale = Date.now() - lastActiveDocRefresh > 5000;
+	const shouldRefresh = layer0Dirty || (isStale && !startedThisCall);
+	const layer0Refreshed = shouldRefresh ? refreshLayer0Summary(converted) : false;
 
 	return {
 		status: 'ok',
@@ -447,14 +458,28 @@ export const __testing = {
 		}
 	},
 	debouncedNotify,
+	batchNotifyFlush() {
+		if (batchTimer) {
+			clearTimeout(batchTimer);
+			batchTimer = null;
+		}
+		if (pendingFiles.size > 0) {
+			for (const f of pendingFiles) {
+				notifyQueue.push({ vaultRoot: watchedVaultRoot ?? '', filename: f });
+			}
+			pendingFiles.clear();
+		}
+		processNotifyQueue();
+	},
 	enqueueNotify(item: { vaultRoot: string; filename: string }) {
 		notifyQueue.push(item);
 	},
 	resetState() {
-		for (const timer of pendingNotifies.values()) {
-			clearTimeout(timer);
+		if (batchTimer) {
+			clearTimeout(batchTimer);
+			batchTimer = null;
 		}
-		pendingNotifies.clear();
+		pendingFiles.clear();
 		notifyQueue.length = 0;
 		notifyInFlight = false;
 		resetStartupState();

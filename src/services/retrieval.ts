@@ -266,31 +266,39 @@ export function queryVaultIndex(
 	}
 
 	// Case 4: LIKE fallback (CJK with few FTS results, or FTS error)
-	// Try LIKE fallback
-	const likePattern = `%${q}%`;
-	let likeWhere = `(
-      vi.search_hints LIKE ? OR
-      vi.summary LIKE ? OR
-      vi.title LIKE ? OR
-      vi.tags LIKE ?
-    )`;
-	const likeParams: unknown[] = [likePattern, likePattern, likePattern, likePattern];
+	// Phased approach: narrow columns first (title + search_hints),
+	// expand to summary + tags only if insufficient.
 
-	if (filterWhere) {
-		likeWhere += ` AND ${filterWhere}`;
-		likeParams.push(...filterParams);
+	const likePattern = `%${q}%`;
+
+	function runLikeQuery(columns: string[], fetchLimit: number): VaultSelectRow[] {
+		const conds = columns.map((col) => `vi.${col} LIKE ?`).join(' OR ');
+		let likeWhere = `(${conds})`;
+		const likeParams: unknown[] = columns.map(() => likePattern);
+
+		if (filterWhere) {
+			likeWhere += ` AND ${filterWhere}`;
+			likeParams.push(...filterParams);
+		}
+
+		const likeSql = `
+			    SELECT ${VAULT_SELECT}
+			    FROM vault_index vi
+			    WHERE ${likeWhere}
+			    ORDER BY vi.modified_at DESC
+			    LIMIT ?
+			  `;
+		likeParams.push(fetchLimit);
+		return queryAll<VaultSelectRow>(db, likeSql, ...likeParams);
 	}
 
-	const likeSql = `
-      SELECT ${VAULT_SELECT}
-      FROM vault_index vi
-      WHERE ${likeWhere}
-      ORDER BY vi.modified_at DESC
-      LIMIT ?
-    `;
-	likeParams.push(limit);
+	// Phase 1: title + search_hints (smaller columns, faster scan)
+	let likeRows = runLikeQuery(['title', 'search_hints'], limit);
 
-	const likeRows = queryAll<VaultSelectRow>(db, likeSql, ...likeParams);
+	// Phase 2: expand if not enough results
+	if (likeRows.length < 2) {
+		likeRows = runLikeQuery(['title', 'search_hints', 'summary', 'tags'], limit);
+	}
 
 	// Merge FTS rows + LIKE rows, deduplicate by file_path
 	const likeSource: MatchSource = ftsRows.length > 0 ? 'hybrid_expand' : 'like_fallback';

@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
+import { z } from 'zod';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -226,6 +227,82 @@ function deepMerge(
 	return result;
 }
 
+// ─── Config validation ───────────────────────────────────────────────────────
+
+const directoriesKeys = [
+	'drafts',
+	'diary',
+	'projects',
+	'research',
+	'knowledge',
+	'outputs',
+	'plans',
+	'resources',
+	'reflection',
+	'system',
+] as const;
+
+const directoriesSchema = z.object(
+	Object.fromEntries(directoriesKeys.map((k) => [k, z.string().min(1)])) as Record<
+		string,
+		z.ZodString
+	>,
+);
+
+const memorySchema = z.object({
+	db_name: z.string().min(1).default('memory.db'),
+	scan_prefixes: z
+		.array(z.string())
+		.default([
+			'drafts',
+			'diary',
+			'projects',
+			'research',
+			'knowledge',
+			'outputs',
+			'plans',
+			'resources',
+			'reflection',
+		]),
+	excluded_prefixes: z.array(z.string()).default(['system']),
+	context_budgets: z.record(z.number().positive()).optional().default({
+		layer0_total: 1800,
+		userprofile_summary: 200,
+		userprofile_rules: 1000,
+		taskboard_focus: 500,
+		revises_summary: 100,
+		userprofile_doc_limit: 2000,
+		taskboard_doc_limit: 3000,
+	}),
+});
+
+export const lifeosConfigSchema = z
+	.object({
+		version: z.string().optional(),
+		language: z.enum(['zh', 'en']).optional().default('zh'),
+		directories: directoriesSchema,
+		memory: memorySchema,
+		installed_versions: z
+			.object({ cli: z.string().optional(), assets: z.string().optional() })
+			.optional(),
+		managed_assets: z.record(z.object({ version: z.string(), sha256: z.string() })).optional(),
+	})
+	.passthrough();
+
+export type ValidatedLifeOSConfig = z.infer<typeof lifeosConfigSchema>;
+
+function validateConfig(
+	raw: Record<string, unknown>,
+	source: string,
+): { valid: boolean; errors: string[] } {
+	const result = lifeosConfigSchema.safeParse(raw);
+	if (result.success) return { valid: true, errors: [] };
+
+	const errors = result.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`);
+	console.warn(`[lifeos] Config validation in ${source}:`, `\n${errors.join('\n')}`);
+	return { valid: false, errors };
+}
+
 // ─── VaultConfig class ────────────────────────────────────────────────────────
 
 export class VaultConfig {
@@ -241,10 +318,9 @@ export class VaultConfig {
 		if (config !== undefined) {
 			const lang = (config.language as string | undefined) ?? 'zh';
 			const preset = loadPreset(lang);
-			return deepMerge(
-				preset as unknown as Record<string, unknown>,
-				config,
-			) as unknown as LifeOSConfig;
+			const merged = deepMerge(preset as unknown as Record<string, unknown>, config);
+			validateConfig(merged, 'programmatic config');
+			return merged as unknown as LifeOSConfig;
 		}
 
 		const yamlPath = join(this._vaultRoot, 'lifeos.yaml');
@@ -253,10 +329,9 @@ export class VaultConfig {
 			const userConfig: Record<string, unknown> = (parseYaml(raw) as Record<string, unknown>) ?? {};
 			const lang = (userConfig.language as string | undefined) ?? 'zh';
 			const preset = loadPreset(lang);
-			return deepMerge(
-				preset as unknown as Record<string, unknown>,
-				userConfig,
-			) as unknown as LifeOSConfig;
+			const merged = deepMerge(preset as unknown as Record<string, unknown>, userConfig);
+			validateConfig(merged, yamlPath);
+			return merged as unknown as LifeOSConfig;
 		}
 
 		// No yaml file — detect from vault contents (default to zh)
