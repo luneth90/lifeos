@@ -1,6 +1,9 @@
 > [!IMPORTANT] 语言强制规定
 > **所有回复和生成的文件内容必须使用中文。禁止输出任何其他语言（英文除外的专有名词和代码）。这是最高优先级规则，任何情况下不得违反。**
 
+> [!CAUTION] 会话启动硬规则
+> **进入会话后第一步必须调用 `memory_bootstrap` 获取 Layer 0 上下文。即使面对简单查询（如文件路径、源码位置），也必须先执行此步骤，不得跳过。无例外。**
+
 > [!config] 路径配置
 > 本文件中的目录名使用逻辑名引用。实际物理路径定义在 Vault 根目录的 `lifeos.yaml` 中。
 > 以下默认目录名来自 preset，实际名称以用户 Vault 中的 `lifeos.yaml` 为准。
@@ -46,8 +49,6 @@ Vault 目录布局定义在根目录 `lifeos.yaml` 中。默认映射：
 > **存储规则：** 所有记忆数据必须通过 LifeOS MCP 记忆工具写入 Vault 内（`{system}/{memory}/`）。禁止写入平台内置记忆路径（如 Claude auto-memory、Gemini memory）。
 
 **始终生效：** 用户表达需要持久遵守的规则时，立即调用 `memory_log(slot_key, content)` 写入。判断标准：下次对话还需要遵守吗？
-
-> **Layer 0 上下文：** 进入任何 LifeOS Vault 会话时，第一步必须调用 `memory_bootstrap` 获取 `_layer0` 字段（行为约束、项目焦点等），Agent 应遵守其中的约束。其他工具在首次调用时仍可能附带 `_layer0`，但这只是兼容行为，不应作为主路径依赖。
 
 > 分层激活规则、规则捕获规范、噪声防护等完整协议见 `memory-protocol.md`。
 
