@@ -1,7 +1,7 @@
 ---
 name: ask
 description: "Default LifeOS Q&A entry for concept, Vault, PDF, learning, or general questions; skip for explicit skills or execution commands."
-version: 1.7.2
+version: 1.8.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Draft_Template.md"

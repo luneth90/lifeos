@@ -1,7 +1,7 @@
 ---
 name: today
 description: '每日规划入口；开始新一天、询问今日安排或说 "/today" 时生成今日日记。'
-version: 1.7.2
+version: 1.8.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Daily_Template.md"

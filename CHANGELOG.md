@@ -1,5 +1,32 @@
 # 更新日志
 
+## 1.8.0 (2026-04-27)
+
+### Vault 索引引擎升级 — 增量扫描、双连接消除
+
+- **增量扫描**：`fullScan` 改为基于 `mtime` 的增量检测，跳过未变更文件，显著减少首次启动后的扫描耗时
+- **双连接消除**：新增 `deduplicateEdges` 步骤，消除 vault 索引中因 wikilink 双向解析产生的冗余图谱连接
+- **backlinks 计算**：新增 `computeBacklinks` 批量计算所有文件的反向链接，写入 `vault_index.backlinks` 供检索使用
+- **wikilink 规范化**：新增 `normalizeWikilink` 工具函数，消除 `[[Title]]` vs `[[Title|Alias]]` vs `Title` 三种引用格式的歧义，TaskBoard 的项目匹配现在支持三种格式
+
+### Schema 校验与查询优化
+
+- **Schema 校验**：`lifeos.yaml` 加载时新增 Zod schema 校验，启动时非法配置直接报错退出，不再静默吞异常
+- **LIKE 分阶段回退**：SQLite LIKE 查询优化，当 `vault_fts` 全文搜索无结果时自动回退到 `vault_index` 的 LIKE 模糊匹配，兜底召回
+- **通知批量化**：Watcher 变更通知改为批量处理，合并密集文件事件的 DB 写入，减少 SQLite 锁竞争
+- **Layer 0 时效修正**：`memory_bootstrap` 返回的 `_layer0.project_focus` 现在使用最新的 project 数据，不再返回过时快照
+
+### Server 健壮性
+
+- **startup 错误细化**：启动失败时返回结构化 `startup_error` 对象，包含错误码和上下文（ConfigError / DbError / Unknown），Agent 可据此采取不同重试策略
+- **memory_log 去抖**：500ms 防抖窗口内重复的 `slot_key` 写入被合并，防止技能频繁调用时写放大
+- **DB 健康检查**：`lifeos doctor` 新增数据库健康检查子命令，校验 SQLite integrity、vault_index/vault_fts 行数一致性
+
+### 内部
+
+- 版本号统一来源：消除 `src/index.ts`、`src/server.ts` 中的硬编码版本号字符串，统一从 `package.json` 读取
+- 更新 13 个文件，净增约 572 行
+
 ## 1.7.2 (2026-04-24)
 
 ### Codex MCP 配置修复

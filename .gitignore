@@ -60,3 +60,6 @@ tmp/
 /70_Resources/
 /80_Reflection/
 /90_System/
+
+# Python cache
+__pycache__/

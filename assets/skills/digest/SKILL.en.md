@@ -1,7 +1,7 @@
 ---
 name: digest
 description: "Create topic-based digests from Paper, RSS, Web, and similar sources, then write structured weekly updates to drafts."
-version: 1.7.2
+version: 1.8.0
 dependencies:
   templates: []
   prompts: []
