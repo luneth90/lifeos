@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { parse as parseYaml } from 'yaml';
-import { resolveConfig } from '../../config.js';
+import { ConfigValidationError, resolveConfig } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { assetsDir } from '../utils/assets.js';
 import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
@@ -64,14 +64,25 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	}
 	try {
 		config = parseYaml(readFileSync(yamlPath, 'utf-8')) as Record<string, unknown>;
-		check('lifeos.yaml', 'pass', 'valid');
 	} catch {
 		check('lifeos.yaml', 'fail', 'invalid YAML');
 		printSummary(result);
 		return result;
 	}
 
-	const resolvedConfig = resolveConfig(targetPath, config ?? {}).rawConfig as LifeOSConfig;
+	let resolvedConfig: LifeOSConfig;
+	try {
+		resolvedConfig = resolveConfig(targetPath, config ?? {}).rawConfig as LifeOSConfig;
+		check('lifeos.yaml', 'pass', 'valid');
+	} catch (e) {
+		check(
+			'lifeos.yaml',
+			'fail',
+			e instanceof ConfigValidationError ? e.errors.join('\n') : 'invalid config',
+		);
+		printSummary(result);
+		return result;
+	}
 	const lang = resolvedConfig.language === 'en' ? 'en' : 'zh';
 
 	const templatesSrc = join(assetsDir(), 'templates', lang);

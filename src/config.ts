@@ -249,6 +249,28 @@ const directoriesSchema = z.object(
 	>,
 );
 
+const subdirectoriesSchema = z.object({
+	knowledge: z.object({ notes: z.string().min(1), wiki: z.string().min(1) }),
+	resources: z.object({
+		books: z.string().min(1),
+		literature: z.string().min(1),
+		translations: z.string().min(1),
+	}),
+	system: z.object({
+		templates: z.string().min(1),
+		schema: z.string().min(1),
+		memory: z.string().min(1),
+		digest: z.string().min(1),
+		prompts: z.string().min(1),
+		archive: z.object({
+			projects: z.string().min(1),
+			drafts: z.string().min(1),
+			plans: z.string().min(1),
+			diary: z.string().min(1),
+		}),
+	}),
+});
+
 const memorySchema = z.object({
 	db_name: z.string().min(1).default('memory.db'),
 	scan_prefixes: z
@@ -281,6 +303,7 @@ export const lifeosConfigSchema = z
 		version: z.string().optional(),
 		language: z.enum(['zh', 'en']).optional().default('zh'),
 		directories: directoriesSchema,
+		subdirectories: subdirectoriesSchema,
 		memory: memorySchema,
 		installed_versions: z
 			.object({ cli: z.string().optional(), assets: z.string().optional() })
@@ -291,16 +314,24 @@ export const lifeosConfigSchema = z
 
 export type ValidatedLifeOSConfig = z.infer<typeof lifeosConfigSchema>;
 
-function validateConfig(
-	raw: Record<string, unknown>,
-	source: string,
-): { valid: boolean; errors: string[] } {
+export class ConfigValidationError extends Error {
+	readonly source: string;
+	readonly errors: string[];
+
+	constructor(source: string, errors: string[]) {
+		super(`Invalid LifeOS config in ${source}:\n${errors.join('\n')}`);
+		this.name = 'ConfigValidationError';
+		this.source = source;
+		this.errors = errors;
+	}
+}
+
+function validateConfig(raw: Record<string, unknown>, source: string): void {
 	const result = lifeosConfigSchema.safeParse(raw);
-	if (result.success) return { valid: true, errors: [] };
+	if (result.success) return;
 
 	const errors = result.error.issues.map((i) => `  - ${i.path.join('.')}: ${i.message}`);
-	console.warn(`[lifeos] Config validation in ${source}:`, `\n${errors.join('\n')}`);
-	return { valid: false, errors };
+	throw new ConfigValidationError(source, errors);
 }
 
 // ─── VaultConfig class ────────────────────────────────────────────────────────

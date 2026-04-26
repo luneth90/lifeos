@@ -124,6 +124,11 @@ function refreshLayer0Summary(params: Record<string, unknown>): boolean {
 			layer0_summary: buildLayer0Summary(resolvedVault),
 		};
 		layer0Dirty = false;
+		if (layer0RefreshTimer) {
+			clearTimeout(layer0RefreshTimer);
+			layer0RefreshTimer = null;
+		}
+		pendingLayer0Params = null;
 		lastActiveDocRefresh = Date.now();
 		return true;
 	} catch (e) {
@@ -273,7 +278,7 @@ function runTool<P extends Record<string, unknown>>(
 	// biome-ignore lint/suspicious/noExplicitAny: core functions have varied signatures
 	coreFn: (params: any) => unknown,
 	params: P,
-	options: { markLayer0DirtyOnSuccess?: boolean } = {},
+	options: { markLayer0DirtyOnSuccess?: boolean; debounceLayer0Refresh?: boolean } = {},
 ): unknown {
 	const converted = normalizeParams(params);
 	const { startedThisCall } = ensureStartup(converted);
@@ -287,7 +292,9 @@ function runTool<P extends Record<string, unknown>>(
 
 	if (options.markLayer0DirtyOnSuccess) {
 		layer0Dirty = true;
-		if (startedThisCall && startupResult) {
+		if (options.debounceLayer0Refresh) {
+			scheduleLayer0Refresh(converted);
+		} else if (startedThisCall && startupResult) {
 			refreshLayer0Summary(converted);
 		} else {
 			scheduleLayer0Refresh(converted);
@@ -340,7 +347,7 @@ function runMemoryBootstrap<P extends Record<string, unknown>>(
 function handleTool<P extends Record<string, unknown>>(
 	// biome-ignore lint/suspicious/noExplicitAny: core functions have varied signatures
 	coreFn: (params: any) => unknown,
-	options: { markLayer0DirtyOnSuccess?: boolean } = {},
+	options: { markLayer0DirtyOnSuccess?: boolean; debounceLayer0Refresh?: boolean } = {},
 ): (params: P) => Promise<{ content: { type: 'text'; text: string }[] }> {
 	return async (params: P) => {
 		return serializeOutput(runTool(coreFn, params, options));
@@ -428,7 +435,14 @@ server.tool(
 			.optional()
 			.describe('Optional ISO date string. Rule will be auto-expired after this date.'),
 	},
-	handleTool(core.memoryLog, { markLayer0DirtyOnSuccess: true }),
+	handleTool(
+		(params: Parameters<typeof core.memoryLog>[0]) =>
+			core.memoryLog({ ...params, refreshActiveDoc: false }),
+		{
+			markLayer0DirtyOnSuccess: true,
+			debounceLayer0Refresh: true,
+		},
+	),
 );
 
 // 4. memory_notify
@@ -471,7 +485,15 @@ export const __testing = {
 			case 'memory_query':
 				return runTool(core.memoryQuery, params);
 			case 'memory_log':
-				return runTool(core.memoryLog, params, { markLayer0DirtyOnSuccess: true });
+				return runTool(
+					(p: Parameters<typeof core.memoryLog>[0]) =>
+						core.memoryLog({ ...p, refreshActiveDoc: false }),
+					params,
+					{
+						markLayer0DirtyOnSuccess: true,
+						debounceLayer0Refresh: true,
+					},
+				);
 			case 'memory_notify':
 				return runTool(core.memoryNotify, params, { markLayer0DirtyOnSuccess: true });
 			default:

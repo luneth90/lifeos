@@ -109,6 +109,34 @@ describe('buildTaskboardSections', () => {
 		const sections = buildTaskboardSections(db, '/tmp/vault');
 		expect(sections['active-projects']).not.toContain('Frozen Project');
 	});
+
+	it('excludes revision notes linked to frozen project with wikilink alias', () => {
+		db.prepare(`
+      INSERT INTO vault_index (file_path, title, type, status, modified_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+			'20_项目/FrozenProject.md',
+			'Frozen Project',
+			'project',
+			'frozen',
+			new Date().toISOString(),
+		);
+		db.prepare(`
+      INSERT INTO vault_index (file_path, title, type, status, project, modified_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+			'40_知识/笔记/FrozenNote.md',
+			'Frozen Note',
+			'note',
+			'draft',
+			'[[Frozen Project|项目别名]]',
+			new Date().toISOString(),
+		);
+
+		const sections = buildTaskboardSections(db, '/tmp/vault');
+		expect(sections.revises).not.toContain('Frozen Note');
+		expect(sections.revises).toContain('暂无待复习的知识笔记');
+	});
 });
 
 // ─── buildUserprofileSections ─────────────────────────────────────────────────

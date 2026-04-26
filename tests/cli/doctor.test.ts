@@ -87,6 +87,23 @@ describe('lifeos doctor', () => {
 		}
 	});
 
+	test('invalid config schema reports failure', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const yamlPath = join(dir, 'lifeos.yaml');
+			const content = readFileSync(yamlPath, 'utf-8');
+			writeFileSync(yamlPath, content.replace('drafts: 00_草稿', 'drafts: 42'));
+			const result = await doctorCommand([dir]);
+			expect(result.passed).toBe(false);
+			expect(result.checks.some((c) => c.name === 'lifeos.yaml' && c.status === 'fail')).toBe(
+				true,
+			);
+		} finally {
+			cleanup();
+		}
+	});
+
 	test('version mismatch reports warning', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {

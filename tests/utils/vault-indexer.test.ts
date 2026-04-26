@@ -171,6 +171,21 @@ This references [[ProjectA]] and [[Math/Algebra]] and also [[Note With Spaces]].
 		expect(wikilinks).toContain('Note With Spaces');
 	});
 
+	it('normalizes wikilink aliases and headings', () => {
+		const content = `---
+title: test
+---
+
+This references [[ProjectA|项目 A]] and [[Math/Algebra#定义]].`;
+		const result = parseMarkdown(content, 'test.md');
+		expect(result).not.toBeNull();
+		const wikilinks = JSON.parse(result!.wikilinks);
+		expect(wikilinks).toContain('ProjectA');
+		expect(wikilinks).toContain('Math/Algebra');
+		expect(wikilinks).not.toContain('ProjectA|项目 A');
+		expect(wikilinks).not.toContain('Math/Algebra#定义');
+	});
+
 	it('extracts section_heads from body', () => {
 		const content = `---
 title: test
@@ -458,6 +473,51 @@ describe('fullScan()', () => {
 		}>;
 		expect(rows).toHaveLength(1);
 	});
+
+	it('computes backlinks by title, path stem, and alias', () => {
+		writeTestNote(
+			vault.root,
+			'20_项目/target-file.md',
+			{ title: 'Target Note', type: 'project', status: 'active', aliases: ['目标别名'] },
+			'Target content',
+		);
+		writeTestNote(
+			vault.root,
+			'00_草稿/source.md',
+			{ title: 'Source', type: 'draft', status: 'pending' },
+			'Links: [[Target Note]] [[20_项目/target-file]] [[目标别名|显示名称]].',
+		);
+
+		fullScan(vault.root, vault.dbPath);
+
+		const row = db
+			.prepare('SELECT backlinks FROM vault_index WHERE file_path = ?')
+			.get('20_项目/target-file.md') as { backlinks: string };
+		expect(JSON.parse(row.backlinks)).toEqual(['00_草稿/source.md']);
+	});
+
+	it('removes stale backlinks after linked source file is deleted', () => {
+		writeTestNote(vault.root, '20_项目/target.md', {
+			title: 'Target',
+			type: 'project',
+			status: 'active',
+		});
+		writeTestNote(
+			vault.root,
+			'00_草稿/source.md',
+			{ title: 'Source', type: 'draft', status: 'pending' },
+			'[[Target]]',
+		);
+
+		fullScan(vault.root, vault.dbPath);
+		unlinkSync(join(vault.root, '00_草稿/source.md'));
+		fullScan(vault.root, vault.dbPath);
+
+		const row = db
+			.prepare('SELECT backlinks FROM vault_index WHERE file_path = ?')
+			.get('20_项目/target.md') as { backlinks: string };
+		expect(JSON.parse(row.backlinks)).toEqual([]);
+	});
 });
 
 // ─── indexSingleFile ──────────────────────────────────────────────────────────
@@ -562,5 +622,33 @@ describe('indexSingleFile()', () => {
 
 		const after = db.prepare('SELECT COUNT(*) as n FROM vault_index').get() as { n: number };
 		expect(after.n).toBe(0);
+	});
+
+	it('preserves incoming backlinks when reindexing a target with no outgoing links', () => {
+		writeTestNote(vault.root, '20_项目/target.md', {
+			title: 'Target',
+			type: 'project',
+			status: 'active',
+		});
+		writeTestNote(
+			vault.root,
+			'00_草稿/source.md',
+			{ title: 'Source', type: 'draft', status: 'pending' },
+			'[[Target]]',
+		);
+		fullScan(vault.root, vault.dbPath);
+
+		writeTestNote(
+			vault.root,
+			'20_项目/target.md',
+			{ title: 'Target', type: 'project', status: 'active' },
+			'Updated target content',
+		);
+		indexSingleFile(vault.root, vault.dbPath, '20_项目/target.md');
+
+		const row = db
+			.prepare('SELECT backlinks FROM vault_index WHERE file_path = ?')
+			.get('20_项目/target.md') as { backlinks: string };
+		expect(JSON.parse(row.backlinks)).toEqual(['00_草稿/source.md']);
 	});
 });

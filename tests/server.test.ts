@@ -122,6 +122,32 @@ describe('server auto lifecycle', () => {
 		});
 	});
 
+	it('memory_log 连续调用会延迟合并刷新 UserProfile', async () => {
+		vi.useFakeTimers();
+		testing.callMemoryBootstrap({ vault_root: vault.root });
+
+		testing.callTool('memory_log', {
+			vault_root: vault.root,
+			slot_key: 'content:language',
+			content: '所有回复使用中文',
+		});
+		testing.callTool('memory_log', {
+			vault_root: vault.root,
+			slot_key: 'format:latex',
+			content: '数学公式使用 LaTeX',
+		});
+
+		expect(coreMock.memoryLog).toHaveBeenLastCalledWith(
+			expect.objectContaining({ refreshActiveDoc: false }),
+		);
+		expect(activeDocsMock.refreshUserprofile).not.toHaveBeenCalled();
+
+		vi.advanceTimersByTime(500);
+
+		expect(activeDocsMock.refreshUserprofile).toHaveBeenCalledTimes(1);
+		expect(layer0Mock.buildLayer0Summary).toHaveBeenCalledTimes(1);
+	});
+
 	it('memory_notify 后再次 bootstrap 会轻量刷新 layer0', async () => {
 		testing.callMemoryBootstrap({ vault_root: vault.root });
 		testing.callTool('memory_notify', {

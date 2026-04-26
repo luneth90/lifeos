@@ -91,6 +91,7 @@ export function memoryLog(opts: {
 	source?: 'preference' | 'correction';
 	relatedFiles?: string[];
 	expiresAt?: string;
+	refreshActiveDoc?: boolean;
 }): UpsertRuleResult {
 	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
 		const result = upsertRule(db, {
@@ -101,9 +102,11 @@ export function memoryLog(opts: {
 			expiresAt: opts.expiresAt,
 		});
 
-		// Refresh the matching UserProfile section after upsert
-		const section = opts.slotKey.startsWith('profile:') ? 'profile-summary' : 'rules';
-		refreshActiveDoc(db, vault, 'UserProfile', { section });
+		if (opts.refreshActiveDoc !== false) {
+			// Refresh the matching UserProfile section after upsert
+			const section = opts.slotKey.startsWith('profile:') ? 'profile-summary' : 'rules';
+			refreshActiveDoc(db, vault, 'UserProfile', { section });
+		}
 
 		return result;
 	});

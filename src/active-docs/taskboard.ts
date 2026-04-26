@@ -20,6 +20,19 @@ interface ActiveProject {
 	modifiedAt: string | null;
 }
 
+interface ProjectRef {
+	file_path: string;
+	title: string | null;
+	status: string | null;
+}
+
+interface RevisionCandidate {
+	title: string;
+	status: string;
+	domain: string | null;
+	project: string | null;
+}
+
 // ─── Section builders ─────────────────────────────────────────────────────────
 
 function buildFocusSection(projects: ActiveProject[]): string {
@@ -72,34 +85,47 @@ function buildActiveProjectsSection(projects: ActiveProject[]): string {
 function buildRevisesSection(db: Database.Database): string {
 	// Find knowledge items needing revision (status = 'draft' or 'revise')
 	// Exclude notes whose parent project has status='frozen'
+	const projectRows = db
+		.prepare(
+			`SELECT file_path, title, status
+       FROM vault_index
+       WHERE type = 'project'`,
+		)
+		.all() as ProjectRef[];
+
+	const projectsByRef = new Map<string, ProjectRef>();
+	for (const p of projectRows) {
+		const fileRef = normalizeWikilink(p.file_path);
+		const titleRef = p.title ? normalizeWikilink(p.title) : '';
+		if (fileRef) projectsByRef.set(fileRef, p);
+		if (titleRef) projectsByRef.set(titleRef, p);
+	}
+
 	const rows = db
 		.prepare(
-			`SELECT vi.file_path, vi.title, vi.status, vi.domain
+			`SELECT vi.title, vi.status, vi.domain, vi.project
        FROM vault_index vi
-       LEFT JOIN vault_index proj
-         ON proj.type = 'project'
-         AND (vi.project = proj.file_path
-               OR vi.project = '[[' || proj.title || ']]'
-               OR vi.project = proj.title)
        WHERE vi.type IN ('note', 'knowledge')
          AND vi.status IN ('draft', 'revise')
-         AND (proj.file_path IS NULL OR proj.status != 'frozen')
        ORDER BY vi.modified_at DESC
-       LIMIT 10`,
+       LIMIT 100`,
 		)
-		.all() as Array<{
-		file_path: string;
-		title: string;
-		status: string;
-		domain: string | null;
-	}>;
+		.all() as RevisionCandidate[];
 
-	if (rows.length === 0) {
+	const visibleRows = rows
+		.filter((r) => {
+			if (!r.project) return true;
+			const parent = projectsByRef.get(normalizeWikilink(r.project));
+			return parent?.status !== 'frozen';
+		})
+		.slice(0, 10);
+
+	if (visibleRows.length === 0) {
 		return '暂无待复习的知识笔记。';
 	}
 
 	const lines: string[] = [];
-	for (const r of rows) {
+	for (const r of visibleRows) {
 		const domain = r.domain ? ` [${r.domain}]` : '';
 		const statusStr = MASTERY_STATUS_LABELS[r.status] ?? r.status;
 		lines.push(`- ${statusStr} **${r.title}**${domain}`);

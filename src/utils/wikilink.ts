@@ -19,6 +19,10 @@ const WIKILINK_RE = /\[\[([^\]|#]+)(?:[|#][^\]]*)?\]\]/g;
 export function normalizeWikilink(raw: string): string {
 	let target = raw.trim();
 
+	if (target.startsWith('[[') && target.endsWith(']]')) {
+		target = target.slice(2, -2).trim();
+	}
+
 	const pipeIdx = target.indexOf('|');
 	if (pipeIdx !== -1) {
 		target = target.slice(0, pipeIdx);

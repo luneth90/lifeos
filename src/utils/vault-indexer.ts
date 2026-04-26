@@ -23,7 +23,7 @@ import {
 	upsertScanStateRows,
 } from './scan-state.js';
 import { buildSearchTokens } from './segmenter.js';
-import { extractWikilinks } from './wikilink.js';
+import { extractWikilinks, normalizeWikilink } from './wikilink.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -282,6 +282,77 @@ function* walkMdFiles(dir: string): Generator<string> {
 
 // ─── Backlinks ────────────────────────────────────────────────────────────────
 
+interface BacklinkIndexRow {
+	file_path: string;
+	title: string | null;
+	aliases: string | null;
+	wikilinks: string | null;
+}
+
+interface WikilinkResolver {
+	byPath: Map<string, string>;
+	byTitle: Map<string, string | null>;
+	byAlias: Map<string, string | null>;
+	byStem: Map<string, string | null>;
+}
+
+function addUnique(
+	map: Map<string, string | null>,
+	key: string | null | undefined,
+	filePath: string,
+) {
+	const normalized = normalizeWikilink(String(key ?? ''));
+	if (!normalized) return;
+	const existing = map.get(normalized);
+	if (existing === undefined) {
+		map.set(normalized, filePath);
+	} else if (existing !== filePath) {
+		map.set(normalized, null);
+	}
+}
+
+function buildWikilinkResolver(rows: BacklinkIndexRow[]): WikilinkResolver {
+	const byPath = new Map<string, string>();
+	const byTitle = new Map<string, string | null>();
+	const byAlias = new Map<string, string | null>();
+	const byStem = new Map<string, string | null>();
+
+	for (const row of rows) {
+		byPath.set(row.file_path, row.file_path);
+		if (row.file_path.endsWith('.md')) {
+			byPath.set(row.file_path.slice(0, -3), row.file_path);
+		}
+
+		addUnique(byTitle, row.title, row.file_path);
+		addUnique(byStem, basename(row.file_path, extname(row.file_path)), row.file_path);
+
+		for (const alias of safeParseArray(row.aliases ?? '[]')) {
+			addUnique(byAlias, alias, row.file_path);
+		}
+	}
+
+	return { byPath, byTitle, byAlias, byStem };
+}
+
+function resolveWikilinkTarget(target: string, resolver: WikilinkResolver): string | null {
+	const normalized = normalizeWikilink(target);
+	if (!normalized) return null;
+
+	const pathMatch = resolver.byPath.get(normalized) ?? resolver.byPath.get(`${normalized}.md`);
+	if (pathMatch) return pathMatch;
+
+	const titleMatch = resolver.byTitle.get(normalized);
+	if (titleMatch) return titleMatch;
+
+	const aliasMatch = resolver.byAlias.get(normalized);
+	if (aliasMatch) return aliasMatch;
+
+	const stemMatch = resolver.byStem.get(normalized);
+	if (stemMatch) return stemMatch;
+
+	return null;
+}
+
 /**
  * Recompute backlinks for all indexed files based on current wikilinks.
  *
@@ -294,24 +365,27 @@ function recomputeAllBacklinks(db: Database.Database): void {
 	db.prepare("UPDATE vault_index SET backlinks = '[]'").run();
 
 	const rows = db
-		.prepare("SELECT file_path, wikilinks FROM vault_index WHERE wikilinks != '[]'")
-		.all() as Array<{ file_path: string; wikilinks: string }>;
+		.prepare('SELECT file_path, title, aliases, wikilinks FROM vault_index')
+		.all() as BacklinkIndexRow[];
 
 	if (rows.length === 0) return;
 
-	const linkMap = new Map<string, string[]>();
+	const resolver = buildWikilinkResolver(rows);
+	const linkMap = new Map<string, Set<string>>();
 	for (const row of rows) {
 		let targets: string[];
 		try {
-			targets = JSON.parse(row.wikilinks);
+			targets = JSON.parse(row.wikilinks ?? '[]');
 		} catch {
 			continue;
 		}
 		if (!Array.isArray(targets)) continue;
 
 		for (const target of targets) {
-			if (!linkMap.has(target)) linkMap.set(target, []);
-			linkMap.get(target)?.push(row.file_path);
+			const targetPath = resolveWikilinkTarget(String(target), resolver);
+			if (!targetPath) continue;
+			if (!linkMap.has(targetPath)) linkMap.set(targetPath, new Set());
+			linkMap.get(targetPath)?.add(row.file_path);
 		}
 	}
 
@@ -319,72 +393,8 @@ function recomputeAllBacklinks(db: Database.Database): void {
 
 	const stmt = db.prepare('UPDATE vault_index SET backlinks = ? WHERE file_path = ?');
 	for (const [target, sources] of linkMap) {
-		stmt.run(JSON.stringify(sources), target);
+		stmt.run(JSON.stringify([...sources]), target);
 	}
-}
-
-/** Update backlinks for files affected by a single file's wikilinks change.
- *  Recomputes backlinks only for targets still linked PLUS targets the file
- *  previously linked to (from old wikilinks). */
-function recomputeBacklinksForFile(
-	db: Database.Database,
-	filePath: string,
-	oldWikilinks: string[],
-	newWikilinks: string[],
-): void {
-	const oldSet = new Set(oldWikilinks);
-	const newSet = new Set(newWikilinks);
-	const affected = new Set([...oldSet, ...newSet]);
-	if (affected.size === 0) return;
-
-	// Remove self from each affected target's current backlinks
-	for (const target of affected) {
-		const row = db.prepare('SELECT backlinks FROM vault_index WHERE file_path = ?').get(target) as
-			| { backlinks: string }
-			| undefined;
-		if (!row) continue;
-
-		let backlinks: string[];
-		try {
-			backlinks = JSON.parse(row.backlinks);
-		} catch {
-			continue;
-		}
-		if (!Array.isArray(backlinks)) continue;
-
-		const filtered = backlinks.filter((s) => s !== filePath);
-		db.prepare('UPDATE vault_index SET backlinks = ? WHERE file_path = ?').run(
-			JSON.stringify(filtered),
-			target,
-		);
-	}
-
-	// Add self to targets the file now links to
-	for (const target of newSet) {
-		const row = db.prepare('SELECT backlinks FROM vault_index WHERE file_path = ?').get(target) as
-			| { backlinks: string }
-			| undefined;
-		if (!row) continue;
-
-		let backlinks: string[];
-		try {
-			backlinks = JSON.parse(row.backlinks);
-		} catch {
-			continue;
-		}
-		if (!Array.isArray(backlinks)) continue;
-
-		if (!backlinks.includes(filePath)) {
-			backlinks.push(filePath);
-			db.prepare('UPDATE vault_index SET backlinks = ? WHERE file_path = ?').run(
-				JSON.stringify(backlinks),
-				target,
-			);
-		}
-	}
-
-	// Update self's backlinks (recompute fully)
-	recomputeAllBacklinks(db);
 }
 
 // ─── Full scan ────────────────────────────────────────────────────────────────
@@ -478,9 +488,6 @@ export function fullScan(
 		// Batch upsert scan state for changed/new files
 		upsertScanStateRows(db, newScanRows);
 
-		// Compute backlinks (after all files are indexed)
-		recomputeAllBacklinks(db);
-
 		// Remove stale entries for files confirmed deleted from disk.
 		let removed = 0;
 		if (isVaultIntact(vaultRoot, cfg)) {
@@ -500,6 +507,9 @@ export function fullScan(
 				deleteScanStateRows(db, removedPaths);
 			}
 		}
+
+		// Compute backlinks after stale rows are removed.
+		recomputeAllBacklinks(db);
 
 		return { indexed, skipped, unchanged, removed };
 	} finally {
@@ -540,16 +550,9 @@ export function indexSingleFile(
 		db.pragma('journal_mode = WAL');
 		initDb(db);
 		try {
-			// Read old wikilinks before removing
-			const oldRow = db
-				.prepare('SELECT wikilinks FROM vault_index WHERE file_path = ?')
-				.get(relPath) as { wikilinks: string } | undefined;
-			const oldWikilinks: string[] = oldRow ? safeParseArray(oldRow.wikilinks) : [];
-
 			removeIndexEntry(db, relPath);
 			deleteScanStateRows(db, [relPath]);
 
-			// Recompute backlinks for files the deleted file linked to
 			recomputeAllBacklinks(db);
 		} finally {
 			db.close();
@@ -578,13 +581,6 @@ export function indexSingleFile(
 	db.pragma('journal_mode = WAL');
 	initDb(db);
 	try {
-		// Read old wikilinks before upsert for backlink delta
-		const oldRow = db
-			.prepare('SELECT wikilinks FROM vault_index WHERE file_path = ?')
-			.get(relPath) as { wikilinks: string } | undefined;
-		const oldWikilinks: string[] = oldRow ? safeParseArray(oldRow.wikilinks) : [];
-		const newWikilinks: string[] = parsed.wikilinks ? safeParseArray(parsed.wikilinks) : [];
-
 		upsertIndex(db, relPath, parsed, fileSize, createdAt, modifiedAt);
 
 		// Persist scan state
@@ -598,8 +594,7 @@ export function indexSingleFile(
 			),
 		]);
 
-		// Update backlinks for affected files
-		recomputeBacklinksForFile(db, relPath, oldWikilinks, newWikilinks);
+		recomputeAllBacklinks(db);
 	} finally {
 		db.close();
 	}

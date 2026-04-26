@@ -3,6 +3,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+	ConfigValidationError,
 	EN_PRESET,
 	VaultConfig,
 	ZH_PRESET,
@@ -178,6 +179,12 @@ describe('VaultConfig — lifeos.yaml loading', () => {
 		const cfg = new VaultConfig(tmp.root);
 		expect(cfg.dbPath()).toBe(join(tmp.root, '90_系统', '记忆', 'custom.db'));
 	});
+
+	it('throws structured validation error for invalid lifeos.yaml values', () => {
+		tmp = createTempDir();
+		writeyaml(tmp.root, `directories:\n  drafts: 42\n`);
+		expect(() => new VaultConfig(tmp.root)).toThrow(ConfigValidationError);
+	});
 });
 
 describe('VaultConfig — config object injection', () => {
@@ -197,6 +204,17 @@ describe('VaultConfig — config object injection', () => {
 		expect(cfg.dirPath('drafts')).toBe(join(tmp.root, 'MyDrafts'));
 		// Merged with preset — other dirs still exist
 		expect(cfg.dirPath('diary')).toBe(join(tmp.root, '10_日记'));
+	});
+
+	it('throws structured validation error for invalid injected config', () => {
+		tmp = createTempDir();
+		expect(
+			() =>
+				new VaultConfig(tmp.root, {
+					language: 'zh',
+					subdirectories: { system: { memory: 42 } },
+				}),
+		).toThrow(ConfigValidationError);
 	});
 });
 
