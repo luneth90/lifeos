@@ -1,8 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assetsDir } from '../../../src/cli/utils/assets.js';
 import { resolveSkillFiles } from '../../../src/cli/utils/lang.js';
 
 const skills = join(assetsDir(), 'skills');
+const LOCAL_LANGUAGE_SUFFIX_REF_RE =
+	/(?:^|[`'"\s(])((?:_shared|references)\/[^`'"\s)]+?\.(?:zh|en)\.md)/g;
 
 describe('resolveSkillFiles', () => {
 	describe('knowledge/ (has SKILL.zh.md + SKILL.en.md, no plain SKILL.md)', () => {
@@ -81,5 +84,22 @@ describe('resolveSkillFiles', () => {
 			expect(map.has('scripts/read_pdf.py')).toBe(true);
 			expect(map.get('scripts/read_pdf.py')).toContain('read_pdf.py');
 		});
+	});
+
+	it('does not ship language-suffixed local references in installed skill markdown', () => {
+		for (const lang of ['zh', 'en'] as const) {
+			for (const skillName of ['brainstorm', 'project', 'research']) {
+				const map = resolveSkillFiles(join(skills, skillName), lang);
+
+				for (const [destRelPath, srcPath] of map) {
+					if (!destRelPath.endsWith('.md')) continue;
+
+					const content = readFileSync(srcPath, 'utf-8');
+					const refs = [...content.matchAll(LOCAL_LANGUAGE_SUFFIX_REF_RE)].map((match) => match[1]);
+
+					expect(refs, `${skillName}/${destRelPath} should use installed .md paths`).toEqual([]);
+				}
+			}
+		}
 	});
 });

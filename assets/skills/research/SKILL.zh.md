@@ -33,7 +33,7 @@ dependencies:
 
 # 阶段0：记忆前置检查（必须）
 
-按 `_shared/dual-agent-orchestrator.zh.md` 阶段0 执行，实体类型 `filters.type = “research”`。
+按 `_shared/dual-agent-orchestrator.md` 阶段0 执行，实体类型 `filters.type = “research”`。
 
 # 工作流概述
 
@@ -45,7 +45,7 @@ dependencies:
 
 # 你作为 Orchestrator 的职责
 
-按 `_shared/dual-agent-orchestrator.zh.md` 的标准编排流程执行，以下为研究技能的额外职责：
+按 `_shared/dual-agent-orchestrator.md` 的标准编排流程执行，以下为研究技能的额外职责：
 
 - 阶段2（用户审核）中，你在对话中直接向用户提出澄清问题，收到回答后写入计划文件，再提示用户审核确认
 
@@ -58,7 +58,7 @@ dependencies:
 
 # 阶段1：启动 Planning Agent
 
-按 `_shared/dual-agent-orchestrator.zh.md` 阶段1 执行。占位符 `[user's input]` 替换为用户实际输入。
+按 `_shared/dual-agent-orchestrator.md` 阶段1 执行。占位符 `[user's input]` 替换为用户实际输入。
 
 Planning Agent 返回后，在**对话中直接**向用户提问：
 
@@ -79,7 +79,7 @@ Planning Agent 返回后，在**对话中直接**向用户提问：
 
 # 阶段2：启动 Execution Agent（用户确认后）
 
-按 `_shared/dual-agent-orchestrator.zh.md` 阶段3 执行。
+按 `_shared/dual-agent-orchestrator.md` 阶段3 执行。
 
 # 边界情况
 

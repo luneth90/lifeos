@@ -33,7 +33,7 @@ You are LifeOS's project creation orchestrator, responsible for coordinating the
 
 # Phase 0: Memory Pre-check (Required)
 
-Follow `_shared/dual-agent-orchestrator.en.md` Phase 0, with entity type `filters.type = "project"`.
+Follow `_shared/dual-agent-orchestrator.md` Phase 0, with entity type `filters.type = "project"`.
 
 # Workflow Overview
 
@@ -45,7 +45,7 @@ Follow `_shared/dual-agent-orchestrator.en.md` Phase 0, with entity type `filter
 
 # Your Responsibilities as Orchestrator
 
-Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.en.md`. The following are additional responsibilities specific to the project skill:
+Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.md`. The following are additional responsibilities specific to the project skill:
 
 - If the project category is `development`, verify the output follows the "single main project + docs directory" convention; if not, require immediate correction before delivery
 
@@ -86,7 +86,7 @@ Even if only the main project file is created initially with no supporting docum
 
 # Phase 1: Launch Planning Agent
 
-Follow `_shared/dual-agent-orchestrator.en.md` Phase 1. Replace the placeholder `[user's idea/draft note]` with the user's actual input.
+Follow `_shared/dual-agent-orchestrator.md` Phase 1. Replace the placeholder `[user's idea/draft note]` with the user's actual input.
 
 After the Planning Agent returns, notify the user in English:
 
@@ -103,7 +103,7 @@ Please review and modify as needed. Once confirmed, I'll generate the formal pro
 
 # Phase 2: Launch Execution Agent (After User Confirmation)
 
-Follow `_shared/dual-agent-orchestrator.en.md` Phase 3.
+Follow `_shared/dual-agent-orchestrator.md` Phase 3.
 
 If the project category is `development`, after the Execution Agent returns, verify the output follows the "Development Project Directory Convention"; if not, require immediate correction before delivery.
 

@@ -33,7 +33,7 @@ You are LifeOS's deep research orchestrator, responsible for coordinating the Pl
 
 # Phase 0: Memory Pre-check (Required)
 
-Follow `_shared/dual-agent-orchestrator.en.md` Phase 0, with entity type `filters.type = "research"`.
+Follow `_shared/dual-agent-orchestrator.md` Phase 0, with entity type `filters.type = "research"`.
 
 # Workflow Overview
 
@@ -45,7 +45,7 @@ Follow `_shared/dual-agent-orchestrator.en.md` Phase 0, with entity type `filter
 
 # Your Responsibilities as Orchestrator
 
-Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.en.md`. The following are additional responsibilities specific to the research skill:
+Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.md`. The following are additional responsibilities specific to the research skill:
 
 - During Phase 2 (user review), you directly ask the user clarification questions in the conversation, write answers into the plan file, then prompt the user to review and confirm
 
@@ -58,7 +58,7 @@ Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.en.md
 
 # Phase 1: Launch Planning Agent
 
-Follow `_shared/dual-agent-orchestrator.en.md` Phase 1. Replace the placeholder `[user's input]` with the user's actual input.
+Follow `_shared/dual-agent-orchestrator.md` Phase 1. Replace the placeholder `[user's input]` with the user's actual input.
 
 After the Planning Agent returns, **directly** ask the user in the conversation:
 
@@ -79,7 +79,7 @@ After receiving answers:
 
 # Phase 2: Launch Execution Agent (After User Confirmation)
 
-Follow `_shared/dual-agent-orchestrator.en.md` Phase 3.
+Follow `_shared/dual-agent-orchestrator.md` Phase 3.
 
 # Edge Cases
 

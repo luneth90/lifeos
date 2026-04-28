@@ -165,7 +165,7 @@ After the summary is confirmed, offer three options:
 2. **Organize knowledge** — create wiki notes in `{knowledge directory}/{wiki subdirectory}/`
 3. **Save as draft** — create a draft note in `{drafts directory}/` for later deepening with `/research` or `/knowledge`
 
-> Detailed execution steps for each option are in `references/action-options.en.md`.
+> Detailed execution steps for each option are in `references/action-options.md`.
 
 If the user confirmed any persistent preferences or rules during this conversation, log them as behavior rules via `memory_log` before wrapping up.
 

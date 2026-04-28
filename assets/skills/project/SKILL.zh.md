@@ -33,7 +33,7 @@ dependencies:
 
 # 阶段0：记忆前置检查（必须）
 
-按 `_shared/dual-agent-orchestrator.zh.md` 阶段0 执行，实体类型 `filters.type = "project"`。
+按 `_shared/dual-agent-orchestrator.md` 阶段0 执行，实体类型 `filters.type = "project"`。
 
 # 工作流概述
 
@@ -45,7 +45,7 @@ dependencies:
 
 # 你作为 Orchestrator 的职责
 
-按 `_shared/dual-agent-orchestrator.zh.md` 的标准编排流程执行，以下为项目技能的额外职责：
+按 `_shared/dual-agent-orchestrator.md` 的标准编排流程执行，以下为项目技能的额外职责：
 
 - 若项目类别为 `development`，检查生成结果是否遵守”单主项目 + 文档目录”规范；若不符合，要求立即修正后再交付
 
@@ -86,7 +86,7 @@ dependencies:
 
 # 阶段1：启动 Planning Agent
 
-按 `_shared/dual-agent-orchestrator.zh.md` 阶段1 执行。占位符 `[user's idea/draft note]` 替换为用户实际输入。
+按 `_shared/dual-agent-orchestrator.md` 阶段1 执行。占位符 `[user's idea/draft note]` 替换为用户实际输入。
 
 Planning Agent 返回后，用中文通知用户：
 
@@ -103,7 +103,7 @@ Planning Agent 返回后，用中文通知用户：
 
 # 阶段2：启动 Execution Agent（用户确认后）
 
-按 `_shared/dual-agent-orchestrator.zh.md` 阶段3 执行。
+按 `_shared/dual-agent-orchestrator.md` 阶段3 执行。
 
 若项目类别为 `development`，在 Execution Agent 返回后验证生成结果是否符合"开发类项目目录规范"；若不符合，要求立即修正后再交付。
 

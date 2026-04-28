@@ -165,7 +165,7 @@ memory_query(query="<话题关键词>", limit=5)
 2. **整理知识** — 在 {知识目录}/{百科子目录}/ 创建百科笔记
 3. **保存草稿** — 在 {草稿目录}/ 创建草稿笔记，供后续 /research 或 /knowledge 深化
 
-> 各选项的详细执行步骤见 `references/action-options.zh.md`。
+> 各选项的详细执行步骤见 `references/action-options.md`。
 
 如果本轮对话中用户确认了需要持久遵守的偏好或规则，收尾前通过 `memory_log` 写入行为约束。
 
