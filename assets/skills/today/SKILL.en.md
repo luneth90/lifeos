@@ -1,7 +1,7 @@
 ---
 name: today
 description: "Plan the day and generate today's diary when the user starts a new day, asks what to do, or says '/today'."
-version: 1.8.0
+version: 1.8.1
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Daily_Template.md"

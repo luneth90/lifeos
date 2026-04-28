@@ -1,7 +1,7 @@
 ---
 name: archive
 description: '清理 Vault 时使用：归档 done 项目/草稿/计划和旧日记，保留 pending、active 与最近 7 天日记。'
-version: 1.8.0
+version: 1.8.1
 dependencies:
   templates: []
   prompts: []

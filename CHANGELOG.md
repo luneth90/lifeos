@@ -1,5 +1,17 @@
 # 更新日志
 
+## 1.8.1 (2026-04-29)
+
+### 技能资产路径修复
+
+- 修复 `/research`、`/project` 和 `/brainstorm` 技能正文中残留的 `*.zh.md` / `*.en.md` 本地引用
+- 这些引用在源码资产中存在，但安装到 Vault 后会被语言解析器映射为无后缀 `.md` 文件，导致运行时读取 `_shared/dual-agent-orchestrator.zh.md` 等路径时报 `File not found`
+- 统一改为安装后的运行时路径：`_shared/dual-agent-orchestrator.md`、`references/action-options.md`
+
+### 测试
+
+- 新增技能安装映射回归测试，扫描安装后的技能 Markdown，防止 `_shared/` 和 `references/` 下再次出现运行时不存在的语言后缀本地引用
+
 ## 1.8.0 (2026-04-27)
 
 ### Vault 索引引擎升级 — 增量扫描、双连接消除
