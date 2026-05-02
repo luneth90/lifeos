@@ -1,7 +1,7 @@
 ---
 name: brainstorm
 description: '想法还不成熟、需要发散推演或可行性讨论时使用；可继续转项目、百科笔记或草稿。'
-version: 1.8.1
+version: 1.8.2
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Wiki_Template.md"

@@ -1,7 +1,7 @@
 ---
 name: revise
 description: '复习知识笔记时使用；生成主动回忆题，作答后批改并更新掌握状态。'
-version: 1.8.1
+version: 1.8.2
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Revise_Template.md"

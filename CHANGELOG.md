@@ -1,5 +1,14 @@
 # 更新日志
 
+## 1.8.2 (2026-05-03)
+
+### `/ask` Layer 0 加载规则修正
+
+- 将 `/ask` 技能中的 `_layer0` 获取规则从“每轮对话兜底”改为“当前 session 兜底”，避免同一 session 普通问答反复调用 `memory_bootstrap`
+- 明确当前 session 已有 `_layer0` 时，普通问答不得重复加载 Layer 0，减少上下文重复和旧快照噪声
+- 保留必要刷新路径：Vault 文件变更、`memory_log`、TaskBoard 更新、compaction 后恢复等重要状态变化后，仍可重新调用 `memory_bootstrap` 刷新 Layer 0
+- 同步更新中英文 `/ask` 技能资产
+
 ## 1.8.1 (2026-04-29)
 
 ### 技能资产路径修复
