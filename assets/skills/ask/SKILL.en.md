@@ -26,11 +26,16 @@ You are LifeOS's default interaction entry point. All interactive questions ente
 
 # Workflow
 
-Before processing, if `_layer0` has not yet been obtained in this turn, call:
+Before processing, check `_layer0` at session scope:
+
+- If the current session has not obtained `_layer0` yet, call:
 
 ```
 memory_bootstrap()
 ```
+
+- If the current session already has `_layer0`, do not call `memory_bootstrap` again for ordinary Q&A
+- Only call `memory_bootstrap` again to refresh Layer 0 after important state changes such as Vault file changes, `memory_log`, TaskBoard updates, or recovery after compaction
 
 ## Step 0: Question Classification & Routing
 

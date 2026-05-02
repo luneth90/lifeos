@@ -26,11 +26,16 @@ dependencies:
 
 # 工作流
 
-开始处理前，若本轮尚未取得 `_layer0`，先调用：
+开始处理前，按 session 级别检查 `_layer0`：
+
+- 若当前 session 尚未取得 `_layer0`，先调用：
 
 ```
 memory_bootstrap()
 ```
+
+- 若当前 session 已有 `_layer0`，普通问答不得重复调用 `memory_bootstrap`
+- 仅在 Vault 文件变更、`memory_log`、TaskBoard 更新、compaction 后恢复等重要状态变化后，才重新调用 `memory_bootstrap` 刷新 Layer 0
 
 ## 步骤零：问题分类与路由
 
