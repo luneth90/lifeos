@@ -1,6 +1,6 @@
 {
 	"name": "lifeos",
-	"version": "1.8.2",
+	"version": "1.8.3",
 	"description": "LifeOS — AI-native knowledge OS runtime, CLI scaffold, and MCP memory server",
 	"type": "module",
 	"main": "dist/index.js",
@@ -26,7 +26,7 @@
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.12.0",
 		"@node-rs/jieba": "^2.0.1",
-		"better-sqlite3": "^12.8.0",
+		"better-sqlite3": "^12.10.0",
 		"yaml": "^2.5.0",
 		"zod": "^3.23.0"
 	},
