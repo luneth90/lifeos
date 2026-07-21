@@ -1,7 +1,7 @@
 ---
 name: archive
 description: "Archive completed Vault items when cleaning up: done projects, drafts, plans, and old diaries while preserving pending, active, and recent notes."
-version: 2.0.0
+version: 2.0.1
 dependencies:
   templates: []
   prompts: []

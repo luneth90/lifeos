@@ -1,7 +1,7 @@
 ---
 name: translate
 description: '翻译英文 PDF 章节时使用；生成中文对照阅读笔记并回填学习项目进度。'
-version: 2.0.0
+version: 2.0.1
 dependencies:
   templates: []
   prompts: []
