@@ -51,6 +51,10 @@ describe('assetsDir', () => {
 			join(dir, 'skills', 'project', 'references', 'planning-agent-prompt.zh.md'),
 			'utf-8',
 		);
+		const projectSkillZh = readFileSync(
+			join(dir, 'skills', 'project', 'SKILL.zh.md'),
+			'utf-8',
+		);
 		const projectExecZh = readFileSync(
 			join(dir, 'skills', 'project', 'references', 'execution-agent-prompt.zh.md'),
 			'utf-8',
@@ -78,7 +82,12 @@ describe('assetsDir', () => {
 		expect(researchPlanZh).toContain('type: plan');
 		expect(researchPlanZh).toContain('status: active');
 
-		expect(projectExecZh).toContain('将计划文件的 frontmatter 中 `status` 更新为 `done`');
+		expect(projectExecZh).toContain(
+			'不得修改来源草稿状态，不得把计划改为 `done`，不得写入 project scope 记忆',
+		);
+		expect(projectSkillZh).toContain(
+			'把来源草稿（如有）和计划更新为 `status: done`，并分别调用 `memory_notify`',
+		);
 		expect(projectExecZh).not.toContain(
 			'将计划文件从 `{计划目录}/Plan_YYYY-MM-DD_Project_ProjectName.md` 移动到',
 		);

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { _resetDefaultInstance } from '../src/config.js';
@@ -12,7 +12,7 @@ import {
 	memoryStartup,
 } from '../src/core.js';
 import { CONTRACT_VERSION } from '../src/runtime-contract.js';
-import { createTempVault, writeTestNote } from './setup.js';
+import { createTempVault, prepareRuntimeVault, writeTestNote } from './setup.js';
 
 let vault: ReturnType<typeof createTempVault>;
 
@@ -27,7 +27,9 @@ afterEach(() => {
 });
 
 describe('memoryStartup 最终 V2/V4 契约', () => {
-	it('只返回结构化 Layer 0，并为 fresh V4 写入运行收据', () => {
+	beforeEach(async () => prepareRuntimeVault(vault));
+
+	it('在完整最终 runtime 上只返回结构化 Layer 0', () => {
 		const result = memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
 
 		expect(result.layer0.text).toEqual(expect.any(String));
@@ -45,6 +47,16 @@ describe('memoryStartup 最终 V2/V4 契约', () => {
 			kind: 'fresh-install',
 			state: 'opened',
 		});
+	});
+
+	it('拒绝已存在但为空的数据库，运行时不会把它初始化成新的 V4', () => {
+		for (const suffix of ['-wal', '-shm']) rmSync(`${vault.dbPath}${suffix}`, { force: true });
+		writeFileSync(vault.dbPath, '');
+
+		expect(() => memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root })).toThrow(
+			/未版本化|需要离线迁移|Schema V4|schema_version/,
+		);
+		expect(statSync(vault.dbPath).size).toBe(0);
 	});
 });
 
@@ -89,6 +101,8 @@ describe('core 非 bootstrap 接口拒绝旧契约', () => {
 });
 
 describe('scoped memory 核心接口', () => {
+	beforeEach(async () => prepareRuntimeVault(vault));
+
 	it('允许同一 slot_key 在不同 scope 共存，且只按完整复合键更新', () => {
 		const global = memoryLog({
 			contractVersion: CONTRACT_VERSION,
@@ -170,6 +184,8 @@ describe('scoped memory 核心接口', () => {
 });
 
 describe('检索与文件通知', () => {
+	beforeEach(async () => prepareRuntimeVault(vault));
+
 	it('显式契约下通知文件后可检索，且不接受旧无版本调用', () => {
 		writeTestNote(
 			vault.root,

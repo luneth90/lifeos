@@ -3,25 +3,21 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import rules from '../../src/cli/commands/rules.js';
-import { VERSION } from '../../src/cli/utils/version.js';
-import { _resetDefaultInstance, resolveConfig } from '../../src/config.js';
-import { initDb } from '../../src/db/schema.js';
-import { RuntimeContractError, writeFreshInstallReceipt } from '../../src/runtime-contract.js';
+import { _resetDefaultInstance } from '../../src/config.js';
+import { RuntimeContractError } from '../../src/runtime-contract.js';
 import { upsertMemoryItem } from '../../src/services/memory-items.js';
-import { createTempVault } from '../setup.js';
+import { createTempVault, prepareRuntimeVault } from '../setup.js';
 
 describe('lifeos rules 最终 V2/V4 治理契约', () => {
 	let vault: ReturnType<typeof createTempVault>;
 	let db: Database.Database;
 	let logSpy: ReturnType<typeof vi.spyOn>;
 
-	beforeEach(() => {
+	beforeEach(async () => {
 		_resetDefaultInstance();
 		vault = createTempVault();
-		// createTempVault 只提供最终配置；initDb 和 fresh receipt 由核心最终路径分别建立。
+		await prepareRuntimeVault(vault);
 		db = new Database(vault.dbPath);
-		initDb(db);
-		writeFreshInstallReceipt(vault.root, resolveConfig(vault.root), VERSION);
 		logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 	});
 
@@ -156,7 +152,7 @@ describe('lifeos rules 最终 V2/V4 治理契约', () => {
 		unlinkSync(join(vault.root, '90_系统', '记忆', 'runtime-receipt.json'));
 		await expect(rules(['list', vault.root])).rejects.toThrow(RuntimeContractError);
 
-		writeFreshInstallReceipt(vault.root, resolveConfig(vault.root), VERSION);
+		await prepareRuntimeVault(vault);
 		await expect(rules(['list', vault.root, '--scope', 'legacy:default'])).rejects.toThrow(
 			/非法 scope type/,
 		);

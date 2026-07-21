@@ -41,6 +41,24 @@ export interface MigrationResult {
 	afterHash: string;
 }
 
+export interface LegacyMemoryInventoryItem {
+	legacyIdentity: string;
+	slotKey: string;
+	content: string;
+	contentHash: string;
+	source: MemorySource;
+	relatedFiles: string[];
+	manualFlag: number;
+	status: string;
+	updatedAt: string | null;
+	expiresAt: string | null;
+}
+
+export interface LegacyMemoryInventory {
+	version: 1 | 2 | 3;
+	items: LegacyMemoryInventoryItem[];
+}
+
 export class MigrationValidationError extends Error {
 	constructor(message: string) {
 		super(message);
@@ -173,6 +191,24 @@ function readLegacyItems(db: Database.Database, version: number): LegacyMemoryIt
 			expiresAt: row.expires_at == null ? null : String(row.expires_at),
 		};
 	});
+}
+
+/**
+ * 只读盘点旧版记忆，供升级器生成可审计的 scope map。
+ * 这里不做任何猜测，也不会修改数据库。
+ */
+export function inspectLegacyMemoryItems(db: Database.Database): LegacyMemoryInventory {
+	const version = readVersion(db);
+	if (![1, 2, 3].includes(version)) {
+		throw new MigrationValidationError(`Schema V${version} 不需要生成 V4 scope map`);
+	}
+	const items = readLegacyItems(db, version).map(
+		(item): LegacyMemoryInventoryItem => ({
+			...item,
+			contentHash: sha256(item.content),
+		}),
+	);
+	return { version: version as 1 | 2 | 3, items };
 }
 
 function isValidTimestamp(value: string | null): value is string {

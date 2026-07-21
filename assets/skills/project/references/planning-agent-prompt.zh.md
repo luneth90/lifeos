@@ -22,8 +22,12 @@ parent_skill: project
 
 - 若输入为 `{草稿目录}/` 中的草稿文件路径：读取其完整内容作为项目种子想法
 - 搜索 `{项目目录}/` 中是否有相关的已有项目
+- 扫描 `{项目目录}/` 下所有 `type: project` 主项目，记录其 Vault 相对路径与 `id`
+- 若任何已有主项目缺少 ID、ID 不是无首尾空格的 YAML 字符串、使用占位 ID、
+  ID 不符合 `^[a-z0-9][a-z0-9._-]*$` 或存在重复，停止规划并提示用户先运行
+  `lifeos upgrade` 或修复项目
 - 搜索 `{资源目录}/`（Books、Papers、Courses、Links）
-- 记录来源草稿文件路径（如有）——后续 Execution Agent 需用此路径更新草稿状态
+- 记录来源草稿文件路径（如有）——后续 Orchestrator 验收通过后用此路径更新草稿状态
 
 汇总 Vault 中已有的相关内容。
 
@@ -39,6 +43,22 @@ parent_skill: project
 - 主项目文件名不得包含版本号
 - 版本信息若存在，写入主项目字段或正文，不单独生成 `V0.2`、`V0.3` 项目文件
 
+## 步骤二点五：固定主路径并生成稳定 ID（强制）
+
+先确定唯一主项目文件的 Vault 相对路径。更新已有项目时沿用原 `id`；新建项目时按以下算法生成：
+
+1. 依次对项目标题、去掉扩展名的主文件名执行 NFKD 规范化、移除组合音标、转小写、
+   把连续非 ASCII 字母数字替换为 `-`、移除首尾 `-`，得到基础 slug。
+2. 基础 slug 必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，不得包含 `placeholder`，也不得等于
+   `project-template`；某个候选不可用时继续尝试下一个来源。基础 slug 非空且未被现有
+   项目或本次其他新项目使用时直接采用。
+3. 完整 Vault 相对 Markdown 路径（包含 `.md`）先经 NFC 规范化并把分隔符统一为 `/`，
+   再对 UTF-8 字节计算 SHA-256。无基础 slug 时使用 `project-<摘要前10位>`；slug 冲突时
+   使用 `<slug>-<摘要前10位>`。
+4. 若仍冲突，每次把摘要延长 2 位直至唯一；完整摘要仍冲突时追加 `-2`、`-3`……。
+
+把最终主路径和 ID 写入计划。计划确认前不得创建项目主文件。
+
 ## 步骤三：创建计划文件
 
 路径：`{计划目录}/Plan_YYYY-MM-DD_Project_ProjectName.md`
@@ -51,6 +71,7 @@ status: active
 created: "YYYY-MM-DD"
 source: project
 project: "[项目名称]"
+project_id: "[project-id]"
 tags: [plan, project]
 aliases: []
 ---
@@ -61,6 +82,8 @@ aliases: []
 
 - 项目类别: [learning / development / creative / general]
 - 知识领域 (Domain): [如 Math, AI 等，决定知识库子目录]
+- 项目稳定 ID: `[project-id]`
+- 主项目文件: `{项目目录}/<最终主项目路径>.md`
 - 难度: [入门 / 进阶 / 高级]（学习类必填）
 - 预估投入: [X小时/周 × Y周] 或 [总计约X小时]
 
@@ -158,5 +181,10 @@ aliases: []
 ```
 
 ## 步骤四：返回结果
+
+回读计划文件，确认 frontmatter 顶层 `project_id` 键只出现一次且是无首尾空格的带引号字符串：新项目符合严格
+kebab-case 格式，更新项目符合可移植 ID 格式；不得含 `{{ID}}`、`Project_Template` 或其他
+占位值，并须与正文分类区一致。确认主项目路径已经固定。
+任一检查失败时先修复计划，不得返回成功。
 
 返回计划文件的路径。

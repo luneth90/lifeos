@@ -77,11 +77,11 @@ lifeos rules restore ./tmp/lifeos-integration-en --id 42
 `Schema V1`、`Schema V2`、`Schema V3` 只能通过离线命令升级：
 
 ```bash
-lifeos upgrade ./tmp/legacy-vault-en --scope-map ./tmp/v4-scope-map.json
+lifeos upgrade ./tmp/legacy-vault-en
 lifeos doctor ./tmp/legacy-vault-en
 ```
 
-确认 runtime 在升级前拒绝旧结构；scope map 逐条匹配旧身份和内容哈希；成功后只剩 `Schema V4`；外部备份、cutover journal 和 `opened` receipt 完整；故障注入会恢复原 Vault；`--override` 被拒绝。
+确认 runtime 在升级前拒绝旧结构；升级器自动补齐缺失项目 ID 并原样写回 Markdown，从旧记忆中的明确源码路径发现最终实际使用的 repository binding，再自动生成带上下文指纹的 scope map；全部正式项目的 V4 `entity_id` 与 Markdown 一致且唯一；歧义结果在 cutover 前停止，审阅后可用 `--accept-scope-map` 接受有效建议，但不能接受 `file:__REVIEW_REQUIRED__`；人工编辑和显式 map 不被覆盖；成功后只剩 `Schema V4`；外部备份、cutover journal 和 `opened` receipt 完整；故障注入会同时恢复项目 Markdown、配置和数据库，`--restore <journal>` 可显式恢复；`--override` 被拒绝。
 
 ## 6. active docs 与知识状态
 

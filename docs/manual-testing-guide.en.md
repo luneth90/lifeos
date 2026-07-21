@@ -91,8 +91,8 @@ draft → review → revised → mastered
 运行时不会迁移旧结构。`Schema V1`、`Schema V2`、`Schema V3` 必须离线升级：
 
 ```bash
-lifeos upgrade ./tmp/legacy-vault-en --scope-map ./tmp/v4-scope-map.json
+lifeos upgrade ./tmp/legacy-vault-en
 lifeos doctor ./tmp/legacy-vault-en
 ```
 
-确认 scope map 逐条覆盖旧记忆，升级生成外部备份、cutover journal 和最终 runtime receipt；失败时恢复原 Vault。`--override` 不存在。
+确认升级器自动生成并写回缺失项目 ID，只从旧记忆中的明确源码绝对路径发现安全 Git 根，并只持久化最终使用的 repository binding；scope map 带上下文指纹，全部项目的 V4 `entity_id` 与 Markdown 一致且唯一；歧义建议在 cutover 前停止，审阅后可用 `--accept-scope-map` 接受，`file:__REVIEW_REQUIRED__` 必须人工填写；人工 map 不被覆盖；升级生成外部备份、cutover journal 和最终 runtime receipt；失败时同时恢复项目 Markdown、配置和数据库，也可用 `--restore <journal>` 显式恢复。`--override` 不存在。

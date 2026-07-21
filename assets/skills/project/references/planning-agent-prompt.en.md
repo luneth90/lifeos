@@ -22,8 +22,13 @@ Execute the following steps:
 
 - If the input is a draft file path in `{drafts directory}/`: read its full content as the project seed idea
 - Search `{projects directory}/` for any related existing projects
+- Scan every `type: project` main note under `{projects directory}` and record its Vault-relative
+  path and `id`
+- If any existing main project has a missing ID, an ID that is not a YAML string without leading or
+  trailing whitespace, a placeholder ID, an ID outside `^[a-z0-9][a-z0-9._-]*$`, or a duplicate
+  ID, stop planning and ask the user to run `lifeos upgrade` or repair the projects first
 - Search `{resources directory}/` (Books, Papers, Courses, Links)
-- Record the source draft file path (if any) — the Execution Agent will need it to update the draft status later
+- Record the source draft file path (if any) — the Orchestrator uses it to update the draft only after acceptance
 
 Summarize all related content already in the Vault.
 
@@ -39,6 +44,26 @@ If the project category is `development`, the plan must include directory struct
 - Main project filename must not contain version numbers
 - If version information exists, write it in the main project's fields or body; do not generate separate `V0.2`, `V0.3` project files
 
+## Step 2.5: Fix the Main Path and Generate a Stable ID (Mandatory)
+
+First determine the only main project's Vault-relative file path. Preserve the original `id` when
+updating an existing project. For a new project, use this algorithm:
+
+1. Try the project title and then the main filename without its extension. For each candidate,
+   apply NFKD normalization, remove combining marks, lowercase it, replace runs of non-ASCII
+   alphanumerics with `-`, and trim leading or trailing `-`.
+2. A usable base slug must match `^[a-z0-9]+(?:-[a-z0-9]+)*$`, must not contain `placeholder`, and
+   must not equal `project-template`. Treat an unusable candidate as absent and continue to the next
+   source. Use a nonempty base slug directly only when no existing project or other new project in
+   the same run uses it.
+3. NFC-normalize the complete Vault-relative Markdown path, including `.md`, and convert separators
+   to `/`. Compute SHA-256 over the UTF-8 bytes. With no base slug, use
+   `project-<first-10-hex>`; on a slug conflict, use `<slug>-<first-10-hex>`.
+4. If that still conflicts, extend the digest by two hexadecimal characters at a time until unique.
+   If the full digest still conflicts, append `-2`, `-3`, and so on.
+
+Write the final main path and ID into the plan. Do not create the main project before plan approval.
+
 ## Step 3: Create Plan File
 
 Path: `{plans directory}/Plan_YYYY-MM-DD_Project_ProjectName.md`
@@ -51,6 +76,7 @@ status: active
 created: "YYYY-MM-DD"
 source: project
 project: "[Project Name]"
+project_id: "[project-id]"
 tags: [plan, project]
 aliases: []
 ---
@@ -61,6 +87,8 @@ aliases: []
 
 - Project category: [learning / development / creative / general]
 - Knowledge domain (Domain): [e.g., Math, AI — determines knowledge base subdirectory]
+- Stable project ID: `[project-id]`
+- Main project file: `{projects directory}/<final-main-project-path>.md`
 - Difficulty: [Beginner / Intermediate / Advanced] (required for learning)
 - Estimated effort: [X hours/week × Y weeks] or [approx. X hours total]
 
@@ -158,5 +186,11 @@ When generating chapter structure:
 ```
 
 ## Step 4: Return Result
+
+Reread the plan and verify that the top-level frontmatter `project_id` key occurs exactly once and is a quoted string without
+leading or trailing whitespace. A new project must satisfy strict kebab-case; an updated project
+must satisfy the portable-ID format. It must contain no `{{ID}}`, `Project_Template`, or other
+placeholder and must match the classification section. Confirm that the final main project path is
+fixed. Repair the plan instead of reporting success when any check fails.
 
 Return the path to the plan file.

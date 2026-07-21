@@ -192,14 +192,21 @@ draft → review → revised → mastered
 对副本中的 `Schema V1`、`Schema V2` 或 `Schema V3` 数据库执行：
 
 ```bash
-lifeos upgrade ./tmp/legacy-vault --scope-map ./tmp/v4-scope-map.json
+lifeos upgrade ./tmp/legacy-vault
 lifeos doctor ./tmp/legacy-vault
 ```
 
 检查：
 
 - MCP runtime 在升级前拒绝打开旧数据库。
-- scope map 覆盖每条旧记忆，内容哈希匹配，项目和仓库 scope 可解析。
+- 自动生成的 scope map 覆盖每条旧记忆，内容哈希匹配，项目和仓库 scope 可解析。
+- 删除两个正式项目的 `id` 后直接运行同一命令；确认升级器生成稳定 ID、写回原项目 Markdown，并保留正文、注释、CRLF/LF 与文件权限。
+- 在旧记忆正文或 `related_files` 中保留明确源码绝对路径；确认只沿候选祖先识别 Git 根，并只把最终采用 repository scope 的 binding 写入配置。
+- 确认全部正式项目在 V4 `vault_index` 中都有唯一、匹配 Markdown 的 `entity_id`，包括升级前已存在 ID 的项目。
+- 制造歧义条目时，升级在 cutover 前停止；审阅后执行 `--accept-scope-map`，或逐条修正并设为 `confirmed: true`。
+- 制造两个同名仓库根、无效 `.git` 或人工编辑后的 stale 默认 map；确认项目 Markdown、YAML 和数据库零改，人工内容不被覆盖。
+- `file:__REVIEW_REQUIRED__` 不能通过确认开关绕过。
 - 升级完成后只有 `Schema V4`，runtime receipt 状态为 `opened`。
 - cutover journal 与 Vault 外部备份存在。
 - 人为制造迁移失败时，Vault 自动恢复；不存在运行时兼容分支。
+- 自动恢复失败时，使用 `lifeos upgrade ./tmp/legacy-vault --restore <journal>` 完成显式恢复。

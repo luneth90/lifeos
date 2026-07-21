@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { dim, green, log, yellow } from './ui.js';
+import { dim, green, log } from './ui.js';
 
 interface McpServerEntry {
 	command: string;
@@ -55,17 +55,22 @@ function mergeJsonConfig(
 ): void {
 	let config: Record<string, unknown> = {};
 	if (existsSync(filePath)) {
+		let parsed: unknown;
 		try {
-			config = JSON.parse(readFileSync(filePath, 'utf-8'));
+			parsed = JSON.parse(readFileSync(filePath, 'utf-8'));
 		} catch {
-			log(yellow('⚠'), `Malformed JSON in ${filePath}, creating fresh config`);
-			config = {};
+			throw new Error(`现有 JSON 配置无法解析，拒绝覆盖：${filePath}`);
 		}
+		if (!isRecord(parsed)) throw new Error(`现有 JSON 配置根节点必须是对象：${filePath}`);
+		config = parsed;
 	} else {
 		mkdirSync(dirname(filePath), { recursive: true });
 	}
-	if (!config[sectionKey]) config[sectionKey] = {};
-	const section = config[sectionKey] as Record<string, unknown>;
+	if (config[sectionKey] === undefined) config[sectionKey] = {};
+	const section = config[sectionKey];
+	if (!isRecord(section)) {
+		throw new Error(`现有 JSON 配置的 ${sectionKey} 必须是对象：${filePath}`);
+	}
 	const existingEntry = section[serverName];
 	section[serverName] =
 		mode === 'merge-missing' && isRecord(existingEntry)
@@ -139,15 +144,61 @@ function findTomlSection(
 	content: string,
 	sectionHeader: string,
 ): { start: number; end: number } | null {
-	const start = content.indexOf(sectionHeader);
-	if (start === -1) return null;
+	const headers: Array<{ header: string; start: number }> = [];
+	let offset = 0;
+	let multiline: '"""' | "'''" | null = null;
+	for (const line of content.split(/(?<=\n)/)) {
+		const withoutNewline = line.replace(/[\r\n]+$/, '');
+		const delimiter: '"""' | "'''" | null = multiline ?? multilineDelimiter(withoutNewline);
+		if (multiline) {
+			if (delimiter && delimiterOccurrences(withoutNewline, delimiter) % 2 === 1) {
+				multiline = null;
+			}
+			offset += line.length;
+			continue;
+		}
+		if (delimiter && delimiterOccurrences(withoutNewline, delimiter) % 2 === 1) {
+			multiline = delimiter;
+			offset += line.length;
+			continue;
+		}
 
-	const afterHeader = start + sectionHeader.length;
-	const rest = content.slice(afterHeader);
-	const nextSectionMatch = rest.match(/\n\[[^\n]+\]/);
-	const nextSectionIndex = nextSectionMatch?.index;
-	const end = nextSectionIndex === undefined ? content.length : afterHeader + nextSectionIndex + 1;
-	return { start, end };
+		const trimmed = withoutNewline.trim();
+		if (trimmed && !trimmed.startsWith('#') && trimmed.startsWith('[')) {
+			const match = trimmed.match(/^(\[[^\]\r\n]+\]|\[\[[^\]\r\n]+\]\])\s*(?:#.*)?$/);
+			if (!match?.[1]) throw new Error('现有 Codex TOML 包含无法安全定位的 table header');
+			headers.push({ header: match[1], start: offset });
+		}
+		offset += line.length;
+	}
+	if (multiline) throw new Error('现有 Codex TOML 包含未闭合的多行字符串');
+
+	const matches = headers.filter((header) => header.header === sectionHeader);
+	if (matches.length > 1) throw new Error(`现有 Codex TOML 重复定义 ${sectionHeader}`);
+	const target = matches[0];
+	if (!target) return null;
+	const next = headers.find((header) => header.start > target.start);
+	return { start: target.start, end: next?.start ?? content.length };
+}
+
+function multilineDelimiter(line: string): '"""' | "'''" | null {
+	const basic = line.indexOf('"""');
+	const literal = line.indexOf("'''");
+	if (basic === -1 && literal === -1) return null;
+	if (basic === -1) return "'''";
+	if (literal === -1) return '"""';
+	return basic < literal ? '"""' : "'''";
+}
+
+function delimiterOccurrences(line: string, delimiter: '"""' | "'''"): number {
+	let count = 0;
+	let offset = 0;
+	while (true) {
+		const next = line.indexOf(delimiter, offset);
+		if (next === -1) return count;
+		count += 1;
+		offset = next + delimiter.length;
+	}
 }
 
 function replaceTomlSection(

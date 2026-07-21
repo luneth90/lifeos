@@ -86,11 +86,34 @@ memory_notify(contract_version=2, file_path="40_知识/笔记/群论.md")
 
 ```bash
 npm update -g lifeos
-lifeos upgrade ./my-vault --scope-map ./v4-scope-map.json
+lifeos upgrade ./my-vault
 lifeos doctor ./my-vault
 ```
 
-存在旧记忆条目时，scope map 必须逐条给出 `legacyIdentity`、内容 SHA-256、最终 `scope` 和 `itemKind`。示例：
+存在旧记忆条目时，升级器先只读盘点数据库，并在内存中自动生成 `{system}/{memory}/migrations/v4-scope-map.json` 的完整计划。调用者不需要创建该文件，也不需要传 `--scope-map`。每条记录包含 `legacyIdentity`、内容 SHA-256、内容预览、建议 `scope`、候选作用域、`itemKind`、推断理由、`confirmed`、上下文指纹和生成条目哈希。高置信结果会在同一次命令中继续；歧义或未知条目只会生成审阅草案，并在安装资产和迁移数据库前停止。`migrations/` 仅是一次性迁移工作区：未完成时保留供审阅，成功提交最终数据库后删除整个目录；后续验证失败则由完整 cutover 恢复升级前内容，Vault 外部显式 scope map 不会被删除。
+
+同一计划还会自动补齐项目和仓库身份：
+
+- 正式项目缺少 `id` 时，按标题/文件名生成 ASCII slug，无法生成时使用稳定路径哈希；备份进入 `prepared` 后才原样写回项目 Markdown。
+- 旧记忆明确包含源码或仓库绝对路径时，只沿该路径祖先验证安全 Git 根目录；不会扫描磁盘或按仓库名称猜目录。
+- 只有最终 scope map 实际引用的高置信 repository 才写入 `memory.repository_bindings`；已有显式 binding 永不覆盖。
+- 项目 ID、配置、scope map 和全部项目的 `vault_index.entity_id` 在数据库提交前交叉校验；失败时由 cutover 一起恢复。
+
+无法唯一识别路径、仓库或作用域时才需要人工处理。手工配置示例：
+
+```yaml
+memory:
+  repository_bindings:
+    lifeos:
+      - /Users/your-name/code/lifeos
+```
+
+`repository_bindings` 的每个值都必须是路径数组；同一稳定仓库名可绑定多个根目录。没有 repository 作用域的旧记忆时使用空对象：
+
+```yaml
+memory:
+  repository_bindings: {}
+```
 
 ```json
 {
@@ -101,13 +124,17 @@ lifeos doctor ./my-vault
       "scope": { "type": "global", "key": "" },
       "itemKind": "rule",
       "priority": 100,
-      "enforcement": "hard"
+      "enforcement": "hard",
+      "confirmed": true,
+      "suggestionReason": "槽位属于已核验的全局规则集合"
     }
   ]
 }
 ```
 
-升级过程会先创建 Vault 外部备份和 cutover journal，再安装最终资产、迁移数据库、验证 `Schema V4`，最后写入运行时 receipt。任一步失败都会尝试恢复备份。`--override` 已删除，不能作为兼容入口使用。
+对有效但有歧义的建议，审阅后可执行 `lifeos upgrade ./my-vault --accept-scope-map`；该开关不会接受 `file:__REVIEW_REQUIRED__` 占位符，未知条目仍必须人工填写真实 scope。`--scope-map <file>` 仅用于覆盖默认审阅文件位置。
+
+升级过程先以纯读方式形成计划；只有真正的歧义草案允许作为独立 preflight 诊断文件创建。高置信路径会取得外部写闸、重新盘点上下文、创建 Vault 外部备份和 cutover journal，进入 `prepared` 后才依次写项目 ID、最终配置、默认 scope map 与托管资产，随后迁移数据库、强制重索引全部正式项目、验证 `Schema V4`，最后写入运行时 receipt。任一步失败都会尝试恢复备份；自动恢复失败时写闸保持关闭，可执行 `lifeos upgrade ./my-vault --restore <journal>` 显式恢复。恢复会识别 staging/previous 残留并续接目录切换。数据库已是 V4 时不会再次消费旧 scope map 或重新自动发现 binding。`--override` 已删除，不能作为兼容入口使用。
 
 ## CLI 治理
 

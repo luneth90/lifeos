@@ -1,8 +1,8 @@
 import { execSync } from 'node:child_process';
 import { existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { stringify as stringifyYaml } from 'yaml';
 import Database from 'better-sqlite3';
+import { stringify as stringifyYaml } from 'yaml';
 import { EN_PRESET, ZH_PRESET } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { initDb } from '../../db/schema.js';

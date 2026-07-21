@@ -57,7 +57,7 @@ export function migrateV3Config(raw: Record<string, unknown>): LifeOSConfig {
 	memory.contract_version = 2;
 	memory.context_budgets = {
 		layer0_total: nonnegative(legacyBudgets.layer0_total, DEFAULT_CONTEXT_BUDGETS.layer0_total),
-		global_rules: DEFAULT_CONTEXT_BUDGETS.global_rules,
+		global_rules: nonnegative(legacyBudgets.global_rules, DEFAULT_CONTEXT_BUDGETS.global_rules),
 		userprofile_summary: nonnegative(
 			legacyBudgets.userprofile_summary,
 			DEFAULT_CONTEXT_BUDGETS.userprofile_summary,
@@ -66,8 +66,14 @@ export function migrateV3Config(raw: Record<string, unknown>): LifeOSConfig {
 			legacyBudgets.taskboard_focus,
 			DEFAULT_CONTEXT_BUDGETS.taskboard_focus,
 		),
-		scoped_context: DEFAULT_CONTEXT_BUDGETS.scoped_context,
-		single_item_max: DEFAULT_CONTEXT_BUDGETS.single_item_max,
+		scoped_context: nonnegative(
+			legacyBudgets.scoped_context,
+			DEFAULT_CONTEXT_BUDGETS.scoped_context,
+		),
+		single_item_max: nonnegative(
+			legacyBudgets.single_item_max,
+			DEFAULT_CONTEXT_BUDGETS.single_item_max,
+		),
 	};
 	memory.repository_bindings = record(legacyMemory.repository_bindings);
 	merged.memory = memory;

@@ -256,6 +256,9 @@ function checkProjectIds(
 		) {
 			issues.push(`占位 id: ${file}`);
 		}
+		if (!/^[a-z0-9][a-z0-9._-]*$/.test(id)) {
+			issues.push(`id 不是可移植的小写 ASCII 标识符 ${id}: ${file}`);
+		}
 		const previous = seen.get(id);
 		if (previous) issues.push(`重复 id ${id}: ${previous}, ${file}`);
 		else seen.set(id, file);

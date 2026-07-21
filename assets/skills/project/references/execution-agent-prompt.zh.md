@@ -21,7 +21,9 @@ parent_skill: project
 
 - 项目类别（learning / development / creative / general）
 - 知识领域（Domain）
-- 来源草稿字段（用于后续状态更新）
+- `project_id`（项目稳定 ID）
+- 最终主项目 Vault 相对路径
+- 来源草稿字段（返回给 Orchestrator，验收后由其更新状态）
 
 ## 步骤二：获取模板（关键）
 
@@ -39,6 +41,25 @@ parent_skill: project
 - `development`：必须创建 `{项目目录}/ProjectName/ProjectName.md`
 - `learning / creative / general`：可创建 `{项目目录}/ProjectName.md`，或在文件较多时使用 `{项目目录}/ProjectName/ProjectName.md`
 
+### 稳定 ID 落盘（强制）
+
+1. 先固定最终主项目 Vault 相对路径。扫描 `{项目目录}/` 下所有现有 `type: project` 主项目，
+   收集其路径和 `id`；发现 ID 缺失、不是无首尾空格的 YAML 字符串、使用占位值、非法或
+   重复时停止并报告，不得在损坏的 ID 清单上继续分配。
+2. 更新已有项目时，沿用该主项目已有且匹配 `^[a-z0-9][a-z0-9._-]*$` 的可移植 ID，
+   不得因改名、移动或版本变化重新生成。
+3. 新项目的计划 `project_id` 必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，不得包含
+   `{{...}}`、`placeholder`，也不得等于 `Project_Template` 或 `project-template`。
+4. 若计划确认期间出现 ID 冲突或最终路径变化，按以下算法重算，并先把新 ID 和最终路径回写计划：
+   - 依次取项目标题、去掉扩展名的主文件名，执行 NFKD 规范化、移除组合音标、转小写、
+     把连续非 ASCII 字母数字替换为 `-`、移除首尾 `-`；不可用候选继续尝试下一来源。
+   - 基础 slug 唯一时直接使用。否则，对包含 `.md` 的完整 Vault 相对路径进行 NFC 规范化、
+     统一 `/` 分隔符，并对 UTF-8 字节计算 SHA-256。
+   - 无 slug 时用 `project-<摘要前10位>`；slug 冲突时用 `<slug>-<摘要前10位>`；仍冲突时
+     每次扩展 2 位摘要，完整摘要仍冲突则追加 `-2`、`-3`……。
+5. 从模板生成文件时，必须把 `id: "{{ID}}"` 替换为带引号的
+   `id: "<最终project_id>"`。禁止省略 `id`、保留模板占位符或把 ID 写成非字符串。
+
 ### 开发类项目目录规范（强制）
 
 若项目类别为 `development`，执行时必须遵守以下规则：
@@ -54,12 +75,15 @@ parent_skill: project
 
 ```yaml
 ---
+title: "ProjectName"
 type: project
+category: learning
 status: active
 domain: "[[DomainName]]"
 created: "YYYY-MM-DD"
 tags: [project]
 aliases: []
+id: "[计划中的最终 project_id]"
 ---
 ```
 
@@ -113,18 +137,23 @@ target_version: V0.2
 - 内容必须为中文
 - 开发类项目必须在主项目正文中写明“项目文档”区块，说明配套文档统一存放在 `文档/` 目录
 
-## 步骤四：更新草稿状态（关键）
+## 步骤四：创建后自检（返回前强制）
 
-检查计划文件中的「来源草稿」字段：
+写入后立即回读主项目并重新扫描全部 `type: project`，确认：
 
-- 若列出了草稿文件路径（非"无"）：将该草稿文件的 frontmatter 中 `status` 更新为 `done`
-- 这标记该草稿已被处理，使 `/archive` 可识别并归档
+- 顶层 frontmatter 中 `type` 与 `id` 各且仅有一个，且 `id` 被 YAML 解析为无首尾空格的字符串
+- `type: project`，`id` 与计划中最终 `project_id` 完全一致
+- 新项目 ID 符合严格 kebab-case；更新项目 ID 符合可移植格式
+- frontmatter 的 `id` 不包含 `{{ID}}`、`Project_Template`、`placeholder` 或其他占位值
+- 没有另一个主项目使用相同 ID
 
-## 步骤五：更新计划状态（关键）
+检查失败时立即修复并重复回读，禁止仅凭写入操作成功就报告完成。
 
-- 项目创建完成后，将计划文件的 frontmatter 中 `status` 更新为 `done`
-- 保持计划文件仍位于 `{计划目录}/Plan_YYYY-MM-DD_Project_ProjectName.md`
-- 后续由 `/archive` 统一将 `status: done` 的计划移动到 `{系统目录}/{归档计划子目录}/`
+## 步骤五：返回 Orchestrator 验收
+
+- 返回主项目路径、最终 ID、来源草稿路径、计划路径和上述自检结果
+- 不得修改来源草稿状态，不得把计划改为 `done`，不得写入 project scope 记忆
+- Orchestrator 独立验收并确认项目 scope 可解析后，才负责更新状态和最终交付
 
 ---
 
@@ -133,13 +162,15 @@ target_version: V0.2
 完成后用中文汇报：
 
 ```
-## 项目创建完成
+## 项目文件已创建——等待验收
 
 **项目:** [[ProjectName]] 已创建
+**项目稳定 ID:** `[project_id]`
 **知识领域:** [Domain]
 **已链接的 Vault 资源:** [列出实际链接到的笔记和资源]
-**来源草稿状态:** [{草稿目录}/文件名.md → status 已更新为 done，或"无来源草稿"]
-**计划状态:** {计划目录}/Plan_YYYY-MM-DD_Project_ProjectName.md → `status: done`（待 `/archive` 归档到 `{系统目录}/{归档计划子目录}/`）
+**ID 自检:** 已回读，格式合法且全局唯一
+**来源草稿:** [{草稿目录}/文件名.md，或"无来源草稿"]（状态保持不变，等待 Orchestrator 验收）
+**计划:** {计划目录}/Plan_YYYY-MM-DD_Project_ProjectName.md（保持 `status: active`，等待 Orchestrator 验收）
 
 若为开发类项目，再补充：
 

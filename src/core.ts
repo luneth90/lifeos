@@ -12,11 +12,8 @@ import { refreshUserprofile } from './active-docs/index.js';
 import { VERSION } from './cli/utils/version.js';
 import { type VaultConfig, getOrCreateVaultConfig } from './config.js';
 import { assertNoActiveCutover } from './cutover-lock.js';
-import { initDb } from './db/schema.js';
-import {
-	CONTRACT_VERSION,
-	assertRuntimeContract,
-} from './runtime-contract.js';
+import { assertSchemaV4 } from './db/schema.js';
+import { CONTRACT_VERSION, assertRuntimeContract } from './runtime-contract.js';
 import { notifyFileChanged, notifyFilesChanged } from './services/capture.js';
 import { buildMemoryContext } from './services/context-router.js';
 import { archiveMemoryItem, listMemoryItems, upsertMemoryItem } from './services/memory-items.js';
@@ -37,6 +34,7 @@ import type {
 	StartupResult,
 	UpsertMemoryItemResult,
 } from './types.js';
+import { assertVaultPathSafe, canonicalVaultRoot } from './utils/safe-path.js';
 
 interface ResolvedRuntime {
 	db: Database.Database;
@@ -58,26 +56,37 @@ function assertContractVersion(contractVersion: number): void {
 
 function openDb(dbPath: string): Database.Database {
 	const db = new Database(dbPath, { fileMustExist: true });
-	db.pragma('journal_mode = WAL');
-	db.pragma('foreign_keys = ON');
-	return db;
+	try {
+		assertSchemaV4(db);
+		db.pragma('journal_mode = WAL');
+		db.pragma('foreign_keys = ON');
+		return db;
+	} catch (error) {
+		db.close();
+		throw error;
+	}
 }
 
 function resolveDbAndVault(dbPath?: string, vaultRoot?: string): ResolvedRuntime {
-	const vault = vaultRoot || process.env.LIFEOS_VAULT_ROOT || process.cwd();
-	if (!existsSync(join(vault, 'lifeos.yaml'))) {
-		throw new Error(`缺少 LifeOS 最终配置：${join(vault, 'lifeos.yaml')}`);
+	const vault = canonicalVaultRoot(vaultRoot || process.env.LIFEOS_VAULT_ROOT || process.cwd());
+	const yamlPath = join(vault, 'lifeos.yaml');
+	if (!existsSync(yamlPath)) {
+		throw new Error(`缺少 LifeOS 最终配置：${yamlPath}`);
 	}
+	assertVaultPathSafe(vault, yamlPath);
 	assertNoActiveCutover(vault);
 	const config = getOrCreateVaultConfig(vault);
-	const resolvedDbPath = dbPath || config.dbPath();
+	const configuredDbPath = assertVaultPathSafe(vault, config.dbPath());
+	const resolvedDbPath = dbPath ? assertVaultPathSafe(vault, dbPath) : configuredDbPath;
+	if (resolvedDbPath !== configuredDbPath) {
+		throw new Error('dbPath 必须指向 lifeos.yaml 配置的 Vault 内数据库');
+	}
 	if (!existsSync(resolvedDbPath)) {
 		throw new Error(`缺少 LifeOS Schema V4 数据库：${resolvedDbPath}`);
 	}
 	const db = openDb(resolvedDbPath);
 
 	try {
-		initDb(db);
 		assertRuntimeContract({
 			vaultRoot: vault,
 			db,

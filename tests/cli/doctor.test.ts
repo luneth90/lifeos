@@ -233,19 +233,24 @@ describe('lifeos doctor', () => {
 		}
 	});
 
-	test('项目稳定 ID 缺失和重复均阻断最终 V4', async () => {
+	test('项目稳定 ID 缺失、重复或不可移植均阻断最终 V4', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {
 			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
 			writeFileSync(join(dir, '20_项目', 'missing.md'), '---\ntype: project\n---\n');
 			writeFileSync(join(dir, '20_项目', 'one.md'), '---\ntype: project\nid: duplicate\n---\n');
 			writeFileSync(join(dir, '20_项目', 'two.md'), '---\ntype: project\nid: duplicate\n---\n');
+			writeFileSync(
+				join(dir, '20_项目', 'invalid.md'),
+				'---\ntype: project\nid: Project_Invalid\n---\n',
+			);
 			const result = await doctorCommand([dir]);
 			expect(result.passed).toBe(false);
 			const check = result.checks.find((item) => item.name === 'project ids');
 			expect(check).toMatchObject({ status: 'fail' });
 			expect(check?.detail).toContain('缺少 id');
 			expect(check?.detail).toContain('重复 id duplicate');
+			expect(check?.detail).toContain('不是可移植的小写 ASCII 标识符');
 		} finally {
 			cleanup();
 		}
@@ -268,9 +273,13 @@ describe('lifeos doctor', () => {
 			});
 			let result = await doctorCommand([dir]);
 			expect(result.passed).toBe(false);
-			expect(
-				result.checks.some((c) => c.name === 'global hard budget' && c.status === 'fail'),
-			).toBe(true);
+			for (const name of [
+				'global hard rules budget',
+				'global hard single-item budget',
+				'global hard Layer 0 budget',
+			]) {
+				expect(result.checks.some((c) => c.name === name && c.status === 'fail')).toBe(true);
+			}
 
 			db.prepare('UPDATE schema_version SET version = 3').run();
 			result = await doctorCommand([dir]);

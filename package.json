@@ -1,6 +1,6 @@
 {
 	"name": "lifeos",
-	"version": "1.8.3",
+	"version": "2.0.0",
 	"description": "LifeOS — AI-native knowledge OS runtime, CLI scaffold, and MCP memory server",
 	"type": "module",
 	"main": "dist/index.js",
@@ -9,7 +9,7 @@
 	},
 	"files": ["dist/", "bin/", "assets/"],
 	"scripts": {
-		"build": "tsc",
+		"build": "node scripts/build.mjs",
 		"dev": "tsx watch src/server.ts",
 		"start": "node dist/server.js",
 		"test": "vitest run",
@@ -20,7 +20,7 @@
 		"release:bump": "node scripts/release/bump-version.mjs",
 		"release:check-version": "node scripts/release/check-version.mjs",
 		"release:verify": "npm run typecheck && npm run lint && npm test && npm run build",
-		"release:pack": "node scripts/release/pack.mjs",
+		"release:pack": "npm run build && node scripts/release/pack.mjs",
 		"prepublishOnly": "npm run build && npm run test"
 	},
 	"dependencies": {

@@ -106,23 +106,37 @@ npm update -g lifeos
 lifeos upgrade ./my-vault
 ```
 
-`npm update -g lifeos` pulls the latest CLI and built-in resources; `lifeos upgrade` syncs the new templates, skills, and specs into your vault. Both steps are required — updating the CLI alone won't touch vault files, and running upgrade alone won't fetch new built-in resources.
+`npm update -g lifeos` updates the CLI and built-in resources. `lifeos upgrade` upgrades the vault automatically and keeps the latest rollback backup.
 
-If you have modified built-in templates, skills, or schema files, `upgrade` will skip them by default to preserve your changes. Add `--override` to force-replace all resource files with the latest version (your notes, resources, `memory.db`, and `lifeos.yaml` config are never affected):
+### Rollback
+
+Backups are stored in `.lifeos-cutovers` next to the vault. Find the matching `journal.json` with:
 
 ```bash
-lifeos upgrade ./my-vault --override
+find /absolute/path/to/.lifeos-cutovers -type f -name journal.json -print
 ```
+
+Then restore the vault with that journal:
+
+```bash
+lifeos upgrade /absolute/path/to/my-vault \
+  --restore /absolute/path/to/.lifeos-cutovers/my-vault-<id>/<cutover-id>/journal.json
+```
+
+Rollback replaces the entire vault. Save any post-upgrade content you still need before running it.
 
 ## CLI Commands
 
 ```bash
-lifeos init [path] [--lang zh|en] [--no-mcp]           # Create a new vault
-lifeos upgrade [path] [--lang zh|en] [--override]      # Upgrade and restore assets/scaffold
-lifeos doctor [path]                                   # Health check
-lifeos rename [path]                                   # Interactive directory rename
-lifeos --help                                          # Show help
-lifeos --version                                       # Show version
+lifeos init [path] [--lang zh|en] [--no-mcp]              # Create a new vault
+lifeos upgrade [path]                                      # Upgrade an existing vault
+lifeos upgrade [path] --restore <journal>                 # Restore the entire vault
+lifeos doctor [path]                                      # Health check
+lifeos rename [path]                                      # Interactive directory rename
+lifeos rules list|audit|export [path]                     # Read-only memory governance
+lifeos rules classify|archive|restore [path]              # Explicitly govern memory items
+lifeos --help                                             # Show help
+lifeos --version                                          # Show version
 ```
 
 ## Skills
@@ -194,7 +208,7 @@ Create a `.md` file in your vault's Prompts directory (`{system directory}/Promp
 
 - ✅ LifeOS 1.0 is now basically usable
 - ✅ The CLI supports directory customization
-- ✅ The CLI `upgrade` command supports smart updates
+- ✅ The CLI `upgrade` command supports offline atomic cutover, automatic recovery, and explicit rollback
 - ✅ Verified on macOS (Claude Code CLI, Codex CLI/Desktop, OpenCode CLI/Desktop) and Windows (Codex Desktop, OpenCode Desktop)
 - ✅ The `/digest` skill supports multilingual weekly digests with multi-source paper fetching
 - ☐ Improve memory-system precision

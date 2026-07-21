@@ -178,18 +178,24 @@ lifeos rules restore ./tmp/lifeos-integration --id 42
 分别准备 `Schema V1`、`Schema V2`、`Schema V3` Vault 副本：
 
 ```bash
-lifeos upgrade ./tmp/legacy-vault --scope-map ./tmp/v4-scope-map.json
+lifeos upgrade ./tmp/legacy-vault
 lifeos doctor ./tmp/legacy-vault
 ```
 
 对每个旧版本确认：
 
 - 未升级前 MCP runtime 明确拒绝，不做隐式迁移。
-- scope map 的条数、旧身份和内容 SHA-256 必须完全匹配。
-- 项目 scope 引用真实稳定项目 ID；仓库 scope 引用已配置 binding。
+- 自动生成 scope map；条数、旧身份和内容 SHA-256 必须完全匹配。
+- 缺失项目 ID 自动生成并写回主 Markdown；内容、注释、换行、权限和已有合法 ID 保持不变。
+- 从旧记忆中的明确绝对路径自动发现安全 Git 根，只持久化最终 repository scope 实际使用的 binding；普通绝对路径和 tool/project scope 不得污染配置。
+- 高置信结果直接继续；歧义结果在 cutover 前停止，`--accept-scope-map` 只能接受已有有效建议。
+- `file:__REVIEW_REQUIRED__` 必须人工替换，确认开关不能绕过。
+- 项目 scope 引用真实稳定项目 ID；仓库 scope 引用已配置 binding；全部正式项目的 V4 `entity_id` 与 Markdown 一致且唯一。
+- 未人工修改的 stale 默认 map 按上下文指纹自动刷新；人工修改或显式 `--scope-map` 永不被自动覆盖。
 - 升级创建 Vault 外部备份与 cutover journal。
 - 成功后数据库只有 `Schema V4`，runtime receipt 为 `opened`。
 - 在文件安装、数据库提交和最终验证阶段分别注入失败时，均恢复旧 Vault。
+- 验证 `--restore <journal>` 可恢复未完成或已打开的 cutover，成功后才释放外部写闸。
 - `--override` 被拒绝，不存在双结构兼容模式。
 
 ## 11. active docs 与状态机

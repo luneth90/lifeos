@@ -1,7 +1,12 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
-import { join } from 'path';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
+import { stringify as stringifyYaml } from 'yaml';
+import { syncVault } from '../src/cli/utils/sync-vault.js';
 import { VERSION } from '../src/cli/utils/version.js';
+import { _resetDefaultInstance, resolveConfig } from '../src/config.js';
+import { initDb } from '../src/db/schema.js';
+import { writeFreshInstallReceipt } from '../src/runtime-contract.js';
 
 export interface TempVault {
 	root: string;
@@ -113,6 +118,40 @@ export function createTestDb(dbPath: string): Database.Database {
 	const db = new Database(dbPath);
 	db.pragma('journal_mode = WAL');
 	return db;
+}
+
+/**
+ * 将基础临时 Vault 安装为可被最终运行契约接受的完整 V2/V4 runtime。
+ *
+ * createTempVault 仍只创建裸配置，供缺失 DB、receipt 或托管资产等失败分支使用；
+ * 需要正常调用 core/CLI 的测试必须显式调用本函数。
+ */
+export async function prepareRuntimeVault(vault: TempVault): Promise<void> {
+	_resetDefaultInstance();
+	const config = structuredClone(resolveConfig(vault.root).rawConfig);
+	const synced = await syncVault(vault.root, config, {
+		lang: config.language === 'en' ? 'en' : 'zh',
+		assetMode: 'overwrite',
+		skillMode: 'overwrite',
+		ensureMcp: false,
+		mcpMode: 'replace',
+		rulesMode: 'overwrite',
+		assetVersion: VERSION,
+	});
+	config.installed_versions = { cli: VERSION, assets: VERSION };
+	config.managed_assets = synced.managedAssets ?? {};
+	writeFileSync(join(vault.root, 'lifeos.yaml'), stringifyYaml(config), 'utf-8');
+
+	const db = new Database(vault.dbPath);
+	try {
+		db.pragma('journal_mode = WAL');
+		db.pragma('foreign_keys = ON');
+		initDb(db);
+	} finally {
+		db.close();
+	}
+	writeFreshInstallReceipt(vault.root, config, VERSION);
+	_resetDefaultInstance();
 }
 
 /**

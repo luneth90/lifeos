@@ -29,7 +29,9 @@ memory_context(
 )
 ```
 
-Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.> [!config]
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
+
+> [!config]
 > Path references in this skill use logical names (e.g., `{projects directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
 > Path mappings:
@@ -56,13 +58,16 @@ Follow `_shared/dual-agent-orchestrator.md` Phase 0, with entity type `filters.t
 | ------- | ------------------ | ----------------------------------------------------------- |
 | Phase 1 | Planning Agent     | Gather context, classify project, design structure, create plan file |
 | Phase 2 | Orchestrator (you) | Notify user to review the plan, wait for confirmation       |
-| Phase 3 | Execution Agent    | Create project note with a clean context and update the plan to `status: done` |
+| Phase 3 | Execution Agent    | Create and self-check the project note with a clean context; return without changing plan/draft status |
+| Phase 4 | Orchestrator (you) | Independently accept the ID, update the index, then mark the plan/source draft `done` |
 
 # Your Responsibilities as Orchestrator
 
 Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.md`. The following are additional responsibilities specific to the project skill:
 
 - If the project category is `development`, verify the output follows the "single main project + docs directory" convention; if not, require immediate correction before delivery
+- Ensure every new `type: project` main note has the same stable `id` in both the plan and final frontmatter
+- After the Execution Agent returns, independently reread the main project and complete the ID acceptance checks below; require correction instead of delivering when any check fails
 
 # Input Context
 
@@ -84,6 +89,56 @@ Auto-classify based on user input:
 | `development`        | Building something    | Single main project + docs directory, phased progression |
 | `creative`           | Writing, design       | Milestone-based, iterative progression    |
 | `general`            | Other                 | Standard C.A.P. structure                 |
+
+# Stable Project ID (Mandatory)
+
+The stable ID is the primary key for project-scoped memory, not a display title. The Planning Agent
+must generate `project_id` in the plan, and the Execution Agent must write that value to the main
+project frontmatter as `id`. Only a `type: project` main note receives a project ID;
+`type: project-doc` must not receive an independent project ID.
+
+## Allocation Rules
+
+1. When updating an existing project, preserve its current portable `id`; renaming, moving, or
+   changing a version must never regenerate it. An existing ID must be a YAML string without
+   leading or trailing whitespace, match `^[a-z0-9][a-z0-9._-]*$`, and not be a placeholder.
+   Otherwise, stop and ask the user to run `lifeos upgrade` or repair the existing project first.
+2. A newly generated project ID must match `^[a-z0-9]+(?:-[a-z0-9]+)*$`. It must not contain `{{...}}` or
+   `placeholder`, and must not equal `Project_Template` or `project-template`.
+3. Build the base slug by trying the project title and then the main project filename without its
+   extension. Apply NFKD normalization, remove combining marks, lowercase it, replace runs of
+   non-ASCII alphanumerics with `-`, and trim leading or trailing `-`. Continue to the next source
+   when a candidate is empty, contains `placeholder`, or equals `project-template`.
+4. Before writing the plan, scan every existing `type: project` ID under `{projects directory}`.
+   Stop and request upgrade or repair if an existing ID is missing, invalid, or duplicated. Use a
+   nonempty base slug only when it is unused by existing projects and every other new project in
+   the same run. If no base slug can be produced, use
+   `project-<path-digest>`; if the base slug conflicts, use `<base-slug>-<path-digest>`.
+5. The path digest is the first 10 hexadecimal characters of SHA-256 over the UTF-8 bytes of the
+   complete main-project Vault-relative path, including `.md`, after NFC normalization and
+   converting separators to `/`. If it still conflicts, extend the digest by two characters at a
+   time until unique. If a full digest still conflicts, append `-2`, `-3`, and so on until unique.
+6. The Planning Agent first fixes the main project's Vault-relative path, then writes the final ID
+   to both the plan frontmatter `project_id` and its classification section. The Execution Agent
+   rescans current IDs immediately before writing. If the final path changed or a conflict appeared
+   while awaiting confirmation, recompute with the same algorithm and update the plan's ID and
+   final path before creating the file.
+
+## Post-creation Acceptance
+
+After the Execution Agent finishes, the Orchestrator must independently reread the main project and
+scan all current projects, confirming that:
+
+- `type: project` and `id` each occur exactly once in frontmatter, with `id` parsed by YAML as a
+  string without leading or trailing whitespace
+- `id` exactly matches the plan's final `project_id`; new projects satisfy strict kebab-case while
+  existing projects satisfy the portable-ID format
+- the frontmatter `id` contains no `{{ID}}`, `Project_Template`, or other placeholder value
+- no other `type: project` in the Vault uses the same `id`
+
+If any check fails, require the Execution Agent to repair the result and rerun acceptance. Until all
+checks pass, do not mark the plan or source draft `done`, write project-scoped memory, or report that
+project creation is complete.
 
 # Development Project Directory Convention (Mandatory)
 
@@ -110,6 +165,7 @@ I've created a project launch plan at `[plan file path]`.
 
 **Project category:** [learning/development/creative/general]
 **Knowledge domain:** [Domain]
+**Stable project ID:** [project_id]
 **Source draft:** [{drafts directory}/filename.md, or "None"]
 **Missing resources:** [List resources needed but not yet in the Vault, or "None"]
 
@@ -120,7 +176,17 @@ Please review and modify as needed. Once confirmed, I'll generate the formal pro
 
 Follow `_shared/dual-agent-orchestrator.md` Phase 3.
 
-If the project category is `development`, after the Execution Agent returns, verify the output follows the "Development Project Directory Convention"; if not, require immediate correction before delivery.
+After the Execution Agent returns, first perform the post-creation acceptance under "Stable Project ID".
+For `development` projects, then verify the "Development Project Directory Convention". Require
+immediate correction before delivery when either check fails. After every check passes:
+
+1. Call `memory_notify(contract_version=2, file_path="<Vault-relative main project path>")` to update
+   the index.
+2. Call `memory_context(contract_version=2, scopes=[{type: "project", key: "<project_id>"}],
+   include_global=false, include_related_files=false)` and confirm the project scope resolves; repair
+   and retry if it does not.
+3. Set the source draft (if any) and plan to `status: done`, calling `memory_notify` for each.
+4. Only then write project-scoped memory or report completion. The report must include the final ID.
 
 # Edge Cases
 
@@ -135,7 +201,7 @@ If the project category is `development`, after the Execution Agent returns, ver
 
 When the user requests modifications after project creation: edit directly, do not create duplicate files. Update status as needed (`active ⇄ frozen → done`).
 
-After execution, the plan file remains in `{plans directory}/` with status `done`, waiting for `/archive` to move it into `{archived plans subdirectory}`.
+After Orchestrator acceptance, the plan file remains in `{plans directory}/` with status `done`, waiting for `/archive` to move it into `{archived plans subdirectory}`.
 
 When adding new documents to a development project later, continue placing them in the `Docs/` subdirectory under the same project directory; do not create a second project file with the same name at the `{projects directory}/` root.
 

@@ -1,7 +1,7 @@
 /** 文件变更通知服务；记忆条目写入统一由 memory-items.ts 负责。 */
 
-import type Database from 'better-sqlite3';
 import { isAbsolute, relative, resolve } from 'node:path';
+import type Database from 'better-sqlite3';
 import type { MemoryScope } from '../types.js';
 import type { IndexImpact, IndexResult } from '../utils/vault-indexer.js';
 import { indexFiles } from '../utils/vault-indexer.js';

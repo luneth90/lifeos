@@ -1,19 +1,25 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
+	closeSync,
 	existsSync,
+	fsyncSync,
+	lstatSync,
+	openSync,
 	readFileSync,
 	readdirSync,
+	realpathSync,
 	renameSync,
 	statSync,
 	writeFileSync,
 } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { resolveSkillFiles } from './cli/utils/lang.js';
 import type { VaultConfig } from './config.js';
 import { resolveConfig } from './config.js';
-import { readCutoverLock } from './cutover-lock.js';
+import { cutoverRoot, isValidCutoverId, readCutoverLock } from './cutover-lock.js';
+import { assertVaultPathSafe, canonicalVaultRoot } from './utils/safe-path.js';
 
 export const CONTRACT_VERSION = 2 as const;
 export const RUNTIME_SCHEMA_VERSION = 4 as const;
@@ -112,6 +118,11 @@ function readReceipt(vaultRoot: string, issues: string[]): RuntimeReceipt | unde
 		return undefined;
 	}
 	try {
+		const stat = lstatSync(path);
+		if (stat.isSymbolicLink() || !stat.isFile()) {
+			issues.push('runtime receipt 必须是 Vault 内普通文件');
+			return undefined;
+		}
 		const value = JSON.parse(readFileSync(path, 'utf-8')) as RuntimeReceipt;
 		if (value.contract_version !== CONTRACT_VERSION) {
 			issues.push('receipt contract_version 不是 2');
@@ -144,12 +155,27 @@ function checkJournal(
 		issues.push('upgrade receipt 缺少绝对 journal_path');
 		return;
 	}
-	const journalRelative = relative(resolve(vaultRoot), resolve(receipt.journal_path));
-	if (journalRelative === '' || (!journalRelative.startsWith('..') && !isAbsolute(journalRelative))) {
-		issues.push('cutover journal 必须位于 Vault 外');
+	if (!receipt.cutover_id || !isValidCutoverId(receipt.cutover_id)) {
+		issues.push('upgrade receipt 的 cutover_id 非法');
+		return;
 	}
-	if (!receipt.cutover_id?.trim()) issues.push('upgrade receipt 缺少 cutover_id');
 	try {
+		const root = canonicalVaultRoot(vaultRoot);
+		const expectedPath = join(cutoverRoot(root), receipt.cutover_id, 'journal.json');
+		const requestedPath = resolve(receipt.journal_path);
+		if (requestedPath !== expectedPath) {
+			issues.push('cutover journal 不在受控目录');
+			return;
+		}
+		const stat = lstatSync(requestedPath);
+		if (stat.isSymbolicLink() || !stat.isFile()) {
+			issues.push('cutover journal 必须是普通文件');
+			return;
+		}
+		if (realpathSync.native(requestedPath) !== expectedPath) {
+			issues.push('cutover journal 路径经过符号链接');
+			return;
+		}
 		const journal = JSON.parse(readFileSync(receipt.journal_path, 'utf-8')) as {
 			state?: string;
 			contract_version?: number;
@@ -159,6 +185,7 @@ function checkJournal(
 			vault_root?: string;
 			to_version?: string;
 			backup_sha256?: string;
+			backup_path?: string;
 		};
 		if (journal.state !== expectedState) {
 			issues.push(`cutover journal 状态不是 ${expectedState}`);
@@ -175,7 +202,7 @@ function checkJournal(
 		if (journal.cutover_id !== receipt.cutover_id) {
 			issues.push('cutover journal cutover_id 不匹配');
 		}
-		if (!journal.vault_root || resolve(journal.vault_root) !== resolve(vaultRoot)) {
+		if (!journal.vault_root || canonicalVaultRoot(journal.vault_root) !== root) {
 			issues.push('cutover journal vault_root 不匹配');
 		}
 		if (journal.to_version !== receipt.runtime_version) {
@@ -183,6 +210,17 @@ function checkJournal(
 		}
 		if (!/^[a-f0-9]{64}$/.test(journal.backup_sha256 ?? '')) {
 			issues.push('cutover journal backup_sha256 非法');
+		}
+		const expectedBackup = join(dirname(expectedPath), 'vault');
+		if (resolve(journal.backup_path ?? '') !== expectedBackup) {
+			issues.push('cutover journal backup_path 不匹配');
+		} else {
+			const backupStat = lstatSync(expectedBackup);
+			if (backupStat.isSymbolicLink() || !backupStat.isDirectory()) {
+				issues.push('cutover backup 不是普通目录');
+			} else if (realpathSync.native(expectedBackup) !== expectedBackup) {
+				issues.push('cutover backup 路径经过符号链接');
+			}
 		}
 	} catch {
 		issues.push('cutover journal 缺失或不可读');
@@ -226,9 +264,15 @@ function checkManagedAssets(
 		}
 	}
 	for (const [assetPath, record] of Object.entries(records)) {
-		const fullPath = safeAssetPath(vaultRoot, assetPath);
+		let fullPath = safeAssetPath(vaultRoot, assetPath);
 		if (!fullPath) {
 			issues.push(`managed asset 路径非法：${assetPath}`);
+			continue;
+		}
+		try {
+			fullPath = assertVaultPathSafe(vaultRoot, fullPath);
+		} catch {
+			issues.push(`managed asset 路径经过符号链接：${assetPath}`);
 			continue;
 		}
 		if (!existsSync(fullPath)) {
@@ -294,8 +338,16 @@ function expectedManagedAssetPaths(config: VaultConfig['rawConfig']): string[] {
 
 export function validateRuntimeContract(options: RuntimeContractOptions): RuntimeContractResult {
 	const issues: string[] = [];
+	let vaultRoot: string;
 	try {
-		const lock = readCutoverLock(options.vaultRoot);
+		vaultRoot = canonicalVaultRoot(options.vaultRoot);
+		assertVaultPathSafe(vaultRoot, join(vaultRoot, 'lifeos.yaml'));
+	} catch (error) {
+		issues.push(error instanceof Error ? error.message : 'Vault 路径不安全');
+		return { ok: false, issues };
+	}
+	try {
+		const lock = readCutoverLock(vaultRoot);
 		if (lock && !options.allowActiveCutover) {
 			issues.push(`cutover 写闸已关闭（pid=${lock.pid}）`);
 		}
@@ -304,7 +356,7 @@ export function validateRuntimeContract(options: RuntimeContractOptions): Runtim
 	}
 	let config: ReturnType<typeof resolveConfig>;
 	try {
-		config = resolveConfig(options.vaultRoot);
+		config = resolveConfig(vaultRoot);
 	} catch (error) {
 		issues.push(error instanceof Error ? error.message : 'lifeos.yaml 无效');
 		return { ok: false, issues };
@@ -313,7 +365,7 @@ export function validateRuntimeContract(options: RuntimeContractOptions): Runtim
 	if (raw.memory.contract_version !== CONTRACT_VERSION) {
 		issues.push('memory.contract_version 必须为 2');
 	}
-	const receipt = readReceipt(options.vaultRoot, issues);
+	const receipt = readReceipt(vaultRoot, issues);
 	if (receipt) {
 		try {
 			if (receipt.package_sha256 !== runtimePackageSha256()) {
@@ -327,12 +379,7 @@ export function validateRuntimeContract(options: RuntimeContractOptions): Runtim
 				`receipt runtime_version ${receipt.runtime_version} 与运行版本 ${options.runtimeVersion} 不一致`,
 			);
 		}
-		checkJournal(
-			receipt,
-			options.vaultRoot,
-			options.expectedJournalState ?? 'opened',
-			issues,
-		);
+		checkJournal(receipt, vaultRoot, options.expectedJournalState ?? 'opened', issues);
 	}
 	if (options.runtimeVersion) {
 		if (raw.installed_versions?.cli !== options.runtimeVersion) {
@@ -344,7 +391,7 @@ export function validateRuntimeContract(options: RuntimeContractOptions): Runtim
 	}
 	checkDb(options.db, config.dbPath(), issues);
 	if (options.verifyManagedAssets !== false) {
-		checkManagedAssets(options.vaultRoot, raw, issues);
+		checkManagedAssets(vaultRoot, raw, issues);
 	}
 	return { ok: issues.length === 0, issues, receipt };
 }
@@ -357,12 +404,24 @@ export function assertRuntimeContract(options: RuntimeContractOptions): RuntimeC
 
 export function writeRuntimeReceipt(vaultRoot: string, receipt: RuntimeReceipt): RuntimeReceipt {
 	const path = receiptPath(vaultRoot);
-	const temporary = `${path}.tmp-${process.pid}`;
-	writeFileSync(temporary, `${JSON.stringify(receipt, null, 2)}\n`, {
-		encoding: 'utf-8',
-		mode: 0o600,
-	});
+	assertVaultPathSafe(vaultRoot, path);
+	const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
+	const descriptor = openSync(temporary, 'wx', 0o600);
+	try {
+		writeFileSync(descriptor, `${JSON.stringify(receipt, null, 2)}\n`, 'utf-8');
+		fsyncSync(descriptor);
+	} finally {
+		closeSync(descriptor);
+	}
 	renameSync(temporary, path);
+	if (process.platform !== 'win32') {
+		const directoryDescriptor = openSync(dirname(path), 'r');
+		try {
+			fsyncSync(directoryDescriptor);
+		} finally {
+			closeSync(directoryDescriptor);
+		}
+	}
 	return receipt;
 }
 

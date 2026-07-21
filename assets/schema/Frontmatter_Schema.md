@@ -97,6 +97,8 @@ id: Frontmatter_Schema
 
 ### project 推荐字段
 
+- `id`: 必填。项目稳定主键；新项目使用小写 ASCII kebab-case
+  (`^[a-z0-9]+(?:-[a-z0-9]+)*$`)，在全部 `type: project` 中唯一，创建后不得因改名或移动而改变
 - `category`: `learning | development | creative | general`
 - `due`: 可空
 - `priority`: `P0 | P1 | P2 | P3 | P4`
@@ -113,6 +115,7 @@ id: Frontmatter_Schema
 
 - `source`: 字符串，来源技能（如 `project`、`research`）
 - `project`: wikilink 或字符串，关联项目（项目计划时可填）
+- `project_id`: 字符串，项目创建计划最终确定的稳定项目 ID
 - `topic`: 字符串，研究主题（研究计划时可填）
 
 ### draft 推荐字段

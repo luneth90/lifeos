@@ -115,21 +115,31 @@ npm update -g lifeos
 lifeos upgrade ./my-vault
 ```
 
-`npm update -g lifeos` 会拉取最新 CLI 和内置资源；`lifeos upgrade` 执行离线、原子化 cutover：先在 Vault 外创建备份和 journal，再安装最终资产、迁移数据库、验证完整契约并写入 runtime receipt。任一步失败都会尝试恢复原 Vault。
+`npm update -g lifeos` 会更新 CLI 和内置资源；`lifeos upgrade` 会自动升级 Vault，并在升级前保留最近一次回滚备份。
 
-运行时只接受 `Schema V4`，不会隐式迁移旧数据库。`Schema V1`、`Schema V2`、`Schema V3` 中存在旧记忆条目时，升级必须提供逐条核验的 scope map：
+### 手动回滚
+
+备份位于 Vault 同级的 `.lifeos-cutovers` 目录。先查找对应的 `journal.json`：
 
 ```bash
-lifeos upgrade ./my-vault --scope-map ./v4-scope-map.json
+find /absolute/path/to/.lifeos-cutovers -type f -name journal.json -print
 ```
 
-`--override` 已删除。升级会切换整套托管资产，不提供双结构兼容模式；用户笔记和资源通过 cutover 备份保护。
+然后使用该 journal 回滚：
+
+```bash
+lifeos upgrade /absolute/path/to/my-vault \
+  --restore /absolute/path/to/.lifeos-cutovers/my-vault-<id>/<cutover-id>/journal.json
+```
+
+回滚会替换整个 Vault；请先保存升级后仍需保留的内容。
 
 ## CLI 命令
 
 ```bash
 lifeos init [path] [--lang zh|en] [--no-mcp]              # 创建新 Vault
-lifeos upgrade [path] [--lang zh|en] [--scope-map file]   # 离线原子升级；旧记忆需要 scope map
+lifeos upgrade [path]                                      # 升级现有 Vault
+lifeos upgrade [path] --restore <journal>                 # 用受控 journal 恢复整个 Vault
 lifeos doctor [path]                                      # 健康检查
 lifeos rename [path]                                      # 交互式重命名目录
 lifeos rules list|audit|export [path]                      # 只读审计与导出记忆

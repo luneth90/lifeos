@@ -14,6 +14,12 @@ function startupResult(text = 'Layer0', snapshotId = 'ctx-test') {
 				omittedSlotKeys: [],
 				oversizedItems: [],
 				warnings: [],
+				sections: {
+					globalRules: { total: 1, loaded: 1, omitted: 0 },
+					taskboardFocus: { total: 0, loaded: 0, omitted: 0 },
+					userprofileSummary: { total: 0, loaded: 0, omitted: 0 },
+					revisionReminder: { total: 0, loaded: 0, omitted: 0 },
+				},
 			},
 		},
 		scopeHints: { availableProjects: ['gts'], availableSkills: ['revise'] },
@@ -104,6 +110,12 @@ describe('server 最终 V2/V4 契约', () => {
 			layer0_meta: {
 				token_estimate: 10,
 				global_items_total: 1,
+				sections: {
+					global_rules: { total: 1, loaded: 1, omitted: 0 },
+					taskboard_focus: { total: 0, loaded: 0, omitted: 0 },
+					userprofile_summary: { total: 0, loaded: 0, omitted: 0 },
+					revision_reminder: { total: 0, loaded: 0, omitted: 0 },
+				},
 			},
 			scope_hints: {
 				available_projects: ['gts'],
@@ -195,7 +207,7 @@ describe('server 最终 V2/V4 契约', () => {
 		});
 		const second = testing.callMemoryBootstrap({ vault_root: vault.root });
 		expect(second.layer0_refreshed).toBe(false);
-		expect(coreMock.memoryStartup).toHaveBeenCalledTimes(1);
+		expect(coreMock.memoryStartup).toHaveBeenCalledTimes(2);
 	});
 
 	it('memory_context 将作用域参数封装为 request，不保留旧上下文字段', () => {
@@ -233,7 +245,7 @@ describe('server 最终 V2/V4 契约', () => {
 			expect(first._layer0).toBe(`Layer0:${vault.root}`);
 			expect(second._layer0).toBe(`Layer0:${other.root}`);
 			expect(again._layer0).toBe(`Layer0:${vault.root}`);
-			expect(coreMock.memoryStartup).toHaveBeenCalledTimes(2);
+			expect(coreMock.memoryStartup).toHaveBeenCalledTimes(3);
 			expect(testing.runtimeCount()).toBe(2);
 		} finally {
 			other.cleanup();

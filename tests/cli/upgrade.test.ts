@@ -1,20 +1,36 @@
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import {
+	chmodSync,
+	cpSync,
 	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
 	readdirSync,
+	readlinkSync,
+	realpathSync,
+	renameSync,
 	rmSync,
+	statSync,
+	symlinkSync,
 	writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parse as parseYaml } from 'yaml';
-import upgrade from '../../src/cli/commands/upgrade.js';
+import upgrade, { persistScopeMap, type ScopeMapPlan } from '../../src/cli/commands/upgrade.js';
+import { retainOnlyCutoverBundle } from '../../src/cli/utils/cutover.js';
 import { VERSION } from '../../src/cli/utils/version.js';
+import {
+	acquireCutoverLock,
+	bindCutoverLock,
+	cutoverLockPath,
+	cutoverRoot,
+	releaseCutoverLock,
+} from '../../src/cutover-lock.js';
 import { validateRuntimeContract } from '../../src/runtime-contract.js';
 
 interface UpgradeFixture {
@@ -31,6 +47,17 @@ const PROJECT_CONTENT = 'GTS 使用最终核心契约';
 
 function sha256(content: string): string {
 	return createHash('sha256').update(content).digest('hex');
+}
+
+function fileSha256(path: string): string {
+	return createHash('sha256').update(readFileSync(path)).digest('hex');
+}
+
+function gitRepository(parent: string, name: string): string {
+	const root = join(parent, name);
+	mkdirSync(join(root, '.git'), { recursive: true });
+	writeFileSync(join(root, '.git', 'HEAD'), 'ref: refs/heads/main\n', 'utf-8');
+	return realpathSync.native(root);
 }
 
 function legacyYaml(): string {
@@ -174,6 +201,11 @@ function makeFixture(): UpgradeFixture {
 		'---\ntitle: GTS\ntype: project\nid: gts-learning\nstatus: active\n---\n用户项目内容\n',
 		'utf-8',
 	);
+	writeFileSync(
+		join(root, '20_项目', 'GTS_Doc.md'),
+		'---\ntitle: GTS 项目文档\ntype: project-doc\n---\n项目辅助文档无需项目 id\n',
+		'utf-8',
+	);
 	writeFileSync(join(root, '00_草稿', 'user-note.md'), '用户数据不得丢失\n', 'utf-8');
 	writeFileSync(join(root, 'AGENTS.md'), 'OLD AGENT CONTRACT\n', 'utf-8');
 	writeFileSync(join(memoryDir, 'ContextPolicy.md'), '旧上下文配置\n', 'utf-8');
@@ -216,6 +248,12 @@ function dbVersion(path: string): number {
 	}
 }
 
+function exitedChildPid(): number {
+	const child = spawnSync(process.execPath, ['-e', '']);
+	if (!child.pid) throw new Error('测试无法取得已退出子进程 PID');
+	return child.pid;
+}
+
 function findJournals(root: string): string[] {
 	if (!existsSync(root)) return [];
 	return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
@@ -223,6 +261,10 @@ function findJournals(root: string): string[] {
 		if (entry.isDirectory()) return findJournals(path);
 		return entry.name === 'journal.json' ? [path] : [];
 	});
+}
+
+function vaultJournals(vaultRoot: string): string[] {
+	return findJournals(cutoverRoot(vaultRoot)).sort();
 }
 
 describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
@@ -324,9 +366,14 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			state: 'opened',
 			package_sha256: receipt.package_sha256,
 		});
-		expect(validateRuntimeContract({ vaultRoot: fixture.root, runtimeVersion: VERSION }).ok).toBe(
-			true,
-		);
+		const runtimeResult = validateRuntimeContract({
+			vaultRoot: fixture.root,
+			runtimeVersion: VERSION,
+		});
+		expect(runtimeResult.ok).toBe(true);
+		expect(vaultJournals(fixture.root)).toEqual([result.journalPath]);
+		expect(existsSync((journal.backup_path as string) ?? '')).toBe(true);
+		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'migrations'))).toBe(false);
 	});
 
 	it('整包覆盖旧协议和旧客户端配置，但保留用户数据文件', async () => {
@@ -355,15 +402,278 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		expect(profile).not.toContain('<!-- BEGIN AUTO:rules -->');
 	});
 
-	it('映射缺失、条数不符或引用不存在项目时在建立 cutover 前零写入失败', async () => {
-		rmSync(fixture.mapPath);
-		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
-			/缺少 V4 scope map/,
-		);
-		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
-		expect(dbVersion(fixture.dbPath)).toBe(3);
-		expect(existsSync(join(fixture.parent, '.lifeos-cutovers'))).toBe(false);
+	it.skipIf(process.platform === 'win32')(
+		'备份与升级保留 Vault 内相对符号链接的原始目标',
+		async () => {
+			const agentsSkills = join(fixture.root, '.agents', 'skills');
+			const claudeDir = join(fixture.root, '.claude');
+			const claudeSkills = join(claudeDir, 'skills');
+			mkdirSync(agentsSkills, { recursive: true });
+			mkdirSync(claudeDir, { recursive: true });
+			symlinkSync('../.agents/skills', claudeSkills);
 
+			const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+			const journal = JSON.parse(readFileSync(result.journalPath, 'utf-8')) as {
+				backup_path: string;
+			};
+
+			expect(readlinkSync(claudeSkills)).toBe('../.agents/skills');
+			expect(readlinkSync(join(journal.backup_path, '.claude', 'skills'))).toBe(
+				'../.agents/skills',
+			);
+			expect(dbVersion(fixture.dbPath)).toBe(4);
+		},
+	);
+
+	it.skipIf(process.platform === 'win32')('备份轮换拒绝跟随伪造的 bundle 符号链接', async () => {
+		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		const journal = JSON.parse(readFileSync(result.journalPath, 'utf-8')) as {
+			cutover_id: string;
+		};
+		const outside = join(fixture.parent, 'outside-cutover-data');
+		mkdirSync(outside);
+		writeFileSync(join(outside, 'must-survive.txt'), '不得删除\n', 'utf-8');
+		const link = join(cutoverRoot(fixture.root), 'malicious-link');
+		symlinkSync(outside, link, 'dir');
+
+		expect(() => retainOnlyCutoverBundle(fixture.root, journal.cutover_id)).toThrow(
+			/cutover bundle 不是安全目录/,
+		);
+		expect(readFileSync(join(outside, 'must-survive.txt'), 'utf-8')).toBe('不得删除\n');
+		rmSync(link);
+	});
+
+	it('scope map 缺失时自动生成，高置信映射无需人工准备即可继续升级', async () => {
+		rmSync(fixture.mapPath);
+		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+
+		expect(result.migratedItems).toBe(2);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		const generated = JSON.parse(readFileSync(fixture.mapPath, 'utf-8')) as {
+			summary: { total: number; confirmed: number; reviewRequired: number };
+			entries: Array<{ confirmed: boolean; suggestionReason: string; contentPreview: string }>;
+		};
+		expect(generated.summary).toEqual({ total: 2, confirmed: 2, reviewRequired: 0 });
+		expect(generated.entries).toHaveLength(2);
+		expect(generated.entries.every((entry) => entry.confirmed)).toBe(true);
+		expect(generated.entries.every((entry) => entry.suggestionReason && entry.contentPreview)).toBe(
+			true,
+		);
+	});
+
+	it('不传 --scope-map 时自动消费高置信映射，并在成功后清理迁移目录', async () => {
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+		expect(existsSync(defaultMapPath)).toBe(false);
+
+		const result = await upgrade([fixture.root]);
+
+		expect(result.migratedItems).toBe(2);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(existsSync(dirname(defaultMapPath))).toBe(false);
+	});
+
+	it('成功升级清理整个 migrations 工作区，但不删除外部 scope map，回滚可恢复原目录', async () => {
+		const migrationsDir = join(fixture.root, '90_系统', '记忆', 'migrations');
+		const sentinel = join(migrationsDir, '旧迁移', '保留到回滚.txt');
+		mkdirSync(dirname(sentinel), { recursive: true });
+		writeFileSync(sentinel, '升级成功后应清理，回滚后应恢复\n', 'utf-8');
+		const externalMapBefore = readFileSync(fixture.mapPath, 'utf-8');
+
+		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+
+		expect(existsSync(migrationsDir)).toBe(false);
+		expect(readFileSync(fixture.mapPath, 'utf-8')).toBe(externalMapBefore);
+
+		await upgrade([fixture.root, '--restore', result.journalPath]);
+		expect(readFileSync(sentinel, 'utf-8')).toBe('升级成功后应清理，回滚后应恢复\n');
+		expect(readFileSync(fixture.mapPath, 'utf-8')).toBe(externalMapBefore);
+	});
+
+	it('一条命令补项目 ID、写回 Markdown、发现实际仓库并重建项目索引', async () => {
+		const gtsPath = join(fixture.root, '20_项目', 'GTS.md');
+		const visualPath = join(fixture.root, '20_项目', 'Visual-Group-Theory学习.md');
+		const originalGts =
+			'---\r\ntitle: GTS\r\ntype: project\r\nstatus: active # 保留注释\r\n---\r\n用户项目内容\r\n';
+		const originalVisual =
+			'---\r\ntitle: Visual-Group-Theory学习\r\ntype: project\r\nstatus: active\r\n---\r\n第二个项目正文\r\n';
+		writeFileSync(gtsPath, originalGts, 'utf-8');
+		writeFileSync(visualPath, originalVisual, 'utf-8');
+		chmodSync(visualPath, 0o640);
+		const originalMode = statSync(visualPath).mode & 0o777;
+		const lifeosRoot = gitRepository(fixture.parent, 'lifeos');
+		const learningAppRoot = gitRepository(fixture.parent, 'LearningApp');
+		const codexRoot = gitRepository(fixture.parent, 'codex');
+		const db = new Database(fixture.dbPath);
+		try {
+			const insert = db.prepare(`
+				INSERT INTO memory_items(
+					slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at
+				) VALUES (?, ?, 'preference', ?, 0, 'active', ?, NULL)
+			`);
+			insert.run(
+				'tool:lifeos-source-path',
+				`LifeOS 源码路径固定为 ${lifeosRoot}`,
+				JSON.stringify([lifeosRoot]),
+				'2026-07-03T00:00:00.000Z',
+			);
+			insert.run(
+				'workflow:lifeos-source-dir',
+				`后续源码修改必须在 ${lifeosRoot} 中完成`,
+				'[]',
+				'2026-07-04T00:00:00.000Z',
+			);
+			insert.run(
+				'tool:learningapp-source-path',
+				`LearningApp 源码路径固定为 ${learningAppRoot}`,
+				'[]',
+				'2026-07-05T00:00:00.000Z',
+			);
+			insert.run(
+				'tool:codex-source-path',
+				`Codex 源码路径固定为 ${codexRoot}`,
+				'[]',
+				'2026-07-06T00:00:00.000Z',
+			);
+		} finally {
+			db.close();
+		}
+
+		const result = await upgrade([fixture.root]);
+
+		const upgradedGts = readFileSync(gtsPath, 'utf-8');
+		const upgradedVisual = readFileSync(visualPath, 'utf-8');
+		expect(upgradedGts).toContain('\r\nid: "gts"\r\n---\r\n用户项目内容\r\n');
+		expect(upgradedGts).toContain('status: active # 保留注释');
+		expect(upgradedVisual).toContain(
+			'\r\nid: "visual-group-theory"\r\n---\r\n第二个项目正文\r\n',
+		);
+		expect(upgradedVisual).not.toMatch(/(?<!\r)\n/);
+		expect(statSync(visualPath).mode & 0o777).toBe(originalMode);
+		expect(result.updated).toEqual(
+			expect.arrayContaining(['20_项目/GTS.md', '20_项目/Visual-Group-Theory学习.md']),
+		);
+
+		const config = parseYaml(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')) as {
+			memory: { repository_bindings: Record<string, string[]> };
+		};
+		expect(config.memory.repository_bindings).toEqual({
+			learningapp: [learningAppRoot],
+			lifeos: [lifeosRoot],
+		});
+
+		const migrated = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
+		try {
+			expect(
+				migrated
+					.prepare(`
+						SELECT slot_key, scope_type, scope_key
+						FROM memory_items
+						WHERE slot_key IN (
+							'project:gts-core', 'tool:lifeos-source-path',
+							'workflow:lifeos-source-dir', 'tool:learningapp-source-path',
+							'tool:codex-source-path'
+						)
+						ORDER BY slot_key
+					`)
+					.all(),
+			).toEqual([
+				{ slot_key: 'project:gts-core', scope_type: 'project', scope_key: 'gts' },
+				{ slot_key: 'tool:codex-source-path', scope_type: 'tool', scope_key: 'codex' },
+				{
+					slot_key: 'tool:learningapp-source-path',
+					scope_type: 'repository',
+					scope_key: 'learningapp',
+				},
+				{
+					slot_key: 'tool:lifeos-source-path',
+					scope_type: 'repository',
+					scope_key: 'lifeos',
+				},
+				{
+					slot_key: 'workflow:lifeos-source-dir',
+					scope_type: 'repository',
+					scope_key: 'lifeos',
+				},
+			]);
+			expect(
+				migrated
+					.prepare(
+						"SELECT file_path, entity_id FROM vault_index WHERE type = 'project' ORDER BY file_path",
+					)
+					.all(),
+			).toEqual([
+				{ file_path: '20_项目/GTS.md', entity_id: 'gts' },
+				{
+					file_path: '20_项目/Visual-Group-Theory学习.md',
+					entity_id: 'visual-group-theory',
+				},
+			]);
+		} finally {
+			migrated.close();
+		}
+
+		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'migrations'))).toBe(false);
+
+		await upgrade([fixture.root, '--restore', result.journalPath]);
+		expect(readFileSync(gtsPath, 'utf-8')).toBe(originalGts);
+		expect(readFileSync(visualPath, 'utf-8')).toBe(originalVisual);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+	});
+
+	it('缺少旧数据库时在生成 scope map 或建立 cutover 前零写入失败', async () => {
+		const yamlPath = join(fixture.root, 'lifeos.yaml');
+		const agentsPath = join(fixture.root, 'AGENTS.md');
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+		const beforeYaml = readFileSync(yamlPath, 'utf-8');
+		const beforeAgents = readFileSync(agentsPath, 'utf-8');
+		rmSync(fixture.dbPath);
+
+		await expect(upgrade([fixture.root])).rejects.toThrow(/缺少旧记忆数据库/);
+
+		expect(readFileSync(yamlPath, 'utf-8')).toBe(beforeYaml);
+		expect(readFileSync(agentsPath, 'utf-8')).toBe(beforeAgents);
+		expect(existsSync(fixture.dbPath)).toBe(false);
+		expect(existsSync(defaultMapPath)).toBe(false);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+		expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
+	});
+
+	it('仓库证据有歧义时只生成审阅草案，不写项目 ID、配置或 cutover', async () => {
+		const yamlPath = join(fixture.root, 'lifeos.yaml');
+		const projectPath = join(fixture.root, '20_项目', 'GTS.md');
+		const originalProject = '---\ntitle: GTS\ntype: project\nstatus: active\n---\n原始正文\n';
+		writeFileSync(projectPath, originalProject, 'utf-8');
+		const firstRoot = gitRepository(join(fixture.parent, 'one'), 'lifeos');
+		const secondRoot = gitRepository(join(fixture.parent, 'two'), 'lifeos-alt');
+		const db = new Database(fixture.dbPath);
+		try {
+			db.prepare(`
+				INSERT INTO memory_items(
+					slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at
+				) VALUES (?, ?, 'preference', '[]', 0, 'active', ?, NULL)
+			`).run(
+				'tool:lifeos-source-path',
+				`LifeOS 源码同时指向 ${firstRoot} 和 ${secondRoot}`,
+				'2026-07-03T00:00:00.000Z',
+			);
+		} finally {
+			db.close();
+		}
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+
+		await expect(upgrade([fixture.root])).rejects.toThrow(
+			/repository_bindings 自动配置存在歧义[\s\S]*多个 Git 仓库/,
+		);
+
+		expect(readFileSync(projectPath, 'utf-8')).toBe(originalProject);
+		expect(readFileSync(yamlPath, 'utf-8')).toBe(fixture.legacyYaml);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(existsSync(defaultMapPath)).toBe(true);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+		expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
+	});
+
+	it('显式 scope map 条数不符或引用不存在项目时在建立 cutover 前零写入失败', async () => {
 		writeFileSync(fixture.mapPath, `${JSON.stringify(scopeMap().slice(0, 1))}\n`, 'utf-8');
 		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
 			/条数 1 与旧记忆 2 不一致/,
@@ -378,16 +688,334 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			/scope map 引用不存在的项目 id/,
 		);
 		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+		expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
+	});
+
+	it('file scope 拒绝 ../../ 路径穿越，且不会修改 Vault 外文件', async () => {
+		const outsidePath = join(fixture.parent, 'outside.md');
+		writeFileSync(outsidePath, '外部文件不得修改\n', 'utf-8');
+		const malicious = scopeMap();
+		malicious[1] = {
+			...malicious[1],
+			scope: { type: 'file', key: '../../outside.md' },
+		};
+		writeFileSync(fixture.mapPath, `${JSON.stringify(malicious, null, 2)}\n`, 'utf-8');
+
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/file scope 必须是安全的 Vault 相对路径或唯一 entity_id/,
+		);
+
+		expect(readFileSync(outsidePath, 'utf-8')).toBe('外部文件不得修改\n');
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+		expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
+	});
+
+	it('拒绝被篡改格式版本的自动生成 scope map', async () => {
+		const db = new Database(fixture.dbPath);
+		try {
+			db.prepare(`
+				INSERT INTO memory_items(
+					slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at
+				) VALUES (?, ?, 'preference', '[]', 0, 'active', ?, NULL)
+			`).run('misc:opaque', '无法自动判断归属的旧记忆', '2026-07-03T00:00:00.000Z');
+		} finally {
+			db.close();
+		}
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+		await expect(upgrade([fixture.root])).rejects.toThrow(/尚无可用作用域/);
+		const generated = JSON.parse(readFileSync(defaultMapPath, 'utf-8')) as Record<string, unknown>;
+		generated.formatVersion = 999;
+		writeFileSync(defaultMapPath, `${JSON.stringify(generated, null, 2)}\n`, 'utf-8');
+
+		await expect(upgrade([fixture.root, '--accept-scope-map'])).rejects.toThrow(
+			/scope map 对象格式或版本无效/,
+		);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+		expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
+	});
+
+	it.skipIf(process.platform === 'win32')(
+		'memory 目录为符号链接时拒绝升级且不写入外部目标',
+		async () => {
+			const memoryDir = join(fixture.root, '90_系统', '记忆');
+			const outsideMemory = join(fixture.parent, 'outside-memory');
+			const outsideSentinel = join(outsideMemory, 'sentinel.txt');
+			mkdirSync(outsideMemory);
+			writeFileSync(outsideSentinel, '外部目录不得修改\n', 'utf-8');
+			rmSync(memoryDir, { recursive: true, force: true });
+			symlinkSync(outsideMemory, memoryDir, 'dir');
+
+			await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+				/符号链接/,
+			);
+
+			expect(readFileSync(outsideSentinel, 'utf-8')).toBe('外部目录不得修改\n');
+			expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+			expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+			expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
+		},
+	);
+
+	it.skipIf(process.platform === 'win32')(
+		'memory.db 为符号链接时拒绝升级且不写入外部数据库',
+		async () => {
+			const outsideDb = join(fixture.parent, 'outside-memory.db');
+			renameSync(fixture.dbPath, outsideDb);
+			const beforeHash = fileSha256(outsideDb);
+			symlinkSync(outsideDb, fixture.dbPath, 'file');
+
+			await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+				/符号链接/,
+			);
+
+			expect(fileSha256(outsideDb)).toBe(beforeHash);
+			expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+			expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+			expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
+		},
+	);
+
+	it('未知映射自动生成审阅草案，禁止占位 scope，人工补齐后可复跑', async () => {
+		const db = new Database(fixture.dbPath);
+		try {
+			db.prepare(`
+				INSERT INTO memory_items(
+					slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at
+				) VALUES (?, ?, 'preference', '[]', 0, 'active', ?, NULL)
+			`).run('misc:opaque', '无法自动判断归属的旧记忆', '2026-07-03T00:00:00.000Z');
+		} finally {
+			db.close();
+		}
+		rmSync(fixture.mapPath);
+
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/尚无可用作用域[\s\S]*选择 scopeCandidates 或填写真实 scope/,
+		);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+		expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
+		const generated = JSON.parse(readFileSync(fixture.mapPath, 'utf-8')) as {
+			summary: { reviewRequired: number };
+			entries: Array<{
+				legacyIdentity: string;
+				confirmed: boolean;
+				scope: { type: string; key: string };
+			}>;
+		};
+		expect(generated.summary.reviewRequired).toBe(1);
+		const unknown = generated.entries.find((entry) => entry.legacyIdentity === 'slot:misc:opaque');
+		expect(unknown).toMatchObject({
+			confirmed: false,
+			scope: { type: 'file', key: '__REVIEW_REQUIRED__' },
+		});
+		await expect(
+			upgrade([fixture.root, '--scope-map', fixture.mapPath, '--accept-scope-map']),
+		).rejects.toThrow(/尚无可用作用域/);
+
+		if (!unknown) throw new Error('测试 scope map 缺少未知条目');
+		unknown.scope = { type: 'project', key: 'gts-learning' };
+		unknown.confirmed = true;
+		writeFileSync(fixture.mapPath, `${JSON.stringify(generated, null, 2)}\n`, 'utf-8');
+		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		expect(result.migratedItems).toBe(3);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+	});
+
+	it('显式 map 有有效歧义候选时，可在内存接受且不覆盖外部审阅文件', async () => {
+		writeFileSync(
+			join(fixture.root, '20_项目', 'GTS_Writing.md'),
+			'---\ntitle: GTS\ntype: project\nid: gts-writing\nstatus: active\n---\n另一个 GTS 项目\n',
+			'utf-8',
+		);
+		const db = new Database(fixture.dbPath);
+		try {
+			db.prepare("UPDATE memory_items SET related_files = '[]' WHERE slot_key = ?").run(
+				'project:gts-core',
+			);
+		} finally {
+			db.close();
+		}
+		rmSync(fixture.mapPath);
+
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/建议待确认/,
+		);
+		const result = await upgrade([
+			fixture.root,
+			'--scope-map',
+			fixture.mapPath,
+			'--accept-scope-map',
+		]);
+		expect(result.migratedItems).toBe(2);
+		const reviewed = JSON.parse(readFileSync(fixture.mapPath, 'utf-8')) as {
+			reviewedBy?: string;
+			summary: { confirmed: number; reviewRequired: number };
+		};
+		expect(reviewed.reviewedBy).toBeUndefined();
+		expect(reviewed.summary).toEqual({ total: 2, confirmed: 1, reviewRequired: 1 });
+	});
+
+	it('已有显式 map 只校验不覆盖，预检后外部变更会阻断持久化', () => {
+		const original = readFileSync(fixture.mapPath, 'utf-8');
+		const plan: ScopeMapPlan = {
+			path: fixture.mapPath,
+			entries: scopeMap(),
+			writeValue: {
+				format: 'lifeos-v4-scope-map',
+				entries: scopeMap().map((entry) => ({ ...entry, confirmed: true })),
+			},
+			writeMode: 'replace',
+			originalHash: sha256(original),
+		};
+
+		persistScopeMap(plan, true);
+		expect(readFileSync(fixture.mapPath, 'utf-8')).toBe(original);
+
+		const concurrent = `${original.trimEnd()}\n\n`;
+		writeFileSync(fixture.mapPath, concurrent, 'utf-8');
+		expect(() => persistScopeMap(plan, true)).toThrow(/scope map 在预检后发生变化/);
+		expect(readFileSync(fixture.mapPath, 'utf-8')).toBe(concurrent);
+	});
+
+	it('已有默认 map 在 CAS 校验后才执行计划写入，并发变更不被覆盖', () => {
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+		mkdirSync(join(defaultMapPath, '..'), { recursive: true });
+		const originalValue = { format: 'old', entries: scopeMap() };
+		const replacementValue = { format: 'new', entries: scopeMap() };
+		const original = `${JSON.stringify(originalValue, null, 2)}\n`;
+		writeFileSync(defaultMapPath, original, 'utf-8');
+		const plan: ScopeMapPlan = {
+			path: defaultMapPath,
+			entries: scopeMap(),
+			writeValue: replacementValue,
+			writeMode: 'replace',
+			originalHash: sha256(original),
+		};
+
+		persistScopeMap(plan, false);
+		expect(JSON.parse(readFileSync(defaultMapPath, 'utf-8'))).toEqual(replacementValue);
+
+		writeFileSync(defaultMapPath, original, 'utf-8');
+		const concurrent = `${original.trimEnd()}\n \n`;
+		writeFileSync(defaultMapPath, concurrent, 'utf-8');
+		expect(() => persistScopeMap(plan, false)).toThrow(/scope map 在预检后发生变化/);
+		expect(readFileSync(defaultMapPath, 'utf-8')).toBe(concurrent);
+	});
+
+	it('未人工改动的默认 map 在项目上下文变化后自动刷新并在成功后清理', async () => {
+		const secondProject = join(fixture.root, '20_项目', 'GTS_Writing.md');
+		writeFileSync(
+			secondProject,
+			'---\ntitle: GTS\ntype: project\nid: gts-writing\nstatus: active\n---\n另一个 GTS 项目\n',
+			'utf-8',
+		);
+		const db = new Database(fixture.dbPath);
+		try {
+			db.prepare("UPDATE memory_items SET related_files = '[]' WHERE slot_key = ?").run(
+				'project:gts-core',
+			);
+		} finally {
+			db.close();
+		}
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+
+		await expect(upgrade([fixture.root])).rejects.toThrow(/建议待确认/);
+		const before = JSON.parse(readFileSync(defaultMapPath, 'utf-8')) as {
+			contextFingerprint: string;
+			summary: { reviewRequired: number };
+		};
+		expect(before.summary.reviewRequired).toBe(1);
+		rmSync(secondProject);
+
+		await upgrade([fixture.root]);
+		expect(before.contextFingerprint).toMatch(/^[a-f0-9]{64}$/);
+		expect(existsSync(dirname(defaultMapPath))).toBe(false);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+	});
+
+	it('人工编辑过的默认 map 在上下文变化后受保护，不被自动覆盖', async () => {
+		const secondProject = join(fixture.root, '20_项目', 'GTS_Writing.md');
+		writeFileSync(
+			secondProject,
+			'---\ntitle: GTS\ntype: project\nid: gts-writing\nstatus: active\n---\n另一个 GTS 项目\n',
+			'utf-8',
+		);
+		const db = new Database(fixture.dbPath);
+		try {
+			db.prepare("UPDATE memory_items SET related_files = '[]' WHERE slot_key = ?").run(
+				'project:gts-core',
+			);
+		} finally {
+			db.close();
+		}
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+		await expect(upgrade([fixture.root])).rejects.toThrow(/建议待确认/);
+		const edited = JSON.parse(readFileSync(defaultMapPath, 'utf-8')) as {
+			entries: Array<{ legacyIdentity: string; suggestionReason: string }>;
+		};
+		const projectEntry = edited.entries.find(
+			(entry) => entry.legacyIdentity === 'slot:project:gts-core',
+		);
+		if (!projectEntry) throw new Error('测试缺少项目 scope map 条目');
+		projectEntry.suggestionReason = `${projectEntry.suggestionReason}；人工备注`;
+		writeFileSync(defaultMapPath, `${JSON.stringify(edited, null, 2)}\n`, 'utf-8');
+		const editedBytes = readFileSync(defaultMapPath, 'utf-8');
+		rmSync(secondProject);
+
+		await expect(upgrade([fixture.root])).rejects.toThrow(/生成上下文已变化[\s\S]*人工修改/);
+		expect(readFileSync(defaultMapPath, 'utf-8')).toBe(editedBytes);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
+	});
+
+	it('现有 MCP JSON 损坏时拒绝覆盖，并原样恢复已修改的其他客户端配置', async () => {
+		const claudePath = join(fixture.root, '.mcp.json');
+		const codexPath = join(fixture.root, '.codex', 'config.toml');
+		const opencodePath = join(fixture.root, 'opencode.json');
+		const projectPath = join(fixture.root, '20_项目', 'GTS.md');
+		const originalProject =
+			'---\r\ntitle: GTS\r\ntype: project\r\nstatus: active\r\n---\r\n失败时必须恢复\r\n';
+		const originalClaude = '{"mcpServers":{"other":{"command":"other"}}}\n';
+		const originalCodex = '[mcp_servers.other]\ncommand = "other"\n';
+		const malformedOpencode = '{"mcp":\n';
+		mkdirSync(join(fixture.root, '.codex'), { recursive: true });
+		writeFileSync(claudePath, originalClaude, 'utf-8');
+		writeFileSync(codexPath, originalCodex, 'utf-8');
+		writeFileSync(opencodePath, malformedOpencode, 'utf-8');
+		writeFileSync(projectPath, originalProject, 'utf-8');
+		writeFileSync(fixture.mapPath, `${JSON.stringify(scopeMap('gts'), null, 2)}\n`, 'utf-8');
+
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/现有 JSON 配置无法解析，拒绝覆盖/,
+		);
+
+		expect(readFileSync(claudePath, 'utf-8')).toBe(originalClaude);
+		expect(readFileSync(codexPath, 'utf-8')).toBe(originalCodex);
+		expect(readFileSync(opencodePath, 'utf-8')).toBe(malformedOpencode);
+		expect(readFileSync(projectPath, 'utf-8')).toBe(originalProject);
+		expect(readFileSync(join(fixture.root, 'AGENTS.md'), 'utf-8')).toBe('OLD AGENT CONTRACT\n');
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		const journals = findJournals(join(fixture.parent, '.lifeos-cutovers'));
+		expect(journals).toHaveLength(1);
+		expect(JSON.parse(readFileSync(journals[0] ?? '', 'utf-8'))).toMatchObject({
+			state: 'restored',
+		});
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
 	it('事务迁移失败时恢复完整 V3 Vault，并留下 restored journal', async () => {
-		writeFileSync(
-			fixture.mapPath,
-			`${JSON.stringify(scopeMap('gts-learning', '0'.repeat(64)), null, 2)}\n`,
-			'utf-8',
-		);
+		const invalidMap = scopeMap();
+		invalidMap[1] = { ...invalidMap[1], status: 'archived' };
+		writeFileSync(fixture.mapPath, `${JSON.stringify(invalidMap, null, 2)}\n`, 'utf-8');
 		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
-			/内容哈希不匹配/,
+			/归档元数据不完整/,
 		);
 
 		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
@@ -404,9 +1032,286 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			contract_version: 2,
 			schema_version: 4,
 		});
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
-	it('未知 AUTO marker、缺失项目 ID 和未知 Schema 均在预检阶段失败', async () => {
+	it('显式恢复拒绝活动 owner，随后可用受控 journal 恢复并释放写闸', async () => {
+		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		const uncontrolledJournal = join(fixture.parent, 'copied-journal.json');
+		writeFileSync(uncontrolledJournal, readFileSync(result.journalPath, 'utf-8'), 'utf-8');
+		await expect(upgrade([fixture.root, '--restore', uncontrolledJournal])).rejects.toThrow(
+			/受控恢复目录|路径不能经过符号链接/,
+		);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		const liveLock = acquireCutoverLock(fixture.root);
+		const lockBefore = readFileSync(cutoverLockPath(fixture.root), 'utf-8');
+		await expect(upgrade([fixture.root, '--restore', result.journalPath])).rejects.toThrow(
+			/仍由活动进程持有/,
+		);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(readFileSync(cutoverLockPath(fixture.root), 'utf-8')).toBe(lockBefore);
+		expect(JSON.parse(readFileSync(result.journalPath, 'utf-8'))).toMatchObject({ state: 'opened' });
+		releaseCutoverLock(fixture.root, liveLock.token);
+
+		const restored = await upgrade([fixture.root, '--restore', result.journalPath]);
+		expect(restored.journalPath).toBe(result.journalPath);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(JSON.parse(readFileSync(result.journalPath, 'utf-8'))).toMatchObject({
+			state: 'restored',
+			error: '用户显式执行恢复',
+		});
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+	});
+
+	it('数据库已是 V4 时不再读取旧 scope map，并将重复升级收敛为一个备份', async () => {
+		const first = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		const firstJournal = JSON.parse(readFileSync(first.journalPath, 'utf-8')) as Record<
+			string,
+			unknown
+		>;
+		for (const cutoverId of ['legacy-copy-a', 'legacy-copy-b']) {
+			const bundle = join(cutoverRoot(fixture.root), cutoverId);
+			cpSync(dirname(first.journalPath), bundle, { recursive: true });
+			writeFileSync(
+				join(bundle, 'journal.json'),
+				`${JSON.stringify(
+					{
+						...firstJournal,
+						cutover_id: cutoverId,
+						backup_path: join(bundle, 'vault'),
+					},
+					null,
+					2,
+				)}\n`,
+				'utf-8',
+			);
+		}
+		expect(vaultJournals(fixture.root)).toHaveLength(3);
+		const staleDb = new Database(fixture.dbPath);
+		try {
+			staleDb
+				.prepare(
+					`INSERT INTO vault_index(file_path, title, type, status, entity_id)
+					 VALUES (?, ?, ?, ?, ?)`,
+				)
+				.run('20_项目/Deleted.md', '已删除项目', 'project', 'active', 'deleted-project');
+			staleDb
+				.prepare(
+					`INSERT INTO scan_state(
+						file_path, last_seen_hash, last_seen_mtime, last_seen_size, last_indexed_at
+					) VALUES (?, ?, ?, ?, ?)`,
+				)
+				.run('20_项目/Deleted.md', 'stale', 1, 1, '2026-01-01T00:00:00.000Z');
+		} finally {
+			staleDb.close();
+		}
+		const yamlPath = join(fixture.root, 'lifeos.yaml');
+		const upgradedYaml = readFileSync(yamlPath, 'utf-8')
+			.replace('layer0_total: 1600', 'layer0_total: 1901')
+			.replace('global_rules: 600', 'global_rules: 701')
+			.replace('userprofile_summary: 180', 'userprofile_summary: 251')
+			.replace('taskboard_focus: 420', 'taskboard_focus: 551')
+			.replace('scoped_context: 1200', 'scoped_context: 1451')
+			.replace('single_item_max: 220', 'single_item_max: 199');
+		writeFileSync(yamlPath, upgradedYaml, 'utf-8');
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+		mkdirSync(join(fixture.root, '90_系统', '记忆', 'migrations'), { recursive: true });
+		writeFileSync(defaultMapPath, '{这不是有效 JSON', 'utf-8');
+
+		const result = await upgrade([fixture.root]);
+
+		expect(result.migratedItems).toBe(0);
+		expect(result.journalPath).not.toBe(first.journalPath);
+		expect(existsSync(first.journalPath)).toBe(false);
+		expect(vaultJournals(fixture.root)).toEqual([result.journalPath]);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(existsSync(dirname(defaultMapPath))).toBe(false);
+		const config = parseYaml(readFileSync(yamlPath, 'utf-8')) as {
+			memory: {
+				context_budgets: Record<string, number>;
+				repository_bindings: Record<string, string[]>;
+			};
+		};
+		expect(config.memory.repository_bindings).toEqual({});
+		expect(config.memory.context_budgets).toEqual({
+			layer0_total: 1901,
+			global_rules: 701,
+			userprofile_summary: 251,
+			taskboard_focus: 551,
+			scoped_context: 1451,
+			single_item_max: 199,
+		});
+		const verifiedDb = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
+		try {
+			expect(
+				verifiedDb
+					.prepare('SELECT 1 FROM vault_index WHERE file_path = ?')
+					.get('20_项目/Deleted.md'),
+			).toBeUndefined();
+			expect(
+				verifiedDb
+					.prepare('SELECT 1 FROM scan_state WHERE file_path = ?')
+					.get('20_项目/Deleted.md'),
+			).toBeUndefined();
+		} finally {
+			verifiedDb.close();
+		}
+		const journal = JSON.parse(readFileSync(result.journalPath, 'utf-8')) as {
+			backup_path: string;
+			backup_receipt_detached: boolean;
+		};
+		expect(journal.backup_receipt_detached).toBe(true);
+		const backupReceipt = JSON.parse(
+			readFileSync(
+				join(journal.backup_path, '90_系统', '记忆', 'runtime-receipt.json'),
+				'utf-8',
+			),
+		) as Record<string, unknown>;
+		expect(backupReceipt.kind).toBe('fresh-install');
+		expect(backupReceipt).not.toHaveProperty('journal_path');
+		expect(validateRuntimeContract({ vaultRoot: fixture.root, runtimeVersion: VERSION }).ok).toBe(
+			true,
+		);
+	});
+
+	it('重复升级后可用唯一备份显式回滚，恢复出的 runtime receipt 不依赖旧 bundle', async () => {
+		const first = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		const userNote = join(fixture.root, '00_草稿', 'user-note.md');
+		writeFileSync(userNote, '第二次升级前必须保留\n', 'utf-8');
+
+		const second = await upgrade([fixture.root]);
+		expect(existsSync(first.journalPath)).toBe(false);
+		expect(vaultJournals(fixture.root)).toEqual([second.journalPath]);
+		writeFileSync(userNote, '第二次升级后会被回滚\n', 'utf-8');
+
+		const restored = await upgrade([fixture.root, '--restore', second.journalPath]);
+
+		expect(restored.journalPath).toBe(second.journalPath);
+		expect(readFileSync(userNote, 'utf-8')).toBe('第二次升级前必须保留\n');
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(vaultJournals(fixture.root)).toEqual([second.journalPath]);
+		const receipt = JSON.parse(
+			readFileSync(join(fixture.root, '90_系统', '记忆', 'runtime-receipt.json'), 'utf-8'),
+		) as Record<string, unknown>;
+		expect(receipt.kind).toBe('fresh-install');
+		expect(receipt).not.toHaveProperty('journal_path');
+		expect(validateRuntimeContract({ vaultRoot: fixture.root, runtimeVersion: VERSION }).ok).toBe(
+			true,
+		);
+		expect(JSON.parse(readFileSync(second.journalPath, 'utf-8'))).toMatchObject({
+			state: 'restored',
+		});
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+	});
+
+	it('V4 重跑失败后恢复原 Vault，并且仍只保留一个可用备份', async () => {
+		const first = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		const yamlBefore = readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8');
+		const staleDb = new Database(fixture.dbPath);
+		try {
+			staleDb
+				.prepare(
+					`INSERT INTO vault_index(file_path, title, type, status, entity_id)
+					 VALUES (?, ?, ?, ?, ?)`,
+				)
+				.run('20_项目/Deleted.md', '已删除项目', 'project', 'active', 'deleted-project');
+			staleDb
+				.prepare(
+					`INSERT INTO memory_items(
+						slot_key, content, item_kind, scope_type, scope_key, created_at, updated_at
+					) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				)
+				.run(
+					'project:deleted',
+					'仍引用已删除项目',
+					'decision',
+					'project',
+					'deleted-project',
+					'2026-01-01T00:00:00.000Z',
+					'2026-01-01T00:00:00.000Z',
+				);
+		} finally {
+			staleDb.close();
+		}
+
+		await expect(upgrade([fixture.root])).rejects.toThrow(/当前项目 catalog 不存在/);
+
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(yamlBefore);
+		const restoredDb = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
+		try {
+			expect(
+				restoredDb
+					.prepare('SELECT entity_id FROM vault_index WHERE file_path = ?')
+					.get('20_项目/Deleted.md'),
+			).toEqual({ entity_id: 'deleted-project' });
+			expect(
+				restoredDb
+					.prepare('SELECT scope_key FROM memory_items WHERE slot_key = ?')
+					.get('project:deleted'),
+			).toEqual({ scope_key: 'deleted-project' });
+		} finally {
+			restoredDb.close();
+		}
+		const journals = vaultJournals(fixture.root);
+		expect(journals).toHaveLength(1);
+		expect(journals).not.toContain(first.journalPath);
+		expect(existsSync(first.journalPath)).toBe(false);
+		expect(JSON.parse(readFileSync(journals[0] ?? '', 'utf-8'))).toMatchObject({
+			state: 'restored',
+			backup_receipt_detached: true,
+		});
+		expect(validateRuntimeContract({ vaultRoot: fixture.root, runtimeVersion: VERSION }).ok).toBe(
+			true,
+		);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+	});
+
+	it('显式恢复在两次目录 rename 之间中断后可从 journal 自动续接', async () => {
+		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		const journal = JSON.parse(readFileSync(result.journalPath, 'utf-8')) as {
+			cutover_id: string;
+			backup_path: string;
+		};
+		const interruptedLock = acquireCutoverLock(fixture.root);
+		const boundLock = bindCutoverLock(
+			fixture.root,
+			interruptedLock.token,
+			journal.cutover_id,
+		);
+		writeFileSync(
+			cutoverLockPath(fixture.root),
+			`${JSON.stringify({ ...boundLock, pid: exitedChildPid() }, null, 2)}\n`,
+			'utf-8',
+		);
+		const staging = join(
+			fixture.parent,
+			`.${basename(fixture.root)}.restore-${journal.cutover_id}`,
+		);
+		const displaced = join(
+			fixture.parent,
+			`.${basename(fixture.root)}.previous-${journal.cutover_id}`,
+		);
+		cpSync(journal.backup_path, staging, {
+			recursive: true,
+			preserveTimestamps: true,
+			verbatimSymlinks: true,
+		});
+		renameSync(fixture.root, displaced);
+		expect(existsSync(fixture.root)).toBe(false);
+
+		const restored = await upgrade([fixture.root, '--restore', result.journalPath]);
+
+		expect(restored.journalPath).toBe(result.journalPath);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(existsSync(staging)).toBe(false);
+		expect(existsSync(displaced)).toBe(false);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+	});
+
+	it('未知 AUTO marker、非法显式项目 ID 和未知 Schema 均在预检阶段失败', async () => {
 		writeFileSync(
 			join(fixture.root, '90_系统', '记忆', 'UserProfile.md'),
 			'<!-- BEGIN AUTO:legacy-shadow -->\n旧内容\n<!-- END AUTO:legacy-shadow -->\n',
@@ -419,12 +1324,27 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 
 		writeFileSync(
 			join(fixture.root, '90_系统', '记忆', 'UserProfile.md'),
-			'# 无 AUTO 区块\n',
+			`# 用户画像
+
+## 用户摘要
+<!-- BEGIN AUTO:profile-summary -->
+旧摘要
+<!-- END AUTO:profile-summary -->
+
+## 行为规则
+<!-- BEGIN AUTO:rules -->
+旧规则
+<!-- END AUTO:rules -->
+`,
 			'utf-8',
 		);
-		writeFileSync(join(fixture.root, '20_项目', 'GTS.md'), '---\ntype: project\n---\n', 'utf-8');
+		writeFileSync(
+			join(fixture.root, '20_项目', 'GTS.md'),
+			'---\ntype: project\nid: Invalid ID\n---\n',
+			'utf-8',
+		);
 		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
-			/项目缺少稳定 id/,
+			/项目 id 必须是可移植的小写 ASCII 标识符/,
 		);
 
 		writeFileSync(

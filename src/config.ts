@@ -5,7 +5,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve, win32 } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
 import type { ContextBudgets } from './types.js';
@@ -260,34 +260,69 @@ const directoriesKeys = [
 	'system',
 ] as const;
 
-const directoriesSchema = z.object(
-	Object.fromEntries(directoriesKeys.map((k) => [k, z.string().min(1)])) as Record<
-		string,
-		z.ZodString
-	>,
-);
+const safeRelativePathSchema = z
+	.string()
+	.min(1)
+	.superRefine((value, context) => {
+		if (value.includes('\0')) {
+			context.addIssue({ code: 'custom', message: '路径不能包含 NUL 字符' });
+			return;
+		}
+		const portable = value.replace(/\\/g, '/');
+		if (
+			isAbsolute(value) ||
+			win32.isAbsolute(value) ||
+			portable.startsWith('/') ||
+			portable.split('/').some((component) => component === '.' || component === '..')
+		) {
+			context.addIssue({ code: 'custom', message: '必须是 Vault 内不含 . 或 .. 的相对路径' });
+		}
+	});
 
-const subdirectoriesSchema = z.object({
-	knowledge: z.object({ notes: z.string().min(1), wiki: z.string().min(1) }),
-	resources: z.object({
-		books: z.string().min(1),
-		literature: z.string().min(1),
-		translations: z.string().min(1),
-	}),
-	system: z.object({
-		templates: z.string().min(1),
-		schema: z.string().min(1),
-		memory: z.string().min(1),
-		digest: z.string().min(1),
-		prompts: z.string().min(1),
-		archive: z.object({
-			projects: z.string().min(1),
-			drafts: z.string().min(1),
-			plans: z.string().min(1),
-			diary: z.string().min(1),
-		}),
-	}),
+const safeFileNameSchema = safeRelativePathSchema.superRefine((value, context) => {
+	if (value.includes('/') || value.includes('\\')) {
+		context.addIssue({ code: 'custom', message: '必须是单个文件名，不能包含目录分隔符' });
+	}
 });
+
+const directoriesSchema = z
+	.object(
+		Object.fromEntries(directoriesKeys.map((k) => [k, safeRelativePathSchema])) as Record<
+			string,
+			typeof safeRelativePathSchema
+		>,
+	)
+	.catchall(safeRelativePathSchema);
+
+const subdirectoriesSchema = z
+	.object({
+		knowledge: z.object({ notes: safeRelativePathSchema, wiki: safeRelativePathSchema }).strict(),
+		resources: z
+			.object({
+				books: safeRelativePathSchema,
+				literature: safeRelativePathSchema,
+				translations: safeRelativePathSchema,
+			})
+			.strict(),
+		system: z
+			.object({
+				templates: safeRelativePathSchema,
+				schema: safeRelativePathSchema,
+				memory: safeRelativePathSchema,
+				digest: safeRelativePathSchema,
+				prompts: safeRelativePathSchema,
+				archive: z
+					.object({
+						projects: safeRelativePathSchema,
+						drafts: safeRelativePathSchema,
+						plans: safeRelativePathSchema,
+						diary: safeRelativePathSchema,
+					})
+					.strict(),
+			})
+			.strict(),
+	})
+	.strict();
 
 const contextBudgetsSchema = z
 	.object({
@@ -307,9 +342,9 @@ const repositoryIdSchema = z
 const memorySchema = z
 	.object({
 		contract_version: z.literal(2),
-		db_name: z.string().min(1).default('memory.db'),
+		db_name: safeFileNameSchema.default('memory.db'),
 		scan_prefixes: z
-			.array(z.string())
+			.array(z.enum(directoriesKeys))
 			.default([
 				'drafts',
 				'diary',
@@ -321,7 +356,7 @@ const memorySchema = z
 				'resources',
 				'reflection',
 			]),
-		excluded_prefixes: z.array(z.string()).default(['system']),
+		excluded_prefixes: z.array(z.enum(directoriesKeys)).default(['system']),
 		context_budgets: contextBudgetsSchema,
 		repository_bindings: z.record(repositoryIdSchema, z.array(z.string().min(1)).min(1)),
 	})

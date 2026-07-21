@@ -302,10 +302,7 @@ export function archiveMemoryItem(
 	input: ArchiveMemoryItemInput,
 ): ScopedMemoryItem {
 	if (!input.reason.trim()) throw new MemoryItemValidationError('归档原因不能为空');
-	const archivedAt = normalizeTimestamp(
-		input.archivedAt ?? new Date().toISOString(),
-		'archivedAt',
-	);
+	const archivedAt = normalizeTimestamp(input.archivedAt ?? new Date().toISOString(), 'archivedAt');
 	const archive = db.transaction(() => {
 		const existing = requireById(db, input.itemId);
 		if (existing.status === 'archived') {
@@ -324,10 +321,7 @@ export function restoreMemoryItem(
 	db: Database.Database,
 	input: RestoreMemoryItemInput,
 ): ScopedMemoryItem {
-	const restoredAt = normalizeTimestamp(
-		input.restoredAt ?? new Date().toISOString(),
-		'restoredAt',
-	);
+	const restoredAt = normalizeTimestamp(input.restoredAt ?? new Date().toISOString(), 'restoredAt');
 	const restore = db.transaction(() => {
 		const existing = requireById(db, input.itemId);
 		if (existing.status !== 'archived') {
@@ -353,10 +347,7 @@ export function reclassifyMemoryItem(
 	db: Database.Database,
 	input: ReclassifyMemoryItemInput,
 ): ScopedMemoryItem {
-	const updatedAt = normalizeTimestamp(
-		input.updatedAt ?? new Date().toISOString(),
-		'updatedAt',
-	);
+	const updatedAt = normalizeTimestamp(input.updatedAt ?? new Date().toISOString(), 'updatedAt');
 	const reclassify = db.transaction(() => {
 		const existing = requireById(db, input.itemId);
 		const scope = input.scope ?? { type: existing.scope_type, key: existing.scope_key };

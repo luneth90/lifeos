@@ -202,6 +202,40 @@ describe('VaultConfig — lifeos.yaml loading', () => {
 	});
 
 	it.each([
+		[
+			'扩展 directories 同样不允许路径穿越',
+			finalYaml(`version: '1.0'\nlanguage: zh\ndirectories:\n  external: ../outside`),
+		],
+		[
+			'directories 不允许 .. 路径穿越',
+			finalYaml(`version: '1.0'\nlanguage: zh\ndirectories:\n  drafts: ../outside`),
+		],
+		[
+			'directories 不允许绝对路径',
+			finalYaml(`version: '1.0'\nlanguage: zh\ndirectories:\n  system: /tmp/lifeos-outside`),
+		],
+		[
+			'subdirectories 不允许 .. 路径穿越',
+			finalYaml(`version: '1.0'\nlanguage: zh\nsubdirectories:\n  system:\n    memory: ../outside`),
+		],
+		[
+			'subdirectories 不允许绝对路径',
+			finalYaml(
+				`version: '1.0'\nlanguage: zh\nsubdirectories:\n  knowledge:\n    notes: /tmp/lifeos-outside`,
+			),
+		],
+		['db_name 不允许包含正斜杠目录', finalYaml(`version: '1.0'\nlanguage: zh`, 'nested/memory.db')],
+		[
+			'db_name 不允许包含反斜杠目录',
+			finalYaml(`version: '1.0'\nlanguage: zh`, String.raw`nested\memory.db`),
+		],
+	] as const)('拒绝不安全 Vault 路径：%s', (_label, yaml) => {
+		tmp = createTempDir();
+		writeyaml(tmp.root, yaml);
+		expect(() => new VaultConfig(tmp.root)).toThrow(ConfigValidationError);
+	});
+
+	it.each([
 		['缺少 memory', `version: '1.0'\nlanguage: zh\n`],
 		[
 			'缺少 contract_version',

@@ -1,5 +1,38 @@
 # 更新日志
 
+## 2.0.0 (2026-07-21)
+
+### 不兼容变更
+
+- 记忆协议一次性切换为 `contract_version=2` 与 `Schema V4`；运行时不再兼容旧契约，也不会隐式迁移旧数据库
+- V1–V3 Vault 必须通过 `lifeos upgrade` 离线升级到 V4；不提供双结构过渡模式，原有 `--override` 参数已移除
+- `lifeos.yaml` 改用分区上下文预算与 `repository_bindings`，移除 `userprofile_rules`、`revises_summary`、`userprofile_doc_limit` 与 `taskboard_doc_limit`
+
+### 作用域记忆与上下文控制
+
+- 将记忆身份统一为 `(scope.type, scope.key, slot_key)`，支持 global、skill、project、repository、tool 与 file 作用域
+- Layer 0 仅装载有效的全局规则、全局画像与当前焦点；全局 hard 规则始终保留，soft 规则按预算筛选，项目等局部规则改为通过 `memory_context` 按需获取
+- 新增 `global_rules`、`scoped_context` 与 `single_item_max` 等独立预算，避免项目增多导致常驻规则持续膨胀
+- MCP 接口收敛为 `memory_bootstrap`、`memory_query`、`memory_context`、`memory_log`、`memory_rules`、`memory_forget` 与 `memory_notify` 七个工具
+- 新增 `lifeos rules` 记忆治理命令，支持 list、audit、export、classify、archive 与 restore
+
+### 自动升级、回滚与运行时安全
+
+- `lifeos upgrade [path]` 会自动为旧项目补充稳定 ID 并写回 Markdown、发现高置信 Git 仓库绑定、生成 scope map，并校验项目索引一致性；只有真正存在歧义时才中断并要求审阅
+- 升级采用原子 cutover：先在 Vault 外创建并校验备份，再通过外部写闸执行资产安装、配置迁移、数据库迁移和最终契约验证；失败时自动恢复原 Vault
+- 每个 Vault 始终只保留最近一次完整回滚备份，包括重复执行同版本升级；可使用 `.lifeos-cutovers` 中对应的 `journal.json` 显式恢复整个 Vault
+- 最终数据库提交后自动清理 `{system}/{memory}/migrations/` 一次性工作区；审阅未完成或升级回滚时仍保留所需迁移材料
+- 自动生成的 scope map 带有上下文指纹与条目哈希：未修改的过期草案可安全刷新，人工编辑或显式指定的文件不会被自动覆盖
+- 运行时拒绝旧 Schema、缺失数据库、活动中的切换锁、越界路径和不一致的托管资产，升级及恢复过程同时防护符号链接和路径穿越
+- 文件移动通知支持旧路径，迁移 file scope 与关联文件引用，避免重命名后产生孤立记忆
+- 构建与发布打包前强制清理 `dist`，防止已删除源码的旧编译产物进入发布包
+
+### 项目、学习状态与文档
+
+- `/project` 创建规则和项目模板现在强制生成稳定、唯一且可移植的项目 ID；项目改名或移动不会改变该 ID，项目作用域记忆可持续解析
+- 知识状态机统一为 `draft → review → revised → mastered`，`/revise` 默认只消费 `review`，完成首次批改后进入 `revised`
+- 更新全部中英文技能、规则资产、记忆协议、集成测试与手工测试文档到 2.0.0 最终语义
+
 ## 1.8.3 (2026-05-13)
 
 ### Node 26 运行时支持
