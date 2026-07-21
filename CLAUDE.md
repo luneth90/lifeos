@@ -51,11 +51,3 @@ SQLite via `better-sqlite3` with WAL mode. Key tables: `vault_index` (indexed ma
 ## Testing
 
 Tests use Vitest with `tests/setup.ts` providing fixtures: `createTempVault()` creates isolated vault directories with `lifeos.yaml`, `createTestDb()` initializes an in-memory or temp SQLite DB, `writeTestNote()` creates markdown files with YAML frontmatter.
-
-## Release
-
-Releases are published by `.github/workflows/release.yml` on `v*` tag pushes. The workflow runs `release:check-version`, which requires the version to be identical in `package.json`, `package-lock.json`, every `assets/skills/*/SKILL.{zh,en}.md` frontmatter, `assets/lifeos-rules.{zh,en}.md`, plus a matching `CHANGELOG.md` heading.
-
-- Always bump with `npm run release:bump -- <major|minor|patch>` — never hand-edit `package.json` alone, or tag validation fails and the release aborts.
-- Before tagging: update `CHANGELOG.md`, then run `npm run release:check-version -- vX.Y.Z` and `npm run release:verify` locally.
-- Commit the bump, tag it as `vX.Y.Z`, and push the tag to trigger the release.
