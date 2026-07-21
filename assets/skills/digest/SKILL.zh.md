@@ -1,7 +1,7 @@
 ---
 name: digest
 description: '生成信息周报时使用；按主题配置抓取 Paper、RSS、Web 等来源并输出到草稿。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates: []
   prompts: []
@@ -10,6 +10,21 @@ dependencies:
   agents: []
 ---
 
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "digest"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{草稿目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
@@ -178,5 +193,5 @@ aliases: []
 周报文件写入 Vault 后，立即调用：
 
 ```text
-memory_notify(file_path="{草稿目录}/<TopicName>-MMDD-MMDD.md")
+memory_notify(contract_version=2, file_path="{草稿目录}/<TopicName>-MMDD-MMDD.md")
 ```

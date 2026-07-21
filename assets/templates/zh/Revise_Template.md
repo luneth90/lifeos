@@ -5,6 +5,7 @@ created: "{{DATE}}"
 domain: "{{DOMAIN}}"
 note: "[[知识笔记路径]]"
 mode: quiz
+status: pending
 score:
 result:
 tags: [revise-record]

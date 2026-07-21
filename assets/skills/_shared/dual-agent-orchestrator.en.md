@@ -12,8 +12,8 @@ Before launching the Planning Agent, query minimal memory context via MCP tools:
 
 Standard query pattern:
 ```
-memory_query(query="<topic keywords>", filters={"type": "<entity type>"}, limit=5)
-memory_query(query="<topic keywords>", limit=10)
+memory_query(contract_version=2, query="<topic keywords>", filters={"type": "<entity type>"}, limit=5)
+memory_query(contract_version=2, query="<topic keywords>", limit=10)
 ```
 
 If a file under {drafts directory}/ is found, read its frontmatter to confirm whether it is still status: pending.

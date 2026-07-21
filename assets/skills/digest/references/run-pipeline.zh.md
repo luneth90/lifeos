@@ -200,7 +200,7 @@ aliases: []
 
 ### Phase 5: 收尾
 
-1. 调用 `memory_notify(file_path="{周报文件路径}")`
+1. 调用 `memory_notify(contract_version=2, file_path="{周报文件路径}")`
 2. 输出完成提示：
 
 ```text

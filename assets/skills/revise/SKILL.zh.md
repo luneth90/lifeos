@@ -1,7 +1,7 @@
 ---
 name: revise
 description: '复习知识笔记时使用；生成主动回忆题，作答后批改并更新掌握状态。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Revise_Template.md"
@@ -11,6 +11,21 @@ dependencies:
   agents: []
 ---
 
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "revise"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{知识目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
@@ -45,20 +60,24 @@ dependencies:
    推荐调用（若 query 无结果，回退到直接读取笔记文件的 frontmatter 确认 status）：
 
 ```
-memory_query(query="<章节名称>", filters={"type": "knowledge", "status": "draft"}, limit=5)
-memory_query(query="<章节名称>", filters={"type": "knowledge", "status": "review"}, limit=5)
-memory_query(query="<章节主题或原书约定关键词> 纠错", limit=5)
+memory_query(contract_version=2, query="<章节名称>", filters={"type": "knowledge", "status": "review"}, limit=5)
+memory_query(contract_version=2, query="<章节主题或原书约定关键词> 纠错", limit=5)
 ```
 
-2. 若用户触发时已提供范围（如 `/revise VGT 第4章`），直接读取对应笔记
+2. 若用户触发时已提供范围（如 `/revise VGT 第4章`），先读取对应笔记并检查状态：
+   - `review`：正常开始首次复习
+   - `revised`：仅当用户明确要求再次复习该笔记时加载，作为后续掌握度复核
+   - `draft`：停止，提示先用 `/knowledge` 完成整理并推进到 `review`
+   - `mastered`：仅在用户明确要求重测时加载，完成后保持 `mastered`
 3. 否则：
    - 扫描 `{项目目录}/` 中 `status: active` 的项目，获取章节列表（跳过 `status: frozen` 的项目及其关联知识笔记）
-   - 扫描 `{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` 中 `status: draft` 或 `status: revise` 的笔记（优先加载未 mastered）
+   - 默认只扫描 `{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` 中 `status: review` 的笔记
 4. 扫描章节目录下已有的复习文件（`复习_*.md`），获取历史复习表现
 5. 统计可复习内容：
-   - `draft`（从未复习）→ 最高优先级
-   - `revise`（复习中）→ 次优先级
-   - `mastered`（已掌握）→ 仅用户明确指定时加载
+   - `review`（等待首次复习）→ 默认复习候选
+   - `revised`（已完成至少一轮）→ 仅用户明确指定后续复核时加载
+   - `draft` → 不进入复习队列
+   - `mastered` → 仅用户明确指定重测时加载
 
 ## 阶段1：配置（1 轮交互）
 
@@ -89,7 +108,7 @@ memory_query(query="<章节主题或原书约定关键词> 纠错", limit=5)
 4. 读取 `{系统目录}/{模板子目录}/Revise_Template.md` 模板
 5. 在章节目录下创建复习文件：`复习_YYYY-MM-DD.md`
    - 路径：`{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/复习_YYYY-MM-DD.md`
-6. 填入 frontmatter（更新 `note`、`domain`、`mode` 字段）
+6. 填入 frontmatter（更新 `note`、`domain`、`mode` 字段，并设置 `status: pending`）
 7. 填入题目到 `## 复习题目` 区块，作答区留空
 
 ### 提问模式 — 文件格式
@@ -180,15 +199,20 @@ memory_query(query="<章节主题或原书约定关键词> 纠错", limit=5)
 > 批改结果格式、status 更新规则、项目掌握度回写、日记记录。
 
 **核心规则速查：**
-- status 只升不降：draft → revise → mastered
-- ≥80% → mastered，50%-80% → revise，<50% → 维持当前
-- 批改后更新项目掌握度小圆点（⚪→🔴→🟡→🟢）
+- 知识笔记 status 只升不降：`draft → review → revised → mastered`
+- 首次完整批改固定执行 `review → revised`；分数只决定弱项与下次复习重点，不得直接进入 `mastered`
+- 只有用户后续明确复习 `revised` 笔记，且独立一轮达到 ≥80% 并清除此前弱项时，才执行 `revised → mastered`
+- 复习文件在等待作答时为 `pending`，完整批改后为 `graded`
+- 批改后更新项目掌握度小圆点（⚪→🔴→🟠→🟡→🟢）
 - 在今日日记追加复习记录
 
 # 重要规则
 
 - **复习失败继续复习** — 答错不调用 `/knowledge`，下次复习重点覆盖
-- **status 只升不降** — draft → revise → mastered，从不回退
+- **status 只升不降** — `draft → review → revised → mastered`，从不回退或跳级
+- **默认只复习 review** — `draft` 不进入默认复习；`revised` 仅在用户明确要求后续复核时加载
+- **首次批改至少 revised** — 完整批改后无论分数都执行 `review → revised`，分数只记录弱项
+- **mastered 需要后续证据** — 仅后续明确复核达到 ≥80% 且此前弱项全部通过时升级
 - **不照搬笔记原文出题** — 问题侧重理解和应用
 - **不重复已掌握题目** — 查看历史复习文件，上次 ✅ 的知识点本次跳过
 - **盲点扫描后自动深入** — `?` 和 `✗` 的概念在后续复习中重点覆盖
@@ -200,10 +224,10 @@ memory_query(query="<章节主题或原书约定关键词> 纠错", limit=5)
 
 # 边界情况
 
-- **无可复习内容（全部 mastered）：** 恭喜用户，列出已掌握笔记，提示"若要重新复习可在问题中指定笔记"
+- **无默认复习候选：** 说明当前没有 `status: review` 的笔记；如需复核 `revised` 或重测 `mastered`，要求用户明确指定笔记
 - **指定范围不存在（笔记未创建）：** 停止，提示用户先用 `/knowledge` 产出该章节笔记
 - **用户中途放弃：** 复习文件保持 `status: pending`，下次可继续作答
-- **笔记 status 字段缺失：** 视为 `draft`，复习后按表现更新
+- **笔记 status 字段缺失：** 视为 `draft`，不得生成复习文件；提示先完成 `/knowledge` 校验并推进到 `review`
 - **今日日记不存在：** 跳过日记追加，在摘要中说明"今日日记未找到，请手动记录"
 - **同一天重复复习同一章节：** 复习文件命名加序号：`复习_YYYY-MM-DD_2.md`
 - **用户请求批改但未作答：** 提示用户先完成作答
@@ -232,13 +256,13 @@ memory_query(query="<章节主题或原书约定关键词> 纠错", limit=5)
 批改结束后，若出现会改变下次复习决策的稳定信号，可写入结构化画像槽位：
 
 - **薄弱点**：错题持续集中在同一子领域，或相关笔记长期停留在 `draft`
-  - `memory_log(slot_key="profile:weak.<domain_slug>", content="<事实 + 证据 + 决策影响>", related_files=[...])`
+  - `memory_log(contract_version=2, slot_key="profile:weak.<domain_slug>", content="<事实 + 证据 + 决策影响>", scope={type: "project", key: "<project_id>"}, item_kind="profile", related_files=[...])`
 - **强项**：同一子领域连续多次高质量通过，已明显可以减少基础引导
-  - `memory_log(slot_key="profile:strong.<domain_slug>", content="<事实 + 证据 + 决策影响>", related_files=[...])`
+  - `memory_log(contract_version=2, slot_key="profile:strong.<domain_slug>", content="<事实 + 证据 + 决策影响>", scope={type: "project", key: "<project_id>"}, item_kind="profile", related_files=[...])`
 
 规则：
 
 - `domain_slug` 只用 ASCII slug，不直接写中文标题
 - 粒度上限为二级领域，如 `math_group_theory`、`swift_concurrency`
 - 没有稳定趋势时不要写，宁可漏写也不要泛写
-- `/revise` 不生成 `profile:summary`
+- 只在已解析项目作用域内写项目画像；确实跨项目稳定时才改用 global，信号不稳定则不写

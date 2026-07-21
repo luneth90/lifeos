@@ -1,7 +1,7 @@
 ---
 name: ask
 description: 'LifeOS 默认问答入口。用户提出概念、检索、PDF、学习或通用问题时使用，显式调用其他技能时跳过。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Draft_Template.md"
@@ -11,6 +11,21 @@ dependencies:
   agents: []
 ---
 
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "ask"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{研究目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
@@ -35,7 +50,7 @@ memory_bootstrap()
 ```
 
 - 若当前 session 已有 `_layer0`，普通问答不得重复调用 `memory_bootstrap`
-- 仅在 Vault 文件变更、`memory_log`、TaskBoard 更新、compaction 后恢复等重要状态变化后，才重新调用 `memory_bootstrap` 刷新 Layer 0
+- 仅在 global rule/profile 或 TaskBoard 焦点确实变化，以及 compaction 后恢复时重新调用 `memory_bootstrap`；scoped 记忆变化后只重新调用对应的 `memory_context(contract_version=2, scopes=[...])`
 
 ## 步骤零：问题分类与路由
 
@@ -70,7 +85,7 @@ memory_bootstrap()
 推荐调用顺序：
 
 ```
-memory_query(query="<问题关键词>", limit=5)
+memory_query(contract_version=2, query="<问题关键词>", limit=5)
 ```
 
 不属于这三类时，**不要默认先查记忆**，直接进入来源检查。
@@ -197,9 +212,11 @@ tags: [ask]
 若用户在相邻轮次中连续纠正提问方式，且这种偏好会影响后续问答风格，可写入：
 
 ```
-memory_log(
+memory_log(contract_version=2,
   slot_key="profile:thinking_preference",
-  content="<事实 + 证据 + 决策影响>"
+  content="<事实 + 证据 + 决策影响>",
+  scope={type: "global", key: ""},
+  item_kind="profile"
 )
 ```
 
@@ -207,4 +224,4 @@ memory_log(
 
 - 至少有连续确认或纠正时才写
 - 单次语气偏好不写
-- `/ask` 不生成 `profile:summary`
+- 没有跨对话稳定信号时不写入画像

@@ -1,7 +1,7 @@
 ---
 name: project
 description: '把想法、草稿或学习资源转成正式项目时使用；支持学习、开发、创作和通用项目。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Project_Template.md"
@@ -14,7 +14,22 @@ dependencies:
     - path: references/execution-agent-prompt.md
       role: execution
 ---
-> [!config]
+
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "project"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。> [!config]
 > 本技能中的路径引用使用逻辑名（如 `{项目目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
 > 路径映射：
@@ -137,9 +152,11 @@ Planning Agent 返回后，用中文通知用户：
 若用户在项目创建过程中明确说明“为什么做这个项目”，且该动机会影响后续取舍，可在确认后写入：
 
 ```
-memory_log(
+memory_log(contract_version=2,
   slot_key="profile:motivation.<project_slug>",
   content="<事实 + 证据 + 决策影响>",
+  scope={type: "project", key: "<project_id>"},
+  item_kind="profile",
   related_files=["<计划文件或项目文件>"]
 )
 ```
@@ -148,4 +165,4 @@ memory_log(
 
 - `project_slug` 只用 ASCII slug
 - 仅记录会影响后续项目取舍的稳定动机，不记录一次性的情绪表达
-- `/project` 不生成 `profile:summary`
+- 项目必须已有最终稳定 `id`；没有稳定动机时不写入画像

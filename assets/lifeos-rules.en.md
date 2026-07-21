@@ -2,14 +2,14 @@
 > **All replies and generated content must be in English. Do not output any other language (except technical terms and code). This is the highest priority rule and must not be violated under any circumstances.**
 
 > [!CAUTION] Session Startup Rule
-> **The first action in any LifeOS vault session must be to call `memory_bootstrap` to load Layer 0 context. Even for simple queries (e.g., file paths, source locations), this step is mandatory and must not be skipped. No exceptions.**
+> **The first action in any LifeOS Vault session must be the versionless `memory_bootstrap()` call, which returns global Layer 0 only. Then identify the skill, project, repository, tool, or file scopes and call `memory_context(contract_version=2, scopes=[...], include_global=false)`; call `memory_query(contract_version=2, ...)` only when source content is needed.**
 
 > [!config] Path Configuration
 > Directory names in this file use logical name references. Actual physical paths are defined in `lifeos.yaml` at the Vault root.
 > The default directory names below come from presets; actual names follow the user's `lifeos.yaml` configuration.
 
 # Agent Behavior Guidelines — LifeOS
-`v1.8.3`
+`v2.0.0`
 
 You are the user's lifelong learning partner. Through **LifeOS**, help the user develop fragmented inspirations into structured knowledge and truly master it — from casually captured ideas, through brainstorming and deep research, to systematic project planning and knowledge notes, then spaced review and mastery tracking. The goal is not just building a knowledge base, but helping the user understand, internalize, and command complex knowledge.
 
@@ -48,7 +48,7 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 
 > **Storage rule:** All memory data must be written into the Vault (`{system}/{memory}/`) through LifeOS MCP memory tools. Do NOT write to platform built-in memory paths (e.g., Claude auto-memory, Gemini memory).
 
-**Always active:** When the user expresses a persistent rule, immediately call `memory_log(slot_key, content)`. Judgment: will it still need to be followed in the next conversation?
+**Always active:** When the user expresses a persistent rule, immediately call `memory_log(contract_version=2, slot_key=..., content=..., scope={type: ..., key: ...}, item_kind="rule")`. Global writes still require an explicit empty key. Ask when the scope is unclear; never default it to global. Memory identity is `(scope.type, scope.key, slot_key)`.
 
 > For the full layered activation rules, rule capture conventions, and noise protection, see `memory-protocol.md`.
 
@@ -75,7 +75,7 @@ See `.agents/skills/_shared/lifecycle.md` for the full state machines for each n
 Global hard constraints:
 - Drafts with `status: pending` are **never** archived
 - Projects with `status: frozen` and their linked knowledge notes are excluded from TaskBoard focus, active-project lists, and review flows
-- Knowledge note status **only goes up, never down** (draft → review → mastered)
+- Knowledge note status **only goes up, never down** (draft → review → revised → mastered); `/revise` consumes `review` by default, the first complete grading pass always moves `review → revised`, and only a later explicit review that meets the threshold moves `revised → mastered`
 
 ### Learning Project Knowledge Accuracy
 

@@ -1,11 +1,12 @@
-import { unlinkSync } from 'fs';
-import { join } from 'path';
+import { unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VaultConfig, _resetDefaultInstance } from '../../src/config.js';
 import { initDb } from '../../src/db/schema.js';
 import {
 	fullScan,
+	indexFiles,
 	indexSingleFile,
 	parseMarkdown,
 	shouldIndex,
@@ -223,6 +224,13 @@ ${longBody}`;
 		expect(result!.searchHints.length).toBeGreaterThan(0);
 		// backlinks default to empty array
 		expect(JSON.parse(result!.backlinks)).toEqual([]);
+	});
+
+	it('只把非模板 id 规范化为稳定 entityId', () => {
+		const stable = parseMarkdown('---\nid: "  note-group  "\ntitle: 群论\n---\n内容', '群论.md');
+		const template = parseMarkdown('---\nid: "{{date}}-note"\ntitle: 模板\n---\n内容', '模板.md');
+		expect(stable?.entityId).toBe('note-group');
+		expect(template?.entityId).toBeNull();
 	});
 });
 
@@ -531,7 +539,7 @@ describe('indexSingleFile()', () => {
 			'Content here',
 		);
 
-		const result = indexSingleFile(vault.root, vault.dbPath, '00_草稿/single.md');
+		const result = indexSingleFile(db, vault.root, '00_草稿/single.md');
 
 		expect(result.status).toBe('indexed');
 		expect(result.filePath).toBe('00_草稿/single.md');
@@ -552,7 +560,7 @@ describe('indexSingleFile()', () => {
 		});
 		const absPath = join(vault.root, '00_草稿/abs.md');
 
-		const result = indexSingleFile(vault.root, vault.dbPath, absPath);
+		const result = indexSingleFile(db, vault.root, absPath);
 		expect(result.status).toBe('indexed');
 		expect(result.filePath).toBe('00_草稿/abs.md');
 	});
@@ -563,7 +571,7 @@ describe('indexSingleFile()', () => {
 			type: 'project',
 			status: 'active',
 		});
-		indexSingleFile(vault.root, vault.dbPath, '20_项目/proj.md');
+		indexSingleFile(db, vault.root, '20_项目/proj.md');
 
 		// Overwrite with new content
 		writeTestNote(vault.root, '20_项目/proj.md', {
@@ -571,7 +579,7 @@ describe('indexSingleFile()', () => {
 			type: 'project',
 			status: 'done',
 		});
-		indexSingleFile(vault.root, vault.dbPath, '20_项目/proj.md');
+		indexSingleFile(db, vault.root, '20_项目/proj.md');
 
 		const row = db
 			.prepare('SELECT title, status FROM vault_index WHERE file_path = ?')
@@ -588,7 +596,7 @@ describe('indexSingleFile()', () => {
 		writeTestNote(vault.root, '90_系统/模板/template.md', { title: 'Template', type: 'template' });
 		const config = new VaultConfig(vault.root);
 
-		const result = indexSingleFile(vault.root, vault.dbPath, '90_系统/模板/template.md', config);
+		const result = indexSingleFile(db, vault.root, '90_系统/模板/template.md', config);
 		expect(result.status).toBe('skipped');
 		expect(result.reason).toBeDefined();
 	});
@@ -597,7 +605,7 @@ describe('indexSingleFile()', () => {
 		const { writeFileSync } = require('fs');
 		writeFileSync(join(vault.root, '00_草稿/bare.md'), '# Bare\n\nno frontmatter', 'utf-8');
 
-		const result = indexSingleFile(vault.root, vault.dbPath, '00_草稿/bare.md');
+		const result = indexSingleFile(db, vault.root, '00_草稿/bare.md');
 		expect(result.status).toBe('skipped');
 		expect(result.reason).toContain('frontmatter');
 	});
@@ -608,7 +616,7 @@ describe('indexSingleFile()', () => {
 			type: 'draft',
 			status: 'pending',
 		});
-		indexSingleFile(vault.root, vault.dbPath, '00_草稿/to-delete.md');
+		indexSingleFile(db, vault.root, '00_草稿/to-delete.md');
 
 		// Verify it's indexed
 		const before = db.prepare('SELECT COUNT(*) as n FROM vault_index').get() as { n: number };
@@ -617,7 +625,7 @@ describe('indexSingleFile()', () => {
 		// Delete the file
 		unlinkSync(join(vault.root, '00_草稿/to-delete.md'));
 
-		const result = indexSingleFile(vault.root, vault.dbPath, '00_草稿/to-delete.md');
+		const result = indexSingleFile(db, vault.root, '00_草稿/to-delete.md');
 		expect(result.status).toBe('removed');
 
 		const after = db.prepare('SELECT COUNT(*) as n FROM vault_index').get() as { n: number };
@@ -644,11 +652,59 @@ describe('indexSingleFile()', () => {
 			{ title: 'Target', type: 'project', status: 'active' },
 			'Updated target content',
 		);
-		indexSingleFile(vault.root, vault.dbPath, '20_项目/target.md');
+		indexSingleFile(db, vault.root, '20_项目/target.md');
 
 		const row = db
 			.prepare('SELECT backlinks FROM vault_index WHERE file_path = ?')
 			.get('20_项目/target.md') as { backlinks: string };
 		expect(JSON.parse(row.backlinks)).toEqual(['00_草稿/source.md']);
+	});
+});
+
+describe('indexFiles() 影响报告', () => {
+	it('项目变更同时返回 file/project scope 与派生文档影响', () => {
+		writeTestNote(vault.root, '20_项目/代数.md', {
+			id: 'project-algebra',
+			title: '代数学习',
+			type: 'project',
+			category: 'learning',
+			status: 'active',
+		});
+		const result = indexFiles(db, vault.root, ['20_项目/代数.md']);
+		expect(result.results).toEqual([
+			expect.objectContaining({ status: 'indexed', filePath: '20_项目/代数.md' }),
+		]);
+		expect(result.impact).toMatchObject({
+			vaultIndexChanged: true,
+			taskboardChanged: true,
+			profileChanged: true,
+			changedEntityIds: ['project-algebra'],
+		});
+		expect(result.impact.affectedScopes).toEqual(
+			expect.arrayContaining([
+				{ type: 'file', key: 'project-algebra' },
+				{ type: 'project', key: 'project-algebra' },
+			]),
+		);
+	});
+
+	it('同批重复路径只处理一次，无变化时返回空影响', () => {
+		writeTestNote(vault.root, '00_草稿/想法.md', {
+			id: 'draft-idea',
+			title: '想法',
+			type: 'draft',
+			status: 'pending',
+		});
+		indexFiles(db, vault.root, ['00_草稿/想法.md']);
+		const result = indexFiles(db, vault.root, ['00_草稿/想法.md', '00_草稿/想法.md']);
+		expect(result.results).toEqual([{ status: 'unchanged', filePath: '00_草稿/想法.md' }]);
+		expect(result.impact).toEqual({
+			vaultIndexChanged: false,
+			backlinksChanged: false,
+			taskboardChanged: false,
+			profileChanged: false,
+			affectedScopes: [],
+			changedEntityIds: [],
+		});
 	});
 });

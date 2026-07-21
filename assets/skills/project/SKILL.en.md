@@ -1,7 +1,7 @@
 ---
 name: project
 description: "Turn ideas, drafts, or learning resources into formal projects; supports learning, development, creative, and general projects."
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Project_Template.md"
@@ -14,7 +14,22 @@ dependencies:
     - path: references/execution-agent-prompt.md
       role: execution
 ---
-> [!config]
+
+
+## Scoped Memory (Required)
+
+After routing this skill and identifying its target, call the following before the first business query:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "project"}, <resolved project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.> [!config]
 > Path references in this skill use logical names (e.g., `{projects directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
 > Path mappings:
@@ -137,9 +152,11 @@ See Phase 0 for query code.
 If the user clearly states why this project matters, and that motivation is durable enough to affect later tradeoffs, write:
 
 ```
-memory_log(
+memory_log(contract_version=2,
   slot_key="profile:motivation.<project_slug>",
   content="<fact + evidence + decision impact>",
+  scope={type: "project", key: "<project_id>"},
+  item_kind="profile",
   related_files=["<plan file or project file>"]
 )
 ```
@@ -148,4 +165,4 @@ Rules:
 
 - `project_slug` must be ASCII only
 - Only capture durable project motivation that will affect future tradeoffs
-- `/project` does not generate `profile:summary`
+- The project must already have its final stable `id`; write nothing when no stable motivation exists

@@ -1,162 +1,15 @@
-import { writeFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { _resetDefaultInstance } from '../../src/config.js';
 import { initDb } from '../../src/db/schema.js';
+import { upsertMemoryItem } from '../../src/services/memory-items.js';
+import { runStartup, runStartupMaintenance } from '../../src/services/startup.js';
 import { createTempVault, createTestDb, writeTestNote } from '../setup.js';
 import type { TempVault } from '../setup.js';
 
-import { generateEnhancedSearchTerms, mergeSearchHints } from '../../src/services/enhance.js';
-import { buildLayer0Summary, extractAutoSection, trimToBudget } from '../../src/services/layer0.js';
-import { upsertRule } from '../../src/services/capture.js';
-// Services under test
-import { runStartup } from '../../src/services/startup.js';
-
-// ─── layer0: extractAutoSection ───────────────────────────────────────────────
-
-describe('extractAutoSection', () => {
-	it('extracts content between BEGIN/END markers', () => {
-		const content = `# Doc
-<!-- BEGIN AUTO:profile-summary -->
-line one
-line two
-<!-- END AUTO:profile-summary -->
-rest`;
-		expect(extractAutoSection(content, 'profile-summary')).toBe('line one\nline two');
-	});
-
-	it('returns empty string when marker is absent', () => {
-		expect(extractAutoSection('no markers here', 'focus')).toBe('');
-	});
-
-	it('handles markers with special regex characters', () => {
-		const content = `<!-- BEGIN AUTO:my.marker -->
-content
-<!-- END AUTO:my.marker -->`;
-		expect(extractAutoSection(content, 'my.marker')).toBe('content');
-	});
-});
-
-// ─── layer0: trimToBudget ─────────────────────────────────────────────────────
-
-describe('trimToBudget', () => {
-	it.each([
-		['short text', 1000, 'short text'],
-		['some text', 0, ''],
-		['   ', 100, ''],
-	] as const)('returns expected result for input=%j budget=%d', (input, budget, expected) => {
-		expect(trimToBudget(input, budget)).toBe(expected);
-	});
-
-	it('truncates text exceeding budget with continuation marker', () => {
-		const lines = Array.from({ length: 50 }, (_, i) => `这是第${i + 1}行内容`);
-		const text = lines.join('\n');
-		const result = trimToBudget(text, 10);
-		expect(result.length).toBeGreaterThan(0);
-		expect(result.endsWith('- ...')).toBe(true);
-	});
-
-	it('trims line-by-line, skipping empty lines', () => {
-		const text = '行一\n\n行二\n行三';
-		const result = trimToBudget(text, 5);
-		expect(result).not.toContain('\n\n');
-	});
-});
-
-// ─── layer0: buildLayer0Summary ───────────────────────────────────────────────
-
-describe('buildLayer0Summary', () => {
-	let vault: TempVault;
-
-	beforeEach(() => {
-		vault = createTempVault();
-		_resetDefaultInstance();
-	});
-
-	afterEach(() => {
-		vault.cleanup();
-		_resetDefaultInstance();
-	});
-
-	it('returns empty string when no files exist', () => {
-		const result = buildLayer0Summary(vault.root);
-		expect(result).toBe('');
-	});
-
-	it('includes UserProfile section when AUTO block exists', () => {
-		const memoryDir = join(vault.root, '90_系统', '记忆');
-		writeFileSync(
-			join(memoryDir, 'UserProfile.md'),
-			`# UserProfile\n<!-- BEGIN AUTO:profile-summary -->\n用户偏好：简洁风格\n<!-- END AUTO:profile-summary -->`,
-			'utf-8',
-		);
-		const result = buildLayer0Summary(vault.root);
-		expect(result).toContain('UserProfile 速览');
-		expect(result).toContain('用户偏好：简洁风格');
-	});
-
-	it('includes TaskBoard section when AUTO block exists', () => {
-		const memoryDir = join(vault.root, '90_系统', '记忆');
-		writeFileSync(
-			join(memoryDir, 'TaskBoard.md'),
-			`# TaskBoard\n<!-- BEGIN AUTO:focus -->\n当前焦点：完成测试套件\n<!-- END AUTO:focus -->`,
-			'utf-8',
-		);
-		const result = buildLayer0Summary(vault.root);
-		expect(result).toContain('TaskBoard 当前焦点');
-		expect(result).toContain('当前焦点：完成测试套件');
-	});
-
-	it('includes rules section when rules AUTO block exists', () => {
-		const memoryDir = join(vault.root, '90_系统', '记忆');
-		writeFileSync(
-			join(memoryDir, 'UserProfile.md'),
-			[
-				'# UserProfile',
-				'<!-- BEGIN AUTO:profile-summary -->',
-				'用户偏好：简洁风格',
-				'<!-- END AUTO:profile-summary -->',
-				'<!-- BEGIN AUTO:rules -->',
-				'- **content:language**: 输出语言使用中文',
-				'- **format:no-emoji**: 不要用英文回复',
-				'<!-- END AUTO:rules -->',
-			].join('\n'),
-			'utf-8',
-		);
-		const result = buildLayer0Summary(vault.root);
-		expect(result).toContain('行为约束');
-		expect(result).toContain('输出语言使用中文');
-		expect(result).toContain('UserProfile 速览');
-	});
-});
-
-// ─── enhance: mergeSearchHints ────────────────────────────────────────────────
-
-describe('mergeSearchHints', () => {
-	it('merges base hints and extra terms without duplicates', () => {
-		const base = JSON.stringify(['项目', '任务']);
-		const extras = ['任务', '进展', '计划'];
-		const result = mergeSearchHints(base, extras);
-		const parsed = JSON.parse(result) as string[];
-		expect(parsed).toContain('项目');
-		expect(parsed).toContain('任务');
-		expect(parsed).toContain('进展');
-		expect(parsed).toContain('计划');
-		expect(parsed.filter((t) => t === '任务').length).toBe(1);
-	});
-
-	it('handles null base hints', () => {
-		const result = mergeSearchHints(null, ['term1', 'term2']);
-		const parsed = JSON.parse(result) as string[];
-		expect(parsed).toContain('term1');
-		expect(parsed).toContain('term2');
-	});
-});
-
-// ─── startup: runStartup ──────────────────────────────────────────────────────
-
-describe('runStartup', () => {
+describe('V4 启动路径', () => {
 	let db: Database.Database;
 	let vault: TempVault;
 
@@ -173,46 +26,151 @@ describe('runStartup', () => {
 		_resetDefaultInstance();
 	});
 
-	it('returns expected shape with vault_stats and layer0_summary', () => {
-		const result = runStartup(db, vault.root);
-		expect(result).toHaveProperty('layer0_summary');
-		expect(result).toHaveProperty('vault_stats');
-		expect(typeof result['layer0_summary']).toBe('string');
-		expect(typeof result['vault_stats']['total_files']).toBe('number');
-	});
-
-	it('counts vault files after scan', () => {
-		writeTestNote(vault.root, '20_项目/project-a.md', {
-			title: '项目A',
+	it('快速启动不全量扫描、不刷新 active docs，只读取现有索引', () => {
+		writeTestNote(vault.root, '20_项目/尚未索引.md', {
+			id: 'project-unindexed',
+			title: '尚未索引',
 			type: 'project',
 			status: 'active',
 		});
-		writeTestNote(vault.root, '20_项目/project-b.md', {
-			title: '项目B',
-			type: 'project',
-			status: 'done',
-		});
+		const taskboard = join(vault.root, '90_系统', '记忆', 'TaskBoard.md');
+		const userprofile = join(vault.root, '90_系统', '记忆', 'UserProfile.md');
+
 		const result = runStartup(db, vault.root);
-		expect(result['vault_stats']['total_files']).toBeGreaterThanOrEqual(0);
+
+		expect(result.vaultStats).toEqual({
+			totalFiles: 0,
+			updatedSinceLast: 0,
+			unchanged: 0,
+			removed: 0,
+			maintenancePending: true,
+		});
+		expect(db.prepare('SELECT * FROM vault_index').all()).toEqual([]);
+		expect(existsSync(taskboard)).toBe(false);
+		expect(existsSync(userprofile)).toBe(false);
 	});
 
-	it('includes structured profile slots in layer0 summary after startup refresh', () => {
-		upsertRule(db, {
-			slotKey: 'profile:work_style',
-			content: '偏好单主线收敛',
-			source: 'preference',
+	it('从现有索引和 active memory 返回 scopeHints 与 Layer 0', () => {
+		db.prepare(`
+			INSERT INTO vault_index(file_path,title,type,status,entity_id)
+			VALUES ('20_项目/代数.md','代数学习','project','active','project-algebra')
+		`).run();
+		upsertMemoryItem(db, {
+			slotKey: 'content:language',
+			content: '必须使用中文',
+			itemKind: 'rule',
+			scope: { type: 'global', key: '' },
+			enforcement: 'hard',
 		});
-		upsertRule(db, {
-			slotKey: 'profile:context_switch_pattern',
-			content: '主线切换时损耗明显',
-			source: 'correction',
+		upsertMemoryItem(db, {
+			slotKey: 'skill:terminology',
+			content: '保持术语一致',
+			itemKind: 'rule',
+			scope: { type: 'skill', key: 'translate' },
 		});
 
 		const result = runStartup(db, vault.root);
-		expect(result.layer0_summary).toContain('UserProfile 速览');
-		expect(result.layer0_summary).toContain('工作方式');
-		expect(result.layer0_summary).toContain('偏好单主线收敛');
-		expect(result.layer0_summary).toContain('切换模式');
-		expect(result.layer0_summary).toContain('主线切换时损耗明显');
+		expect(result.scopeHints).toEqual({
+			availableProjects: ['project-algebra'],
+			availableSkills: ['translate'],
+		});
+		expect(result.vaultStats.totalFiles).toBe(1);
+		expect(result.layer0.text).toContain('必须使用中文');
+		expect(result.layer0.text).not.toContain('保持术语一致');
+		expect(result.layer0.snapshotId).toMatch(/^ctx-[0-9a-f]{20}$/);
+	});
+
+	it('快速启动同步失效过期条目，但不删除历史记录', () => {
+		const item = upsertMemoryItem(db, {
+			slotKey: 'temporary:old',
+			content: '旧临时约束',
+			itemKind: 'rule',
+			scope: { type: 'global', key: '' },
+			expiresAt: '2000-01-01T00:00:00.000Z',
+		});
+
+		runStartup(db, vault.root);
+		const row = db
+			.prepare('SELECT status FROM memory_items WHERE item_id = ?')
+			.get(item.itemId) as {
+			status: string;
+		};
+		expect(row.status).toBe('expired');
+		expect(db.prepare('SELECT COUNT(*) AS count FROM memory_items').get()).toEqual({ count: 1 });
+	});
+});
+
+describe('V4 启动维护路径', () => {
+	let db: Database.Database;
+	let vault: TempVault;
+
+	beforeEach(() => {
+		vault = createTempVault();
+		db = createTestDb(vault.dbPath);
+		initDb(db);
+		_resetDefaultInstance();
+	});
+
+	afterEach(() => {
+		db.close();
+		vault.cleanup();
+		_resetDefaultInstance();
+	});
+
+	it('全量维护负责索引并原子刷新两个 active docs', () => {
+		writeTestNote(
+			vault.root,
+			'20_项目/代数.md',
+			{
+				id: 'project-algebra',
+				title: '代数学习',
+				type: 'project',
+				category: 'learning',
+				status: 'active',
+				domain: '数学',
+			},
+			'研究群论结构。',
+		);
+
+		const result = runStartupMaintenance(db, vault.root);
+		expect(result.vaultStats).toMatchObject({
+			totalFiles: 1,
+			updatedSinceLast: 1,
+			unchanged: 0,
+			removed: 0,
+			maintenancePending: false,
+		});
+		expect(result.activeDocs.map((item) => item.target)).toEqual(['TaskBoard', 'UserProfile']);
+		expect(result.activeDocs.every((item) => item.changed && existsSync(item.path))).toBe(true);
+		expect(result.impact).toMatchObject({ taskboardChanged: true, profileChanged: true });
+		expect(result.impact.affectedScopes).toEqual(
+			expect.arrayContaining([
+				{ type: 'file', key: 'project-algebra' },
+				{ type: 'project', key: 'project-algebra' },
+			]),
+		);
+	});
+
+	it('无文件变化时报告 unchanged，且不重写 active docs', () => {
+		writeTestNote(vault.root, '00_草稿/想法.md', {
+			id: 'draft-idea',
+			title: '想法',
+			type: 'draft',
+			status: 'pending',
+		});
+		runStartupMaintenance(db, vault.root);
+		const second = runStartupMaintenance(db, vault.root);
+		expect(second.vaultStats).toMatchObject({
+			updatedSinceLast: 0,
+			unchanged: 1,
+			removed: 0,
+			maintenancePending: false,
+		});
+		expect(second.activeDocs.every((item) => item.changed === false)).toBe(true);
+		expect(second.impact).toEqual({
+			taskboardChanged: false,
+			profileChanged: false,
+			affectedScopes: [],
+		});
 	});
 });

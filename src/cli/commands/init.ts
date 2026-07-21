@@ -2,8 +2,11 @@ import { execSync } from 'node:child_process';
 import { existsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
+import Database from 'better-sqlite3';
 import { EN_PRESET, ZH_PRESET } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
+import { initDb } from '../../db/schema.js';
+import { writeFreshInstallReceipt } from '../../runtime-contract.js';
 import { ensureDir } from '../utils/assets.js';
 import { syncVault } from '../utils/sync-vault.js';
 import { parseArgs } from '../utils/ui.js';
@@ -109,7 +112,7 @@ export default async function init(args: string[]): Promise<void> {
 	}
 	log('  ', '');
 
-	const preset: LifeOSConfig = lang === 'en' ? EN_PRESET : ZH_PRESET;
+	const preset: LifeOSConfig = structuredClone(lang === 'en' ? EN_PRESET : ZH_PRESET);
 
 	// 1. Validate target
 	const yamlPath = join(targetPath, 'lifeos.yaml');
@@ -143,6 +146,21 @@ export default async function init(args: string[]): Promise<void> {
 
 	yamlConfig.managed_assets = syncResult.managedAssets ?? {};
 	writeFileSync(yamlPath, stringifyYaml(yamlConfig), 'utf-8');
+	const dbPath = join(
+		targetPath,
+		yamlConfig.directories.system,
+		yamlConfig.subdirectories.system.memory,
+		yamlConfig.memory.db_name,
+	);
+	const db = new Database(dbPath);
+	try {
+		db.pragma('journal_mode = WAL');
+		db.pragma('foreign_keys = ON');
+		initDb(db);
+	} finally {
+		db.close();
+	}
+	writeFreshInstallReceipt(targetPath, yamlConfig, VERSION);
 
 	// 6. Print summary
 	log(green('✔'), bold('LifeOS vault initialized'));

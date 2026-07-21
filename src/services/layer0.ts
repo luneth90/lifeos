@@ -1,108 +1,188 @@
-/**
- * layer0.ts — Layer 0 context summary builder.
- *
- * Builds the Layer 0 summary from UserProfile.md and TaskBoard.md,
- * trimmed to configured token budgets.
- */
-
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { getVaultConfig, resolveConfig } from '../config.js';
+import { createHash } from 'node:crypto';
+import type Database from 'better-sqlite3';
+import { buildTaskboardFocusSection, countRevisionCandidates } from '../active-docs/taskboard.js';
+import { buildGlobalProfileSummary } from '../active-docs/userprofile.js';
+import type { ContextBudgets, Layer0Context, ScopedMemoryItem } from '../types.js';
 import { estimateTokens } from '../utils/shared.js';
+import { listMemoryItems } from './memory-items.js';
 
-// ─── extractAutoSection ───────────────────────────────────────────────────────
-
-/**
- * Extract the content between <!-- BEGIN AUTO:marker --> and <!-- END AUTO:marker -->
- * comment blocks in a markdown document. Returns empty string if not found.
- */
-export function extractAutoSection(content: string, marker: string): string {
-	const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-	const pattern = new RegExp(
-		`<!-- BEGIN AUTO:${escaped} -->\\n(.*?)\\n<!-- END AUTO:${escaped} -->`,
-		's',
-	);
-	const match = content.match(pattern);
-	return match ? match[1].trim() : '';
+function snapshot(value: unknown): string {
+	return `ctx-${createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 20)}`;
 }
 
-// ─── trimToBudget ─────────────────────────────────────────────────────────────
+function formatRule(item: ScopedMemoryItem): string {
+	return `- **${item.slotKey}**: ${item.content}`;
+}
 
-/**
- * Trim text to at most `budget` estimated tokens.
- * Returns empty string when budget is 0 or text is blank.
- * Appends '...' continuation marker when text is cut.
- */
-export function trimToBudget(text: string, budget: number): string {
-	if (budget <= 0 || !text.trim()) return '';
-	if (estimateTokens(text) <= budget) return text.trim();
+function compareRules(a: ScopedMemoryItem, b: ScopedMemoryItem): number {
+	if (a.enforcement !== b.enforcement) return a.enforcement === 'hard' ? -1 : 1;
+	if (a.priority !== b.priority) return b.priority - a.priority;
+	if (a.source !== b.source) return a.source === 'correction' ? -1 : 1;
+	const updated = b.updatedAt.localeCompare(a.updatedAt);
+	return updated || a.slotKey.localeCompare(b.slotKey);
+}
 
-	const pieces: string[] = [];
-	let current = 0;
-	for (const line of text.split('\n')) {
-		const cleanLine = line.trimEnd();
-		if (!cleanLine) continue;
-		const lineTokens = estimateTokens(cleanLine);
-		if (current + lineTokens > budget) {
-			if (pieces.length === 0) return `${cleanLine.slice(0, Math.max(1, budget))}...`;
-			break;
+function renderSections(sections: Array<{ title: string; body: string }>): string {
+	return sections
+		.filter((section) => section.body.trim())
+		.map((section) => `## ${section.title}\n${section.body.trim()}`)
+		.join('\n\n');
+}
+
+function appendTextLines(
+	sections: Array<{ title: string; body: string }>,
+	title: string,
+	text: string,
+	sectionBudget: number,
+	totalBudget: number,
+): { loadedLines: number; totalLines: number } {
+	const sourceLines = text
+		.split('\n')
+		.map((candidate) => candidate.trimEnd())
+		.filter(Boolean);
+	if (sectionBudget <= 0 || sourceLines.length === 0) {
+		return { loadedLines: 0, totalLines: sourceLines.length };
+	}
+	const lines: string[] = [];
+	for (const line of sourceLines) {
+		const body = [...lines, line].join('\n');
+		if (estimateTokens(body) > sectionBudget) break;
+		const candidate = renderSections([...sections, { title, body }]);
+		if (estimateTokens(candidate) > totalBudget) break;
+		lines.push(line);
+	}
+	if (lines.length) sections.push({ title, body: lines.join('\n') });
+	return { loadedLines: lines.length, totalLines: sourceLines.length };
+}
+
+export function buildLayer0Context(
+	db: Database.Database,
+	vaultRoot: string,
+	budgets: ContextBudgets,
+): Layer0Context {
+	void vaultRoot;
+	const now = new Date().toISOString();
+	const rules = listMemoryItems(db, {
+		scope: { type: 'global', key: '' },
+		itemKind: 'rule',
+		status: 'active',
+		limit: 10_000,
+	})
+		.filter((item) => !item.expiresAt || item.expiresAt >= now)
+		.sort(compareRules);
+	const hard = rules.filter((item) => item.enforcement === 'hard');
+	const soft = rules.filter((item) => item.enforcement !== 'hard');
+	const loaded: ScopedMemoryItem[] = [];
+	const omittedSlotKeys: string[] = [];
+	const oversizedItems: string[] = [];
+	const warnings: string[] = [];
+	const sections: Array<{ title: string; body: string }> = [];
+	const singleMax = Math.max(0, budgets.single_item_max);
+
+	for (const item of hard) {
+		if (singleMax === 0 || estimateTokens(formatRule(item)) > singleMax) {
+			oversizedItems.push(item.slotKey);
+			warnings.push(`全局硬规则超过单条预算：${item.slotKey}`);
 		}
-		pieces.push(cleanLine);
-		current += lineTokens;
+		loaded.push(item);
 	}
-	if (pieces.length === 0) return '';
-	const trimmed = pieces.join('\n').trim();
-	return trimmed !== text.trim() ? `${trimmed}\n- ...` : trimmed;
-}
-
-// ─── buildLayer0Summary ───────────────────────────────────────────────────────
-
-/**
- * Build the Layer 0 summary string from UserProfile.md and TaskBoard.md.
- * Reads AUTO sections and trims to configured token budgets.
- */
-export function buildLayer0Summary(vaultRoot: string): string {
-	const vc = getVaultConfig() ?? resolveConfig(vaultRoot);
-	const memoryDir = vc.memoryDir();
-	const budgets = vc.contextBudgets();
-
-	const upPath = join(memoryDir, 'UserProfile.md');
-	const tbPath = join(memoryDir, 'TaskBoard.md');
-
-	const upContent = existsSync(upPath) ? readFileSync(upPath, 'utf-8') : '';
-	const tbContent = existsSync(tbPath) ? readFileSync(tbPath, 'utf-8') : '';
-
-	const upBudget = budgets.userprofile_summary;
-	const rulesBudget = budgets.userprofile_rules;
-	const tbBudget = budgets.taskboard_focus;
-	const totalBudget = budgets.layer0_total;
-
-	let upSummary = trimToBudget(extractAutoSection(upContent, 'profile-summary'), upBudget);
-
-	// Rules section (unified preferences + corrections)
-	const rulesRaw = extractAutoSection(upContent, 'rules');
-	let upRules = trimToBudget(rulesRaw, rulesBudget);
-
-	let tbFocus = trimToBudget(extractAutoSection(tbContent, 'focus'), tbBudget);
-
-	// Revises summary
-	const revisesRaw = extractAutoSection(tbContent, 'revises');
-	const revisesCount = (revisesRaw.match(/^- /gm) || []).length;
-	const revisesLine = revisesCount > 0 ? `待复习笔记：${revisesCount} 篇` : '';
-
-	// Total budget trimming (priority: rules > focus > summary)
-	const combined = estimateTokens(upSummary) + estimateTokens(upRules) + estimateTokens(tbFocus);
-	if (combined > totalBudget) {
-		upSummary = trimToBudget(upSummary, Math.min(upBudget, Math.floor(totalBudget * 0.1)));
-		const remaining = totalBudget - estimateTokens(upSummary);
-		upRules = trimToBudget(upRules, Math.min(rulesBudget, Math.floor(remaining * 0.55)));
-		tbFocus = trimToBudget(tbFocus, remaining - estimateTokens(upRules));
+	for (const item of soft) {
+		if (singleMax === 0 || estimateTokens(formatRule(item)) > singleMax) {
+			oversizedItems.push(item.slotKey);
+			continue;
+		}
+		const candidate = [...loaded, item];
+		const ruleBody = candidate.map(formatRule).join('\n');
+		const trial = renderSections([{ title: '行为约束', body: ruleBody }]);
+		if (
+			estimateTokens(ruleBody) > budgets.global_rules ||
+			estimateTokens(trial) > budgets.layer0_total
+		) {
+			omittedSlotKeys.push(item.slotKey);
+			continue;
+		}
+		loaded.push(item);
 	}
-
-	const sections: string[] = [];
-	if (upSummary) sections.push(`## UserProfile 速览\n${upSummary}`);
-	if (upRules) sections.push(`## 行为约束\n${upRules}`);
-	if (tbFocus) sections.push(`## TaskBoard 当前焦点\n${tbFocus}`);
-	if (revisesLine) sections.push(`## 复习提醒\n${revisesLine}`);
-	return sections.join('\n\n').trim();
+	if (loaded.length) {
+		sections.push({ title: '行为约束', body: loaded.map(formatRule).join('\n') });
+	}
+	const taskboardResult = appendTextLines(
+		sections,
+		'TaskBoard 当前焦点',
+		buildTaskboardFocusSection(db),
+		budgets.taskboard_focus,
+		budgets.layer0_total,
+	);
+	if (taskboardResult.loadedLines < taskboardResult.totalLines) {
+		warnings.push('TaskBoard 当前焦点已按预算裁剪');
+	}
+	const profileResult = appendTextLines(
+		sections,
+		'UserProfile 速览',
+		buildGlobalProfileSummary(db),
+		budgets.userprofile_summary,
+		budgets.layer0_total,
+	);
+	if (profileResult.loadedLines < profileResult.totalLines) {
+		warnings.push('UserProfile 速览已按预算裁剪');
+	}
+	const revisionCount = countRevisionCandidates(db);
+	let revisionReminderLoaded = 0;
+	if (revisionCount > 0) {
+		const reminder = { title: '复习提醒', body: `待复习笔记：${revisionCount} 篇` };
+		if (estimateTokens(renderSections([...sections, reminder])) <= budgets.layer0_total) {
+			sections.push(reminder);
+			revisionReminderLoaded = 1;
+		} else {
+			warnings.push('复习提醒因 Layer 0 总预算被省略');
+		}
+	}
+	const text = renderSections(sections);
+	const tokenEstimate = estimateTokens(text);
+	if (estimateTokens(hard.map(formatRule).join('\n')) > budgets.global_rules) {
+		warnings.push('全局硬规则总量超过 global_rules 预算');
+	}
+	if (tokenEstimate > budgets.layer0_total) {
+		warnings.push('全局硬规则导致 Layer 0 超过总预算');
+	}
+	const meta = {
+		tokenEstimate,
+		tokenBudget: budgets.layer0_total,
+		globalItemsTotal: rules.length,
+		globalItemsLoaded: loaded.length,
+		omittedSlotKeys,
+		oversizedItems,
+		warnings,
+		sections: {
+			globalRules: {
+				total: rules.length,
+				loaded: loaded.length,
+				omitted: rules.length - loaded.length,
+			},
+			taskboardFocus: {
+				total: taskboardResult.totalLines,
+				loaded: taskboardResult.loadedLines,
+				omitted: taskboardResult.totalLines - taskboardResult.loadedLines,
+			},
+			userprofileSummary: {
+				total: profileResult.totalLines,
+				loaded: profileResult.loadedLines,
+				omitted: profileResult.totalLines - profileResult.loadedLines,
+			},
+			revisionReminder: {
+				total: revisionCount > 0 ? 1 : 0,
+				loaded: revisionReminderLoaded,
+				omitted: revisionCount > 0 ? 1 - revisionReminderLoaded : 0,
+			},
+		},
+	};
+	return {
+		text,
+		snapshotId: snapshot({
+			text,
+			items: loaded.map((item) => [item.itemId, item.updatedAt, item.content]),
+			meta,
+		}),
+		meta,
+	};
 }

@@ -201,7 +201,7 @@ Only list enabled modules. Omit empty categories.
 
 ### Phase 5: Wrap-up
 
-1. call `memory_notify(file_path="{digest file path}")`
+1. call `memory_notify(contract_version=2, file_path="{digest file path}")`
 2. print the completion message:
 
 ```text

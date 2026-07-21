@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
-import { join } from 'path';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
 	ConfigValidationError,
@@ -31,6 +31,24 @@ function createTempDir(): TempDir {
 
 function writeyaml(root: string, content: string): void {
 	writeFileSync(join(root, 'lifeos.yaml'), content, 'utf-8');
+}
+
+function finalYaml(prefix: string, dbName = 'memory.db'): string {
+	return `${prefix}
+memory:
+  contract_version: 2
+  db_name: ${dbName}
+  scan_prefixes: [drafts, diary, projects, research, knowledge, outputs, plans, resources, reflection]
+  excluded_prefixes: [system]
+  context_budgets:
+    layer0_total: 1800
+    global_rules: 600
+    userprofile_summary: 200
+    taskboard_focus: 500
+    scoped_context: 1200
+    single_item_max: 220
+  repository_bindings: {}
+`;
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -135,10 +153,13 @@ describe('VaultConfig — zh preset (default)', () => {
 		const cfg = new VaultConfig(tmp.root);
 		const budgets = cfg.contextBudgets();
 		expect(budgets.layer0_total).toBe(1800);
+		expect(budgets.global_rules).toBe(600);
 		expect(budgets.userprofile_summary).toBe(200);
-		expect(budgets.userprofile_rules).toBe(1000);
 		expect(budgets.taskboard_focus).toBe(500);
-		expect(budgets.revises_summary).toBe(100);
+		expect(budgets.scoped_context).toBe(1200);
+		expect(budgets.single_item_max).toBe(220);
+		expect(budgets).not.toHaveProperty('userprofile_rules');
+		expect(budgets).not.toHaveProperty('revises_summary');
 	});
 });
 
@@ -152,7 +173,7 @@ describe('VaultConfig — lifeos.yaml loading', () => {
 
 	it('loads and merges user lifeos.yaml over zh preset', () => {
 		tmp = createTempDir();
-		writeyaml(tmp.root, `version: '1.0'\nlanguage: zh\ndirectories:\n  drafts: "Draft"\n`);
+		writeyaml(tmp.root, finalYaml(`version: '1.0'\nlanguage: zh\ndirectories:\n  drafts: "Draft"`));
 		const cfg = new VaultConfig(tmp.root);
 		// User override applies
 		expect(cfg.dirPath('drafts')).toBe(join(tmp.root, 'Draft'));
@@ -162,7 +183,7 @@ describe('VaultConfig — lifeos.yaml loading', () => {
 
 	it('respects language: en in lifeos.yaml', () => {
 		tmp = createTempDir();
-		writeyaml(tmp.root, `version: '1.0'\nlanguage: en\n`);
+		writeyaml(tmp.root, finalYaml(`version: '1.0'\nlanguage: en`));
 		const cfg = new VaultConfig(tmp.root);
 		expect(cfg.rawConfig.language).toBe('en');
 		// en preset uses English folder names
@@ -175,14 +196,62 @@ describe('VaultConfig — lifeos.yaml loading', () => {
 
 	it('custom db_name overrides default', () => {
 		tmp = createTempDir();
-		writeyaml(tmp.root, `memory:\n  db_name: custom.db\n`);
+		writeyaml(tmp.root, finalYaml(`version: '1.0'\nlanguage: zh`, 'custom.db'));
 		const cfg = new VaultConfig(tmp.root);
 		expect(cfg.dbPath()).toBe(join(tmp.root, '90_系统', '记忆', 'custom.db'));
 	});
 
+	it.each([
+		['缺少 memory', `version: '1.0'\nlanguage: zh\n`],
+		[
+			'缺少 contract_version',
+			finalYaml(`version: '1.0'\nlanguage: zh`).replace('  contract_version: 2\n', ''),
+		],
+		[
+			'旧 contract_version',
+			finalYaml(`version: '1.0'\nlanguage: zh`).replace(
+				'contract_version: 2',
+				'contract_version: 1',
+			),
+		],
+		[
+			'旧预算键',
+			finalYaml(`version: '1.0'\nlanguage: zh`).replace(
+				'    global_rules: 600',
+				'    global_rules: 600\n    userprofile_rules: 1000',
+			),
+		],
+		[
+			'旧 scope_mode',
+			finalYaml(`version: '1.0'\nlanguage: zh`).replace(
+				'  repository_bindings: {}',
+				'  repository_bindings: {}\n  scope_mode: enforced',
+			),
+		],
+	] as const)('拒绝最终 V2 契约之外的配置：%s', (_label, yaml) => {
+		tmp = createTempDir();
+		writeyaml(tmp.root, yaml);
+		expect(() => new VaultConfig(tmp.root)).toThrow(ConfigValidationError);
+	});
+
+	it('接受值为 0 的最终预算，但不补齐 YAML 中缺失的预算键', () => {
+		tmp = createTempDir();
+		writeyaml(
+			tmp.root,
+			finalYaml(`version: '1.0'\nlanguage: zh`).replace('layer0_total: 1800', 'layer0_total: 0'),
+		);
+		expect(new VaultConfig(tmp.root).contextBudgets().layer0_total).toBe(0);
+
+		writeyaml(
+			tmp.root,
+			finalYaml(`version: '1.0'\nlanguage: zh`).replace('    single_item_max: 220\n', ''),
+		);
+		expect(() => new VaultConfig(tmp.root)).toThrow(ConfigValidationError);
+	});
+
 	it('throws structured validation error for invalid lifeos.yaml values', () => {
 		tmp = createTempDir();
-		writeyaml(tmp.root, `directories:\n  drafts: 42\n`);
+		writeyaml(tmp.root, 'directories:\n  drafts: 42\n');
 		expect(() => new VaultConfig(tmp.root)).toThrow(ConfigValidationError);
 	});
 });

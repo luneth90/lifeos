@@ -1,7 +1,7 @@
 ---
 name: digest
 description: "Create topic-based digests from Paper, RSS, Web, and similar sources, then write structured weekly updates to drafts."
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates: []
   prompts: []
@@ -10,6 +10,21 @@ dependencies:
   agents: []
 ---
 
+
+## Scoped Memory (Required)
+
+After routing this skill and identifying its target, call the following before the first business query:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "digest"}, <resolved project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
 > [!config]
 > Path references in this skill use logical names (for example `{drafts directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
@@ -183,5 +198,5 @@ Organize the body using the configured category system. Each item should have a 
 After the digest file is written into the Vault, call:
 
 ```text
-memory_notify(file_path="{drafts directory}/<TopicName>-MMDD-MMDD.md")
+memory_notify(contract_version=2, file_path="{drafts directory}/<TopicName>-MMDD-MMDD.md")
 ```

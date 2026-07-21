@@ -1,7 +1,7 @@
 ---
 name: translate
 description: "Translate English PDF chapters into Chinese companion notes and update the linked learning project's progress."
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates: []
   prompts: []
@@ -10,6 +10,21 @@ dependencies:
   agents: []
 ---
 
+
+## Scoped Memory (Required)
+
+After routing this skill and identifying its target, call the following before the first business query:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "translate"}, <resolved project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
 > [!config]
 > Path references in this skill use logical names (e.g., `{resources directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into context.
@@ -132,7 +147,7 @@ Example: `70_资源/翻译/VGT/第9章_Sylow定理.md`
 ## Step 4: File Change Notification
 
 ```
-memory_notify(file_path="<translation file relative path>")
+memory_notify(contract_version=2, file_path="<translation file relative path>")
 ```
 
 ## Step 5: Update Project Mastery Overview (If Associated Project Exists)
@@ -146,7 +161,7 @@ memory_notify(file_path="<translation file relative path>")
    - Chapters without translations keep `—`
 4. Notify file change:
 ```
-memory_notify(file_path="<project file relative path>")
+memory_notify(contract_version=2, file_path="<project file relative path>")
 ```
 
 # Output Summary

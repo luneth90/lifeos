@@ -1,7 +1,7 @@
 ---
 name: brainstorm
 description: "Use for immature ideas, divergent thinking, or feasibility exploration; can continue into a project, wiki note, or draft."
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Wiki_Template.md"
@@ -14,6 +14,21 @@ dependencies:
   agents: []
 ---
 
+
+## Scoped Memory (Required)
+
+After routing this skill and identifying its target, call the following before the first business query:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "brainstorm"}, <resolved project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
 > [!config]
 > Path references in this skill use logical names (e.g., `{drafts directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
@@ -50,7 +65,7 @@ Before starting the conversation, **silently** perform the following (do not rep
    Recommended commands:
 
 ```
-memory_query(query="<topic keywords>", limit=5)
+memory_query(contract_version=2, query="<topic keywords>", limit=5)
 ```
 
 2. Based on the topic keywords provided by the user, perform a quick search:
@@ -172,9 +187,11 @@ If the user confirmed any persistent preferences or rules during this conversati
 If the conversation also reveals a stable thinking-style preference that should change how future questioning or divergence works, write:
 
 ```
-memory_log(
+memory_log(contract_version=2,
   slot_key="profile:thinking_preference",
-  content="<fact + evidence + decision impact>"
+  content="<fact + evidence + decision impact>",
+  scope={type: "global", key: ""},
+  item_kind="profile"
 )
 ```
 

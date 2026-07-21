@@ -1,7 +1,7 @@
 ---
 name: today
 description: "Plan the day and generate today's diary when the user starts a new day, asks what to do, or says '/today'."
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Daily_Template.md"
@@ -11,6 +11,21 @@ dependencies:
   agents: []
 ---
 
+
+## Scoped Memory (Required)
+
+After routing this skill and identifying its target, call the following before the first business query:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "today"}, <resolved project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
 > [!config]
 > Path references in this skill use logical names (e.g., `{diary directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
@@ -51,7 +66,7 @@ Help the user start a new day: review yesterday's progress, create today's diary
 
 4. **Query active projects** (via VaultIndex, as fallback)
    ```
-   memory_query(query="", filters={"type":"project","status":"active"})
+   memory_query(contract_version=2, query="", filters={"type":"project","status":"active"})
    ```
    - Get the active project list (file_path, title, summary) from the returned JSON
    - For each active project, **deep-read the original file as needed** to obtain:
@@ -61,19 +76,18 @@ Help the user start a new day: review yesterday's progress, create today's diary
 
 5. **Query notes pending review** (via VaultIndex, as fallback)
    ```
-   memory_query(query="", filters={"type":"knowledge","status":"draft"})
-   memory_query(query="", filters={"type":"knowledge","status":"revise"})
+   memory_query(contract_version=2, query="", filters={"type":"knowledge","status":"review"})
    ```
-   - Merge both query results; draft takes higher priority than revise
+   - The default review list contains only `status: review`; `draft` is unfinished, while `revised` requires an explicit follow-up request
    - Also check if any revise-record entries have pending status (user received questions but hasn't answered):
      ```
-     memory_query(query="", filters={"type":"revise-record","status":"pending"})
+     memory_query(contract_version=2, query="", filters={"type":"revise-record","status":"pending"})
      ```
    - Count the number of items pending review
 
 6. **Query the drafts pool** (via VaultIndex)
    ```
-   memory_query(query="", filters={"status":"pending"}, limit=20)
+   memory_query(contract_version=2, query="", filters={"status":"pending"}, limit=20)
    ```
    - Filter results where `file_path` starts with `{drafts directory}/`
    - Count pending items
@@ -117,7 +131,7 @@ Use the AskUserQuestion tool to collect the following information:
 2. **Populate diary content:**
    - **To-do items**: Fill in by priority (order: yesterday's carryover → incomplete review answers → user's today goals → project next steps → notes pending review)
      - If there are review files with `status: pending` (user received questions but hasn't answered), prioritize the reminder: `📝 Complete review answers: [[Review_YYYY-MM-DD]] ([[chapter note name]])`
-     - If there are notes pending review (status: draft or review), list each as `/revise [[note name]]` in to-dos
+     - If there are notes pending review (only `status: review`), list each as `/revise [[note name]]` in to-dos
    - **Log**: Leave empty for the user
    - **Notes**: Fill in suggestions (time-sensitive items, stalled project reminders, pending draft count)
    - **Related projects**: List active projects with current status
@@ -130,9 +144,11 @@ Based on the signals collected in Step 1, only write structured profile slots wh
    - Condition: the user explicitly narrows today to a single main line, rejects parallel main lines, or repeatedly asks to keep the day tightly scoped
    - Write:
    ```
-   memory_log(
+   memory_log(contract_version=2,
      slot_key="profile:work_style",
      content="<fact + evidence + decision impact>",
+     scope={type: "global", key: ""},
+     item_kind="profile",
      related_files=["<today note or related project file>"]
    )
    ```
@@ -141,9 +157,11 @@ Based on the signals collected in Step 1, only write structured profile slots wh
    - Condition: the user explicitly reports switching fatigue, or the context makes the switching cost clear enough to act on
    - Write:
    ```
-   memory_log(
+   memory_log(contract_version=2,
      slot_key="profile:context_switch_pattern",
      content="<fact + evidence + decision impact>",
+     scope={type: "global", key: ""},
+     item_kind="profile",
      related_files=["<today note or related project file>"]
    )
    ```
@@ -153,7 +171,7 @@ Based on the signals collected in Step 1, only write structured profile slots wh
    - Second part: evidence
    - Final part: how the next decision should use it
 
-> Note: `/today` no longer generates or backfills `profile:summary`. If no clear event is present, skip this step.
+> Note: Skip this step when there is no stable signal across conversations.
 
 ## Step 4: Capture New Ideas (from Question 2)
 
@@ -196,8 +214,7 @@ Output a concise summary:
 - [[Idea2]]
 
 **Notes pending review ([N]):**
-- [[NoteTitle1]] (draft)
-- [[NoteTitle2]] (revise)
+- [[NoteTitle1]] (review)
 
 **Drafts:** [N] items pending
 

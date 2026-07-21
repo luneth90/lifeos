@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import Database from 'better-sqlite3';
+import { VERSION } from '../src/cli/utils/version.js';
 
 export interface TempVault {
 	root: string;
@@ -67,6 +68,7 @@ subdirectories:
       plans: "归档/计划"
       diary: "归档/日记"
 memory:
+  contract_version: 2
   db_name: memory.db
   scan_prefixes:
     - drafts
@@ -80,6 +82,18 @@ memory:
     - reflection
   excluded_prefixes:
     - system
+  context_budgets:
+    layer0_total: 1800
+    global_rules: 600
+    userprofile_summary: 200
+    taskboard_focus: 500
+    scoped_context: 1200
+    single_item_max: 220
+  repository_bindings: {}
+installed_versions:
+  cli: "${VERSION}"
+  assets: "${VERSION}"
+managed_assets: {}
 `;
 	writeFileSync(join(root, 'lifeos.yaml'), yamlContent, 'utf-8');
 

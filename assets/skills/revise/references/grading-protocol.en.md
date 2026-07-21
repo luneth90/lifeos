@@ -44,15 +44,16 @@ Triggered after the user completes their answers (user says "grade", "mark", "ch
 
 ### Update Note Status
 
-Update the `status` field of the corresponding note in `{knowledge directory}/` based on this grading result:
+Update the corresponding note in `{knowledge directory}/` from its pre-grading state. The score records weaknesses and determines eligibility for later mastery; it does not control the first transition:
 
-| Performance | status Change |
-| --- | --- |
-| All/most correct (≥80%) | → `mastered` |
-| Partially correct (50%-80%) | Maintain `revise` (or upgrade from `draft` to `revise`) |
-| Many errors (< 50%) | Maintain `draft` or maintain `revise` (no downgrade) |
+| Status before grading | Condition | Status after grading |
+| --- | --- | --- |
+| `review` | The first review has been graded completely | `revised` (regardless of score) |
+| `revised` | The user explicitly requested a later independent review, scored at least 80%, and cleared every prior weakness | `mastered` |
+| `revised` | Any of those conditions is not met | Keep `revised` |
+| `mastered` | The user explicitly requested a retest | Keep `mastered` |
 
-> **Rule**: status only goes up, never down (draft → revise → mastered) — a failed review never causes a downgrade.
+> **Rule**: knowledge status only advances (`draft → review → revised → mastered`). `draft` is not eligible for `/revise`, and a first complete grading pass never jumps directly from `review` to `mastered`.
 
 ### Update Project File Mastery Indicators
 
@@ -60,8 +61,9 @@ After grading is complete, find the corresponding project file in `{projects dir
 
 ```
 ⚪ Not started    → note does not exist
-🔴 Not reviewed   → status: draft
-🟡 Needs practice → status: revise
+🔴 Curation in progress → status: draft
+🟠 Awaiting review → status: review
+🟡 Revised, needs reinforcement → status: revised
 🟢 Mastered       → status: mastered
 ```
 
@@ -88,7 +90,7 @@ Append to the log section of `{diary directory}/YYYY-MM-DD.md` (if the file exis
 - ❌ Needs improvement: [concept list]
 
 **Note Status:**
-- [[NoteTitle]] → mastered / review / draft (maintained)
+- [[NoteTitle]] → revised / mastered (updated by this protocol)
 
 **Project Progress:**
 - [[Project name]] mastery table updated

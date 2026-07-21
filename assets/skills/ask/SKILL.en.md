@@ -1,7 +1,7 @@
 ---
 name: ask
 description: "Default LifeOS Q&A entry for concept, Vault, PDF, learning, or general questions; skip for explicit skills or execution commands."
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Draft_Template.md"
@@ -11,6 +11,21 @@ dependencies:
   agents: []
 ---
 
+
+## Scoped Memory (Required)
+
+After routing this skill and identifying its target, call the following before the first business query:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "ask"}, <resolved project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
 > [!config]
 > Path references in this skill use logical names (e.g., `{research directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
@@ -35,7 +50,7 @@ memory_bootstrap()
 ```
 
 - If the current session already has `_layer0`, do not call `memory_bootstrap` again for ordinary Q&A
-- Only call `memory_bootstrap` again to refresh Layer 0 after important state changes such as Vault file changes, `memory_log`, TaskBoard updates, or recovery after compaction
+- Call `memory_bootstrap` again only when a global rule/profile or TaskBoard focus actually changed, or after compaction recovery. After a scoped-memory change, refresh only the matching `memory_context(contract_version=2, scopes=[...])`
 
 ## Step 0: Question Classification & Routing
 
@@ -70,7 +85,7 @@ Only query memory first for the following three types of questions before decidi
 Recommended call order:
 
 ```
-memory_query(query="<question keywords>", limit=5)
+memory_query(contract_version=2, query="<question keywords>", limit=5)
 ```
 
 If the question does not fall into these three types, **do not query memory by default** — proceed directly to the source check.
@@ -197,9 +212,11 @@ See Step 1 for query code (limited to three question types).
 If the user repeatedly corrects the questioning style across adjacent turns, and that preference should change future Q&A behavior, write:
 
 ```
-memory_log(
+memory_log(contract_version=2,
   slot_key="profile:thinking_preference",
-  content="<fact + evidence + decision impact>"
+  content="<fact + evidence + decision impact>",
+  scope={type: "global", key: ""},
+  item_kind="profile"
 )
 ```
 
@@ -207,4 +224,4 @@ Rules:
 
 - Require repeated confirmation or correction before writing
 - Do not write one-off tone preferences
-- `/ask` does not generate `profile:summary`
+- Do not write a profile item unless the signal is stable across conversations

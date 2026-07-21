@@ -1,13 +1,75 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
-const SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS schema_version (
-    version INTEGER NOT NULL
-);
+export interface InitDbResult {
+	createdFresh: boolean;
+}
 
-CREATE TABLE IF NOT EXISTS vault_index (
+export class MigrationRequiredError extends Error {
+	constructor(readonly foundVersion: number | null) {
+		super(
+			foundVersion === null
+				? '检测到未版本化的非空数据库；请先运行 lifeos upgrade'
+				: `数据库 Schema V${foundVersion} 不能由 runtime 打开；请先运行 lifeos upgrade`,
+		);
+		this.name = 'MigrationRequiredError';
+	}
+}
+
+export class InvalidSchemaError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'InvalidSchemaError';
+	}
+}
+
+export function createMemoryItemsTableSql(tableName: 'memory_items' | 'memory_items_v4'): string {
+	return `
+CREATE TABLE ${tableName} (
+    item_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slot_key TEXT NOT NULL CHECK (length(trim(slot_key)) > 0),
+    content TEXT NOT NULL CHECK (length(trim(content)) > 0),
+    item_kind TEXT NOT NULL CHECK (item_kind IN ('rule', 'decision', 'fact', 'profile', 'event')),
+    scope_type TEXT NOT NULL CHECK (scope_type IN ('global', 'skill', 'project', 'repository', 'tool', 'file')),
+    scope_key TEXT NOT NULL,
+    priority INTEGER NOT NULL DEFAULT 50 CHECK (priority BETWEEN 0 AND 100),
+    enforcement TEXT NOT NULL DEFAULT 'soft' CHECK (enforcement IN ('hard', 'soft')),
+    source TEXT NOT NULL DEFAULT 'preference' CHECK (source IN ('preference', 'correction')),
+    related_files TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(related_files) AND json_type(related_files) = 'array'),
+    manual_flag INTEGER NOT NULL DEFAULT 0 CHECK (manual_flag IN (0, 1)),
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'expired', 'archived')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    expires_at TEXT,
+    archived_at TEXT,
+    archive_reason TEXT,
+    CHECK (scope_key = trim(scope_key)),
+    CHECK (
+        (scope_type = 'global' AND scope_key = '') OR
+        (scope_type != 'global' AND length(scope_key) > 0)
+    ),
+    CHECK (item_kind != 'event' OR status = 'archived'),
+    CHECK (
+        (status = 'archived' AND archived_at IS NOT NULL AND archive_reason IS NOT NULL
+            AND length(trim(archive_reason)) > 0) OR
+        (status != 'archived' AND archived_at IS NULL AND archive_reason IS NULL)
+    ),
+    UNIQUE(scope_type, scope_key, slot_key)
+);`;
+}
+
+export const MEMORY_ITEMS_V4_INDEX_SQL = `
+CREATE INDEX idx_memory_items_active_scope
+ON memory_items(
+    status, scope_type, scope_key, item_kind,
+    enforcement, priority DESC, updated_at DESC
+);`;
+
+const FRESH_SCHEMA_SQL = `
+CREATE TABLE schema_version (version INTEGER NOT NULL);
+
+CREATE TABLE vault_index (
     file_path TEXT PRIMARY KEY,
     title TEXT,
     type TEXT,
@@ -26,10 +88,11 @@ CREATE TABLE IF NOT EXISTS vault_index (
     created_at TEXT,
     modified_at TEXT,
     indexed_at TEXT,
-    project TEXT
+    project TEXT,
+    entity_id TEXT
 );
 
-CREATE TABLE IF NOT EXISTS scan_state (
+CREATE TABLE scan_state (
     file_path TEXT PRIMARY KEY,
     last_seen_hash TEXT,
     last_seen_mtime REAL,
@@ -37,279 +100,204 @@ CREATE TABLE IF NOT EXISTS scan_state (
     last_indexed_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS memory_items (
-    slot_key TEXT PRIMARY KEY,
-    content TEXT NOT NULL,
-    source TEXT DEFAULT 'preference',
-    related_files TEXT,
-    manual_flag INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'active',
-    updated_at TEXT,
-    expires_at TEXT
+${createMemoryItemsTableSql('memory_items')}
+
+CREATE VIRTUAL TABLE vault_fts USING fts5(
+    file_path, title, summary, search_hints, tags,
+    content='vault_index', content_rowid='rowid'
 );
 
--- FTS5 virtual tables
-CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(
-    file_path,
-    title,
-    summary,
-    search_hints,
-    tags,
-    content='vault_index',
-    content_rowid='rowid'
-);
-
--- FTS5 sync triggers for vault_index
-CREATE TRIGGER IF NOT EXISTS vault_fts_ai AFTER INSERT ON vault_index BEGIN
+CREATE TRIGGER vault_fts_ai AFTER INSERT ON vault_index BEGIN
     INSERT INTO vault_fts(rowid, file_path, title, summary, search_hints, tags)
     VALUES (new.rowid, new.file_path, new.title, new.summary, new.search_hints, new.tags);
 END;
-
-CREATE TRIGGER IF NOT EXISTS vault_fts_ad AFTER DELETE ON vault_index BEGIN
+CREATE TRIGGER vault_fts_ad AFTER DELETE ON vault_index BEGIN
     INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, search_hints, tags)
     VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.search_hints, old.tags);
 END;
-
-CREATE TRIGGER IF NOT EXISTS vault_fts_au AFTER UPDATE ON vault_index BEGIN
+CREATE TRIGGER vault_fts_au AFTER UPDATE ON vault_index BEGIN
     INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, search_hints, tags)
     VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.search_hints, old.tags);
     INSERT INTO vault_fts(rowid, file_path, title, summary, search_hints, tags)
     VALUES (new.rowid, new.file_path, new.title, new.summary, new.search_hints, new.tags);
 END;
 
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_vault_index_type_status ON vault_index (type, status);
-CREATE INDEX IF NOT EXISTS idx_scan_state_last_indexed_at ON scan_state (last_indexed_at DESC);
-CREATE INDEX IF NOT EXISTS idx_memory_items_status ON memory_items (status);
+CREATE INDEX idx_vault_index_type_status ON vault_index(type, status);
+CREATE INDEX idx_vault_index_entity_id ON vault_index(entity_id) WHERE entity_id IS NOT NULL;
+CREATE INDEX idx_scan_state_last_indexed_at ON scan_state(last_indexed_at DESC);
+${MEMORY_ITEMS_V4_INDEX_SQL}
 `;
 
-/**
- * Check if a column exists in a table.
- */
-function columnExists(db: Database.Database, table: string, column: string): boolean {
-	const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
-	return cols.some((c) => c.name === column);
+const REQUIRED_MEMORY_COLUMNS = [
+	'item_id',
+	'slot_key',
+	'content',
+	'item_kind',
+	'scope_type',
+	'scope_key',
+	'priority',
+	'enforcement',
+	'source',
+	'related_files',
+	'manual_flag',
+	'status',
+	'created_at',
+	'updated_at',
+	'expires_at',
+	'archived_at',
+	'archive_reason',
+] as const;
+
+const REQUIRED_VAULT_COLUMNS = [
+	'file_path',
+	'title',
+	'type',
+	'status',
+	'domain',
+	'category',
+	'tags',
+	'aliases',
+	'summary',
+	'search_hints',
+	'wikilinks',
+	'backlinks',
+	'section_heads',
+	'content_hash',
+	'file_size',
+	'created_at',
+	'modified_at',
+	'indexed_at',
+	'project',
+	'entity_id',
+] as const;
+
+const REQUIRED_SCAN_STATE_COLUMNS = [
+	'file_path',
+	'last_seen_hash',
+	'last_seen_mtime',
+	'last_seen_size',
+	'last_indexed_at',
+] as const;
+
+const REQUIRED_FTS_COLUMNS = ['file_path', 'title', 'summary', 'search_hints', 'tags'] as const;
+
+function assertExactColumns(
+	db: Database.Database,
+	table: string,
+	expected: readonly string[],
+): void {
+	const actual = (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
+		(row) => row.name,
+	);
+	if (actual.length !== expected.length || expected.some((column) => !actual.includes(column))) {
+		throw new InvalidSchemaError(`Schema V4 ${table} 列结构不匹配`);
+	}
 }
 
-/**
- * Check if a table exists in the database.
- */
-function tableExists(db: Database.Database, table: string): boolean {
+function hasCompositeMemoryIdentity(db: Database.Database): boolean {
+	const indexes = db.prepare('PRAGMA index_list(memory_items)').all() as Array<{
+		name: string;
+		unique: number;
+	}>;
+	return indexes.some((index) => {
+		if (index.unique !== 1) return false;
+		const columns = db.prepare(`PRAGMA index_info(${index.name})`).all() as Array<{
+			seqno: number;
+			name: string;
+		}>;
+		return (
+			columns
+				.sort((a, b) => a.seqno - b.seqno)
+				.map((column) => column.name)
+				.join(',') === 'scope_type,scope_key,slot_key'
+		);
+	});
+}
+
+function normalizeSchemaSql(value: string): string {
+	return value
+		.replace(/["`\[\]]/g, '')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.replace(/;$/, '')
+		.toLowerCase();
+}
+
+function assertMemoryTableDefinition(db: Database.Database): void {
 	const row = db
-		.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`)
-		.get(table) as { name: string } | undefined;
-	return row !== undefined;
+		.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_items'")
+		.get() as { sql?: string } | undefined;
+	const expected = normalizeSchemaSql(createMemoryItemsTableSql('memory_items'));
+	if (!row?.sql || normalizeSchemaSql(row.sql) !== expected) {
+		throw new InvalidSchemaError('Schema V4 memory_items 约束定义不匹配');
+	}
 }
 
-/**
- * Migrate from schema V1 to V2.
- * - Reads existing memory_items data
- * - Drops session_log, session_fts, session_state, old memory_items
- * - Creates new memory_items with simplified schema
- * - Re-inserts migrated data
- * - Adds project column to vault_index if missing
- */
-function migrateV1toV2(db: Database.Database): void {
-	// 1. Read only rule rows (preferences/corrections) from old memory_items
-	interface OldMemoryItem {
-		slot_key: string;
-		content: string;
-		section: string;
-		related_files: string | null;
-		manual_flag: number;
-		updated_at: string;
-		expires_at: string | null;
+export function tableExists(db: Database.Database, table: string): boolean {
+	return (
+		db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !==
+		undefined
+	);
+}
+
+function readSchemaVersion(db: Database.Database): number | null {
+	if (!tableExists(db, 'schema_version')) return null;
+	const rows = db.prepare('SELECT version FROM schema_version').all() as Array<{
+		version: unknown;
+	}>;
+	if (rows.length !== 1 || !Number.isInteger(rows[0]?.version)) {
+		throw new InvalidSchemaError('schema_version 必须且只能包含一个整数版本');
+	}
+	return rows[0]?.version as number;
+}
+
+function isFreshDatabase(db: Database.Database): boolean {
+	const row = db
+		.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+		.get() as { count: number };
+	return row.count === 0;
+}
+
+export function assertSchemaV4(db: Database.Database): void {
+	const version = readSchemaVersion(db);
+	if (version !== SCHEMA_VERSION) throw new MigrationRequiredError(version);
+	for (const table of ['vault_index', 'scan_state', 'memory_items', 'vault_fts']) {
+		if (!tableExists(db, table)) throw new InvalidSchemaError(`Schema V4 缺少表：${table}`);
 	}
 
-	let migratedItems: OldMemoryItem[] = [];
-	if (tableExists(db, 'memory_items')) {
-		try {
-			migratedItems = db
-				.prepare(
-					`SELECT slot_key, content, section, related_files, manual_flag, updated_at, expires_at
-					 FROM memory_items
-					 WHERE status = 'active' AND section IN ('corrections', 'preferences')
-					 ORDER BY CASE section WHEN 'corrections' THEN 0 ELSE 1 END`,
-				)
-				.all() as OldMemoryItem[];
-		} catch {
-			// Old schema might not have these columns — skip migration data
-			migratedItems = [];
-		}
+	assertExactColumns(db, 'memory_items', REQUIRED_MEMORY_COLUMNS);
+	assertExactColumns(db, 'vault_index', REQUIRED_VAULT_COLUMNS);
+	assertExactColumns(db, 'scan_state', REQUIRED_SCAN_STATE_COLUMNS);
+	assertExactColumns(db, 'vault_fts', REQUIRED_FTS_COLUMNS);
+	assertMemoryTableDefinition(db);
+	if (!hasCompositeMemoryIdentity(db)) {
+		throw new InvalidSchemaError('Schema V4 缺少 memory_items 复合唯一键');
 	}
+	const index = db
+		.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?")
+		.get('idx_memory_items_active_scope');
+	if (!index) throw new InvalidSchemaError('Schema V4 缺少 memory_items scope 索引');
+	for (const trigger of ['vault_fts_ai', 'vault_fts_ad', 'vault_fts_au']) {
+		const exists = db
+			.prepare("SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = ?")
+			.get(trigger);
+		if (!exists) throw new InvalidSchemaError(`Schema V4 缺少触发器：${trigger}`);
+	}
+}
 
-	// 2. Atomic migration: wrap everything in a transaction
-	const migrate = db.transaction(() => {
-		// Drop old tables (order matters for triggers/FTS)
-		const dropStatements = [
-			'DROP TRIGGER IF EXISTS session_fts_ai',
-			'DROP TRIGGER IF EXISTS session_fts_ad',
-			'DROP TRIGGER IF EXISTS session_fts_au',
-			'DROP TABLE IF EXISTS session_fts',
-			'DROP INDEX IF EXISTS idx_session_log_time',
-			'DROP INDEX IF EXISTS idx_session_log_type',
-			'DROP INDEX IF EXISTS idx_session_log_scope',
-			'DROP INDEX IF EXISTS idx_session_log_session_id',
-			'DROP INDEX IF EXISTS idx_session_log_rule_key',
-			'DROP INDEX IF EXISTS idx_session_state_closed_at',
-			'DROP INDEX IF EXISTS idx_session_state_last_seen_at',
-			'DROP INDEX IF EXISTS idx_memory_items_slot',
-			'DROP INDEX IF EXISTS idx_memory_items_target_section_status',
-			'DROP TABLE IF EXISTS session_log',
-			'DROP TABLE IF EXISTS session_state',
-			'DROP TABLE IF EXISTS memory_items',
-		];
-
-		for (const stmt of dropStatements) {
-			db.exec(stmt);
-		}
-
-		// Create new memory_items with V2 schema
-		db.exec(`
-			CREATE TABLE IF NOT EXISTS memory_items (
-				slot_key TEXT PRIMARY KEY,
-				content TEXT NOT NULL,
-				source TEXT DEFAULT 'preference',
-				related_files TEXT,
-				manual_flag INTEGER DEFAULT 0,
-				status TEXT DEFAULT 'active',
-				updated_at TEXT,
-				expires_at TEXT
-			);
-			CREATE INDEX IF NOT EXISTS idx_memory_items_status ON memory_items (status);
-		`);
-
-		// Re-insert only rule data (corrections first via ORDER BY, INSERT OR IGNORE keeps first)
-		if (migratedItems.length > 0) {
-			const insert = db.prepare(`
-				INSERT OR IGNORE INTO memory_items (slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at)
-				VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
-			`);
-			for (const item of migratedItems) {
-				const source = item.section === 'corrections' ? 'correction' : 'preference';
-				insert.run(
-					item.slot_key,
-					item.content,
-					source,
-					item.related_files,
-					item.manual_flag,
-					item.updated_at,
-					item.expires_at,
-				);
-			}
-		}
-
-		// Add project column to vault_index if missing
-		if (!columnExists(db, 'vault_index', 'project')) {
-			db.exec('ALTER TABLE vault_index ADD COLUMN project TEXT');
-		}
-
-		// Update schema_version
-		db.prepare('UPDATE schema_version SET version = ?').run(SCHEMA_VERSION);
+export function initDb(db: Database.Database): InitDbResult {
+	const version = readSchemaVersion(db);
+	if (version !== null) {
+		if (version !== SCHEMA_VERSION) throw new MigrationRequiredError(version);
+		assertSchemaV4(db);
+		return { createdFresh: false };
+	}
+	if (!isFreshDatabase(db)) throw new MigrationRequiredError(null);
+	const create = db.transaction(() => {
+		db.exec(FRESH_SCHEMA_SQL);
+		db.prepare('INSERT INTO schema_version(version) VALUES (?)').run(SCHEMA_VERSION);
 	});
-
-	migrate();
-}
-
-/**
- * Migrate from schema V2 to V3.
- * - Drops enhance_queue table and index
- * - Drops semantic_summary column from vault_index (recreates FTS)
- */
-function migrateV2toV3(db: Database.Database): void {
-	const migrate = db.transaction(() => {
-		// Drop enhance_queue
-		db.exec('DROP INDEX IF EXISTS idx_enhance_queue_status');
-		db.exec('DROP TABLE IF EXISTS enhance_queue');
-
-		// Rebuild FTS without semantic_summary:
-		// Drop old triggers and FTS table, then recreate from SCHEMA_SQL
-		db.exec('DROP TRIGGER IF EXISTS vault_fts_ai');
-		db.exec('DROP TRIGGER IF EXISTS vault_fts_ad');
-		db.exec('DROP TRIGGER IF EXISTS vault_fts_au');
-		db.exec('DROP TABLE IF EXISTS vault_fts');
-
-		// SQLite cannot drop columns in older versions, but the column
-		// being present in vault_index is harmless — it just won't be
-		// written to anymore. Recreate FTS and triggers without it.
-		db.exec(`
-			CREATE VIRTUAL TABLE IF NOT EXISTS vault_fts USING fts5(
-				file_path, title, summary, search_hints, tags,
-				content='vault_index', content_rowid='rowid'
-			);
-			CREATE TRIGGER IF NOT EXISTS vault_fts_ai AFTER INSERT ON vault_index BEGIN
-				INSERT INTO vault_fts(rowid, file_path, title, summary, search_hints, tags)
-				VALUES (new.rowid, new.file_path, new.title, new.summary, new.search_hints, new.tags);
-			END;
-			CREATE TRIGGER IF NOT EXISTS vault_fts_ad AFTER DELETE ON vault_index BEGIN
-				INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, search_hints, tags)
-				VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.search_hints, old.tags);
-			END;
-			CREATE TRIGGER IF NOT EXISTS vault_fts_au AFTER UPDATE ON vault_index BEGIN
-				INSERT INTO vault_fts(vault_fts, rowid, file_path, title, summary, search_hints, tags)
-				VALUES ('delete', old.rowid, old.file_path, old.title, old.summary, old.search_hints, old.tags);
-				INSERT INTO vault_fts(rowid, file_path, title, summary, search_hints, tags)
-				VALUES (new.rowid, new.file_path, new.title, new.summary, new.search_hints, new.tags);
-			END;
-		`);
-
-		// Rebuild FTS index from existing data
-		db.exec("INSERT INTO vault_fts(vault_fts) VALUES('rebuild')");
-
-		// Update schema version
-		db.prepare('UPDATE schema_version SET version = ?').run(SCHEMA_VERSION);
-	});
-
-	migrate();
-}
-
-/**
- * Initialize the database with the V3 schema.
- * Handles migration from V1 if needed.
- * Idempotent — safe to call multiple times.
- */
-export function initDb(db: Database.Database): void {
-	// Check if schema_version table exists (indicates existing DB)
-	const hasSchemaVersion = tableExists(db, 'schema_version');
-
-	if (hasSchemaVersion) {
-		const row = db.prepare('SELECT version FROM schema_version').get() as
-			| { version: number }
-			| undefined;
-
-		if (row && row.version < 2) {
-			migrateV1toV2(db);
-			// Fall through to V2→V3 check
-		}
-
-		// Re-read version after potential V1→V2 migration
-		const currentRow = db.prepare('SELECT version FROM schema_version').get() as
-			| { version: number }
-			| undefined;
-
-		if (currentRow && currentRow.version === 2) {
-			migrateV2toV3(db);
-			return;
-		}
-
-		if (currentRow && currentRow.version >= 3) {
-			// Already at V3 or higher — just ensure all tables exist
-			db.exec(SCHEMA_SQL);
-			// Ensure project column exists (idempotent)
-			if (!columnExists(db, 'vault_index', 'project')) {
-				db.exec('ALTER TABLE vault_index ADD COLUMN project TEXT');
-			}
-			return;
-		}
-	}
-
-	// Fresh database — create everything from scratch
-	db.exec(SCHEMA_SQL);
-
-	const row = db.prepare('SELECT version FROM schema_version').get() as
-		| { version: number }
-		| undefined;
-	if (!row) {
-		db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(SCHEMA_VERSION);
-	}
+	create.exclusive();
+	assertSchemaV4(db);
+	return { createdFresh: true };
 }

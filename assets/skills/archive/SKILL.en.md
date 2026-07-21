@@ -1,7 +1,7 @@
 ---
 name: archive
 description: "Archive completed Vault items when cleaning up: done projects, drafts, plans, and old diaries while preserving pending, active, and recent notes."
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates: []
   prompts: []
@@ -9,6 +9,21 @@ dependencies:
   agents: []
 ---
 
+
+## Scoped Memory (Required)
+
+After routing this skill and identifying its target, call the following before the first business query:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "archive"}, <resolved project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
 > [!config]
 > Path references in this skill use logical names (e.g., `{projects directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
@@ -37,9 +52,9 @@ Help the user archive completed projects, processed drafts, completed plans, and
 Query the memory system before scanning to confirm file statuses, reducing per-file reads:
 
 ```
-memory_query(query="", filters={"type":"project","status":"done"})
-memory_query(query="", filters={"type":"draft","status":"done"}, limit=50)
-memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
+memory_query(contract_version=2, query="", filters={"type":"project","status":"done"})
+memory_query(contract_version=2, query="", filters={"type":"draft","status":"done"}, limit=50)
+memory_query(contract_version=2, query="", filters={"type":"plan","status":"done"}, limit=50)
 ```
 
 Use the query results as the candidate list; confirm each candidate file individually in Step 1.

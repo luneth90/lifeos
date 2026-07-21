@@ -8,10 +8,11 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
+import type { ContextBudgets } from './types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface DirectoriesConfig {
+export interface DirectoriesConfig {
 	drafts: string;
 	diary: string;
 	projects: string;
@@ -25,7 +26,7 @@ interface DirectoriesConfig {
 	[key: string]: string;
 }
 
-interface SubdirectoriesConfig {
+export interface SubdirectoriesConfig {
 	knowledge: { notes: string; wiki: string };
 	resources: { books: string; literature: string; translations: string };
 	system: {
@@ -38,11 +39,15 @@ interface SubdirectoriesConfig {
 	};
 }
 
-interface MemoryConfig {
+export type RepositoryBindings = Record<string, string[]>;
+
+export interface MemoryConfig {
+	contract_version: 2;
 	db_name: string;
 	scan_prefixes: string[];
 	excluded_prefixes: string[];
-	context_budgets: Record<string, number>;
+	context_budgets: ContextBudgets;
+	repository_bindings: RepositoryBindings;
 }
 
 interface ManagedAssetRecord {
@@ -50,7 +55,7 @@ interface ManagedAssetRecord {
 	sha256: string;
 }
 
-interface LifeOSConfig {
+export interface LifeOSConfig {
 	version?: string;
 	language: string;
 	directories: DirectoriesConfig;
@@ -60,6 +65,31 @@ interface LifeOSConfig {
 	managed_assets?: Record<string, ManagedAssetRecord>;
 	[key: string]: unknown;
 }
+
+export const DEPRECATED_CONTEXT_BUDGET_KEYS = [
+	'userprofile_rules',
+	'revises_summary',
+	'userprofile_doc_limit',
+	'taskboard_doc_limit',
+] as const;
+
+export const CONTEXT_BUDGET_KEYS = [
+	'layer0_total',
+	'global_rules',
+	'userprofile_summary',
+	'taskboard_focus',
+	'scoped_context',
+	'single_item_max',
+] as const;
+
+export const DEFAULT_CONTEXT_BUDGETS: ContextBudgets = {
+	layer0_total: 1800,
+	global_rules: 600,
+	userprofile_summary: 200,
+	taskboard_focus: 500,
+	scoped_context: 1200,
+	single_item_max: 220,
+};
 
 // ─── Presets ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +126,7 @@ const ZH_PRESET: LifeOSConfig = {
 		},
 	},
 	memory: {
+		contract_version: 2,
 		db_name: 'memory.db',
 		scan_prefixes: [
 			'drafts',
@@ -109,15 +140,8 @@ const ZH_PRESET: LifeOSConfig = {
 			'reflection',
 		],
 		excluded_prefixes: ['system'],
-		context_budgets: {
-			layer0_total: 1800,
-			userprofile_summary: 200,
-			userprofile_rules: 1000,
-			taskboard_focus: 500,
-			revises_summary: 100,
-			userprofile_doc_limit: 2000,
-			taskboard_doc_limit: 3000,
-		},
+		context_budgets: { ...DEFAULT_CONTEXT_BUDGETS },
+		repository_bindings: {},
 	},
 };
 
@@ -154,6 +178,7 @@ const EN_PRESET: LifeOSConfig = {
 		},
 	},
 	memory: {
+		contract_version: 2,
 		db_name: 'memory.db',
 		scan_prefixes: [
 			'drafts',
@@ -167,15 +192,8 @@ const EN_PRESET: LifeOSConfig = {
 			'reflection',
 		],
 		excluded_prefixes: ['system'],
-		context_budgets: {
-			layer0_total: 1800,
-			userprofile_summary: 200,
-			userprofile_rules: 1000,
-			taskboard_focus: 500,
-			revises_summary: 100,
-			userprofile_doc_limit: 2000,
-			taskboard_doc_limit: 3000,
-		},
+		context_budgets: { ...DEFAULT_CONTEXT_BUDGETS },
+		repository_bindings: {},
 	},
 };
 
@@ -194,7 +212,7 @@ const LOGICAL_TO_BUCKET: Record<string, string> = {
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function loadPreset(language: string): LifeOSConfig {
-	return language === 'en' ? { ...EN_PRESET } : { ...ZH_PRESET };
+	return structuredClone(language === 'en' ? EN_PRESET : ZH_PRESET);
 }
 
 /**
@@ -271,32 +289,43 @@ const subdirectoriesSchema = z.object({
 	}),
 });
 
-const memorySchema = z.object({
-	db_name: z.string().min(1).default('memory.db'),
-	scan_prefixes: z
-		.array(z.string())
-		.default([
-			'drafts',
-			'diary',
-			'projects',
-			'research',
-			'knowledge',
-			'outputs',
-			'plans',
-			'resources',
-			'reflection',
-		]),
-	excluded_prefixes: z.array(z.string()).default(['system']),
-	context_budgets: z.record(z.number().positive()).optional().default({
-		layer0_total: 1800,
-		userprofile_summary: 200,
-		userprofile_rules: 1000,
-		taskboard_focus: 500,
-		revises_summary: 100,
-		userprofile_doc_limit: 2000,
-		taskboard_doc_limit: 3000,
-	}),
-});
+const contextBudgetsSchema = z
+	.object({
+		layer0_total: z.number().nonnegative(),
+		global_rules: z.number().nonnegative(),
+		userprofile_summary: z.number().nonnegative(),
+		taskboard_focus: z.number().nonnegative(),
+		scoped_context: z.number().nonnegative(),
+		single_item_max: z.number().nonnegative(),
+	})
+	.strict();
+
+const repositoryIdSchema = z
+	.string()
+	.regex(/^[a-z0-9][a-z0-9._-]*$/, 'repository id 必须是可移植的小写 ASCII 标识符');
+
+const memorySchema = z
+	.object({
+		contract_version: z.literal(2),
+		db_name: z.string().min(1).default('memory.db'),
+		scan_prefixes: z
+			.array(z.string())
+			.default([
+				'drafts',
+				'diary',
+				'projects',
+				'research',
+				'knowledge',
+				'outputs',
+				'plans',
+				'resources',
+				'reflection',
+			]),
+		excluded_prefixes: z.array(z.string()).default(['system']),
+		context_budgets: contextBudgetsSchema,
+		repository_bindings: z.record(repositoryIdSchema, z.array(z.string().min(1)).min(1)),
+	})
+	.strict();
 
 export const lifeosConfigSchema = z
 	.object({
@@ -334,6 +363,48 @@ function validateConfig(raw: Record<string, unknown>, source: string): void {
 	throw new ConfigValidationError(source, errors);
 }
 
+function assertNoDeprecatedContextBudgetKeys(raw: Record<string, unknown>, source: string): void {
+	const memory = raw.memory;
+	if (!memory || typeof memory !== 'object' || Array.isArray(memory)) return;
+	const budgets = (memory as Record<string, unknown>).context_budgets;
+	if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) return;
+	const keys = DEPRECATED_CONTEXT_BUDGET_KEYS.filter(
+		(key) => key in (budgets as Record<string, unknown>),
+	);
+	if (keys.length > 0) {
+		throw new ConfigValidationError(
+			source,
+			keys.map((key) => `  - memory.context_budgets.${key}: 已弃用；请先运行 lifeos upgrade`),
+		);
+	}
+}
+
+function assertFinalYamlMemoryContract(raw: Record<string, unknown>, source: string): void {
+	const memory = raw.memory;
+	if (!memory || typeof memory !== 'object' || Array.isArray(memory)) {
+		throw new ConfigValidationError(source, ['  - memory: 最终配置必须显式提供 memory']);
+	}
+	const record = memory as Record<string, unknown>;
+	const errors: string[] = [];
+	if (record.contract_version !== 2) {
+		errors.push('  - memory.contract_version: 必须显式为 2；请先运行 lifeos upgrade');
+	}
+	if (!('repository_bindings' in record)) {
+		errors.push('  - memory.repository_bindings: 最终配置必须显式提供');
+	}
+	const budgets = record.context_budgets;
+	if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) {
+		errors.push('  - memory.context_budgets: 最终配置必须显式提供');
+	} else {
+		for (const key of CONTEXT_BUDGET_KEYS) {
+			if (!(key in (budgets as Record<string, unknown>))) {
+				errors.push(`  - memory.context_budgets.${key}: 最终配置必须显式提供`);
+			}
+		}
+	}
+	if (errors.length > 0) throw new ConfigValidationError(source, errors);
+}
+
 // ─── VaultConfig class ────────────────────────────────────────────────────────
 
 export class VaultConfig {
@@ -347,6 +418,7 @@ export class VaultConfig {
 
 	private _load(config?: Record<string, unknown>): LifeOSConfig {
 		if (config !== undefined) {
+			assertNoDeprecatedContextBudgetKeys(config, 'programmatic config');
 			const lang = (config.language as string | undefined) ?? 'zh';
 			const preset = loadPreset(lang);
 			const merged = deepMerge(preset as unknown as Record<string, unknown>, config);
@@ -358,6 +430,8 @@ export class VaultConfig {
 		if (existsSync(yamlPath)) {
 			const raw = readFileSync(yamlPath, 'utf-8');
 			const userConfig: Record<string, unknown> = (parseYaml(raw) as Record<string, unknown>) ?? {};
+			assertNoDeprecatedContextBudgetKeys(userConfig, yamlPath);
+			assertFinalYamlMemoryContract(userConfig, yamlPath);
 			const lang = (userConfig.language as string | undefined) ?? 'zh';
 			const preset = loadPreset(lang);
 			const merged = deepMerge(preset as unknown as Record<string, unknown>, userConfig);
@@ -450,24 +524,18 @@ export class VaultConfig {
 		return join(this.memoryDir(), dbName);
 	}
 
-	/** Context budget configuration object with validated positive numbers. */
-	contextBudgets(): Record<string, number> {
-		const raw = this._config.memory.context_budgets ?? {};
-		const defaults: Record<string, number> = {
-			layer0_total: 1800,
-			userprofile_summary: 200,
-			userprofile_rules: 1000,
-			taskboard_focus: 500,
-			revises_summary: 100,
-			userprofile_doc_limit: 2000,
-			taskboard_doc_limit: 3000,
-		};
-		const result: Record<string, number> = {};
-		for (const [k, v] of Object.entries({ ...defaults, ...raw })) {
-			const n = Number(v);
-			result[k] = Number.isFinite(n) && n > 0 ? n : (defaults[k] ?? 1800);
-		}
-		return result;
+	/** 返回独立副本，避免调用方污染缓存配置。 */
+	contextBudgets(): ContextBudgets {
+		return { ...this._config.memory.context_budgets };
+	}
+
+	repositoryBindings(): RepositoryBindings {
+		return Object.fromEntries(
+			Object.entries(this._config.memory.repository_bindings).map(([id, roots]) => [
+				id,
+				[...roots],
+			]),
+		);
 	}
 
 	// ── Path inference ─────────────────────────────────────────────────────────
@@ -520,16 +588,19 @@ export class VaultConfig {
 
 // ─── Module-level singleton ───────────────────────────────────────────────────
 
-let _defaultInstance: VaultConfig | null = null;
+const _instances = new Map<string, VaultConfig>();
+let _defaultRoot: string | null = null;
 
 /** Get the current global VaultConfig (null if not set). */
-export function getVaultConfig(): VaultConfig | null {
-	return _defaultInstance;
+export function getVaultConfig(vaultRoot?: string): VaultConfig | null {
+	if (vaultRoot !== undefined) return _instances.get(resolve(vaultRoot)) ?? null;
+	return _defaultRoot ? (_instances.get(_defaultRoot) ?? null) : null;
 }
 
 /** Set the global VaultConfig singleton. */
 export function setVaultConfig(cfg: VaultConfig): void {
-	_defaultInstance = cfg;
+	_instances.set(cfg.vaultRoot, cfg);
+	_defaultRoot = cfg.vaultRoot;
 }
 
 /**
@@ -537,12 +608,20 @@ export function setVaultConfig(cfg: VaultConfig): void {
  * Throws if no singleton exists and vaultRoot is not provided.
  */
 export function getOrCreateVaultConfig(vaultRoot?: string): VaultConfig {
-	if (_defaultInstance !== null) return _defaultInstance;
 	if (vaultRoot === undefined) {
-		throw new Error('vault_root is required when no global VaultConfig exists');
+		const current = getVaultConfig();
+		if (!current) throw new Error('vault_root is required when no VaultConfig exists');
+		return current;
 	}
-	_defaultInstance = new VaultConfig(vaultRoot);
-	return _defaultInstance;
+	const key = resolve(vaultRoot);
+	const existing = _instances.get(key);
+	if (existing) {
+		_defaultRoot = key;
+		return existing;
+	}
+	const created = new VaultConfig(key);
+	setVaultConfig(created);
+	return created;
 }
 
 /**
@@ -557,7 +636,8 @@ export function resolveConfig(vaultRoot: string, config?: Record<string, unknown
  * Reset the module-level singleton (for use in tests only).
  */
 export function _resetDefaultInstance(): void {
-	_defaultInstance = null;
+	_instances.clear();
+	_defaultRoot = null;
 }
 
 // ─── Reflection subdirectory names ───────────────────────────────────────────
@@ -581,4 +661,4 @@ const EN_REFLECTION_SUBS: readonly string[] = [
 // ─── Re-exports for CLI ──────────────────────────────────────────────────────
 
 export { ZH_PRESET, EN_PRESET, ZH_REFLECTION_SUBS, EN_REFLECTION_SUBS };
-export type { LifeOSConfig, ManagedAssetRecord };
+export type { ContextBudgets, ManagedAssetRecord };

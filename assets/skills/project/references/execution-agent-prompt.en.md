@@ -86,7 +86,7 @@ target_version: V0.2
 | Chapter 1 [Name] | ⚪ Not started | — | — |
 | Chapter 2 [Name] | ⚪ Not started | — | — |
 
-<!-- Mastery dot mapping: ⚪ Not started 🔴 Not reviewed (draft) 🟡 Needs reinforcement (revise) 🟢 Mastered (mastered) -->
+<!-- Mastery dot mapping: ⚪ Not started (no note) 🔴 Curation in progress (draft) 🟠 Awaiting review (review) 🟡 Revised, needs reinforcement (revised) 🟢 Mastered (mastered) -->
 <!-- /revise will automatically update this table after grading -->
 
 ### 📖 Chapter 1: [Chapter Name]

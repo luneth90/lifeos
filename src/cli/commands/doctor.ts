@@ -1,9 +1,11 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { extname, join, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { parse as parseYaml } from 'yaml';
 import { ConfigValidationError, resolveConfig } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
+import { validateRuntimeContract } from '../../runtime-contract.js';
+import { estimateTokens } from '../../utils/shared.js';
 import { assetsDir } from '../utils/assets.js';
 import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
@@ -72,7 +74,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 
 	let resolvedConfig: LifeOSConfig;
 	try {
-		resolvedConfig = resolveConfig(targetPath, config ?? {}).rawConfig as LifeOSConfig;
+		resolvedConfig = resolveConfig(targetPath).rawConfig;
 		check('lifeos.yaml', 'pass', 'valid');
 	} catch (e) {
 		check(
@@ -180,11 +182,110 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 		check('assets version', 'warn', 'no installed_versions in lifeos.yaml');
 	}
 
+	const runtime = validateRuntimeContract({
+		vaultRoot: targetPath,
+		runtimeVersion: VERSION,
+		verifyManagedAssets: true,
+	});
+	check(
+		'runtime contract',
+		runtime.ok ? 'pass' : 'fail',
+		runtime.ok ? 'contract=2 schema=4 receipt=opened' : runtime.issues.join('; '),
+	);
+	checkProjectIds(targetPath, resolvedConfig, check);
+	checkProtocolAssets(targetPath, resolvedConfig, check);
+
 	// 10. Database health
 	checkDbHealth(targetPath, resolvedConfig, check);
 
 	printSummary(result);
 	return result;
+}
+
+function* walkMarkdown(root: string): Generator<string> {
+	if (!existsSync(root)) return;
+	for (const entry of readdirSync(root)) {
+		const path = join(root, entry);
+		const stat = statSafe(path);
+		if (!stat) continue;
+		if (stat.isDirectory()) yield* walkMarkdown(path);
+		else if (stat.isFile() && extname(entry) === '.md') yield path;
+	}
+}
+
+function statSafe(path: string): ReturnType<typeof import('node:fs').statSync> | null {
+	try {
+		return statSync(path);
+	} catch {
+		return null;
+	}
+}
+
+function readFrontmatter(path: string): Record<string, unknown> | null {
+	const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(readFileSync(path, 'utf-8'));
+	if (!match?.[1]) return null;
+	try {
+		const value: unknown = parseYaml(match[1]);
+		return value && typeof value === 'object' && !Array.isArray(value)
+			? (value as Record<string, unknown>)
+			: null;
+	} catch {
+		return null;
+	}
+}
+
+function checkProjectIds(
+	targetPath: string,
+	config: LifeOSConfig,
+	check: (name: string, status: 'pass' | 'warn' | 'fail', detail?: string) => void,
+): void {
+	const seen = new Map<string, string>();
+	const issues: string[] = [];
+	for (const file of walkMarkdown(join(targetPath, config.directories.projects))) {
+		const frontmatter = readFrontmatter(file);
+		if (frontmatter?.type !== 'project') continue;
+		const id = typeof frontmatter.id === 'string' ? frontmatter.id.trim() : '';
+		if (!id) {
+			issues.push(`缺少 id: ${file}`);
+			continue;
+		}
+		if (
+			id === 'Project_Template' ||
+			id.includes('{{') ||
+			id.toLowerCase().includes('placeholder')
+		) {
+			issues.push(`占位 id: ${file}`);
+		}
+		const previous = seen.get(id);
+		if (previous) issues.push(`重复 id ${id}: ${previous}, ${file}`);
+		else seen.set(id, file);
+	}
+	check(
+		'project ids',
+		issues.length ? 'fail' : 'pass',
+		issues.length ? issues.join('; ') : `${seen.size} unique`,
+	);
+}
+
+function checkProtocolAssets(
+	targetPath: string,
+	config: LifeOSConfig,
+	check: (name: string, status: 'pass' | 'warn' | 'fail', detail?: string) => void,
+): void {
+	const paths = [
+		join(targetPath, 'AGENTS.md'),
+		join(targetPath, 'CLAUDE.md'),
+		join(targetPath, '.agents', 'skills', '_shared', 'memory-protocol.md'),
+	];
+	const legacy =
+		/memory_(recent|auto_capture|skill_complete|refresh|skill_context)|memory_log\s*\(\s*slot_key|profile:summary.*(?:兼容|legacy)/i;
+	const bad = paths.filter((path) => existsSync(path) && legacy.test(readFileSync(path, 'utf-8')));
+	check(
+		'memory protocol assets',
+		bad.length ? 'fail' : 'pass',
+		bad.length ? `旧协议残留: ${bad.join(', ')}` : undefined,
+	);
+	void config;
 }
 
 function checkDbHealth(
@@ -205,6 +306,14 @@ function checkDbHealth(
 	let db: Database.Database | null = null;
 	try {
 		db = new Database(dbPath, { readonly: true });
+		const versions = db.prepare('SELECT version FROM schema_version').all() as Array<{
+			version: number;
+		}>;
+		if (versions.length !== 1 || versions[0]?.version !== 4) {
+			check('database schema', 'fail', `expected 4, found ${versions[0]?.version ?? 'unknown'}`);
+			return;
+		}
+		check('database schema', 'pass', 'v4');
 
 		// Integrity check
 		try {
@@ -234,6 +343,77 @@ function checkDbHealth(
 		} catch {
 			check('database rows', 'fail', 'query failed');
 		}
+
+		const projectOrphans = (
+			db
+				.prepare(`
+					SELECT COUNT(*) AS count FROM memory_items m
+					WHERE m.scope_type = 'project'
+					  AND NOT EXISTS (
+						SELECT 1 FROM vault_index v
+						WHERE v.type = 'project' AND v.entity_id = m.scope_key
+					  )
+				`)
+				.get() as { count: number }
+		).count;
+		const fileOrphans = (
+			db
+				.prepare(`
+					SELECT COUNT(*) AS count FROM memory_items m
+					WHERE m.scope_type = 'file'
+					  AND NOT EXISTS (
+						SELECT 1 FROM vault_index v
+						WHERE v.entity_id = m.scope_key OR v.file_path = m.scope_key
+					  )
+				`)
+				.get() as { count: number }
+		).count;
+		const repositoryIds = new Set(Object.keys(config.memory.repository_bindings));
+		const repositoryOrphans = (
+			db
+				.prepare("SELECT DISTINCT scope_key FROM memory_items WHERE scope_type = 'repository'")
+				.all() as Array<{ scope_key: string }>
+		).filter((row) => !repositoryIds.has(row.scope_key)).length;
+		const orphanCount = projectOrphans + fileOrphans + repositoryOrphans;
+		check('memory scopes', orphanCount === 0 ? 'pass' : 'fail', `${orphanCount} orphan`);
+		const hardRules = db
+			.prepare(`
+				SELECT slot_key, content FROM memory_items
+				WHERE status = 'active' AND scope_type = 'global'
+				  AND item_kind = 'rule' AND enforcement = 'hard'
+			`)
+			.all() as Array<{ slot_key: string; content: string }>;
+		const hardTokens = estimateTokens(
+			hardRules.map((row) => `- **${row.slot_key}**: ${row.content}`).join('\n'),
+		);
+		const budgets = config.memory.context_budgets;
+		check(
+			'global hard rules budget',
+			hardTokens <= budgets.global_rules ? 'pass' : 'fail',
+			`${hardTokens}/${budgets.global_rules}`,
+		);
+		const oversizedHard = hardRules.filter(
+			(row) =>
+				budgets.single_item_max === 0 ||
+				estimateTokens(`- **${row.slot_key}**: ${row.content}`) > budgets.single_item_max,
+		);
+		check(
+			'global hard single-item budget',
+			oversizedHard.length === 0 ? 'pass' : 'fail',
+			oversizedHard.length
+				? `${oversizedHard.map((row) => row.slot_key).join(', ')} > ${budgets.single_item_max}`
+				: `<= ${budgets.single_item_max}`,
+		);
+		const hardLayerTokens = hardRules.length
+			? estimateTokens(
+					`## 行为约束\n${hardRules.map((row) => `- **${row.slot_key}**: ${row.content}`).join('\n')}`,
+				)
+			: 0;
+		check(
+			'global hard Layer 0 budget',
+			hardLayerTokens <= budgets.layer0_total ? 'pass' : 'fail',
+			`${hardLayerTokens}/${budgets.layer0_total}`,
+		);
 	} catch {
 		check('database', 'fail', 'could not open memory.db');
 	} finally {

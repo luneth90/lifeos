@@ -1,7 +1,7 @@
 ---
 name: today
 description: '每日规划入口；开始新一天、询问今日安排或说 "/today" 时生成今日日记。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Daily_Template.md"
@@ -11,6 +11,21 @@ dependencies:
   agents: []
 ---
 
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "today"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{日记目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
@@ -51,7 +66,7 @@ dependencies:
 
 4. **查询活跃项目**（通过 VaultIndex，作为兜底）
    ```
-   memory_query(query="", filters={"type":"project","status":"active"})
+   memory_query(contract_version=2, query="", filters={"type":"project","status":"active"})
    ```
    - 从返回的 JSON 中获取活跃项目列表（file_path、title、summary）
    - 对每个活跃项目，**按需深读原文件**以获取：
@@ -61,19 +76,18 @@ dependencies:
 
 5. **查询待复习笔记**（通过 VaultIndex，作为兜底）
    ```
-   memory_query(query="", filters={"type":"knowledge","status":"draft"})
-   memory_query(query="", filters={"type":"knowledge","status":"revise"})
+   memory_query(contract_version=2, query="", filters={"type":"knowledge","status":"review"})
    ```
-   - 合并两次查询结果，draft 优先级高于 revise
+   - 默认待复习清单只包含 `status: review`；`draft` 尚未完成整理，`revised` 仅由用户明确发起后续复核
    - 同时检查 revise-record 类型中是否有 pending 状态（用户已收到题目但未作答）：
      ```
-     memory_query(query="", filters={"type":"revise-record","status":"pending"})
+     memory_query(contract_version=2, query="", filters={"type":"revise-record","status":"pending"})
      ```
    - 统计待复习数量
 
 6. **查询草稿池**（通过 VaultIndex）
    ```
-   memory_query(query="", filters={"status":"pending"}, limit=20)
+   memory_query(contract_version=2, query="", filters={"status":"pending"}, limit=20)
    ```
    - 从结果中筛选 `file_path` 以 `{草稿目录}/` 开头的条目
    - 统计待处理数量
@@ -117,7 +131,7 @@ dependencies:
 2. **填充日记内容：**
    - **待办事项**：按优先级填入（顺序：昨日遗留 → 未完成的复习作答 → 用户今日目标 → 项目下一步 → 待复习笔记）
      - 若有 `status: pending` 的复习文件（用户已收到题目但未作答），优先提醒：`📝 完成复习作答: [[复习_YYYY-MM-DD]]（[[章节笔记名]]）`
-     - 若有待复习笔记（status: draft 或 review），每条以 `/revise [[笔记名]]` 形式列入待办
+     - 若有待复习笔记（仅 `status: review`），每条以 `/revise [[笔记名]]` 形式列入待办
    - **日志**：留空给用户
    - **备注**：填入建议（时间敏感事项、停滞项目提醒、待处理草稿数量）
    - **相关项目**：列出活跃项目及当前状态
@@ -130,9 +144,11 @@ dependencies:
    - 条件：用户主动收敛范围、拒绝多主线并行、连续强调“今天只做一条主线”
    - 写入：
    ```
-   memory_log(
+   memory_log(contract_version=2,
      slot_key="profile:work_style",
      content="<事实 + 证据 + 决策影响>",
+     scope={type: "global", key: ""},
+     item_kind="profile",
      related_files=["<今日日记或相关项目文件>"]
    )
    ```
@@ -141,9 +157,11 @@ dependencies:
    - 条件：用户显式反馈切换很累，或上下文已足够明确地显示主线切换损耗
    - 写入：
    ```
-   memory_log(
+   memory_log(contract_version=2,
      slot_key="profile:context_switch_pattern",
      content="<事实 + 证据 + 决策影响>",
+     scope={type: "global", key: ""},
+     item_kind="profile",
      related_files=["<今日日记或相关项目文件>"]
    )
    ```
@@ -153,7 +171,7 @@ dependencies:
    - 第二段写证据（当日日记、项目文件或用户明确表述）
    - 最后一段写“下次决策如何使用”
 
-> 注意：`/today` 不再生成或补录 `profile:summary`。没有明确事件时，此步骤直接跳过。
+> 注意：没有跨对话稳定信号时，此步骤直接跳过。
 
 ## 步骤四：捕获新想法（来自问题2）
 
@@ -196,8 +214,7 @@ domain: math
 - [[Idea2]]
 
 **待复习笔记 ([N]):**
-- [[NoteTitle1]]（draft）
-- [[NoteTitle2]]（review）
+- [[NoteTitle1]]（review）
 
 **草稿:** [N] 条待处理 (pending)
 

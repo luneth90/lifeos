@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { initDb } from '../../src/db/schema.js';
+import { expireMemoryItems, upsertMemoryItem } from '../../src/services/memory-items.js';
 import {
 	queryMemoryItems,
 	queryVaultIndex,
@@ -34,13 +35,14 @@ function insertVaultNote(
 		wikilinks?: string;
 		backlinks?: string;
 		modifiedAt?: string;
+		entityId?: string;
 	},
 ): void {
 	db.prepare(`
     INSERT INTO vault_index (
       file_path, title, type, status, domain, summary,
-      search_hints, tags, aliases, wikilinks, backlinks, modified_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      search_hints, tags, aliases, wikilinks, backlinks, modified_at, entity_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
 		opts.filePath,
 		opts.title,
@@ -54,6 +56,7 @@ function insertVaultNote(
 		opts.wikilinks ?? null,
 		opts.backlinks ?? null,
 		opts.modifiedAt ?? new Date().toISOString(),
+		opts.entityId ?? null,
 	);
 }
 
@@ -210,6 +213,29 @@ describe('queryVaultIndex', () => {
 		expect(results.every((r) => r.type === 'project')).toBe(true);
 	});
 
+	it('可按 entity_id 精确过滤，并在结果中返回稳定身份', () => {
+		insertVaultNote(db, {
+			filePath: '20_项目/代数.md',
+			title: '代数学习',
+			type: 'project',
+			entityId: 'project-algebra',
+		});
+		insertVaultNote(db, {
+			filePath: '20_项目/分析.md',
+			title: '分析学习',
+			type: 'project',
+			entityId: 'project-analysis',
+		});
+		const { results } = queryVaultIndex(db, '', { entity_id: 'project-algebra' }, 10);
+		expect(results).toEqual([
+			expect.objectContaining({
+				filePath: '20_项目/代数.md',
+				entityId: 'project-algebra',
+				matchSource: 'exact_filter',
+			}),
+		]);
+	});
+
 	it('returns empty for no query and no filters', () => {
 		insertVaultNote(db, {
 			filePath: '40_知识/note.md',
@@ -218,6 +244,12 @@ describe('queryVaultIndex', () => {
 
 		const { results } = queryVaultIndex(db, '', null, 10);
 		expect(results).toHaveLength(0);
+	});
+
+	it('拒绝未列入白名单的过滤字段', () => {
+		expect(() => queryVaultIndex(db, '', { 'type OR 1=1': 'project' }, 10)).toThrow(
+			/不支持的 Vault 过滤字段/,
+		);
 	});
 });
 
@@ -442,86 +474,102 @@ describe('queryMemoryItems', () => {
 		db.close();
 	});
 
-	function insertMemoryItem(
-		db: Database.Database,
-		opts: {
-			slotKey: string;
-			content: string;
-			source?: string;
-			status?: string;
-			updatedAt?: string;
-		},
-	): void {
-		db.prepare(`
-      INSERT INTO memory_items (slot_key, content, source, status, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-			opts.slotKey,
-			opts.content,
-			opts.source ?? 'preference',
-			opts.status ?? 'active',
-			opts.updatedAt ?? new Date().toISOString(),
-		);
+	function insertMemoryItem(options: {
+		slotKey: string;
+		content: string;
+		scope?: { type: 'global' | 'project'; key: string };
+		itemKind?: 'rule' | 'decision' | 'fact';
+		source?: 'preference' | 'correction';
+		expiresAt?: string;
+	}) {
+		return upsertMemoryItem(db, {
+			slotKey: options.slotKey,
+			content: options.content,
+			scope: options.scope ?? { type: 'global', key: '' },
+			itemKind: options.itemKind ?? 'rule',
+			source: options.source,
+			expiresAt: options.expiresAt,
+		});
 	}
 
 	it('returns active memory items', () => {
-		insertMemoryItem(db, {
+		insertMemoryItem({
 			slotKey: 'format:note-style',
 			content: 'Prefer concise notes',
-			status: 'active',
 		});
-		insertMemoryItem(db, {
+		insertMemoryItem({
 			slotKey: 'format:commit-msg',
 			content: 'Use conventional commits',
-			status: 'expired',
+			expiresAt: '2000-01-01T00:00:00.000Z',
 		});
+		expireMemoryItems(db);
 
-		const { items } = queryMemoryItems(db, { statusFilter: 'active' });
+		const { items } = queryMemoryItems(db, { status: 'active' });
 		expect(items.length).toBe(1);
 		expect(items[0].slotKey).toBe('format:note-style');
 	});
 
-	it('filters by slot_key', () => {
-		insertMemoryItem(db, { slotKey: 'format:style', content: 'Concise style' });
-		insertMemoryItem(db, { slotKey: 'workflow:tdd', content: 'Use TDD' });
+	it('按 slotKey 与 scope 精确过滤，不解释 SQL 通配符', () => {
+		insertMemoryItem({ slotKey: 'format:style', content: '全局简洁' });
+		insertMemoryItem({
+			slotKey: 'format:style',
+			content: '项目详细',
+			scope: { type: 'project', key: 'project-1' },
+		});
+		insertMemoryItem({ slotKey: 'format:commit', content: '提交简洁' });
 
-		const { items } = queryMemoryItems(db, { slotKey: 'format:style' });
+		const { items } = queryMemoryItems(db, {
+			slotKey: 'format:style',
+			scope: { type: 'project', key: 'project-1' },
+		});
 		expect(items.length).toBe(1);
-		expect(items[0].slotKey).toBe('format:style');
-	});
-
-	it('supports pattern matching with %', () => {
-		insertMemoryItem(db, { slotKey: 'format:style', content: 'Concise style' });
-		insertMemoryItem(db, { slotKey: 'format:commit', content: 'Commit style' });
-		insertMemoryItem(db, { slotKey: 'workflow:tdd', content: 'Use TDD' });
-
-		const { items } = queryMemoryItems(db, { slotKey: 'format:%' });
-		expect(items.length).toBe(2);
+		expect(items[0]).toMatchObject({
+			content: '项目详细',
+			scope: { type: 'project', key: 'project-1' },
+		});
+		expect(queryMemoryItems(db, { slotKey: 'format:%' }).items).toEqual([]);
 	});
 
 	it('returns all items when no filters', () => {
-		insertMemoryItem(db, { slotKey: 'format:style', content: 'Active item', status: 'active' });
-		insertMemoryItem(db, { slotKey: 'format:old-style', content: 'Old item', status: 'expired' });
+		insertMemoryItem({ slotKey: 'format:style', content: 'Active item' });
+		insertMemoryItem({
+			slotKey: 'format:old-style',
+			content: 'Old item',
+			expiresAt: '2000-01-01T00:00:00.000Z',
+		});
+		expireMemoryItems(db);
 
 		const { items } = queryMemoryItems(db, {});
 		expect(items.length).toBe(2);
 	});
 
-	it('returns memory item with expected fields', () => {
-		insertMemoryItem(db, {
+	it('返回完整 V4 camelCase 结构并支持 itemKind、source 与 itemIds 过滤', () => {
+		const selected = insertMemoryItem({
 			slotKey: 'format:note-style',
 			content: 'Prefer bullet points',
 			source: 'correction',
+			itemKind: 'decision',
 		});
+		insertMemoryItem({ slotKey: 'fact:other', content: '其他事实', itemKind: 'fact' });
 
-		const { items } = queryMemoryItems(db, {});
+		const { items } = queryMemoryItems(db, {
+			itemIds: [selected.itemId],
+			itemKind: 'decision',
+			source: 'correction',
+		});
 		expect(items.length).toBe(1);
 		const item = items[0];
-		expect(item.slotKey).toBe('format:note-style');
-		expect(item.content).toBe('Prefer bullet points');
-		expect(item.source).toBe('correction');
-		expect(item.status).toBe('active');
+		expect(item).toMatchObject({
+			itemId: selected.itemId,
+			slotKey: 'format:note-style',
+			content: 'Prefer bullet points',
+			itemKind: 'decision',
+			scope: { type: 'global', key: '' },
+			source: 'correction',
+			status: 'active',
+		});
 		expect(typeof item.manualFlag).toBe('boolean');
+		expect(typeof item.createdAt).toBe('string');
 		expect(typeof item.updatedAt).toBe('string');
 	});
 });

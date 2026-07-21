@@ -1,7 +1,7 @@
 ---
 name: brainstorm
 description: '想法还不成熟、需要发散推演或可行性讨论时使用；可继续转项目、百科笔记或草稿。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Wiki_Template.md"
@@ -14,6 +14,21 @@ dependencies:
   agents: []
 ---
 
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "brainstorm"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{草稿目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
@@ -50,7 +65,7 @@ dependencies:
    推荐命令：
 
 ```
-memory_query(query="<话题关键词>", limit=5)
+memory_query(contract_version=2, query="<话题关键词>", limit=5)
 ```
 
 2. 根据用户提供的话题关键词，快速搜索：
@@ -172,9 +187,11 @@ memory_query(query="<话题关键词>", limit=5)
 如果本轮对话中用户连续确认了某种稳定的思考方式偏好，并且它会影响下次提问或发散方式，可写入：
 
 ```
-memory_log(
+memory_log(contract_version=2,
   slot_key="profile:thinking_preference",
-  content="<事实 + 证据 + 决策影响>"
+  content="<事实 + 证据 + 决策影响>",
+  scope={type: "global", key: ""},
+  item_kind="profile"
 )
 ```
 

@@ -53,7 +53,7 @@ id: Frontmatter_Schema
 
 ### knowledge
 
-- `draft` / `revise` / `mastered`（只升不降）
+- `draft`（整理未完成）/ `review`（待复习）/ `revised`（已完成复习）/ `mastered`（已掌握），只升不降
 
 ### wiki
 
@@ -67,13 +67,9 @@ id: Frontmatter_Schema
 
 - `active` / `done` / `archived`
 
-### revise
-
-- 无状态流转
-
 ### revise-record
 
-- 无状态流转（由 `result: pass | fail` 标记批改结果）
+- `pending`（待作答或待批改）→ `graded`（已完成批改）；另由 `result: pass | fail` 标记结果
 
 ### draft
 

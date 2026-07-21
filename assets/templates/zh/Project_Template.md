@@ -11,7 +11,7 @@ difficulty:
 estimated-hours:
 tags: [project]
 aliases: []
-id: Project_Template
+id: "{{ID}}"
 ---
 
 # {{TITLE}}

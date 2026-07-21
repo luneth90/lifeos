@@ -1,7 +1,7 @@
 ---
 name: archive
 description: '清理 Vault 时使用：归档 done 项目/草稿/计划和旧日记，保留 pending、active 与最近 7 天日记。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates: []
   prompts: []
@@ -9,6 +9,21 @@ dependencies:
   agents: []
 ---
 
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "archive"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{项目目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
@@ -37,9 +52,9 @@ dependencies:
 扫描前先通过记忆系统确认文件状态，减少逐文件读取：
 
 ```
-memory_query(query="", filters={"type":"project","status":"done"})
-memory_query(query="", filters={"type":"draft","status":"done"}, limit=50)
-memory_query(query="", filters={"type":"plan","status":"done"}, limit=50)
+memory_query(contract_version=2, query="", filters={"type":"project","status":"done"})
+memory_query(contract_version=2, query="", filters={"type":"draft","status":"done"}, limit=50)
+memory_query(contract_version=2, query="", filters={"type":"plan","status":"done"}, limit=50)
 ```
 
 将查询结果作为扫描候选列表，步骤一中对候选文件逐个确认。

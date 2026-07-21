@@ -4,14 +4,16 @@
 
 import type Database from 'better-sqlite3';
 import { inClause, queryAll } from '../db/index.js';
-import type { MatchSource, MemoryItemRow, VaultSelectRow } from '../types.js';
+import type { ListMemoryItemsInput, MatchSource, VaultSelectRow } from '../types.js';
 import { tokenize } from '../utils/segmenter.js';
 import { compactText, containsCjk, loadsJsonList } from '../utils/shared.js';
+import { listMemoryItems } from './memory-items.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface VaultQueryResult {
 	filePath: string;
+	entityId: string | null;
 	title: string;
 	type: string | null;
 	status: string | null;
@@ -27,17 +29,6 @@ export interface VaultQueryResult {
 	aliases?: string[];
 	wikilinks?: string[];
 	backlinks?: string[];
-}
-
-export interface MemoryItem {
-	slotKey: string;
-	content: string;
-	source: string;
-	relatedFiles: string[];
-	manualFlag: boolean;
-	status: string;
-	updatedAt: string;
-	expiresAt: string | null;
 }
 
 // ─── Score constants ──────────────────────────────────────────────────────────
@@ -136,6 +127,7 @@ function buildQueryResult(
 
 	return {
 		filePath: String(row.file_path),
+		entityId: row.entity_id != null ? String(row.entity_id) : null,
 		title: row.title != null ? String(row.title) : '',
 		type: row.type != null ? String(row.type) : null,
 		status: row.status != null ? String(row.status) : null,
@@ -175,10 +167,37 @@ function mergeAndDedupe<T>(primary: T[], secondary: T[], keyFn: (item: T) => str
 
 const VAULT_SELECT = `
   vi.file_path, vi.title, vi.type, vi.status, vi.domain,
-  vi.summary, vi.search_hints,
+  vi.category, vi.project, vi.entity_id, vi.summary, vi.search_hints,
   vi.tags, vi.aliases, vi.wikilinks, vi.backlinks,
   vi.modified_at
 `.trim();
+
+const VAULT_FILTER_COLUMNS = new Set([
+	'file_path',
+	'title',
+	'type',
+	'status',
+	'domain',
+	'category',
+	'project',
+	'entity_id',
+]);
+
+function buildFilters(filters: Record<string, string> | null): {
+	where: string;
+	params: string[];
+} {
+	const conditions: string[] = [];
+	const params: string[] = [];
+	for (const [key, value] of Object.entries(filters ?? {})) {
+		if (!VAULT_FILTER_COLUMNS.has(key)) {
+			throw new Error(`不支持的 Vault 过滤字段：${key}`);
+		}
+		conditions.push(`vi.${key} = ?`);
+		params.push(value);
+	}
+	return { where: conditions.join(' AND '), params };
+}
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -195,16 +214,7 @@ export function queryVaultIndex(
 	const hasQuery = q.length > 0;
 	const hasFilters = filters != null && Object.keys(filters).length > 0;
 
-	// Build WHERE clause for filters
-	const filterConditions: string[] = [];
-	const filterParams: unknown[] = [];
-	if (hasFilters && filters != null) {
-		for (const [key, value] of Object.entries(filters)) {
-			filterConditions.push(`vi.${key} = ?`);
-			filterParams.push(value);
-		}
-	}
-	const filterWhere = filterConditions.length > 0 ? filterConditions.join(' AND ') : '';
+	const { where: filterWhere, params: filterParams } = buildFilters(filters);
 
 	// Case 1: No query, no filters → empty
 	if (!hasQuery && !hasFilters) {
@@ -485,57 +495,6 @@ export function queryVaultIndexByDomainsOrTags(
 /**
  * Query memory items by slot_key pattern or status.
  */
-export function queryMemoryItems(
-	db: Database.Database,
-	opts: {
-		slotKey?: string | null;
-		statusFilter?: string | null;
-		limit?: number;
-	},
-): { items: MemoryItem[] } {
-	const { slotKey, statusFilter, limit = 100 } = opts;
-
-	const conditions: string[] = [];
-	const params: unknown[] = [];
-
-	if (slotKey) {
-		// Support pattern matching with % wildcard
-		if (slotKey.includes('%')) {
-			conditions.push('slot_key LIKE ?');
-		} else {
-			conditions.push('slot_key = ?');
-		}
-		params.push(slotKey);
-	}
-
-	if (statusFilter) {
-		conditions.push('status = ?');
-		params.push(statusFilter);
-	}
-
-	const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-	const sql = `
-    SELECT slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at
-    FROM memory_items
-    ${whereClause}
-    ORDER BY updated_at DESC
-    LIMIT ?
-  `;
-	params.push(limit);
-
-	const rows = queryAll<MemoryItemRow>(db, sql, ...params);
-
-	const items: MemoryItem[] = rows.map((row) => ({
-		slotKey: String(row.slot_key),
-		content: String(row.content),
-		source: String(row.source ?? 'preference'),
-		relatedFiles: loadsJsonList(row.related_files),
-		manualFlag: Number(row.manual_flag) !== 0,
-		status: String(row.status),
-		updatedAt: String(row.updated_at),
-		expiresAt: row.expires_at != null ? String(row.expires_at) : null,
-	}));
-
-	return { items };
+export function queryMemoryItems(db: Database.Database, input: ListMemoryItemsInput = {}) {
+	return { items: listMemoryItems(db, input) };
 }

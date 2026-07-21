@@ -1,737 +1,456 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	readdirSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import init from '../../src/cli/commands/init.js';
-import renameCommand from '../../src/cli/commands/rename.js';
+import Database from 'better-sqlite3';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { parse as parseYaml } from 'yaml';
 import upgrade from '../../src/cli/commands/upgrade.js';
 import { VERSION } from '../../src/cli/utils/version.js';
+import { validateRuntimeContract } from '../../src/runtime-contract.js';
 
-function makeTmpDir() {
-	const dir = mkdtempSync(join(tmpdir(), 'lifeos-upgrade-'));
-	return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+interface UpgradeFixture {
+	parent: string;
+	root: string;
+	dbPath: string;
+	mapPath: string;
+	legacyYaml: string;
+	cleanup: () => void;
 }
 
-function patchVersion(vaultDir: string, version: string) {
-	updateYamlConfig(vaultDir, (config) => {
-		const versions = (config.installed_versions as Record<string, string> | undefined) ?? {};
-		versions.assets = version;
-		config.installed_versions = versions;
-	});
-}
+const GLOBAL_CONTENT = '所有回复使用中文';
+const PROJECT_CONTENT = 'GTS 使用最终核心契约';
 
-function readYamlConfig(vaultDir: string) {
-	const yamlPath = join(vaultDir, 'lifeos.yaml');
-	return parseYaml(readFileSync(yamlPath, 'utf-8')) as Record<string, unknown>;
-}
-
-function updateYamlConfig(vaultDir: string, mutate: (config: Record<string, unknown>) => void) {
-	const yamlPath = join(vaultDir, 'lifeos.yaml');
-	const config = readYamlConfig(vaultDir);
-	mutate(config);
-	writeFileSync(yamlPath, stringifyYaml(config), 'utf-8');
-}
-
-function sha256(content: string) {
+function sha256(content: string): string {
 	return createHash('sha256').update(content).digest('hex');
 }
 
-describe('lifeos upgrade', () => {
-	let dir: string;
-	let cleanup: () => void;
+function legacyYaml(): string {
+	return `version: '1.0'
+language: zh
+directories:
+  drafts: 00_草稿
+  diary: 10_日记
+  projects: 20_项目
+  research: 30_研究
+  knowledge: 40_知识
+  outputs: 50_成果
+  plans: 60_计划
+  resources: 70_资源
+  reflection: 80_复盘
+  system: 90_系统
+subdirectories:
+  knowledge:
+    notes: 笔记
+    wiki: 百科
+  resources:
+    books: 书籍
+    literature: 文献
+    translations: 翻译
+  system:
+    templates: 模板
+    schema: 规范
+    memory: 记忆
+    digest: 信息
+    prompts: 提示词
+    archive:
+      projects: 归档/项目
+      drafts: 归档/草稿
+      plans: 归档/计划
+      diary: 归档/日记
+memory:
+  db_name: memory.db
+  scan_prefixes: [drafts, diary, projects, research, knowledge, outputs, plans, resources, reflection]
+  excluded_prefixes: [system]
+  context_budgets:
+    layer0_total: 1600
+    userprofile_summary: 180
+    userprofile_rules: 1000
+    taskboard_focus: 420
+    revises_summary: 100
+  repository_bindings: {}
+installed_versions:
+  cli: 1.8.3
+  assets: 1.8.3
+`;
+}
+
+function createV3Database(path: string): void {
+	const db = new Database(path);
+	try {
+		db.pragma('journal_mode = WAL');
+		db.exec(`
+			CREATE TABLE schema_version (version INTEGER NOT NULL);
+			INSERT INTO schema_version(version) VALUES (3);
+			CREATE TABLE vault_index (
+				file_path TEXT PRIMARY KEY,
+				title TEXT,
+				type TEXT,
+				status TEXT,
+				domain TEXT,
+				category TEXT,
+				tags TEXT,
+				aliases TEXT,
+				summary TEXT,
+				search_hints TEXT,
+				wikilinks TEXT,
+				backlinks TEXT,
+				section_heads TEXT,
+				content_hash TEXT,
+				file_size INTEGER,
+				created_at TEXT,
+				modified_at TEXT,
+				indexed_at TEXT
+			);
+			CREATE TABLE memory_items (
+				slot_key TEXT PRIMARY KEY,
+				content TEXT NOT NULL,
+				source TEXT NOT NULL DEFAULT 'preference',
+				related_files TEXT NOT NULL DEFAULT '[]',
+				manual_flag INTEGER NOT NULL DEFAULT 0,
+				status TEXT NOT NULL DEFAULT 'active',
+				updated_at TEXT,
+				expires_at TEXT
+			);
+		`);
+		const insert = db.prepare(`
+			INSERT INTO memory_items(
+				slot_key, content, source, related_files, manual_flag, status, updated_at, expires_at
+			) VALUES (?, ?, ?, ?, 0, 'active', ?, NULL)
+		`);
+		insert.run('content:language', GLOBAL_CONTENT, 'correction', '[]', '2026-07-01T00:00:00.000Z');
+		insert.run(
+			'project:gts-core',
+			PROJECT_CONTENT,
+			'preference',
+			'["20_项目/GTS.md"]',
+			'2026-07-02T00:00:00.000Z',
+		);
+	} finally {
+		db.close();
+	}
+}
+
+function scopeMap(projectKey = 'gts-learning', projectHash = sha256(PROJECT_CONTENT)) {
+	return [
+		{
+			legacyIdentity: 'slot:content:language',
+			contentHash: sha256(GLOBAL_CONTENT),
+			scope: { type: 'global', key: '' },
+			itemKind: 'rule',
+			priority: 100,
+			enforcement: 'hard',
+		},
+		{
+			legacyIdentity: 'slot:project:gts-core',
+			contentHash: projectHash,
+			scope: { type: 'project', key: projectKey },
+			itemKind: 'decision',
+			priority: 80,
+			enforcement: 'soft',
+		},
+	];
+}
+
+function makeFixture(): UpgradeFixture {
+	const parent = mkdtempSync(join(tmpdir(), 'lifeos-v2-upgrade-'));
+	const root = join(parent, 'vault');
+	const memoryDir = join(root, '90_系统', '记忆');
+	mkdirSync(join(root, '20_项目'), { recursive: true });
+	mkdirSync(join(root, '00_草稿'), { recursive: true });
+	mkdirSync(memoryDir, { recursive: true });
+	const yaml = legacyYaml();
+	writeFileSync(join(root, 'lifeos.yaml'), yaml, 'utf-8');
+	writeFileSync(
+		join(root, '20_项目', 'GTS.md'),
+		'---\ntitle: GTS\ntype: project\nid: gts-learning\nstatus: active\n---\n用户项目内容\n',
+		'utf-8',
+	);
+	writeFileSync(join(root, '00_草稿', 'user-note.md'), '用户数据不得丢失\n', 'utf-8');
+	writeFileSync(join(root, 'AGENTS.md'), 'OLD AGENT CONTRACT\n', 'utf-8');
+	writeFileSync(join(memoryDir, 'ContextPolicy.md'), '旧上下文配置\n', 'utf-8');
+	writeFileSync(
+		join(memoryDir, 'UserProfile.md'),
+		`# 用户画像
+
+## 用户摘要
+<!-- BEGIN AUTO:profile-summary -->
+旧摘要
+<!-- END AUTO:profile-summary -->
+
+## 行为规则
+<!-- BEGIN AUTO:rules -->
+旧规则
+<!-- END AUTO:rules -->
+`,
+		'utf-8',
+	);
+	const dbPath = join(memoryDir, 'memory.db');
+	createV3Database(dbPath);
+	const mapPath = join(parent, 'v4-scope-map.json');
+	writeFileSync(mapPath, `${JSON.stringify(scopeMap(), null, 2)}\n`, 'utf-8');
+	return {
+		parent,
+		root,
+		dbPath,
+		mapPath,
+		legacyYaml: yaml,
+		cleanup: () => rmSync(parent, { recursive: true, force: true }),
+	};
+}
+
+function dbVersion(path: string): number {
+	const db = new Database(path, { readonly: true, fileMustExist: true });
+	try {
+		return (db.prepare('SELECT version FROM schema_version').get() as { version: number }).version;
+	} finally {
+		db.close();
+	}
+}
+
+function findJournals(root: string): string[] {
+	if (!existsSync(root)) return [];
+	return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+		const path = join(root, entry.name);
+		if (entry.isDirectory()) return findJournals(path);
+		return entry.name === 'journal.json' ? [path] : [];
+	});
+}
+
+describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
+	let fixture: UpgradeFixture;
+	let logSpy: ReturnType<typeof vi.spyOn>;
 
 	beforeEach(() => {
-		({ dir, cleanup } = makeTmpDir());
+		fixture = makeFixture();
+		logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 	});
 
 	afterEach(() => {
-		cleanup();
+		logSpy.mockRestore();
+		fixture.cleanup();
 	});
 
-	test('errors when no lifeos.yaml found', async () => {
-		await expect(upgrade([dir])).rejects.toThrow('No lifeos.yaml found');
-	});
+	it('在一个 cutover 中升级配置、资产、客户端、数据库和运行收据', async () => {
+		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
 
-	test('same version: restores missing templates', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
+		expect(result.migratedItems).toBe(2);
+		expect(result.skipped).toEqual([]);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		const db = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
+		try {
+			const rows = db
+				.prepare(`
+					SELECT item_id, slot_key, item_kind, scope_type, scope_key, priority, enforcement, content
+					FROM memory_items ORDER BY item_id
+				`)
+				.all() as Array<Record<string, unknown>>;
+			expect(rows).toHaveLength(2);
+			expect(rows).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						slot_key: 'content:language',
+						item_kind: 'rule',
+						scope_type: 'global',
+						scope_key: '',
+						priority: 100,
+						enforcement: 'hard',
+						content: GLOBAL_CONTENT,
+					}),
+					expect.objectContaining({
+						slot_key: 'project:gts-core',
+						item_kind: 'decision',
+						scope_type: 'project',
+						scope_key: 'gts-learning',
+						content: PROJECT_CONTENT,
+					}),
+				]),
+			);
+			expect(
+				db
+					.prepare('PRAGMA index_list(memory_items)')
+					.all()
+					.some((row) => (row as { unique: number }).unique === 1),
+			).toBe(true);
+		} finally {
+			db.close();
+		}
 
-		const templatesDir = join(dir, '90_系统', '模板');
-		rmSync(templatesDir, { recursive: true, force: true });
-		expect(existsSync(join(templatesDir, 'Daily_Template.md'))).toBe(false);
-
-		const result = await upgrade([dir]);
-
-		expect(existsSync(join(templatesDir, 'Daily_Template.md'))).toBe(true);
-		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
-	});
-
-	test('same version: restores missing diary archive directory', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		const archiveDiaryDir = join(dir, '90_系统', '归档', '日记');
-		rmSync(archiveDiaryDir, { recursive: true, force: true });
-		expect(existsSync(archiveDiaryDir)).toBe(false);
-
-		await upgrade([dir]);
-
-		expect(existsSync(archiveDiaryDir)).toBe(true);
-	});
-
-	test('migrates legacy digest directory to the configured digest path', async () => {
-		await init([dir, '--lang', 'en', '--no-mcp']);
-
-		const targetDigestDir = join(dir, '90_System', 'Digest');
-		const legacyDigestDir = join(dir, '90_System', '信息');
-		rmSync(targetDigestDir, { recursive: true, force: true });
-		mkdirSync(legacyDigestDir, { recursive: true });
-		writeFileSync(join(legacyDigestDir, 'LLM-Agent.md'), '# legacy digest config\n', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		await upgrade([dir]);
-
-		expect(existsSync(legacyDigestDir)).toBe(false);
-		expect(existsSync(join(targetDigestDir, 'LLM-Agent.md'))).toBe(true);
-		expect(readFileSync(join(targetDigestDir, 'LLM-Agent.md'), 'utf-8')).toBe(
-			'# legacy digest config\n',
-		);
-	});
-
-	test('keeps both digest directories when legacy and target paths already exist', async () => {
-		await init([dir, '--lang', 'en', '--no-mcp']);
-
-		const targetDigestDir = join(dir, '90_System', 'Digest');
-		const legacyDigestDir = join(dir, '90_System', '信息');
-		mkdirSync(legacyDigestDir, { recursive: true });
-		writeFileSync(join(targetDigestDir, 'current.md'), '# current digest config\n', 'utf-8');
-		writeFileSync(join(legacyDigestDir, 'legacy.md'), '# legacy digest config\n', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		await upgrade([dir]);
-
-		expect(existsSync(join(targetDigestDir, 'current.md'))).toBe(true);
-		expect(existsSync(join(targetDigestDir, 'legacy.md'))).toBe(false);
-		expect(existsSync(join(legacyDigestDir, 'legacy.md'))).toBe(true);
-	});
-
-	test('skips modified templates during upgrade', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		// Modify a template file
-		const templatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
-		expect(existsSync(templatePath)).toBe(true);
-		writeFileSync(templatePath, 'USER MODIFIED CONTENT', 'utf-8');
-
-		// Patch version so upgrade proceeds
-		patchVersion(dir, '0.0.1');
-
-		const result = await upgrade([dir]);
-
-		// Template should be preserved
-		const afterUpgrade = readFileSync(templatePath, 'utf-8');
-		expect(afterUpgrade).toBe('USER MODIFIED CONTENT');
-
-		// Should appear in skipped list
-		expect(result.skipped).toContain('90_系统/模板/Daily_Template.md');
-	});
-
-	test('override overwrites modified templates during upgrade', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		const templatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
-		const latestTemplate = readFileSync(templatePath, 'utf-8');
-		writeFileSync(templatePath, 'USER MODIFIED CONTENT', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		const result = await upgrade([dir, '--override']);
-
-		expect(readFileSync(templatePath, 'utf-8')).toBe(latestTemplate);
-		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
-		expect(result.skipped).not.toContain('90_系统/模板/Daily_Template.md');
-	});
-
-	test('upgrades tracked unchanged templates when managed hash matches current content', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		const templatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
-		const latestTemplate = readFileSync(templatePath, 'utf-8');
-		const previousTemplate = 'OLDER MANAGED TEMPLATE CONTENT';
-		writeFileSync(templatePath, previousTemplate, 'utf-8');
-
-		updateYamlConfig(dir, (config) => {
-			const versions = (config.installed_versions as Record<string, string> | undefined) ?? {};
-			versions.assets = '0.0.1';
-			config.installed_versions = versions;
-			config.managed_assets = {
-				...(config.managed_assets as Record<string, unknown> | undefined),
-				'90_系统/模板/Daily_Template.md': {
-					version: '0.0.1',
-					sha256: sha256(previousTemplate),
-				},
-			};
+		const config = parseYaml(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')) as {
+			memory: Record<string, unknown> & { context_budgets: Record<string, number> };
+			installed_versions: { cli: string; assets: string };
+		};
+		expect(config.memory.contract_version).toBe(2);
+		expect(config.memory).not.toHaveProperty('scope_mode');
+		expect(config.memory.context_budgets).toEqual({
+			layer0_total: 1600,
+			global_rules: 600,
+			userprofile_summary: 180,
+			taskboard_focus: 420,
+			scoped_context: 1200,
+			single_item_max: 220,
 		});
+		expect(config.memory.context_budgets).not.toHaveProperty('userprofile_rules');
+		expect(config.memory.context_budgets).not.toHaveProperty('revises_summary');
+		expect(config.installed_versions).toEqual({ cli: VERSION, assets: VERSION });
 
-		const result = await upgrade([dir]);
-		const config = readYamlConfig(dir) as {
-			managed_assets?: Record<string, { version?: string; sha256?: string }>;
-		};
+		const receipt = JSON.parse(
+			readFileSync(join(fixture.root, '90_系统', '记忆', 'runtime-receipt.json'), 'utf-8'),
+		) as Record<string, unknown>;
+		expect(receipt).toMatchObject({
+			contract_version: 2,
+			schema_version: 4,
+			kind: 'upgrade',
+			state: 'opened',
+			runtime_version: VERSION,
+			journal_path: result.journalPath,
+		});
+		expect(receipt.package_sha256).toEqual(expect.stringMatching(/^[0-9a-f]{64}$/));
+		const journal = JSON.parse(readFileSync(result.journalPath, 'utf-8')) as Record<
+			string,
+			unknown
+		>;
+		expect(journal).toMatchObject({
+			contract_version: 2,
+			schema_version: 4,
+			state: 'opened',
+			package_sha256: receipt.package_sha256,
+		});
+		expect(validateRuntimeContract({ vaultRoot: fixture.root, runtimeVersion: VERSION }).ok).toBe(
+			true,
+		);
+	});
 
-		expect(readFileSync(templatePath, 'utf-8')).toBe(latestTemplate);
-		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
-		expect(config.managed_assets?.['90_系统/模板/Daily_Template.md']).toEqual({
-			version: VERSION,
-			sha256: sha256(latestTemplate),
+	it('整包覆盖旧协议和旧客户端配置，但保留用户数据文件', async () => {
+		mkdirSync(join(fixture.root, '.codex'), { recursive: true });
+		writeFileSync(
+			join(fixture.root, '.codex', 'config.toml'),
+			'[mcp_servers.lifeos]\ncommand = "legacy-lifeos"\nargs = ["--shadow"]\n',
+			'utf-8',
+		);
+		await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+
+		expect(readFileSync(join(fixture.root, '00_草稿', 'user-note.md'), 'utf-8')).toBe(
+			'用户数据不得丢失\n',
+		);
+		expect(readFileSync(join(fixture.root, 'AGENTS.md'), 'utf-8')).not.toContain(
+			'OLD AGENT CONTRACT',
+		);
+		const codex = readFileSync(join(fixture.root, '.codex', 'config.toml'), 'utf-8');
+		expect(codex).toContain('command = "lifeos"');
+		expect(codex).not.toContain('legacy-lifeos');
+		expect(codex).not.toContain('shadow');
+		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'ContextPolicy.md'))).toBe(false);
+		const profile = readFileSync(join(fixture.root, '90_系统', '记忆', 'UserProfile.md'), 'utf-8');
+		expect(profile).toContain('<!-- BEGIN AUTO:global-rules -->');
+		expect(profile).toContain('<!-- BEGIN AUTO:scoped-rules-index -->');
+		expect(profile).not.toContain('<!-- BEGIN AUTO:rules -->');
+	});
+
+	it('映射缺失、条数不符或引用不存在项目时在建立 cutover 前零写入失败', async () => {
+		rmSync(fixture.mapPath);
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/缺少 V4 scope map/,
+		);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(existsSync(join(fixture.parent, '.lifeos-cutovers'))).toBe(false);
+
+		writeFileSync(fixture.mapPath, `${JSON.stringify(scopeMap().slice(0, 1))}\n`, 'utf-8');
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/条数 1 与旧记忆 2 不一致/,
+		);
+
+		writeFileSync(
+			fixture.mapPath,
+			`${JSON.stringify(scopeMap('missing-project'), null, 2)}\n`,
+			'utf-8',
+		);
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/scope map 引用不存在的项目 id/,
+		);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+	});
+
+	it('事务迁移失败时恢复完整 V3 Vault，并留下 restored journal', async () => {
+		writeFileSync(
+			fixture.mapPath,
+			`${JSON.stringify(scopeMap('gts-learning', '0'.repeat(64)), null, 2)}\n`,
+			'utf-8',
+		);
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/内容哈希不匹配/,
+		);
+
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(readFileSync(join(fixture.root, 'AGENTS.md'), 'utf-8')).toBe('OLD AGENT CONTRACT\n');
+		expect(readFileSync(join(fixture.root, '00_草稿', 'user-note.md'), 'utf-8')).toBe(
+			'用户数据不得丢失\n',
+		);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'runtime-receipt.json'))).toBe(false);
+		const journals = findJournals(join(fixture.parent, '.lifeos-cutovers'));
+		expect(journals).toHaveLength(1);
+		expect(JSON.parse(readFileSync(journals[0] ?? '', 'utf-8'))).toMatchObject({
+			state: 'restored',
+			contract_version: 2,
+			schema_version: 4,
 		});
 	});
 
-	test('smart-merge still upgrades tracked templates after renaming the system directory', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		const oldTemplatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
-		const latestTemplate = readFileSync(oldTemplatePath, 'utf-8');
-		const previousTemplate = 'OLDER MANAGED TEMPLATE CONTENT';
-		writeFileSync(oldTemplatePath, previousTemplate, 'utf-8');
-
-		updateYamlConfig(dir, (config) => {
-			const versions = (config.installed_versions as Record<string, string> | undefined) ?? {};
-			versions.assets = '0.0.1';
-			config.installed_versions = versions;
-			config.managed_assets = {
-				...(config.managed_assets as Record<string, unknown> | undefined),
-				'90_系统/模板/Daily_Template.md': {
-					version: '0.0.1',
-					sha256: sha256(previousTemplate),
-				},
-			};
-		});
-
-		await renameCommand([dir, '--logical', 'system', '--name', '99_系统']);
-
-		const result = await upgrade([dir]);
-		const renamedTemplatePath = join(dir, '99_系统', '模板', 'Daily_Template.md');
-
-		expect(readFileSync(renamedTemplatePath, 'utf-8')).toBe(latestTemplate);
-		expect(result.updated).toContain('99_系统/模板/Daily_Template.md');
-		expect(result.skipped).not.toContain('99_系统/模板/Daily_Template.md');
-	});
-
-	test('skips modified schema during upgrade', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		// Modify a schema file
-		const schemaPath = join(dir, '90_系统', '规范', 'Frontmatter_Schema.md');
-		expect(existsSync(schemaPath)).toBe(true);
-		writeFileSync(schemaPath, 'USER MODIFIED SCHEMA', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		const result = await upgrade([dir]);
-
-		const afterUpgrade = readFileSync(schemaPath, 'utf-8');
-		expect(afterUpgrade).toBe('USER MODIFIED SCHEMA');
-		expect(result.skipped).toContain('90_系统/规范/Frontmatter_Schema.md');
-	});
-
-	test('skips modified prompts during upgrade', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		const promptPath = join(dir, '90_系统', '提示词', 'AI_LLMResearch_Prompt.md');
-		expect(existsSync(promptPath)).toBe(true);
-		writeFileSync(promptPath, 'USER MODIFIED PROMPT', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		const result = await upgrade([dir]);
-
-		expect(readFileSync(promptPath, 'utf-8')).toBe('USER MODIFIED PROMPT');
-		expect(result.skipped).toContain('90_系统/提示词/AI_LLMResearch_Prompt.md');
-	});
-
-	test('skips differing templates conservatively when managed hash metadata is missing', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		const templatePath = join(dir, '90_系统', '模板', 'Daily_Template.md');
-		writeFileSync(templatePath, 'LEGACY TEMPLATE WITHOUT MANIFEST', 'utf-8');
-
-		updateYamlConfig(dir, (config) => {
-			const versions = (config.installed_versions as Record<string, string> | undefined) ?? {};
-			versions.assets = '0.0.1';
-			config.installed_versions = versions;
-			delete config.managed_assets;
-		});
-
-		const result = await upgrade([dir]);
-
-		expect(readFileSync(templatePath, 'utf-8')).toBe('LEGACY TEMPLATE WITHOUT MANIFEST');
-		expect(result.skipped).toContain('90_系统/模板/Daily_Template.md');
-	});
-
-	test('skips modified skill files (Tier 2)', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		// Modify a skill file
-		const skillPath = join(dir, '.agents', 'skills', 'today', 'SKILL.md');
-		expect(existsSync(skillPath)).toBe(true);
-		writeFileSync(skillPath, 'USER CUSTOMIZED SKILL', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		const result = await upgrade([dir]);
-
-		// Should be skipped, not overwritten
-		const afterUpgrade = readFileSync(skillPath, 'utf-8');
-		expect(afterUpgrade).toBe('USER CUSTOMIZED SKILL');
-		expect(result.skipped).toContain('.agents/skills/today/SKILL.md');
-	});
-
-	test('override overwrites modified skill files', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		const skillPath = join(dir, '.agents', 'skills', 'today', 'SKILL.md');
-		const latestSkill = readFileSync(skillPath, 'utf-8');
-		writeFileSync(skillPath, 'USER CUSTOMIZED SKILL', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		const result = await upgrade([dir, '--override']);
-
-		expect(readFileSync(skillPath, 'utf-8')).toBe(latestSkill);
-		expect(result.updated).toContain('.agents/skills/today/SKILL.md');
-		expect(result.skipped).not.toContain('.agents/skills/today/SKILL.md');
-	});
-
-	test('copies new skill files (Tier 2)', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		// Delete a skill directory
-		const skillDir = join(dir, '.agents', 'skills', 'today');
-		rmSync(skillDir, { recursive: true, force: true });
-		expect(existsSync(skillDir)).toBe(false);
-
-		patchVersion(dir, '0.0.1');
-
-		const result = await upgrade([dir]);
-
-		// Should restore the skill
-		expect(existsSync(skillDir)).toBe(true);
-		expect(existsSync(join(skillDir, 'SKILL.md'))).toBe(true);
-
-		// Should appear in updated list
-		const todayUpdated = result.updated.filter((p) => p.startsWith('.agents/skills/today/'));
-		expect(todayUpdated.length).toBeGreaterThan(0);
-	});
-
-	test('does not touch CLAUDE.md (Tier 3)', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		// Modify CLAUDE.md
-		const claudePath = join(dir, 'CLAUDE.md');
-		writeFileSync(claudePath, 'MY CUSTOM CLAUDE INSTRUCTIONS', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		await upgrade([dir]);
-
-		// CLAUDE.md should keep user's modifications
-		const afterUpgrade = readFileSync(claudePath, 'utf-8');
-		expect(afterUpgrade).toBe('MY CUSTOM CLAUDE INSTRUCTIONS');
-	});
-
-	test('does not touch AGENTS.md (Tier 3)', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		// Modify AGENTS.md
-		const agentsPath = join(dir, 'AGENTS.md');
-		writeFileSync(agentsPath, 'MY CUSTOM AGENTS INSTRUCTIONS', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		await upgrade([dir]);
-
-		// AGENTS.md should keep user's modifications
-		const afterUpgrade = readFileSync(agentsPath, 'utf-8');
-		expect(afterUpgrade).toBe('MY CUSTOM AGENTS INSTRUCTIONS');
-	});
-
-	test('override overwrites rules files', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		const claudePath = join(dir, 'CLAUDE.md');
-		const agentsPath = join(dir, 'AGENTS.md');
-		const originalClaude = readFileSync(claudePath, 'utf-8');
-		const originalAgents = readFileSync(agentsPath, 'utf-8');
-
-		writeFileSync(claudePath, 'MY CUSTOM CLAUDE INSTRUCTIONS', 'utf-8');
-		writeFileSync(agentsPath, 'MY CUSTOM AGENTS INSTRUCTIONS', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		await upgrade([dir, '--override']);
-
-		expect(readFileSync(claudePath, 'utf-8')).toBe(originalClaude);
-		expect(readFileSync(agentsPath, 'utf-8')).toBe(originalAgents);
-	});
-
-	test('updates installed_versions in lifeos.yaml', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		patchVersion(dir, '0.0.1');
-
-		await upgrade([dir]);
-
-		const config = readYamlConfig(dir);
-		const versions = config.installed_versions as Record<string, string>;
-		expect(versions.assets).toBe(VERSION);
-		expect(versions.cli).toBe(VERSION);
-	});
-
-	test('en: skips modified English templates', async () => {
-		await init([dir, '--lang', 'en', '--no-mcp']);
-
-		const templatePath = join(dir, '90_System', 'Templates', 'Daily_Template.md');
-		expect(existsSync(templatePath)).toBe(true);
-		writeFileSync(templatePath, 'MODIFIED', 'utf-8');
-
-		patchVersion(dir, '0.0.1');
-
-		const result = await upgrade([dir]);
-
-		expect(readFileSync(templatePath, 'utf-8')).toBe('MODIFIED');
-		expect(result.skipped).toContain('90_System/Templates/Daily_Template.md');
-	});
-
-	test('reports unchanged skill files', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		patchVersion(dir, '0.0.1');
-
-		const result = await upgrade([dir]);
-
-		// Skills were just installed and not modified, so they should be unchanged
-		expect(result.unchanged.length).toBeGreaterThan(0);
-	});
-
-	test('merges missing zh preset keys from partial lifeos.yaml', async () => {
+	it('未知 AUTO marker、缺失项目 ID 和未知 Schema 均在预检阶段失败', async () => {
 		writeFileSync(
-			join(dir, 'lifeos.yaml'),
-			[
-				"version: '1.0'",
-				'language: zh',
-				'directories:',
-				'  system: "90_系统"',
-				'subdirectories:',
-				'  knowledge:',
-				'    notes: "笔记"',
-				'    wiki: "百科"',
-				'  resources:',
-				'    books: "书籍"',
-				'    literature: "文献"',
-				'installed_versions:',
-				'  assets: "0.0.1"',
-				'',
-			].join('\n'),
+			join(fixture.root, '90_系统', '记忆', 'UserProfile.md'),
+			'<!-- BEGIN AUTO:legacy-shadow -->\n旧内容\n<!-- END AUTO:legacy-shadow -->\n',
 			'utf-8',
 		);
-
-		const result = await upgrade([dir]);
-		const config = readYamlConfig(dir);
-
-		expect(existsSync(join(dir, '90_系统', '模板', 'Daily_Template.md'))).toBe(true);
-		expect(result.updated).toContain('90_系统/模板/Daily_Template.md');
-		expect((config.subdirectories as { system?: { templates?: string } }).system?.templates).toBe(
-			'模板',
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/未知 AUTO 区块/,
 		);
-		expect((config.subdirectories as { system?: { digest?: string } }).system?.digest).toBe('信息');
-		expect(
-			(config.subdirectories as { system?: { archive?: Record<string, string> } }).system?.archive
-				?.diary,
-		).toBe('归档/日记');
-	});
-
-	test('restores missing init-managed directories and files', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		rmSync(join(dir, '90_系统', '记忆'), { recursive: true, force: true });
-		rmSync(join(dir, '90_系统', '归档', '日记'), { recursive: true, force: true });
-		rmSync(join(dir, '.claude'), { recursive: true, force: true });
-		rmSync(join(dir, 'CLAUDE.md'), { force: true });
-		rmSync(join(dir, 'AGENTS.md'), { force: true });
-
-		await upgrade([dir]);
-
-		expect(existsSync(join(dir, '90_系统', '记忆'))).toBe(true);
-		expect(existsSync(join(dir, '90_系统', '归档', '日记'))).toBe(true);
-		expect(existsSync(join(dir, '.claude', 'skills'))).toBe(true);
-		expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true);
-		expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true);
-	});
-
-	test('does not recreate git metadata when missing', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-		rmSync(join(dir, '.git'), { recursive: true, force: true });
-		rmSync(join(dir, '.gitignore'), { force: true });
-
-		await upgrade([dir]);
-
-		expect(existsSync(join(dir, '.git'))).toBe(false);
-		expect(existsSync(join(dir, '.gitignore'))).toBe(false);
-	});
-
-	test('registers missing MCP config entries during upgrade', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		expect(existsSync(join(dir, '.mcp.json'))).toBe(false);
-		expect(existsSync(join(dir, '.codex', 'config.toml'))).toBe(false);
-		expect(existsSync(join(dir, 'opencode.json'))).toBe(false);
-
-		await upgrade([dir]);
-
-		const claudeConfig = parseYaml(readFileSync(join(dir, '.mcp.json'), 'utf-8')) as {
-			mcpServers?: Record<string, { command?: string; args?: string[] }>;
-		};
-		expect(claudeConfig.mcpServers?.lifeos?.command).toBe('lifeos');
-		expect(claudeConfig.mcpServers?.lifeos?.args).toEqual(['--vault-root', dir]);
-
-		const codexConfig = readFileSync(join(dir, '.codex', 'config.toml'), 'utf-8');
-		expect(codexConfig).toContain('[mcp_servers.lifeos]');
-		expect(codexConfig).toContain('command = "lifeos"');
-		expect(codexConfig).toContain(`"--vault-root", "${dir}"`);
-
-		const openCodeConfig = parseYaml(readFileSync(join(dir, 'opencode.json'), 'utf-8')) as {
-			mcp?: Record<string, { type?: string; command?: string[] }>;
-		};
-		expect(openCodeConfig.mcp?.lifeos?.type).toBe('local');
-		expect(openCodeConfig.mcp?.lifeos?.command).toEqual(['lifeos', '--vault-root', dir]);
-	});
-
-	test('fills missing lifeos MCP fields without overwriting existing values', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
 
 		writeFileSync(
-			join(dir, '.mcp.json'),
-			JSON.stringify(
-				{
-					mcpServers: {
-						lifeos: { command: 'custom-command' },
-						existing: { command: 'keep-me', args: ['foo'] },
-					},
-				},
-				null,
-				2,
-			),
+			join(fixture.root, '90_系统', '记忆', 'UserProfile.md'),
+			'# 无 AUTO 区块\n',
 			'utf-8',
 		);
-		ensureDirForTest(join(dir, '.codex'));
+		writeFileSync(join(fixture.root, '20_项目', 'GTS.md'), '---\ntype: project\n---\n', 'utf-8');
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/项目缺少稳定 id/,
+		);
+
 		writeFileSync(
-			join(dir, '.codex', 'config.toml'),
-			[
-				'[mcp_servers.lifeos]',
-				'command = "custom-command"',
-				'',
-				'[mcp_servers.existing]',
-				'command = "keep-me"',
-				'args = ["foo"]',
-				'',
-			].join('\n'),
+			join(fixture.root, '20_项目', 'GTS.md'),
+			'---\ntype: project\nid: gts-learning\n---\n',
 			'utf-8',
 		);
-		writeFileSync(
-			join(dir, 'opencode.json'),
-			JSON.stringify(
-				{
-					mcp: {
-						lifeos: { type: 'remote' },
-						existing: { type: 'local', command: ['keep-me'] },
-					},
-				},
-				null,
-				2,
-			),
-			'utf-8',
-		);
-
-		await upgrade([dir]);
-
-		const claudeConfig = parseYaml(readFileSync(join(dir, '.mcp.json'), 'utf-8')) as {
-			mcpServers?: Record<string, { command?: string; args?: string[] }>;
-		};
-		expect(claudeConfig.mcpServers?.lifeos?.command).toBe('custom-command');
-		expect(claudeConfig.mcpServers?.lifeos?.args).toEqual(['--vault-root', dir]);
-		expect(claudeConfig.mcpServers?.existing).toEqual({ command: 'keep-me', args: ['foo'] });
-
-		const codexConfig = readFileSync(join(dir, '.codex', 'config.toml'), 'utf-8');
-		expect(codexConfig).toContain('[mcp_servers.lifeos]');
-		expect(codexConfig).toContain('command = "custom-command"');
-		expect(codexConfig).toContain(`args = ["--vault-root", "${dir}"]`);
-		expect(codexConfig).toContain('[mcp_servers.existing]');
-
-		const openCodeConfig = parseYaml(readFileSync(join(dir, 'opencode.json'), 'utf-8')) as {
-			mcp?: Record<string, { type?: string; command?: string[] }>;
-		};
-		expect(openCodeConfig.mcp?.lifeos?.type).toBe('remote');
-		expect(openCodeConfig.mcp?.lifeos?.command).toEqual(['lifeos', '--vault-root', dir]);
-		expect(openCodeConfig.mcp?.existing).toEqual({ type: 'local', command: ['keep-me'] });
-	});
-
-	test('keeps Codex tool sections on a new line when filling missing MCP fields', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		ensureDirForTest(join(dir, '.codex'));
-		writeFileSync(
-			join(dir, '.codex', 'config.toml'),
-			[
-				'[mcp_servers.lifeos]',
-				'command = "lifeos"',
-				'',
-				'[mcp_servers.lifeos.tools.memory_bootstrap]',
-				'approval_mode = "approve"',
-				'',
-			].join('\n'),
-			'utf-8',
-		);
-
-		await upgrade([dir]);
-
-		const codexConfig = readFileSync(join(dir, '.codex', 'config.toml'), 'utf-8');
-		expect(codexConfig).toContain(`args = ["--vault-root", "${dir}"]`);
-		expect(codexConfig).toContain(
-			`args = ["--vault-root", "${dir}"]\n[mcp_servers.lifeos.tools.memory_bootstrap]`,
-		);
-		expect(codexConfig).not.toContain(
-			`args = ["--vault-root", "${dir}"][mcp_servers.lifeos.tools.memory_bootstrap]`,
+		const db = new Database(fixture.dbPath);
+		try {
+			db.prepare('UPDATE schema_version SET version = 5').run();
+		} finally {
+			db.close();
+		}
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/不支持的数据库 Schema：5/,
 		);
 	});
 
-	test('override replaces existing lifeos MCP config entries', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
+	it('明确拒绝旧 --override 兼容模式和未初始化 Vault', async () => {
+		await expect(
+			upgrade([fixture.root, '--scope-map', fixture.mapPath, '--override']),
+		).rejects.toThrow(/不再支持 --override/);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
 
-		writeFileSync(
-			join(dir, '.mcp.json'),
-			JSON.stringify(
-				{
-					mcpServers: {
-						lifeos: { command: 'custom-command', args: ['--foo'] },
-						existing: { command: 'keep-me', args: ['foo'] },
-					},
-				},
-				null,
-				2,
-			),
-			'utf-8',
-		);
-		ensureDirForTest(join(dir, '.codex'));
-		writeFileSync(
-			join(dir, '.codex', 'config.toml'),
-			[
-				'[mcp_servers.lifeos]',
-				'command = "custom-command"',
-				'args = ["--foo"]',
-				'',
-				'[mcp_servers.existing]',
-				'command = "keep-me"',
-				'args = ["foo"]',
-				'',
-			].join('\n'),
-			'utf-8',
-		);
-		writeFileSync(
-			join(dir, 'opencode.json'),
-			JSON.stringify(
-				{
-					mcp: {
-						lifeos: { type: 'remote', command: ['custom-command', '--foo'] },
-						existing: { type: 'local', command: ['keep-me'] },
-					},
-				},
-				null,
-				2,
-			),
-			'utf-8',
-		);
-
-		await upgrade([dir, '--override']);
-
-		const claudeConfig = parseYaml(readFileSync(join(dir, '.mcp.json'), 'utf-8')) as {
-			mcpServers?: Record<string, { command?: string; args?: string[] }>;
-		};
-		expect(claudeConfig.mcpServers?.lifeos).toEqual({
-			command: 'lifeos',
-			args: ['--vault-root', dir],
-		});
-		expect(claudeConfig.mcpServers?.existing).toEqual({ command: 'keep-me', args: ['foo'] });
-
-		const codexConfig = readFileSync(join(dir, '.codex', 'config.toml'), 'utf-8');
-		expect(codexConfig).toContain('[mcp_servers.lifeos]');
-		expect(codexConfig).toContain('command = "lifeos"');
-		expect(codexConfig).toContain(`args = ["--vault-root", "${dir}"]`);
-		expect(codexConfig).toContain('[mcp_servers.existing]');
-		expect(codexConfig).toContain('command = "keep-me"');
-
-		const openCodeConfig = parseYaml(readFileSync(join(dir, 'opencode.json'), 'utf-8')) as {
-			mcp?: Record<string, { type?: string; command?: string[] }>;
-		};
-		expect(openCodeConfig.mcp?.lifeos).toEqual({
-			type: 'local',
-			command: ['lifeos', '--vault-root', dir],
-		});
-		expect(openCodeConfig.mcp?.existing).toEqual({ type: 'local', command: ['keep-me'] });
-	});
-
-	test('override preserves custom config and user-generated data', async () => {
-		await init([dir, '--lang', 'zh', '--no-mcp']);
-
-		updateYamlConfig(dir, (config) => {
-			config.directories = {
-				...(config.directories as Record<string, unknown>),
-				knowledge: '40_CustomKnowledge',
-				system: '99_CustomSystem',
-			};
-			config.subdirectories = {
-				...(config.subdirectories as Record<string, unknown>),
-				knowledge: {
-					...((config.subdirectories as { knowledge?: Record<string, string> }).knowledge ?? {}),
-					notes: 'MyNotes',
-					wiki: 'MyWiki',
-				},
-				system: {
-					...((
-						config.subdirectories as {
-							system?: Record<string, string | Record<string, string>>;
-						}
-					).system ?? {}),
-					templates: 'MyTemplates',
-				},
-			};
-		});
-
-		const userNotePath = join(dir, '40_CustomKnowledge', 'MyNotes', 'user-note.md');
-		ensureDirForTest(join(dir, '40_CustomKnowledge', 'MyNotes'));
-		writeFileSync(userNotePath, '# user note\n', 'utf-8');
-
-		const memoryDbPath = join(dir, 'memory.db');
-		writeFileSync(memoryDbPath, 'sqlite-placeholder', 'utf-8');
-
-		await upgrade([dir, '--override']);
-
-		const config = readYamlConfig(dir) as {
-			directories: { knowledge: string; system: string };
-			subdirectories: {
-				knowledge: { notes: string; wiki: string };
-				system: { templates: string };
-			};
-		};
-		expect(config.directories.knowledge).toBe('40_CustomKnowledge');
-		expect(config.directories.system).toBe('99_CustomSystem');
-		expect(config.subdirectories.knowledge.notes).toBe('MyNotes');
-		expect(config.subdirectories.system.templates).toBe('MyTemplates');
-		expect(readFileSync(userNotePath, 'utf-8')).toBe('# user note\n');
-		expect(readFileSync(memoryDbPath, 'utf-8')).toBe('sqlite-placeholder');
+		const empty = join(fixture.parent, 'empty');
+		mkdirSync(empty);
+		await expect(upgrade([empty])).rejects.toThrow(/No lifeos.yaml/);
 	});
 });
-
-function ensureDirForTest(path: string) {
-	mkdirSync(path, { recursive: true });
-}

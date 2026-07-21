@@ -5,6 +5,7 @@ created: "{{DATE}}"
 domain: "{{DOMAIN}}"
 note: "[[Knowledge note path]]"
 mode: quiz
+status: pending
 score:
 result:
 tags: [revise-record]

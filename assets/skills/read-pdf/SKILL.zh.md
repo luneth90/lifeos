@@ -1,7 +1,7 @@
 ---
 name: read-pdf
 description: '读取 PDF 内容时使用；按页码或章节提取文本、图表、公式和表格，供其他技能复用。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates: []
   prompts: []
@@ -9,6 +9,21 @@ dependencies:
   agents: []
 ---
 
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "read-pdf"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{资源目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。

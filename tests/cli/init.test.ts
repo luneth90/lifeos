@@ -117,10 +117,46 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect((config.subdirectories as { system?: { digest?: string } }).system?.digest).toBe(
 			d.digest,
 		);
+		const memory = config.memory as {
+			contract_version?: number;
+			context_budgets?: Record<string, number>;
+			repository_bindings?: Record<string, string[]>;
+			scope_mode?: unknown;
+		};
+		expect(memory.contract_version).toBe(2);
+		expect(memory.repository_bindings).toEqual({});
+		expect(memory.context_budgets).toEqual({
+			layer0_total: 1800,
+			global_rules: 600,
+			userprofile_summary: 200,
+			taskboard_focus: 500,
+			scoped_context: 1200,
+			single_item_max: 220,
+		});
+		expect(memory).not.toHaveProperty('scope_mode');
+		expect(memory.context_budgets).not.toHaveProperty('userprofile_rules');
+		expect(memory.context_budgets).not.toHaveProperty('revises_summary');
 
 		const versions = config.installed_versions as Record<string, string>;
 		expect(versions.cli).toBe(VERSION);
 		expect(versions.assets).toBe(VERSION);
+	});
+
+	test('写入 opened 的最终 V2/V4 fresh-install 收据', async () => {
+		await init([dir, '--lang', lang, '--no-mcp']);
+
+		const receipt = JSON.parse(
+			readFileSync(join(dir, d.system, d.memory, 'runtime-receipt.json'), 'utf-8'),
+		) as Record<string, unknown>;
+		expect(receipt).toMatchObject({
+			contract_version: 2,
+			schema_version: 4,
+			kind: 'fresh-install',
+			state: 'opened',
+			runtime_version: VERSION,
+		});
+		expect(receipt.package_sha256).toEqual(expect.stringMatching(/^[0-9a-f]{64}$/));
+		expect(receipt).not.toHaveProperty('scope_mode');
 	});
 
 	test('records managed asset hashes in lifeos.yaml', async () => {

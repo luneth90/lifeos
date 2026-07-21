@@ -1,122 +1,167 @@
 # Memory System Integration Protocol
 
-> All memory operations are invoked via MCP tools. `db_path` and `vault_root` are automatically injected at runtime; no need to specify them in the skill.
-> Session initialization (startup) is handled automatically by the MCP server, but when entering a Vault session the agent must explicitly call `memory_bootstrap` to trigger and read `_layer0`.
+> All memory operations use LifeOS MCP. `db_path` and `vault_root` are injected by the runtime and should not be supplied by skills.
+> `memory_bootstrap` is the only tool that does not require `contract_version`; every other tool must explicitly pass `contract_version=2`.
 
-## Layered Activation Rules
+## Required Call Order
 
-Memory operations are organized into two layers.
-
-### Layer 1: Always Active
-
-The following operations must be performed in **any conversation**, regardless of whether a skill workflow is active:
-
-| Operation | When | Description |
-| --- | --- | --- |
-| `memory_log` | When user expresses persistent rules | Write behavior rules — **must include `slot_key`** and `content` |
-
-**Judgment criteria:** Will the user's statement **still need to be followed in the next conversation**? If yes, regardless of what you're currently doing, it must be written to LifeOS immediately.
-
-### Layer 2: Skill Workflows
-
-Activated only when executing a LifeOS skill (`/today`, `/knowledge`, `/revise`, `/research`, `/project`, `/archive`, `/brainstorm`, `/ask`, `/digest`) or when the user explicitly requests Vault file operations:
-
-| Operation | When | Description |
-| --- | --- | --- |
-| `memory_bootstrap` | When entering a Vault session | Explicitly trigger startup and read the current `_layer0` |
-| `memory_notify` | After creating or modifying a Vault file | Update file index (fs.watch provides automatic backup, but call explicitly when immediate query is needed) |
-| `memory_query` | When context is needed | Query user preferences, learning progress, etc. |
-
-### Noise Protection
-
-The following scenarios **do not trigger Layer 2 operations** (but Layer 1 remains active):
-- Casual chat, code discussions, conversations unrelated to the Vault
-- One-off technical Q&A
-
----
-
-## File Change Notification
-
-After each Vault file creation or modification, immediately call:
-
-```
-memory_notify(file_path="<relative path of changed file>")
+```text
+memory_bootstrap
+  → identify skill, project, repository, tool, or file scopes
+  → memory_context(contract_version=2, scopes)
+  → use memory_query only when source documents are needed
+  → perform the task
+  → call memory_notify after file changes
+  → use memory_log with an explicit scope
 ```
 
-> fs.watch automatically indexes `.md` file changes as a backup, but call explicitly when you need immediate query results for a newly created file.
+1. Call `memory_bootstrap` when entering a LifeOS Vault session. It returns global Layer 0 only.
+2. After routing the task, call `memory_context`. An empty scope list returns empty local context; it never loads all memory.
+3. Call `memory_query` only when note content is needed. It searches Vault files and does not replace scoped rule routing.
+4. Every request except bootstrap must include `contract_version=2`.
 
-## Behavior Rule Logging
+## Final Tool Set
 
-When the user expresses a persistent rule, call:
+| Tool | Purpose |
+| --- | --- |
+| `memory_bootstrap` | Start a session with global Layer 0 only |
+| `memory_context` | Load local context for explicit scopes after routing |
+| `memory_query` | Read indexed Vault files when source content is needed |
+| `memory_log` | Write durable memory with an explicit kind and scope |
+| `memory_rules` | Audit items by kind, scope, status, or slot |
+| `memory_forget` | Soft-archive an item by ID with a reason |
+| `memory_notify` | Reindex file changes and invalidate affected scopes |
 
-```
-memory_log(
-  slot_key="<category>:<topic>",
-  content="<rule content>"
+Use the governance interface when auditing memory:
+
+```text
+memory_rules(
+  contract_version=2,
+  item_kind="rule",
+  scope={type: "project", key: "gts-learning"},
+  status="active",
+  limit=100
 )
 ```
 
-### `slot_key` Convention
+## Choosing a Scope
 
-Each rule must include a `slot_key` in the format `<category>:<topic>`. Subsequent writes with the same `slot_key` automatically overwrite the old value.
+| User meaning | scope | Typical content |
+| --- | --- | --- |
+| “Always do this…” | `{type: "global", key: ""}` | Global rules and profile signals |
+| “When using revise…” | `{type: "skill", key: "revise"}` | Skill rules |
+| “In the GTS project…” | `{type: "project", key: "<stable project id>"}` | Project rules, decisions, and profile signals |
+| “In the LifeOS repository…” | `{type: "repository", key: "lifeos"}` | Repository rules and stable facts |
+| “When using Obsidian…” | `{type: "tool", key: "obsidian"}` | Tool rules |
+| “Only for this note…” | `{type: "file", key: "<note id or Vault-relative path>"}` | File-specific exceptions |
 
-Profile slots may continue using `.` inside the topic to represent scope, for example:
+- A project scope must use the stable `id` from project frontmatter, not its display title.
+- A repository scope must use a portable ID bound in `lifeos.yaml`, never an absolute path.
+- Ask when the scope is unclear; never default an unclassified item to global.
+- Keep complete architecture decisions in project documents. Memory stores only a short summary plus `related_files`.
+
+## Loading Local Context
+
+After routing, call:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[
+    {type: "skill", key: "revise"},
+    {type: "project", key: "gts-learning"}
+  ],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+`memory_context` returns rules, decisions, facts, related files, and diagnostics for the requested scopes. Global hard rules have already been injected by bootstrap, so global context should not normally be repeated.
+
+## Search and File Notifications
+
+```text
+memory_query(
+  contract_version=2,
+  query="<keywords>",
+  filters={"type": "project"},
+  limit=5
+)
+
+memory_notify(
+  contract_version=2,
+  file_path="<Vault-relative path>"
+)
+
+# A move or rename must include the previous path
+memory_notify(
+  contract_version=2,
+  file_path="<new Vault-relative path>",
+  previous_file_path="<previous Vault-relative path>"
+)
+```
+
+Notify LifeOS after creating, editing, moving, or deleting a Vault file. For a move or rename, `previous_file_path` synchronizes path-based file scopes and `related_files`. `fs.watch` is only a fallback; explicit notification is required for read-after-write behavior.
+
+## Writing Memory
+
+`memory_log` accepts only durable `rule`, `decision`, `fact`, or `profile` items and requires both scope and kind:
+
+```text
+memory_log(
+  contract_version=2,
+  slot_key="content:language",
+  content="Use Chinese for every response",
+  scope={type: "global", key: ""},
+  item_kind="rule",
+  priority=100,
+  enforcement="hard",
+  source="correction"
+)
+
+memory_log(
+  contract_version=2,
+  slot_key="workflow:revise-latex",
+  content="Do not use unsafe append operations for LaTeX in review Q&A",
+  scope={type: "skill", key: "revise"},
+  item_kind="rule",
+  related_files=["40_Knowledge/Notes/related-chapter.md"]
+)
+```
+
+### Field Rules
+
+- `slot_key` uses `<category>:<topic>` with an ASCII slug. Only the same `(scope.type, scope.key, slot_key)` identity is updated.
+- `item_kind`: `rule` is a durable behavior constraint; `decision` is a confirmed decision summary; `fact` is stable information; `profile` is a user profile signal.
+- `priority` is 0–100 and defaults to 50. `enforcement` is `hard | soft` and defaults to `soft`.
+- Use `source="correction"` for user corrections. A later preference cannot downgrade a correction.
+- `related_files` identifies evidence or authoritative source documents. Use `expires_at` only for genuinely temporary memory.
+- One-off completion records are events and cannot be written through normal `memory_log`.
+- Archive with `memory_forget(contract_version=2, item_id=..., reason="...")`; hard deletion is not available.
+
+### Capture Decision
+
+Write only information that still matters in a later conversation:
+
+- A correction that applies everywhere → global rule.
+- A rule limited to a skill, project, repository, tool, or file → matching scoped rule.
+- A confirmed project tradeoff → project decision linked to the authoritative project document.
+- Stable path or tool configuration → repository/tool fact.
+- One-off discussion, information derivable from code or Git, or parameters already stored in configuration → do not write.
+
+## Profile Slots
+
+Common structured profile slots:
 
 - `profile:work_style`
-- `profile:weak.math_group_theory`
-- `profile:strong.swift_concurrency`
-- `profile:motivation.learningapp`
+- `profile:weak.<domain_slug>`
+- `profile:strong.<domain_slug>`
+- `profile:motivation.<project_slug>`
+- `profile:context_switch_pattern`
 - `profile:thinking_preference`
 
-Rules:
+Profile content should include the fact, evidence, and decision impact. Use global scope for stable cross-context signals and project scope for motivation or strengths and weaknesses that only apply to one project. Do not write removed aggregate profile slots.
 
-- `slot_key` should stay ASCII-only; do not write raw Chinese titles into keys
-- `profile:summary` is now a legacy compatibility slot, not the recommended write target
-- Prefer structured `profile:*` slots for profile writes
-- The system only falls back to legacy `profile:summary` when no structured `profile:*` slots remain
-- Unrecognized structured profile slots may appear under an "other profile signals" fallback bucket; that bucket exists for smooth upgrades, not as a recommended write target
+## Noise Protection
 
-| category | Meaning | Examples |
-| --- | --- | --- |
-| `format` | Output format | `format:latex`, `format:note-style` |
-| `workflow` | Workflow | `workflow:review-frequency` |
-| `tool` | Tool usage | `tool:editor` |
-| `content` | Content style | `content:language`, `content:emoji` |
-| `schedule` | Scheduling | `schedule:study-time` |
-
-**Examples:**
-
-```
-memory_log(
-  slot_key="format:latex",
-  content="Math formulas must use LaTeX format"
-)
-
-memory_log(
-  slot_key="workflow:revise-latex",
-  content="Do not use obsidian append to write LaTeX content in review Q&A"
-)
-```
-
-> Optional parameters: `related_files` (array of related file paths), `expires_at` (expiration time).
-
-### Profile Content Shape
-
-When writing structured `profile:*` slots, the `content` should usually include three parts:
-
-1. Fact: what stable signal was observed
-2. Evidence: which user statement, diary, project file, or review record supports it
-3. Decision impact: how the next interaction should use this profile signal
-
-## Rule Capture
-
-Each rule **must include a `slot_key`** (format: `<category>:<topic>`). The system automatically persists it to UserProfile; subsequent writes with the same `slot_key` overwrite the old value.
-
-**Must capture scenarios:**
-- User corrects Agent behavior ("don't use English", "no emoji", "from now on...") → `memory_log(slot_key="content:language", content="rule content")`
-- User expresses a persistent preference ("I prefer concise commit messages", "set review interval to two weeks") → `memory_log(slot_key="format:commit-msg", content="rule content")`
-
-**Forbidden capture scenarios:**
-- One-off technical discussions ("what caused this bug")
-- Conventions already codified in code (parameters in config files)
-- Information directly derivable from code or git history
+Casual chat, one-off technical Q&A, and conversations unrelated to the Vault do not trigger file search or local context. Explicit persistent rules still follow the scoped write protocol above.

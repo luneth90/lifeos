@@ -29,11 +29,13 @@ read-pdf → JSON intermediate output (PDF extractor consumed by knowledge/ask/r
 4. `/revise` — Generate review questions, grade upon completion
 5. `/archive` — Archive completed projects and processed drafts
 
+Knowledge status advances only through `draft → review → revised → mastered`: `/knowledge` moves a validated note to `review`; `/revise` consumes `review` by default, the first complete grading pass moves it to `revised`, and only a later explicit review that meets the mastery criteria moves it to `mastered`.
+
 ## Skill Invocation Matrix
 
 | Source Skill | Callable/Suggested Targets | Invocation Method |
 |-------------|---------------------------|-------------------|
-| /today | /review, /research, /project, /brainstorm, /archive | Text suggestion |
+| /today | /revise, /research, /project, /brainstorm, /archive | Text suggestion |
 | /brainstorm | /project | Read project planning-agent-prompt to launch sub-agent |
 | /brainstorm | /knowledge | Directly create encyclopedia notes |
 | /brainstorm | draft | Directly create draft files |

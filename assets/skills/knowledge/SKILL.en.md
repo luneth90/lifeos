@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: "Build knowledge notes and wiki concepts from a project, source chapter or paper, and optional draft notes."
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Knowledge_Template.md"
@@ -12,6 +12,21 @@ dependencies:
   agents: []
 ---
 
+
+## Scoped Memory (Required)
+
+After routing this skill and identifying its target, call the following before the first business query:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "knowledge"}, <resolved project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
 > [!config]
 > Path references in this skill use logical names (e.g., `{knowledge directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
@@ -45,8 +60,8 @@ Before starting curation, check three minimal context categories first, then dec
 Recommended calls:
 
 ```
-memory_query(query="<project name or chapter keyword>", filters={"type": "project"}, limit=5)
-memory_query(query="<chapter keyword>", filters={"type": "knowledge"}, limit=5)
+memory_query(contract_version=2, query="<project name or chapter keyword>", filters={"type": "project"}, limit=5)
+memory_query(contract_version=2, query="<chapter keyword>", filters={"type": "knowledge"}, limit=5)
 ```
 
 Memory checks are only for determining current context and avoiding duplicate curation -- **they do not replace reading the source material**.
@@ -115,6 +130,10 @@ First, identify from the project file:
 - **AI instruction execution rules**:
   - If the template contains HTML comments `<!-- AI Instructions: ... -->`, you must execute that instruction to generate the corresponding block content
   - **CRITICAL**: The final output must never contain the `<!-- AI Instructions: ... -->` comment text — it must be replaced with generated content
+- **Knowledge status transition**:
+  - Keep `status: draft` while generating and validating the note
+  - Change the main note to `status: review` only after all required frontmatter, template sections, source links, and project backlinks pass validation
+  - If any required content is missing or the write fails, keep `draft`; it must not enter the default review queue
 
 **Draft integration rules (when draft source is available):**
 
@@ -165,6 +184,7 @@ After completion, **do not output full file contents in the conversation** (unle
 
 - [[<Main_Note_Name>]]
   - Path: `<Path_to_Main_Note>`
+  - Status: `review` (curation complete; ready for the first review)
 
 **🧱 Wiki Concepts Extracted:**
 
@@ -190,7 +210,7 @@ After completion, **do not output full file contents in the conversation** (unle
 - **Draft not provided**: Skip draft integration step; the rest executes normally
 - **Domain is other/unknown**: Inform the user there is no corresponding template, use a generic chapter structure, and suggest creating a dedicated template later
 - **Wiki concept with same name already exists**: Read the existing file, determine whether it needs updating/supplementing, rather than creating a duplicate
-- **File write failure**: Output the full content in conversation, prompt the user to manually paste it at the corresponding path
+- **File write failure**: Keep the knowledge note at `status: draft`; output the full content in conversation and ask the user to paste and validate it before changing it to `review`
 
 # Memory System Integration
 

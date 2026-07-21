@@ -1,270 +1,205 @@
-# LifeOS 手动测试指南
+# LifeOS V2 手工测试指南
 
-> 从零开始安装 LifeOS 并在 Claude Code 中实际操作全部 MCP 工具。
-> 用于验证完整用户体验链路，区别于 `integration-test.md` 的 CLI 单元验证。
+本指南验证当前唯一支持的最终协议：`contract_version=2`、`Schema V4`、7 个 MCP 工具。不要使用旧事件接口或依赖运行时迁移。
 
-## 前置条件
+协议字段与治理规则以 [记忆协议 V2](./memory-contract-v2.md) 为准。
 
-- Node.js 24.14.1+（LTS）
-- Claude Code CLI 已安装（`claude` 命令可用）
-- LifeOS 项目源码已 clone
-
----
-
-## 1. 构建与本地注册
+## 1. 准备隔离 Vault
 
 ```bash
-cd /path/to/lifeos          # 进入项目目录
-npm install
 npm run build
-npm run typecheck            # 确认无类型错误
-npm test                     # 确认测试通过
-npm link                     # 全局注册 lifeos 命令
+lifeos init ./tmp/lifeos-manual-test --lang zh
+lifeos doctor ./tmp/lifeos-manual-test
 ```
 
-> **关键：** `npm link` 会将本地构建注册为全局包，之后 `lifeos` 命令会解析到本地构建产物。
-> 这样 `lifeos init` 生成的 `.mcp.json`（默认使用 `lifeos --vault-root ...`）无需手动覆写即可直接工作。
+预期：
 
-**验证注册成功：**
-```bash
-lifeos --version             # 应输出与 package.json 一致的版本号（当前为 1.4.0）
-which lifeos                 # 应指向全局 node_modules 的 symlink
+- `lifeos.yaml` 中 `memory.contract_version` 为 `2`。
+- 新数据库首次打开后为 `Schema V4`。
+- `doctor` 不报告 runtime receipt、项目 ID、scope 或托管资产错误。
+
+## 2. 确认工具集合
+
+客户端的 MCP 工具列表必须恰好包含：
+
+1. `memory_bootstrap`
+2. `memory_query`
+3. `memory_context`
+4. `memory_log`
+5. `memory_rules`
+6. `memory_forget`
+7. `memory_notify`
+
+如果出现其他 LifeOS 记忆工具，说明客户端仍连接旧服务，应先重启客户端并检查 MCP 配置。
+
+## 3. 验证 bootstrap 与 Layer 0
+
+新会话的第一步调用：
+
+```text
+memory_bootstrap()
 ```
 
----
+检查：
 
-## 2. 初始化测试 Vault
+- 返回 `contract_version: 2`、`schema_version: 4`、`status: "ok"`。
+- 返回 `_layer0`、`snapshot_id`、`layer0_meta`、`scope_hints`。
+- Layer 0 只含全局规则、全局画像摘要、TaskBoard 焦点与复习提醒。
+- Layer 0 不包含任何项目、技能、仓库、工具或文件 scope 的正文。
+- 第二次调用保持幂等；没有全局变化时不重复执行完整启动维护。
 
-```bash
-lifeos init tmp/lifeos-manual-test --lang zh
+## 4. 验证契约前置拒绝
+
+任选一个非 bootstrap 工具，省略 `contract_version` 或传入其他版本。
+
+预期：请求在打开 Vault、数据库或执行启动逻辑前失败。随后使用正确版本：
+
+```text
+memory_rules(contract_version=2, status="active", limit=10)
 ```
 
-**预期输出：**
-- 10 个目录已创建（`00_草稿` ~ `90_系统`）
-- 模板、规范、提示词、技能文件已复制
-- `.claude/skills` → `.agents/skills` 符号链接已创建
-- `.mcp.json`、`.codex/config.toml`、`opencode.json` 已注册
+预期：正常返回条目列表。
 
-如需 Git 版本控制，请在初始化完成后自行执行。
+## 5. 验证显式记忆模型
 
-**验证：**
-```bash
-ls tmp/lifeos-manual-test/
-cat tmp/lifeos-manual-test/lifeos.yaml
-cat tmp/lifeos-manual-test/.mcp.json
-ls -la tmp/lifeos-manual-test/.claude/skills   # 确认是 symlink
+### 5.1 写入全局硬规则
+
+```text
+memory_log(contract_version=2, slot_key="content:language", content="必须使用中文", item_kind="rule", scope={"type":"global","key":""}, priority=100, enforcement="hard", source="correction")
 ```
 
----
+检查返回条目具有稳定 `itemId`，且 `action` 为 `created` 或 `updated`。
 
-## 3. 启动 Claude Code
+### 5.2 写入项目局部规则
 
-```bash
-cd tmp/lifeos-manual-test
-claude
+先确保项目 frontmatter 有唯一、非占位的稳定 ID，例如：
+
+```yaml
+id: project-algebra
+type: project
+status: active
 ```
 
-启动后确认 MCP Server 已连接——在 Claude Code 会话中可看到 lifeos 工具可用。
+通知索引器后写入：
 
----
-
-## 4. MCP 工具逐项测试
-
-以下测试在 Claude Code 会话中执行。每一步直接告诉 Claude 要调用的工具即可。
-
-### 4.1 显式 bootstrap 验证 — 调用 memory_bootstrap 获取 Layer 0
-
-> `memory_startup` 已内部化，不再作为 MCP 工具暴露。推荐通过 `memory_bootstrap` 显式触发 startup 并读取 `_layer0`。
-
-> 对 Claude 说：调用 memory_bootstrap
-
-**预期：**
-- [ ] 返回结果中包含 `_layer0` 字段（说明自动启动已触发）
-- [ ] `tmp/lifeos-manual-test/90_系统/记忆/memory.db` 已创建
-- [ ] 无报错
-
-### 4.2 memory_log — 记录事件
-
-> 对 Claude 说：调用 memory_log，`entry_type` 设为 `"milestone"`，`importance` 设为 `3`，内容为"测试手动记录功能"
-
-**预期：**
-- [ ] 返回成功，包含事件 ID
-- [ ] 事件类型为 `milestone`
-
-### 4.3 memory_recent — 查询最近事件
-
-> 对 Claude 说：调用 memory_recent，查看最近的会话日志
-
-**预期：**
-- [ ] 返回列表中包含 5.2 刚记录的事件
-- [ ] 若当前会话没有额外写入事件，结果可能只包含该条 `milestone` 事件
-
-### 4.4 memory_query — 搜索 Vault
-
-先创建一个测试笔记用于搜索：
-
-```bash
-# 在另一个终端中执行
-cat > tmp/lifeos-manual-test/00_草稿/测试笔记.md <<'EOF'
----
-title: 量子计算入门笔记
-type: note
-status: draft
-created: 2026-03-27
-tags: [physics, quantum]
----
-
-# 量子计算入门
-
-量子比特是量子计算的基本单元。
-EOF
+```text
+memory_notify(contract_version=2, file_path="20_项目/代数学习.md")
+memory_log(contract_version=2, slot_key="format:proof", content="给出完整证明步骤", item_kind="rule", scope={"type":"project","key":"project-algebra"}, priority=80, enforcement="soft")
 ```
 
-> 对 Claude 说：调用 memory_notify 通知有文件变更，然后调用 memory_query 搜索"量子计算"
+### 5.3 写入决策、事实与画像
 
-**预期：**
-- [ ] memory_notify 成功触发重新扫描
-- [ ] memory_query 返回结果中包含"测试笔记.md"
-- [ ] 结果包含文件路径、标题、标签等元数据
+```text
+memory_log(contract_version=2, slot_key="decision:notation", content="本项目采用右作用记号", item_kind="decision", scope={"type":"project","key":"project-algebra"})
+memory_log(contract_version=2, slot_key="fact:source", content="主教材是群论讲义", item_kind="fact", scope={"type":"project","key":"project-algebra"}, related_files=["70_资源/书籍/群论讲义.pdf"])
+memory_log(contract_version=2, slot_key="profile:thinking_preference", content="偏好先看结构再看细节", item_kind="profile", scope={"type":"global","key":""})
+```
 
-### 4.5 memory_auto_capture — 批量捕获
+负向检查：用 `memory_log` 写入 `item_kind="event"` 必须失败。
 
-> 对 Claude 说：调用 memory_auto_capture，记录一个偏好："用户喜欢使用中文界面"
+## 6. 验证 scoped context
 
-**预期：**
-- [ ] 返回成功，包含捕获的条目数量
-- [ ] 条目类型为 preference
+```text
+memory_context(contract_version=2, scopes=[{"type":"project","key":"project-algebra"}], include_global=false, include_related_files=true)
+```
 
-### 4.6 活跃文档自动刷新验证
+检查：
 
-> 对 Claude 说：调用 memory_log，记录一条带 `slot_key="content:ui-language"` 的 preference，内容为"界面提示优先中文"
+- 返回项目 scope 中的 `rule`、`decision`、`fact`。
+- 不返回 `profile` 或历史 `event`。
+- `matchedScopes` 使用稳定项目 ID，而不是项目标题。
+- `relatedFiles` 去重并排序。
+- 全局同 slot 的 `hard` 规则会阻止局部覆盖，并在诊断中说明。
+- `omittedSlotKeys`、`oversizedItems` 和 `warnings` 可用于判断预算裁剪。
 
-**预期：**
-- [ ] 返回成功
-- [ ] 检查 vault 中 UserProfile.md 的“偏好设置”AUTO 区块已更新：
-  ```bash
-  cat tmp/lifeos-manual-test/90_系统/记忆/UserProfile.md
-  ```
-- [ ] 新偏好已出现在文件中
+再创建文件 scope 的同 slot 规则并同时请求项目和文件 scope，确认优先级遵循：
 
-### 4.7 memory_citations — 获取来源引用
+```text
+file > project > repository > skill > tool > global
+```
 
-> 对 Claude 说：调用 memory_citations，查询 TaskBoard 中某个条目的来源事件
+## 7. 验证查询职责分离
 
-**预期：**
-- [ ] 返回关联的 session_log 事件列表
-- [ ] 每条引用包含时间戳和原始内容
+创建一篇带 frontmatter 的测试笔记并通知：
 
-### 4.8 聚合上下文读取验证
+```text
+memory_notify(contract_version=2, file_path="40_知识/笔记/群论.md")
+memory_query(contract_version=2, query="群论", filters={"type":"note","status":"review"}, limit=10)
+```
 
-> 对 Claude 说：读取 `90_系统/记忆/TaskBoard.md`，确认“当前焦点”区块可直接作为今日规划的优先上下文
+检查：
 
-**预期：**
-- [ ] 成功读取 TaskBoard 聚合结果
-- [ ] 其中包含“当前焦点”“活跃项目”或“近期决策”区块
+- `memory_query` 只返回 Vault 索引结果和稳定 `entityId`。
+- `memory_query` 不返回记忆规则；记忆审计必须使用 `memory_rules`。
+- 不支持的过滤字段会被拒绝。
 
-### 4.9 memory_log（skill_completion）— 记录技能完成
+## 8. 验证审计与遗忘
 
-> `memory_skill_complete` 已删除，改用 `memory_log(entry_type="skill_completion", ...)` 替代。
+```text
+memory_rules(contract_version=2, item_kind="rule", scope={"type":"project","key":"project-algebra"}, status="active", limit=100)
+memory_forget(contract_version=2, item_id=<上一步返回的 itemId>, reason="测试软归档")
+memory_rules(contract_version=2, scope={"type":"project","key":"project-algebra"}, status="archived", limit=100)
+```
 
-> 对 Claude 说：调用 memory_log，entry_type 为 "skill_completion"，记录 today 技能已完成
+检查：
 
-**预期：**
-- [ ] 返回成功
-- [ ] 该事件可通过 memory_recent 查询到
+- `memory_forget` 不物理删除记录。
+- 归档记录具有时间和非空原因。
+- 普通 `memory_log` 不能直接覆盖已归档条目。
 
-### 4.10 自动 checkpoint 验证 — 会话结束时自动执行
-
-> `memory_checkpoint` 已内部化，不再作为 MCP 工具暴露。MCP Server 会在会话结束（stdin end / beforeExit）时自动执行。
-
-**操作：** 退出 Claude Code 会话（输入 `/exit` 或 Ctrl+C）
-
-**预期：**
-- [ ] 退出后检查活跃文档已刷新（见第 6 节数据持久化验证）
-- [ ] enhance_queue 已处理
-
----
-
-## 5. 技能触发测试
-
-在 Claude Code 会话中直接使用斜杠命令触发技能：
-
-| 命令 | 预期行为 |
-|------|---------|
-| `/today` | 生成今日计划，优先读取 TaskBoard 聚合结果，完成后通过 memory_log 记录 skill_completion |
-| `/ask 什么是量子纠缠` | 进入问答模式，可保存为草稿 |
-| `/brainstorm 个人知识管理方案` | 引导式头脑风暴 |
-| `/knowledge` | 创建知识笔记 |
-| `/revise` | 复盘当前阶段工作 |
-
-**验证：**
-- [ ] 技能被正确识别和加载
-- [ ] 技能执行中调用了相应的 MCP 工具
-- [ ] 产出文件保存到正确的 vault 目录
-
----
-
-## 6. 数据持久化验证
-
-退出 Claude Code 后检查数据库状态：
+## 9. 验证 CLI 治理
 
 ```bash
-# 检查数据库文件
-ls -la tmp/lifeos-manual-test/90_系统/记忆/memory.db
-
-# 查看表结构
-sqlite3 tmp/lifeos-manual-test/90_系统/记忆/memory.db ".tables"
-
-# 查看会话日志
-sqlite3 tmp/lifeos-manual-test/90_系统/记忆/memory.db "SELECT id, entry_type, summary, substr(detail, 1, 60) FROM session_log ORDER BY timestamp DESC LIMIT 10;"
-
-# 查看 vault 索引
-sqlite3 tmp/lifeos-manual-test/90_系统/记忆/memory.db "SELECT file_path, title, type, status FROM vault_index LIMIT 10;"
-
-# 查看活跃文档条目
-sqlite3 tmp/lifeos-manual-test/90_系统/记忆/memory.db "SELECT target, section, slot_key, substr(content, 1, 60) FROM memory_items LIMIT 10;"
+lifeos rules list ./tmp/lifeos-manual-test --status active
+lifeos rules audit ./tmp/lifeos-manual-test
+lifeos rules export ./tmp/lifeos-manual-test --output ./tmp/memory-export.json
+lifeos rules archive ./tmp/lifeos-manual-test --id 42 --reason "手工测试"
+lifeos rules restore ./tmp/lifeos-manual-test --id 42
 ```
 
-**验证：**
-- [ ] 所有表已创建（vault_index, session_log, memory_items 等）
-- [ ] session_log 中包含测试过程中记录的事件
-- [ ] vault_index 中包含测试笔记
-- [ ] memory_items 中包含活跃文档数据
-
----
-
-## 7. 重启后连续性
-
-重新进入 Claude Code，验证数据跨会话保持：
+需要显式重分类时：
 
 ```bash
-cd tmp/lifeos-manual-test
-claude
+lifeos rules classify ./tmp/lifeos-manual-test --id 42 --scope-type project --scope-key project-algebra --kind decision
 ```
 
-> 对 Claude 说：先调用 memory_bootstrap，然后调用 memory_query 搜索"测试"
-
-**验证：**
-- [ ] memory_bootstrap 返回结果中包含 `_layer0` 字段
-- [ ] Layer 0 摘要包含上一会话的信息
-- [ ] 随后的 memory_query 可以正常返回检索结果
-
----
-
-## 清理
+## 10. 验证数据库最终态
 
 ```bash
-rm -rf tmp/lifeos-manual-test
+sqlite3 ./tmp/lifeos-manual-test/90_系统/记忆/memory.db "SELECT version FROM schema_version;"
+sqlite3 ./tmp/lifeos-manual-test/90_系统/记忆/memory.db "PRAGMA table_info(memory_items);"
+sqlite3 ./tmp/lifeos-manual-test/90_系统/记忆/memory.db "SELECT item_id,slot_key,item_kind,scope_type,scope_key,status FROM memory_items ORDER BY item_id;"
 ```
 
----
+预期：
 
-## 问题排查
+- 版本只有 `4`。
+- `memory_items` 包含 `item_id`、`item_kind`、`scope_type`、`scope_key`、优先级、强制级别和归档元数据。
+- 不存在旧会话日志表和旧事件检索表。
 
-| 问题 | 排查方法 |
-|------|---------|
-| MCP Server 未连接 | 检查 `.mcp.json` 路径是否正确；`node dist/server.js` 能否正常启动 |
-| `memory_bootstrap` 未返回 `_layer0` | 检查 `lifeos.yaml` 是否存在且格式正确；确认 MCP Server 已正确连接 |
-| memory_query 无结果 | 先调用 `memory_notify` 触发扫描，确认 vault_index 有数据 |
-| 技能未识别 | 检查 `.agents/skills/` 目录和 `CLAUDE.md` 技能表 |
-| 数据库锁定 | 确保没有其他进程持有 `90_系统/记忆/memory.db`（`lsof tmp/lifeos-manual-test/90_系统/记忆/memory.db`） |
+## 11. 验证知识状态链
+
+知识笔记只允许按以下方向推进：
+
+```text
+draft → review → revised → mastered
+```
+
+检查 TaskBoard：`frozen` 项目及其关联笔记不出现在焦点、活跃项目或复习候选中。
+
+## 12. 验证旧数据库离线升级
+
+对副本中的 `Schema V1`、`Schema V2` 或 `Schema V3` 数据库执行：
+
+```bash
+lifeos upgrade ./tmp/legacy-vault --scope-map ./tmp/v4-scope-map.json
+lifeos doctor ./tmp/legacy-vault
+```
+
+检查：
+
+- MCP runtime 在升级前拒绝打开旧数据库。
+- scope map 覆盖每条旧记忆，内容哈希匹配，项目和仓库 scope 可解析。
+- 升级完成后只有 `Schema V4`，runtime receipt 状态为 `opened`。
+- cutover journal 与 Vault 外部备份存在。
+- 人为制造迁移失败时，Vault 自动恢复；不存在运行时兼容分支。

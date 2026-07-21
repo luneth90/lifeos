@@ -17,6 +17,10 @@ export async function run(args: string[]): Promise<void> {
 			await (await import('./commands/rename.js')).default(args.slice(1));
 			return;
 		}
+		case 'rules': {
+			await (await import('./commands/rules.js')).default(args.slice(1));
+			return;
+		}
 		case 'help':
 		case '--help':
 		case '-h':
@@ -39,10 +43,13 @@ Usage:
   lifeos upgrade [path] [opts] Upgrade assets to latest version
   lifeos doctor [path]         Check vault health
   lifeos rename [path]         Rename a vault directory
+  lifeos rules <cmd> [path]    List, audit, classify, archive or restore memory
 
 Options (init / upgrade):
   --lang, -l <zh|en>   Language preset (default: auto-detect / from config)
-  --override           Force-refresh managed assets and managed config files
+
+Options (upgrade):
+  --scope-map, -m <file>  Explicit V4 scope map (required for legacy memory)
 
 Options (global):
   --help, -h           Show this help

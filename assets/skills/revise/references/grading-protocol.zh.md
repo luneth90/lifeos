@@ -44,15 +44,16 @@
 
 ### 更新笔记 status
 
-根据本次批改结果更新 `{知识目录}/` 对应笔记的 `status` 字段：
+根据批改前的知识笔记状态更新 `{知识目录}/` 对应笔记；分数只用于记录弱项和判断后续掌握门槛：
 
-| 表现 | status 变更 |
-| --- | --- |
-| 所有/绝大多数正确（≥80%）| → `mastered` |
-| 部分正确（50%-80%）| 维持 `revise`（或从 `draft` 升为 `revise`）|
-| 较多错误（< 50%）| 维持 `draft` 或维持 `revise`（不回退）|
+| 批改前状态 | 条件 | 批改后状态 |
+| --- | --- | --- |
+| `review` | 首次复习已完成全部批改 | `revised`（与分数无关） |
+| `revised` | 用户明确发起后续独立复核，成绩 ≥80%，且此前弱项全部通过 | `mastered` |
+| `revised` | 未满足上述全部条件 | 维持 `revised` |
+| `mastered` | 用户明确重测 | 维持 `mastered` |
 
-> **规则**：status 只升不降（draft → revise → mastered），复习失败不回退。
+> **规则**：知识状态只升不降（`draft → review → revised → mastered`）。`draft` 不进入 `/revise`；首次完整批改不得从 `review` 直接跳到 `mastered`。
 
 ### 更新项目文件掌握度小圆点
 
@@ -60,8 +61,9 @@
 
 ```
 ⚪ 未学    → 笔记不存在
-🔴 未复习  → status: draft
-🟡 待巩固  → status: revise
+🔴 整理中  → status: draft
+🟠 待复习  → status: review
+🟡 已复习待巩固 → status: revised
 🟢 已掌握  → status: mastered
 ```
 
@@ -88,7 +90,7 @@
 - ❌ 需加强：[概念列表]
 
 **笔记状态:**
-- [[NoteTitle]] → mastered / review / draft（维持）
+- [[NoteTitle]] → revised / mastered（按本协议更新）
 
 **项目进度:**
 - [[项目名]] 掌握度表格已更新

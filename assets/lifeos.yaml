@@ -34,6 +34,7 @@ subdirectories:
       diary: "归档/日记"
 
 memory:
+  contract_version: 2
   db_name: memory.db
   scan_prefixes:
   - drafts
@@ -49,9 +50,9 @@ memory:
   - system
   context_budgets:
     layer0_total: 1800
+    global_rules: 600
     userprofile_summary: 200
-    userprofile_rules: 1000
     taskboard_focus: 500
-    revises_summary: 100
-    userprofile_doc_limit: 2000
-    taskboard_doc_limit: 3000
+    scoped_context: 1200
+    single_item_max: 220
+  repository_bindings: {}

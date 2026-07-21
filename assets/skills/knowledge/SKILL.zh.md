@@ -1,7 +1,7 @@
 ---
 name: knowledge
 description: '整理书章或论文知识时使用；从项目、原文和可选草稿生成知识笔记与 Wiki 概念。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Knowledge_Template.md"
@@ -12,6 +12,21 @@ dependencies:
   agents: []
 ---
 
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "knowledge"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{知识目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
@@ -45,8 +60,8 @@ dependencies:
 推荐调用：
 
 ```
-memory_query(query="<项目名或章节关键词>", filters={"type": "project"}, limit=5)
-memory_query(query="<章节关键词>", filters={"type": "knowledge"}, limit=5)
+memory_query(contract_version=2, query="<项目名或章节关键词>", filters={"type": "project"}, limit=5)
+memory_query(contract_version=2, query="<章节关键词>", filters={"type": "knowledge"}, limit=5)
 ```
 
 记忆检查只用于确定当前上下文和避免重复整理，**不替代原文阅读**。
@@ -115,6 +130,10 @@ memory_query(query="<章节关键词>", filters={"type": "knowledge"}, limit=5)
 - **AI 指令执行规则**:
   - 若模板包含 HTML 注释 `<!-- AI指令：... -->`，必须执行该指令生成对应区块内容
   - **CRITICAL**: 最终输出中绝对不能出现 `<!-- AI指令：... -->` 注释原文，必须替换为生成内容
+- **知识状态流转**：
+  - 生成和校验过程中保持 `status: draft`
+  - 只有在必填 frontmatter、模板区块、来源链接和项目双链全部校验通过后，才将主笔记更新为 `status: review`
+  - 任一必填内容缺失或写入失败时保持 `draft`，不得进入默认复习队列
 
 **草稿融合规则（当草稿来源存在时）：**
 
@@ -165,6 +184,7 @@ memory_query(query="<章节关键词>", filters={"type": "knowledge"}, limit=5)
 
 - [[<Main_Note_Name>]]
   - 路径: `<Path_to_Main_Note>`
+  - 状态: `review`（已完成整理，等待首次复习）
 
 **🧱 百科概念已提取:**
 
@@ -190,7 +210,7 @@ memory_query(query="<章节关键词>", filters={"type": "knowledge"}, limit=5)
 - **草稿未提供**：跳过草稿融合步骤，其余正常执行
 - **Domain 为其他/未知**：告知用户无对应模板，使用通用章节结构，建议后续创建专属模板
 - **百科概念已存在同名文件**：读取现有文件，判断是否需要更新/补充，而非创建重复文件
-- **文件写入失败**：在对话中输出完整内容，提示用户手动粘贴到对应路径
+- **文件写入失败**：保持知识笔记为 `status: draft`；在对话中输出完整内容，提示用户手动粘贴并完成校验后再改为 `review`
 
 # 记忆系统集成
 

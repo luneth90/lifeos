@@ -1,7 +1,7 @@
 ---
 name: translate
 description: '翻译英文 PDF 章节时使用；生成中文对照阅读笔记并回填学习项目进度。'
-version: 1.8.3
+version: 2.0.0
 dependencies:
   templates: []
   prompts: []
@@ -10,6 +10,21 @@ dependencies:
   agents: []
 ---
 
+
+## 作用域记忆（必须）
+
+完成本技能的入口路由并识别对象后，在首次业务查询前调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "skill", key: "translate"}, <已明确的 project/repository/tool/file scopes>],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{资源目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
@@ -132,7 +147,7 @@ aliases: []
 ## 步骤四：文件变更通知
 
 ```
-memory_notify(file_path="<翻译文件相对路径>")
+memory_notify(contract_version=2, file_path="<翻译文件相对路径>")
 ```
 
 ## 步骤五：回填项目掌握度总览（若有关联项目）
@@ -156,7 +171,7 @@ memory_notify(file_path="<翻译文件相对路径>")
 
 4. 通知文件变更：
 ```
-memory_notify(file_path="<项目文件相对路径>")
+memory_notify(contract_version=2, file_path="<项目文件相对路径>")
 ```
 
 # 输出摘要
