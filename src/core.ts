@@ -91,7 +91,7 @@ function resolveDbAndVault(dbPath?: string, vaultRoot?: string): ResolvedRuntime
 			vaultRoot: vault,
 			db,
 			runtimeVersion: VERSION,
-			verifyManagedAssets: true,
+			verifyManagedAssets: false,
 		});
 		return { db, vault, config };
 	} catch (error) {

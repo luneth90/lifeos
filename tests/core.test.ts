@@ -11,7 +11,7 @@ import {
 	memoryRules,
 	memoryStartup,
 } from '../src/core.js';
-import { CONTRACT_VERSION } from '../src/runtime-contract.js';
+import { CONTRACT_VERSION, validateRuntimeContract } from '../src/runtime-contract.js';
 import { createTempVault, prepareRuntimeVault, writeTestNote } from './setup.js';
 
 let vault: ReturnType<typeof createTempVault>;
@@ -57,6 +57,16 @@ describe('memoryStartup 最终 V2/V4 契约', () => {
 			/未版本化|需要离线迁移|Schema V4|schema_version/,
 		);
 		expect(statSync(vault.dbPath).size).toBe(0);
+	});
+
+	it('允许用户修改托管资产，同时保留离线严格校验能力', () => {
+		const agentsPath = join(vault.root, 'AGENTS.md');
+		writeFileSync(agentsPath, `${readFileSync(agentsPath, 'utf-8')}\n用户自定义规则\n`, 'utf-8');
+
+		expect(validateRuntimeContract({ vaultRoot: vault.root }).issues).toContain(
+			'managed asset 哈希不匹配：AGENTS.md',
+		);
+		expect(() => memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root })).not.toThrow();
 	});
 });
 
