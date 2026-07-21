@@ -1,5 +1,12 @@
 # 更新日志
 
+## 2.0.1 (2026-07-21)
+
+### 修复
+
+- MCP 热路径不再逐文件校验托管资产哈希（`verifyManagedAssets: false`），允许用户自定义内置 Skill、模板和规范文件后正常使用 MCP 工具
+- 制品完整性校验（`runtime-receipt.package_sha256`）和离线诊断命令（`lifeos doctor`、`lifeos upgrade`）中的托管资产校验保持不变
+
 ## 2.0.0 (2026-07-21)
 
 ### 不兼容变更
