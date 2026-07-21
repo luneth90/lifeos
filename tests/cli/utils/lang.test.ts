@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assetsDir } from '../../../src/cli/utils/assets.js';
 import { resolveSkillFiles } from '../../../src/cli/utils/lang.js';
@@ -84,6 +85,26 @@ describe('resolveSkillFiles', () => {
 			expect(map.has('scripts/read_pdf.py')).toBe(true);
 			expect(map.get('scripts/read_pdf.py')).toContain('read_pdf.py');
 		});
+	});
+
+	it('忽略 Python 字节码缓存但保留 Python 源码', () => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-skill-files-'));
+		try {
+			const references = join(root, 'references');
+			const cache = join(references, '__pycache__');
+			mkdirSync(cache, { recursive: true });
+			writeFileSync(join(root, 'SKILL.zh.md'), '# 技能\n', 'utf-8');
+			writeFileSync(join(references, 'worker.py'), 'print("ok")\n', 'utf-8');
+			writeFileSync(join(references, 'worker.pyc'), Buffer.from([0x00, 0xff, 0x42]));
+			writeFileSync(join(cache, 'worker.cpython-312.pyc'), Buffer.from([0x42, 0x00, 0xff]));
+			writeFileSync(join(cache, 'worker.pyo'), Buffer.from([0xff, 0x00, 0x42]));
+
+			const map = resolveSkillFiles(root, 'zh');
+
+			expect([...map.keys()].sort()).toEqual(['SKILL.md', 'references/worker.py']);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	it('does not ship language-suffixed local references in installed skill markdown', () => {

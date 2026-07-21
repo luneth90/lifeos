@@ -15,7 +15,7 @@ import {
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
-import { resolveSkillFiles } from './cli/utils/lang.js';
+import { isGeneratedPythonCacheEntry, resolveSkillFiles } from './cli/utils/lang.js';
 import type { VaultConfig } from './config.js';
 import { resolveConfig } from './config.js';
 import { cutoverRoot, isValidCutoverId, readCutoverLock } from './cutover-lock.js';
@@ -72,6 +72,7 @@ function packageFiles(root: string, path: string): string[] {
 	if (stat.isFile()) return [relative(root, path).replace(/\\/g, '/')];
 	if (!stat.isDirectory()) return [];
 	return readdirSync(path)
+		.filter((entry) => !isGeneratedPythonCacheEntry(entry))
 		.sort()
 		.flatMap((entry) => packageFiles(root, join(path, entry)));
 }

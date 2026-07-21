@@ -11,7 +11,7 @@ const SCRIPT_PATH = join(
 );
 
 function runPython(code: string): string {
-	const result = spawnSync('python3', ['-c', code], { encoding: 'utf-8' });
+	const result = spawnSync('python3', ['-B', '-c', code], { encoding: 'utf-8' });
 	if (result.status !== 0) {
 		throw new Error(result.stderr || result.stdout || `python exited with ${result.status}`);
 	}
@@ -47,7 +47,7 @@ print(json.dumps(payload, ensure_ascii=False))
 	});
 
 	test('keeps the top-level JSON contract stable for an empty config', () => {
-		const result = spawnSync('python3', [SCRIPT_PATH], {
+		const result = spawnSync('python3', ['-B', SCRIPT_PATH], {
 			encoding: 'utf-8',
 			input: JSON.stringify({
 				language: 'en',
