@@ -1,7 +1,7 @@
 ---
 name: translate
 description: "Translate English PDF chapters into Chinese companion notes and update the linked learning project's progress."
-version: 2.0.1
+version: 2.0.2
 dependencies:
   templates: []
   prompts: []
