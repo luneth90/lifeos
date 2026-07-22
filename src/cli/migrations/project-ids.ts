@@ -44,6 +44,11 @@ export interface AppliedProjectIds {
 	catalog: ScopeMapProject[];
 }
 
+export interface ApplyProjectIdPlanOptions {
+	/** 所有 CAS 校验通过、即将首次写入项目文件时调用。 */
+	beforeWrite?: () => void;
+}
+
 interface MarkdownSnapshot {
 	filePath: string;
 	relativePath: string;
@@ -380,7 +385,10 @@ function atomicWrite(path: string, content: string, mode: number): void {
 }
 
 /** 原子应用同一进程生成的计划，并返回应用后的项目 catalog。 */
-export function applyProjectIdPlan(plan: ProjectIdPlan): AppliedProjectIds {
+export function applyProjectIdPlan(
+	plan: ProjectIdPlan,
+	options: ApplyProjectIdPlanOptions = {},
+): AppliedProjectIds {
 	const internal = internalPlans.get(plan);
 	if (!internal) throw new Error('项目 id 计划不是由当前进程生成，拒绝应用');
 	const current = buildPlan(plan.vaultRoot, internal.projectsDirectory);
@@ -402,6 +410,7 @@ export function applyProjectIdPlan(plan: ProjectIdPlan): AppliedProjectIds {
 			throw new Error(`项目文件在应用 id 前发生变化：${safePath}`);
 		}
 	}
+	if (internal.writes.length > 0) options.beforeWrite?.();
 	for (const write of internal.writes) {
 		atomicWrite(write.file.filePath, write.updatedContent, write.file.mode);
 	}

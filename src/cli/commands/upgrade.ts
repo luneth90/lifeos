@@ -18,7 +18,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep, win32 } fr
 import Database from 'better-sqlite3';
 import { stringify as stringifyYaml } from 'yaml';
 import type { LifeOSConfig, RepositoryBindings } from '../../config.js';
-import { resolveConfig } from '../../config.js';
+import { EN_REFLECTION_SUBS, ZH_REFLECTION_SUBS, resolveConfig } from '../../config.js';
 import {
 	acquireCutoverLock,
 	bindCutoverLock,
@@ -36,6 +36,7 @@ import {
 import { assertSchemaV4 } from '../../db/schema.js';
 import {
 	RUNTIME_RECEIPT_FILENAME,
+	expectedManagedAssetPaths,
 	runtimePackageSha256,
 	validateRuntimeContract,
 	writeRuntimeReceipt,
@@ -73,6 +74,7 @@ import {
 } from '../migrations/v4-scope-map.js';
 import {
 	advanceCutover,
+	assertCutoverSourceUnchanged,
 	assertVaultMatchesCutoverBackup,
 	backupVault,
 	createCutover,
@@ -81,9 +83,11 @@ import {
 	restoreVault,
 	retainOnlyCutoverBundle,
 } from '../utils/cutover.js';
+import { isManagedAssetRecord } from '../utils/managed-assets.js';
 import { syncVault } from '../utils/sync-vault.js';
 import { bold, green, log, parseArgs } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
+import type { WriteSetTarget } from '../utils/write-set-backup.js';
 
 export interface UpgradeResult {
 	updated: string[];
@@ -91,6 +95,17 @@ export interface UpgradeResult {
 	unchanged: string[];
 	journalPath: string;
 	migratedItems: number;
+}
+
+export interface UpgradeExecutionOptions {
+	sqliteBusyTimeoutMs?: number;
+	retryDelaysMs?: readonly number[];
+	hooks?: {
+		afterWriteSetSnapshot?: () => void | Promise<void>;
+		afterBackupPrepared?: () => void | Promise<void>;
+		afterScopeMapPublished?: () => void;
+		onSqliteRetry?: (attempt: number, error: unknown) => void;
+	};
 }
 
 interface DatabaseInfo {
@@ -108,18 +123,33 @@ function fsyncParent(path: string): void {
 	}
 }
 
+function nodeExists(path: string): boolean {
+	try {
+		lstatSync(path);
+		return true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+		throw error;
+	}
+}
+
 function atomicText(path: string, content: string, mode: number): void {
 	mkdirSync(dirname(path), { recursive: true });
 	const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
-	const descriptor = openSync(temporary, 'wx', mode);
+	let descriptor: number | null = null;
 	try {
+		descriptor = openSync(temporary, 'wx', mode);
 		writeFileSync(descriptor, content, 'utf-8');
 		fsyncSync(descriptor);
-	} finally {
 		closeSync(descriptor);
+		descriptor = null;
+		renameSync(temporary, path);
+		fsyncParent(path);
+	} catch (error) {
+		if (descriptor !== null) closeSync(descriptor);
+		if (nodeExists(temporary)) unlinkSync(temporary);
+		throw error;
 	}
-	renameSync(temporary, path);
-	fsyncParent(path);
 }
 
 function atomicYaml(path: string, config: LifeOSConfig): void {
@@ -134,26 +164,36 @@ function atomicJson(path: string, value: unknown): void {
  * 为需要人工审阅的 preflight 诊断创建新文件，绝不覆盖并发或人工已有内容。
  * 临时文件先完整 fsync，再通过同目录硬链接原子发布。
  */
-function createJsonIfAbsent(path: string, value: unknown): boolean {
+function createJsonIfAbsent(path: string, value: unknown, onPublished?: () => void): boolean {
 	mkdirSync(dirname(path), { recursive: true });
 	const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
-	const descriptor = openSync(temporary, 'wx', 0o600);
+	let descriptor: number | null = null;
 	try {
+		descriptor = openSync(temporary, 'wx', 0o600);
 		writeFileSync(descriptor, `${JSON.stringify(value, null, 2)}\n`, 'utf-8');
 		fsyncSync(descriptor);
-	} finally {
 		closeSync(descriptor);
-	}
-	try {
-		linkSync(temporary, path);
+		descriptor = null;
 	} catch (error) {
-		unlinkSync(temporary);
-		if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+		if (descriptor !== null) closeSync(descriptor);
+		if (nodeExists(temporary)) unlinkSync(temporary);
 		throw error;
 	}
-	unlinkSync(temporary);
-	fsyncParent(path);
-	return true;
+	let published = false;
+	try {
+		linkSync(temporary, path);
+		published = true;
+		// 硬链接成功后最终路径已经对外可见。必须在任何后续清理或 fsync 前
+		// 标记写入，避免这些步骤失败时被误判为“零写入”而跳过回滚。
+		onPublished?.();
+		unlinkSync(temporary);
+		fsyncParent(path);
+		return true;
+	} catch (error) {
+		if (nodeExists(temporary)) unlinkSync(temporary);
+		if (!published && (error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+		throw error;
+	}
 }
 
 function sha256(value: string): string {
@@ -185,6 +225,56 @@ function databaseInfoFromConnection(db: Database.Database): DatabaseInfo {
 		db.prepare('SELECT COUNT(*) AS count FROM memory_items').get() as { count: number }
 	).count;
 	return { version: versions[0]?.version as number, memoryItems };
+}
+
+function isSqliteBusy(error: unknown): boolean {
+	const code = (error as { code?: unknown })?.code;
+	return typeof code === 'string' && code.startsWith('SQLITE_BUSY');
+}
+
+async function retryDelay(ms: number): Promise<void> {
+	await new Promise<void>((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+async function beginUpgradeTransaction(
+	dbPath: string,
+	options: UpgradeExecutionOptions,
+): Promise<Database.Database> {
+	const delays = options.retryDelaysMs ?? [300, 1_000, 3_000];
+	const busyTimeout = options.sqliteBusyTimeoutMs ?? 5_000;
+	for (let attempt = 0; ; attempt += 1) {
+		const db = new Database(dbPath, { fileMustExist: true, timeout: busyTimeout });
+		try {
+			db.pragma(`busy_timeout = ${busyTimeout}`);
+			db.pragma('foreign_keys = ON');
+			db.exec('BEGIN IMMEDIATE');
+			return db;
+		} catch (error) {
+			db.close();
+			const delay = delays[attempt];
+			if (delay === undefined || !isSqliteBusy(error)) throw error;
+			options.hooks?.onSqliteRetry?.(attempt + 1, error);
+			await retryDelay(delay);
+		}
+	}
+}
+
+async function commitUpgradeTransaction(
+	db: Database.Database,
+	options: UpgradeExecutionOptions,
+): Promise<void> {
+	const delays = options.retryDelaysMs ?? [300, 1_000, 3_000];
+	for (let attempt = 0; ; attempt += 1) {
+		try {
+			db.exec('COMMIT');
+			return;
+		} catch (error) {
+			const delay = delays[attempt];
+			if (delay === undefined || !db.inTransaction || !isSqliteBusy(error)) throw error;
+			options.hooks?.onSqliteRetry?.(attempt + 1, error);
+			await retryDelay(delay);
+		}
+	}
 }
 
 interface ReviewableScopeMapEntry extends LegacyScopeMapEntry {
@@ -366,7 +456,10 @@ function prepareScopeMap(
 	}
 }
 
-export function persistScopeMap(plan: ScopeMapPlan, explicitPath: boolean): void {
+function assertScopeMapPlanCurrent(plan: ScopeMapPlan): void {
+	if (plan.writeMode === 'create' && nodeExists(plan.path)) {
+		throw new Error(`scope map 在预检后被并发创建，请重新执行 upgrade：${plan.path}`);
+	}
 	if (plan.originalHash !== undefined) {
 		let current: string;
 		try {
@@ -378,12 +471,21 @@ export function persistScopeMap(plan: ScopeMapPlan, explicitPath: boolean): void
 			throw new Error(`scope map 在预检后发生变化，请重新执行 upgrade：${plan.path}`);
 		}
 	}
+}
+
+export function persistScopeMap(
+	plan: ScopeMapPlan,
+	explicitPath: boolean,
+	beforeWrite?: () => void,
+): void {
+	assertScopeMapPlanCurrent(plan);
 	if (!plan.writeValue || !plan.writeMode) return;
 	if (plan.writeMode === 'create') {
-		if (!createJsonIfAbsent(plan.path, plan.writeValue)) {
+		if (!createJsonIfAbsent(plan.path, plan.writeValue, beforeWrite)) {
 			throw new Error(`scope map 在预检后被并发创建，请重新执行 upgrade：${plan.path}`);
 		}
 	} else if (!explicitPath) {
+		beforeWrite?.();
 		atomicJson(plan.path, plan.writeValue);
 	}
 	if (plan.generatedSummary) {
@@ -571,6 +673,20 @@ function assertUpgradePathsSafe(
 	config: LifeOSConfig,
 	scopeMapPath: string,
 ): void {
+	const configuredPaths: string[] = [...Object.values(config.directories), config.memory.db_name];
+	for (const group of Object.values(config.subdirectories)) {
+		for (const value of Object.values(group as Record<string, unknown>)) {
+			if (typeof value === 'string') configuredPaths.push(value);
+			else if (value && typeof value === 'object' && !Array.isArray(value)) {
+				for (const nested of Object.values(value as Record<string, unknown>)) {
+					if (typeof nested === 'string') configuredPaths.push(nested);
+				}
+			}
+		}
+	}
+	if (configuredPaths.some((path) => path.includes('\\'))) {
+		throw new Error('upgrade 配置路径必须使用 / 作为分隔符，不能包含反斜杠');
+	}
 	const relativeTargets = new Set<string>([
 		'lifeos.yaml',
 		'AGENTS.md',
@@ -618,6 +734,158 @@ function assertUpgradePathsSafe(
 		assertManagedTreeSafe(vaultRoot, tree);
 	}
 	assertScopeMapPathSafe(vaultRoot, scopeMapPath);
+}
+
+function portableRelativePath(path: string): string {
+	return path.replaceAll('\\', '/');
+}
+
+function safePreviousManagedAssetPath(vaultRoot: string, path: string): string | null {
+	if (
+		!path ||
+		path.includes('\0') ||
+		path.includes('\\') ||
+		isAbsolute(path) ||
+		win32.isAbsolute(path)
+	)
+		return null;
+	const candidate = resolve(vaultRoot, portableRelativePath(path));
+	const rel = relative(vaultRoot, candidate);
+	if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return null;
+	try {
+		assertVaultPathSafe(vaultRoot, candidate);
+	} catch {
+		// syncVault 对同一类不安全历史清单项会跳过，写集也不应因此扩大或失败。
+		return null;
+	}
+	return portableRelativePath(rel);
+}
+
+function addDirectoryParents(paths: Set<string>, relativePath: string): void {
+	let current = portableRelativePath(dirname(relativePath));
+	while (current && current !== '.') {
+		paths.add(current);
+		const parent = portableRelativePath(dirname(current));
+		if (!parent || parent === '.' || parent === current) break;
+		current = parent;
+	}
+}
+
+function configuredDirectoryPaths(config: LifeOSConfig): Set<string> {
+	const result = new Set<string>();
+	for (const directory of Object.values(config.directories)) {
+		result.add(portableRelativePath(directory));
+	}
+	for (const [logicalParent, group] of Object.entries(config.subdirectories)) {
+		const parent = config.directories[logicalParent];
+		if (!parent) continue;
+		for (const value of Object.values(group as Record<string, unknown>)) {
+			if (typeof value === 'string') {
+				result.add(portableRelativePath(join(parent, value)));
+				continue;
+			}
+			if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+			for (const nested of Object.values(value as Record<string, unknown>)) {
+				if (typeof nested === 'string') {
+					result.add(portableRelativePath(join(parent, nested)));
+				}
+			}
+		}
+	}
+	const reflectionSubs = config.language === 'en' ? EN_REFLECTION_SUBS : ZH_REFLECTION_SUBS;
+	for (const subdirectory of reflectionSubs) {
+		result.add(portableRelativePath(join(config.directories.reflection, subdirectory)));
+	}
+	return result;
+}
+
+function compactContentTargets(paths: ReadonlySet<string>): string[] {
+	const ordered = [...paths].sort((left, right) => {
+		const depth = left.split('/').length - right.split('/').length;
+		return depth || left.localeCompare(right);
+	});
+	const compacted: string[] = [];
+	for (const path of ordered) {
+		if (!compacted.some((parent) => path.startsWith(`${parent}/`))) compacted.push(path);
+	}
+	return compacted;
+}
+
+function buildUpgradeWriteSet(options: {
+	vaultRoot: string;
+	baseConfig: LifeOSConfig;
+	plan: AutomaticUpgradePlan;
+	explicitScopeMap: boolean;
+}): WriteSetTarget[] {
+	const { vaultRoot, baseConfig, plan } = options;
+	const finalConfig = plan.config;
+	const memoryDirectory = portableRelativePath(
+		join(finalConfig.directories.system, finalConfig.subdirectories.system.memory),
+	);
+	const contentPaths = new Set<string>([
+		'lifeos.yaml',
+		'.mcp.json',
+		portableRelativePath(join('.codex', 'config.toml')),
+		'opencode.json',
+		portableRelativePath(join(memoryDirectory, 'ContextPolicy.md')),
+		portableRelativePath(join(memoryDirectory, 'UserProfile.md')),
+		portableRelativePath(join(memoryDirectory, 'migrations')),
+		portableRelativePath(join(memoryDirectory, RUNTIME_RECEIPT_FILENAME)),
+	]);
+	const expectedAssetPaths = expectedManagedAssetPaths(finalConfig);
+	for (const path of expectedAssetPaths) {
+		contentPaths.add(portableRelativePath(path));
+	}
+	const claudeSkillsPath = join(vaultRoot, '.claude', 'skills');
+	if (!nodeExists(claudeSkillsPath)) {
+		contentPaths.add(portableRelativePath(join('.claude', 'skills')));
+	}
+	for (const [path, record] of Object.entries(baseConfig.managed_assets ?? {})) {
+		if (!isManagedAssetRecord(record) || expectedAssetPaths.includes(portableRelativePath(path))) {
+			continue;
+		}
+		const safePath = safePreviousManagedAssetPath(vaultRoot, path);
+		if (!safePath) continue;
+		const absolutePath = join(vaultRoot, safePath);
+		if (!existsSync(absolutePath)) continue;
+		const stat = lstatSync(absolutePath);
+		if (!stat.isFile() || stat.isSymbolicLink()) continue;
+		// syncVault 会在真正删除时重新比较旧哈希；当前普通文件均是潜在删除目标。
+		contentPaths.add(safePath);
+	}
+	for (const change of plan.projectIds.changes) {
+		contentPaths.add(portableRelativePath(change.relativePath));
+	}
+	const scopeMapWillBeWritten =
+		plan.scopeMap?.writeMode === 'create' ||
+		(plan.scopeMap?.writeMode === 'replace' && !options.explicitScopeMap);
+	if (scopeMapWillBeWritten && plan.scopeMap && isInside(vaultRoot, plan.scopeMap.path)) {
+		contentPaths.add(portableRelativePath(relative(vaultRoot, plan.scopeMap.path)));
+	}
+
+	const compactedContent = compactContentTargets(contentPaths);
+	const databasePath = portableRelativePath(join(memoryDirectory, finalConfig.memory.db_name));
+	if (compactedContent.some((parent) => databasePath.startsWith(`${parent}/`))) {
+		throw new Error('SQLite 数据库不能位于其他写集目录目标内');
+	}
+
+	const directoryPaths = configuredDirectoryPaths(finalConfig);
+	for (const path of [...directoryPaths]) addDirectoryParents(directoryPaths, path);
+	for (const path of [...compactedContent, databasePath]) addDirectoryParents(directoryPaths, path);
+	const directoryTargets = [...directoryPaths]
+		.filter(
+			(path) =>
+				path &&
+				path !== '.' &&
+				!compactedContent.some((content) => path === content || path.startsWith(`${content}/`)),
+		)
+		.sort((left, right) => left.localeCompare(right));
+
+	return [
+		...compactedContent.map((path) => ({ path, strategy: 'content' as const })),
+		{ path: databasePath, strategy: 'sqlite' as const },
+		...directoryTargets.map((path) => ({ path, strategy: 'directory-presence' as const })),
+	];
 }
 
 function legacyVaultIndexColumns(db: Database.Database): Set<string> {
@@ -816,15 +1084,16 @@ function restoreCutover(vaultRoot: string, journalPath: string): UpgradeResult {
 		throw new Error('cutover journal 的 backup_path 无效');
 	}
 	const lock = claimCutoverLock(vaultRoot, journal.cutover_id);
-	const recoveryState = journal.state;
-	if (journal.state !== 'restored') {
-		if (journal.state !== 'preparing') restoreVault(journal);
+	if (journal.state === 'preparing') {
 		advanceCutover(resolvedJournalPath, journal, 'restored', '用户显式执行恢复');
-	}
-	if (recoveryState === 'preparing') {
 		discardCutoverBundle(vaultRoot, journal.cutover_id);
+	} else if (journal.state === 'restored') {
+		// restored 是已完成且已验证的终态。重复恢复只校验并保留备份，不能再次改写 Vault。
+		retainOnlyCutoverBundle(vaultRoot, journal.cutover_id);
 	} else {
+		restoreVault(journal);
 		assertVaultMatchesCutoverBackup(journal);
+		advanceCutover(resolvedJournalPath, journal, 'restored', '用户显式执行恢复');
 		retainOnlyCutoverBundle(vaultRoot, journal.cutover_id);
 	}
 	// 上述任一步失败都会提前抛错并保留写闸；仅在恢复成功后释放。
@@ -839,7 +1108,22 @@ function restoreCutover(vaultRoot: string, journalPath: string): UpgradeResult {
 	};
 }
 
-export default async function upgrade(args: string[]): Promise<UpgradeResult> {
+interface PreparedUpgradeContext {
+	yamlSource: string;
+	baseConfig: LifeOSConfig;
+	memoryDir: string;
+	dbPath: string;
+	explicitScopeMap: boolean;
+	info: DatabaseInfo;
+	packageSha256: string;
+	plan: AutomaticUpgradePlan;
+	cutover: ReturnType<typeof createCutover>;
+}
+
+export default async function upgrade(
+	args: string[],
+	executionOptions: UpgradeExecutionOptions = {},
+): Promise<UpgradeResult> {
 	if (args.includes('--override')) {
 		throw new Error('V2 升级是原子整包切换，不再支持 --override 模式');
 	}
@@ -866,56 +1150,56 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 		throw new Error('No lifeos.yaml found. Run `lifeos init` first.');
 	}
 	assertVaultPathSafe(targetPath, yamlPath);
-	const yamlSource = readFileSync(yamlPath, 'utf-8');
-	const legacyRaw = parseLegacyConfigYaml(yamlSource);
-	if (flags.lang && flags.lang !== true) legacyRaw.language = flags.lang;
-	const baseConfig = migrateV3Config(legacyRaw);
-	const memoryDir = join(
-		targetPath,
-		baseConfig.directories.system,
-		baseConfig.subdirectories.system.memory,
-	);
-	const dbPath = join(memoryDir, baseConfig.memory.db_name);
-	const explicitScopeMapValue =
-		typeof flags['scope-map'] === 'string' ? flags['scope-map'] : undefined;
-	const explicitScopeMap = explicitScopeMapValue !== undefined;
-	const scopeMapPath =
-		explicitScopeMapValue !== undefined
-			? join(
-					realpathSync.native(dirname(resolve(explicitScopeMapValue))),
-					basename(explicitScopeMapValue),
-				)
-			: join(memoryDir, 'migrations', 'v4-scope-map.json');
-	assertUpgradePathsSafe(targetPath, baseConfig, scopeMapPath);
-	const info = databaseInfo(dbPath);
-	if (!info) {
-		throw new Error('缺少旧记忆数据库；upgrade 不会创建空库，请对新 Vault 使用 lifeos init');
-	}
-	if (![1, 2, 3, 4].includes(info.version)) {
-		throw new Error(`不支持的数据库 Schema：${info.version}`);
-	}
-	validateActiveDocs(targetPath, baseConfig);
-	// 首轮纯读计划负责在任何 cutover 之前暴露项目、仓库或 scope 歧义。
-	buildAutomaticUpgradePlan({
-		vaultRoot: targetPath,
-		baseConfig,
-		dbPath,
-		database: info,
-		scopeMapPath,
-		scopeMapIsExplicit: explicitScopeMap,
-		acceptSuggestions: flags['accept-scope-map'] === true,
-	});
-
-	const fromVersion = String(
-		(legacyRaw.installed_versions as { assets?: string } | undefined)?.assets ?? 'unknown',
-	);
-	const packageSha256 = runtimePackageSha256();
+	// 尽早取得写闸：后续配置解析、项目扫描、scope 规划和数据库快照都在同一排他窗口内。
 	const cutoverLock = acquireCutoverLock(targetPath);
-	let plan: AutomaticUpgradePlan;
-	let cutover: ReturnType<typeof createCutover>;
+	let prepared: PreparedUpgradeContext;
 	try {
+		const yamlSource = readFileSync(yamlPath, 'utf-8');
+		const legacyRaw = parseLegacyConfigYaml(yamlSource);
+		if (flags.lang && flags.lang !== true) legacyRaw.language = flags.lang;
+		const baseConfig = migrateV3Config(legacyRaw);
+		const memoryDir = join(
+			targetPath,
+			baseConfig.directories.system,
+			baseConfig.subdirectories.system.memory,
+		);
+		const dbPath = join(memoryDir, baseConfig.memory.db_name);
+		const explicitScopeMapValue =
+			typeof flags['scope-map'] === 'string' ? flags['scope-map'] : undefined;
+		const explicitScopeMap = explicitScopeMapValue !== undefined;
+		const scopeMapPath =
+			explicitScopeMapValue !== undefined
+				? join(
+						realpathSync.native(dirname(resolve(explicitScopeMapValue))),
+						basename(explicitScopeMapValue),
+					)
+				: join(memoryDir, 'migrations', 'v4-scope-map.json');
+		assertUpgradePathsSafe(targetPath, baseConfig, scopeMapPath);
+		const info = databaseInfo(dbPath);
+		if (!info) {
+			throw new Error('缺少旧记忆数据库；upgrade 不会创建空库，请对新 Vault 使用 lifeos init');
+		}
+		if (![1, 2, 3, 4].includes(info.version)) {
+			throw new Error(`不支持的数据库 Schema：${info.version}`);
+		}
+		validateActiveDocs(targetPath, baseConfig);
+		const plan = buildAutomaticUpgradePlan({
+			vaultRoot: targetPath,
+			baseConfig,
+			dbPath,
+			database: info,
+			scopeMapPath,
+			scopeMapIsExplicit: explicitScopeMap,
+			acceptSuggestions: flags['accept-scope-map'] === true,
+		});
+		if (plan.scopeMap?.writeMode === 'create' && !isInside(targetPath, plan.scopeMap.path)) {
+			persistScopeMap(plan.scopeMap, true);
+			plan.scopeMap.originalHash = sha256(readFileSync(plan.scopeMap.path, 'utf-8'));
+			plan.scopeMap.writeValue = undefined;
+			plan.scopeMap.writeMode = undefined;
+		}
 		if (readFileSync(yamlPath, 'utf-8') !== yamlSource) {
-			throw new Error('lifeos.yaml 在升级预检后发生变化，请重新执行 upgrade');
+			throw new Error('lifeos.yaml 在升级预检期间发生变化，请重新执行 upgrade');
 		}
 		const currentInfo = databaseInfo(dbPath);
 		if (
@@ -923,24 +1207,40 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 			currentInfo.version !== info.version ||
 			currentInfo.memoryItems !== info.memoryItems
 		) {
-			throw new Error('数据库在升级预检后发生变化，请重新执行 upgrade');
+			throw new Error('数据库在升级预检期间发生变化，请重新执行 upgrade');
 		}
-		// 取得写闸后重新生成计划，避免复用预检与加锁之间过期的项目或 scope 上下文。
-		plan = buildAutomaticUpgradePlan({
-			vaultRoot: targetPath,
-			baseConfig,
-			dbPath,
-			database: currentInfo,
-			scopeMapPath,
-			scopeMapIsExplicit: explicitScopeMap,
-			acceptSuggestions: flags['accept-scope-map'] === true,
-		});
-		cutover = createCutover(targetPath, fromVersion, VERSION, packageSha256);
+		const fromVersion = String(
+			(legacyRaw.installed_versions as { assets?: string } | undefined)?.assets ?? 'unknown',
+		);
+		const packageSha256 = runtimePackageSha256();
+		const cutover = createCutover(targetPath, fromVersion, VERSION, packageSha256);
 		bindCutoverLock(targetPath, cutoverLock.token, cutover.journal.cutover_id);
+		prepared = {
+			yamlSource,
+			baseConfig,
+			memoryDir,
+			dbPath,
+			explicitScopeMap,
+			info: currentInfo,
+			packageSha256,
+			plan,
+			cutover,
+		};
 	} catch (error) {
 		releaseCutoverLock(targetPath, cutoverLock.token);
 		throw error;
 	}
+	const {
+		yamlSource,
+		baseConfig,
+		memoryDir,
+		dbPath,
+		explicitScopeMap,
+		info,
+		packageSha256,
+		plan,
+		cutover,
+	} = prepared;
 	const { journalPath, journal } = cutover;
 	let migratedItems = 0;
 	let vaultMutationStarted = false;
@@ -948,11 +1248,13 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 	let transactionOpen = false;
 	try {
 		const finalConfig = plan.config;
-		db = new Database(dbPath, { fileMustExist: true });
-		db.pragma('busy_timeout = 5000');
-		db.pragma('foreign_keys = ON');
-		db.pragma('wal_checkpoint(TRUNCATE)');
-		db.exec('BEGIN EXCLUSIVE');
+		const writeSet = buildUpgradeWriteSet({
+			vaultRoot: targetPath,
+			baseConfig,
+			plan,
+			explicitScopeMap,
+		});
+		db = await beginUpgradeTransaction(dbPath, executionOptions);
 		transactionOpen = true;
 		const lockedInfo = databaseInfoFromConnection(db);
 		if (lockedInfo.version !== info.version || lockedInfo.memoryItems !== info.memoryItems) {
@@ -964,19 +1266,43 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 				throw new Error('旧记忆内容在升级预检后发生变化，请重新执行 upgrade');
 			}
 		}
-		backupVault(journal, {
+		await backupVault(journal, {
 			runtimeReceiptPath: join(memoryDir, RUNTIME_RECEIPT_FILENAME),
+			targets: writeSet,
+			retryDelaysMs: executionOptions.retryDelaysMs,
+			hooks: { afterSourceSnapshot: executionOptions.hooks?.afterWriteSetSnapshot },
+			onSqliteRetry: executionOptions.hooks?.onSqliteRetry,
 		});
+		if (readFileSync(yamlPath, 'utf-8') !== yamlSource) {
+			throw new Error('lifeos.yaml 与升级计划不一致，请重新执行 upgrade');
+		}
 		advanceCutover(journalPath, journal, 'prepared');
-		// scope map 可能由用户或外部编辑器维护。必须在任何 Vault 改写前完成 CAS；
-		// CAS 失败时尚未开启 Vault 回滚，避免用备份反向覆盖刚发生的并发编辑。
-		if (plan.scopeMap) persistScopeMap(plan.scopeMap, explicitScopeMap);
-		vaultMutationStarted = true;
-		mkdirSync(memoryDir, { recursive: true });
-		const appliedProjects = applyProjectIdPlan(plan.projectIds);
+		await executionOptions.hooks?.afterBackupPrepared?.();
+		// 在任何 Vault 改写前统一校验写集，再补充项目全树与外部 scope map 的 CAS。
+		assertCutoverSourceUnchanged(journal);
+		if (readFileSync(yamlPath, 'utf-8') !== yamlSource) {
+			throw new Error('lifeos.yaml 与升级计划不一致，请重新执行 upgrade');
+		}
+		if (plan.scopeMap) assertScopeMapPlanCurrent(plan.scopeMap);
+		const markVaultMutation = (): void => {
+			vaultMutationStarted = true;
+		};
+		const appliedProjects = applyProjectIdPlan(plan.projectIds, {
+			beforeWrite: markVaultMutation,
+		});
 		if (JSON.stringify(appliedProjects.catalog) !== JSON.stringify(plan.projectIds.catalog)) {
 			throw new Error('项目 id 应用结果与升级计划不一致');
 		}
+		if (plan.scopeMap) {
+			persistScopeMap(plan.scopeMap, explicitScopeMap, () => {
+				markVaultMutation();
+				if (plan.scopeMap?.writeMode === 'create') {
+					executionOptions.hooks?.afterScopeMapPublished?.();
+				}
+			});
+		}
+		markVaultMutation();
+		mkdirSync(memoryDir, { recursive: true });
 		atomicYaml(yamlPath, finalConfig);
 		const lang = finalConfig.language === 'en' ? 'en' : 'zh';
 		const synced = await syncVault(targetPath, finalConfig, {
@@ -1012,13 +1338,13 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 			appliedProjects.catalog,
 		);
 		assertGlobalHardSafety(db, { operation: 'write' });
-		db.exec('COMMIT');
+		await commitUpgradeTransaction(db, executionOptions);
 		transactionOpen = false;
 		db.close();
 		db = undefined;
 		advanceCutover(journalPath, journal, 'db_committed');
 		// scope map 只服务于一次性迁移。成功提交数据库后清理整个临时目录；
-		// 后续验证失败时，外层 cutover 仍会从完整备份恢复它。
+		// 后续验证失败时，外层 cutover 仍会从精确写集备份恢复它。
 		removeMigrationArtifacts(targetPath, finalConfig);
 		const verificationDb = new Database(dbPath, { readonly: true, fileMustExist: true });
 		try {
@@ -1082,17 +1408,23 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 			transactionOpen = false;
 			db?.close();
 			db = undefined;
-			if (vaultMutationStarted) restoreVault(journal);
-			advanceCutover(
-				journalPath,
-				journal,
-				'restored',
-				error instanceof Error ? error.message : String(error),
-			);
 			if (vaultMutationStarted) {
+				restoreVault(journal);
 				assertVaultMatchesCutoverBackup(journal);
+				advanceCutover(
+					journalPath,
+					journal,
+					'restored',
+					error instanceof Error ? error.message : String(error),
+				);
 				retainOnlyCutoverBundle(targetPath, journal.cutover_id);
 			} else {
+				advanceCutover(
+					journalPath,
+					journal,
+					'restored',
+					error instanceof Error ? error.message : String(error),
+				);
 				discardCutoverBundle(targetPath, journal.cutover_id);
 			}
 			releaseCutoverLock(targetPath, cutoverLock.token);

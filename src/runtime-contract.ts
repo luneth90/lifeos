@@ -10,6 +10,7 @@ import {
 	realpathSync,
 	renameSync,
 	statSync,
+	unlinkSync,
 	writeFileSync,
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -294,7 +295,7 @@ function checkManagedAssets(
 	}
 }
 
-function expectedManagedAssetPaths(config: VaultConfig['rawConfig']): string[] {
+export function expectedManagedAssetPaths(config: VaultConfig['rawConfig']): string[] {
 	const root = join(runtimePackageRoot(), 'assets');
 	const lang = config.language === 'en' ? 'en' : 'zh';
 	const expected = new Set<string>(['AGENTS.md', 'CLAUDE.md']);
@@ -416,21 +417,26 @@ export function writeRuntimeReceipt(vaultRoot: string, receipt: RuntimeReceipt):
 	const path = receiptPath(vaultRoot);
 	assertVaultPathSafe(vaultRoot, path);
 	const temporary = `${path}.tmp-${process.pid}-${randomUUID()}`;
-	const descriptor = openSync(temporary, 'wx', 0o600);
+	let descriptor: number | null = null;
 	try {
+		descriptor = openSync(temporary, 'wx', 0o600);
 		writeFileSync(descriptor, `${JSON.stringify(receipt, null, 2)}\n`, 'utf-8');
 		fsyncSync(descriptor);
-	} finally {
 		closeSync(descriptor);
-	}
-	renameSync(temporary, path);
-	if (process.platform !== 'win32') {
-		const directoryDescriptor = openSync(dirname(path), 'r');
-		try {
-			fsyncSync(directoryDescriptor);
-		} finally {
-			closeSync(directoryDescriptor);
+		descriptor = null;
+		renameSync(temporary, path);
+		if (process.platform !== 'win32') {
+			const directoryDescriptor = openSync(dirname(path), 'r');
+			try {
+				fsyncSync(directoryDescriptor);
+			} finally {
+				closeSync(directoryDescriptor);
+			}
 		}
+	} catch (error) {
+		if (descriptor !== null) closeSync(descriptor);
+		if (existsSync(temporary)) unlinkSync(temporary);
+		throw error;
 	}
 	return receipt;
 }

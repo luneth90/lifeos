@@ -123,6 +123,7 @@ function safeManagedAssetPath(targetPath: string, managedPath: string): string |
 	if (
 		!managedPath ||
 		managedPath.includes('\0') ||
+		managedPath.includes('\\') ||
 		isAbsolute(managedPath) ||
 		win32.isAbsolute(managedPath)
 	) {

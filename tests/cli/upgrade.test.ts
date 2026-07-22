@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
 	chmodSync,
@@ -22,7 +22,12 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { parse as parseYaml } from 'yaml';
 import upgrade, { persistScopeMap, type ScopeMapPlan } from '../../src/cli/commands/upgrade.js';
-import { retainOnlyCutoverBundle } from '../../src/cli/utils/cutover.js';
+import {
+	advanceCutover,
+	backupVault,
+	createCutover,
+	retainOnlyCutoverBundle,
+} from '../../src/cli/utils/cutover.js';
 import { VERSION } from '../../src/cli/utils/version.js';
 import {
 	acquireCutoverLock,
@@ -365,6 +370,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			contract_version: 2,
 			schema_version: 4,
 			state: 'opened',
+			backup_format: 'write-set-v1',
 			package_sha256: receipt.package_sha256,
 		});
 		const runtimeResult = validateRuntimeContract({
@@ -404,7 +410,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 	});
 
 	it.skipIf(process.platform === 'win32')(
-		'备份与升级保留 Vault 内相对符号链接的原始目标',
+		'升级保留现有 Claude 相对符号链接，且不把未修改目录纳入写集',
 		async () => {
 			const agentsSkills = join(fixture.root, '.agents', 'skills');
 			const claudeDir = join(fixture.root, '.claude');
@@ -417,14 +423,82 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			const journal = JSON.parse(readFileSync(result.journalPath, 'utf-8')) as {
 				backup_path: string;
 			};
+			const manifest = JSON.parse(
+				readFileSync(join(journal.backup_path, 'manifest.json'), 'utf-8'),
+			) as { entries: Array<{ path: string }> };
 
 			expect(readlinkSync(claudeSkills)).toBe('../.agents/skills');
-			expect(readlinkSync(join(journal.backup_path, '.claude', 'skills'))).toBe(
-				'../.agents/skills',
-			);
+			expect(manifest.entries.some((entry) => entry.path === '.claude/skills')).toBe(false);
 			expect(dbVersion(fixture.dbPath)).toBe(4);
 		},
 	);
+
+	it('备份期间 .git 与 .obsidian 波动不会阻断升级，也不会进入回滚写集', async () => {
+		const gitHead = join(fixture.root, '.git', 'HEAD');
+		const workspace = join(fixture.root, '.obsidian', 'workspace.json');
+		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath], {
+			hooks: {
+				afterWriteSetSnapshot: () => {
+					mkdirSync(dirname(gitHead), { recursive: true });
+					mkdirSync(dirname(workspace), { recursive: true });
+					writeFileSync(gitHead, 'ref: refs/heads/concurrent\n', 'utf-8');
+					writeFileSync(workspace, '{"concurrent":true}\n', 'utf-8');
+				},
+			},
+		});
+		const journal = JSON.parse(readFileSync(result.journalPath, 'utf-8')) as {
+			backup_path: string;
+		};
+		const manifest = JSON.parse(
+			readFileSync(join(journal.backup_path, 'manifest.json'), 'utf-8'),
+		) as { entries: Array<{ path: string }> };
+
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(readFileSync(gitHead, 'utf-8')).toContain('concurrent');
+		expect(readFileSync(workspace, 'utf-8')).toContain('concurrent');
+		expect(manifest.entries.some((entry) => entry.path.startsWith('.git'))).toBe(false);
+		expect(manifest.entries.some((entry) => entry.path.startsWith('.obsidian'))).toBe(false);
+	});
+
+	it('项目文件在备份后被并发编辑时拒绝升级，且不反向覆盖新内容', async () => {
+		const projectPath = join(fixture.root, '20_项目', 'Concurrent.md');
+		const initial = '---\ntitle: Concurrent\ntype: project\nstatus: active\n---\n并发前内容\n';
+		const concurrent = `${initial}编辑器并发写入\n`;
+		writeFileSync(projectPath, initial, 'utf-8');
+
+		await expect(
+			upgrade([fixture.root, '--scope-map', fixture.mapPath], {
+				hooks: {
+					afterBackupPrepared: () => writeFileSync(projectPath, concurrent, 'utf-8'),
+				},
+			}),
+		).rejects.toThrow(/升级写集在切换前发生变化[\s\S]*Concurrent\.md/);
+
+		expect(readFileSync(projectPath, 'utf-8')).toBe(concurrent);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(vaultJournals(fixture.root)).toEqual([]);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+	});
+
+	it('通用写集在 prepared 后发生变化时零写入失败，并保留并发内容', async () => {
+		const agentsPath = join(fixture.root, 'AGENTS.md');
+		const concurrent = '编辑器在 prepared 后写入的新规则\n';
+
+		await expect(
+			upgrade([fixture.root, '--scope-map', fixture.mapPath], {
+				hooks: {
+					afterBackupPrepared: () => writeFileSync(agentsPath, concurrent, 'utf-8'),
+				},
+			}),
+		).rejects.toThrow(/升级写集在切换前发生变化[\s\S]*AGENTS\.md/);
+
+		expect(readFileSync(agentsPath, 'utf-8')).toBe(concurrent);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(vaultJournals(fixture.root)).toEqual([]);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+	});
 
 	it.skipIf(process.platform === 'win32')('备份轮换拒绝跟随伪造的 bundle 符号链接', async () => {
 		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
@@ -471,6 +545,51 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		expect(result.migratedItems).toBe(2);
 		expect(dbVersion(fixture.dbPath)).toBe(4);
 		expect(existsSync(dirname(defaultMapPath))).toBe(false);
+	});
+
+	it('默认 scope map 在 prepared 后被并发创建时不会被回滚删除', async () => {
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+		const concurrent = '{"createdBy":"editor"}\n';
+
+		await expect(
+			upgrade([fixture.root], {
+				hooks: {
+					afterBackupPrepared: () => {
+						mkdirSync(dirname(defaultMapPath), { recursive: true });
+						writeFileSync(defaultMapPath, concurrent, 'utf-8');
+					},
+				},
+			}),
+		).rejects.toThrow(/升级写集在切换前发生变化[\s\S]*migrations/);
+
+		expect(readFileSync(defaultMapPath, 'utf-8')).toBe(concurrent);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(vaultJournals(fixture.root)).toEqual([]);
+	});
+
+	it('scope map 发布后的落盘故障会按已写入处理并完整回滚', async () => {
+		const defaultMapPath = join(fixture.root, '90_系统', '记忆', 'migrations', 'v4-scope-map.json');
+
+		await expect(
+			upgrade([fixture.root], {
+				hooks: {
+					afterScopeMapPublished: () => {
+						throw new Error('模拟 scope map 发布后的落盘故障');
+					},
+				},
+			}),
+		).rejects.toThrow(/模拟 scope map 发布后的落盘故障/);
+
+		expect(existsSync(defaultMapPath)).toBe(false);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		const journals = vaultJournals(fixture.root);
+		expect(journals).toHaveLength(1);
+		expect(JSON.parse(readFileSync(journals[0] ?? '', 'utf-8'))).toMatchObject({
+			state: 'restored',
+		});
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
 	it('成功升级清理整个 migrations 工作区，但不删除外部 scope map，回滚可恢复原目录', async () => {
@@ -973,6 +1092,104 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		expect(findJournals(join(fixture.parent, '.lifeos-cutovers'))).toEqual([]);
 	});
 
+	it('SQLite 短暂写锁会有限重试，释放后继续完成升级', async () => {
+		const lockScript = `
+const Database = require('better-sqlite3');
+const db = new Database(process.argv[1]);
+db.pragma('busy_timeout = 0');
+db.exec('BEGIN IMMEDIATE');
+process.stdout.write('locked\\n');
+setTimeout(() => {
+	db.exec('ROLLBACK');
+	db.close();
+}, 350);
+`;
+		const child = spawn(process.execPath, ['-e', lockScript, fixture.dbPath], {
+			cwd: process.cwd(),
+			stdio: ['ignore', 'pipe', 'pipe'],
+		});
+		let stderr = '';
+		child.stderr.setEncoding('utf-8');
+		child.stderr.on('data', (chunk: string) => {
+			stderr += chunk;
+		});
+		await new Promise<void>((resolvePromise, rejectPromise) => {
+			let stdout = '';
+			child.stdout.setEncoding('utf-8');
+			child.stdout.on('data', (chunk: string) => {
+				stdout += chunk;
+				if (stdout.includes('locked\n')) resolvePromise();
+			});
+			child.once('error', rejectPromise);
+			child.once('exit', (code) => {
+				if (!stdout.includes('locked\n')) {
+					rejectPromise(new Error(`SQLite 持锁子进程提前退出（${code}）：${stderr}`));
+				}
+			});
+		});
+
+		let retries = 0;
+		try {
+			const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath], {
+				sqliteBusyTimeoutMs: 10,
+				retryDelaysMs: [20, 40, 80, 160, 320],
+				hooks: {
+					onSqliteRetry: () => {
+						retries += 1;
+					},
+				},
+			});
+			expect(result.migratedItems).toBe(2);
+		} finally {
+			if (child.exitCode === null && child.signalCode === null) child.kill();
+			await new Promise<void>((resolvePromise) => {
+				if (child.exitCode !== null || child.signalCode !== null) resolvePromise();
+				else child.once('exit', () => resolvePromise());
+			});
+		}
+
+		expect(retries).toBeGreaterThan(0);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+	});
+
+	it('SQLite 在线快照包含尚未 checkpoint 的 WAL 提交', async () => {
+		const keeper = new Database(fixture.dbPath);
+		let keeperOpen = true;
+		try {
+			keeper.pragma('journal_mode = WAL');
+			keeper.pragma('wal_autocheckpoint = 0');
+			keeper.exec(`
+				CREATE TABLE wal_sentinel(value TEXT NOT NULL);
+				INSERT INTO wal_sentinel(value) VALUES ('只存在于 WAL 的提交');
+			`);
+			expect(existsSync(`${fixture.dbPath}-wal`)).toBe(true);
+			expect(statSync(`${fixture.dbPath}-wal`).size).toBeGreaterThan(0);
+
+			const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath], {
+				hooks: {
+					afterBackupPrepared: () => {
+						keeper.close();
+						keeperOpen = false;
+					},
+				},
+			});
+			await upgrade([fixture.root, '--restore', result.journalPath]);
+
+			const restored = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
+			try {
+				expect(restored.prepare('SELECT value FROM wal_sentinel').get()).toEqual({
+					value: '只存在于 WAL 的提交',
+				});
+				expect(restored.pragma('quick_check')).toEqual([{ quick_check: 'ok' }]);
+			} finally {
+				restored.close();
+			}
+			expect(dbVersion(fixture.dbPath)).toBe(3);
+		} finally {
+			if (keeperOpen) keeper.close();
+		}
+	});
+
 	it('现有 MCP JSON 损坏时拒绝覆盖，并原样恢复已修改的其他客户端配置', async () => {
 		const claudePath = join(fixture.root, '.mcp.json');
 		const codexPath = join(fixture.root, '.codex', 'config.toml');
@@ -989,15 +1206,28 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		writeFileSync(opencodePath, malformedOpencode, 'utf-8');
 		writeFileSync(projectPath, originalProject, 'utf-8');
 		writeFileSync(fixture.mapPath, `${JSON.stringify(scopeMap('gts'), null, 2)}\n`, 'utf-8');
+		mkdirSync(join(fixture.root, '.agents', 'skills'), { recursive: true });
 
-		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
-			/现有 JSON 配置无法解析，拒绝覆盖/,
-		);
+		const customSkill = join(fixture.root, '.agents', 'skills', 'custom', 'SKILL.md');
+		const userNote = join(fixture.root, '00_草稿', 'user-note.md');
+		await expect(
+			upgrade([fixture.root, '--scope-map', fixture.mapPath], {
+				hooks: {
+					afterBackupPrepared: () => {
+						mkdirSync(dirname(customSkill), { recursive: true });
+						writeFileSync(customSkill, '并发创建的用户 Skill\n', 'utf-8');
+						writeFileSync(userNote, '升级期间继续编辑的用户笔记\n', 'utf-8');
+					},
+				},
+			}),
+		).rejects.toThrow(/现有 JSON 配置无法解析，拒绝覆盖/);
 
 		expect(readFileSync(claudePath, 'utf-8')).toBe(originalClaude);
 		expect(readFileSync(codexPath, 'utf-8')).toBe(originalCodex);
 		expect(readFileSync(opencodePath, 'utf-8')).toBe(malformedOpencode);
 		expect(readFileSync(projectPath, 'utf-8')).toBe(originalProject);
+		expect(readFileSync(customSkill, 'utf-8')).toBe('并发创建的用户 Skill\n');
+		expect(readFileSync(userNote, 'utf-8')).toBe('升级期间继续编辑的用户笔记\n');
 		expect(readFileSync(join(fixture.root, 'AGENTS.md'), 'utf-8')).toBe('OLD AGENT CONTRACT\n');
 		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
 		expect(dbVersion(fixture.dbPath)).toBe(3);
@@ -1009,7 +1239,46 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
-	it('事务迁移失败时恢复完整 V3 Vault，并留下 restored journal', async () => {
+	it('失败回滚会恢复旧 managed_assets 中被整包升级删除的退役文件', async () => {
+		const obsoleteRelative = 'legacy-assets/Obsolete.md';
+		const obsoletePath = join(fixture.root, obsoleteRelative);
+		const obsoleteContent = '仍属于旧托管清单的退役资产\n';
+		mkdirSync(dirname(obsoletePath), { recursive: true });
+		writeFileSync(obsoletePath, obsoleteContent, 'utf-8');
+		const yamlWithManagedAsset = `${fixture.legacyYaml}managed_assets:\n  ${obsoleteRelative}:\n    version: 1.8.3\n    sha256: ${sha256(obsoleteContent)}\n  00_草稿:\n    version: 1.8.3\n    sha256: ${'a'.repeat(64)}\n`;
+		writeFileSync(join(fixture.root, 'lifeos.yaml'), yamlWithManagedAsset, 'utf-8');
+		writeFileSync(join(fixture.root, 'opencode.json'), '{"mcp":\n', 'utf-8');
+		const userNote = join(fixture.root, '00_草稿', 'user-note.md');
+
+		await expect(
+			upgrade([fixture.root, '--scope-map', fixture.mapPath], {
+				hooks: {
+					afterBackupPrepared: () =>
+						writeFileSync(userNote, '目录型旧清单不得扩大回滚范围\n', 'utf-8'),
+				},
+			}),
+		).rejects.toThrow(/现有 JSON 配置无法解析，拒绝覆盖/);
+
+		expect(readFileSync(obsoletePath, 'utf-8')).toBe(obsoleteContent);
+		expect(readFileSync(userNote, 'utf-8')).toBe('目录型旧清单不得扩大回滚范围\n');
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(yamlWithManagedAsset);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		const journalPath = vaultJournals(fixture.root)[0];
+		if (!journalPath) throw new Error('测试缺少 restored journal');
+		const journal = JSON.parse(readFileSync(journalPath, 'utf-8')) as { backup_path: string };
+		const manifest = JSON.parse(
+			readFileSync(join(journal.backup_path, 'manifest.json'), 'utf-8'),
+		) as { entries: Array<{ path: string; strategy: string }> };
+		expect(manifest.entries).toContainEqual({
+			path: '00_草稿',
+			strategy: 'directory-presence',
+			originalKind: 'directory',
+			sourceFingerprint: 'directory',
+		});
+	});
+
+	it('事务迁移失败时恢复 V3 升级写集，并留下 restored journal', async () => {
+		if (process.platform !== 'win32') chmodSync(fixture.dbPath, 0o600);
 		const invalidMap = scopeMap();
 		invalidMap[1] = { ...invalidMap[1], status: 'archived' };
 		writeFileSync(fixture.mapPath, `${JSON.stringify(invalidMap, null, 2)}\n`, 'utf-8');
@@ -1023,6 +1292,9 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			'用户数据不得丢失\n',
 		);
 		expect(dbVersion(fixture.dbPath)).toBe(3);
+		if (process.platform !== 'win32') {
+			expect(statSync(fixture.dbPath).mode & 0o777).toBe(0o600);
+		}
 		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'runtime-receipt.json'))).toBe(false);
 		const journals = findJournals(join(fixture.parent, '.lifeos-cutovers'));
 		expect(journals).toHaveLength(1);
@@ -1198,7 +1470,10 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		};
 		expect(journal.backup_receipt_detached).toBe(true);
 		const backupReceipt = JSON.parse(
-			readFileSync(join(journal.backup_path, '90_系统', '记忆', 'runtime-receipt.json'), 'utf-8'),
+			readFileSync(
+				join(journal.backup_path, 'payload', '90_系统', '记忆', 'runtime-receipt.json'),
+				'utf-8',
+			),
 		) as Record<string, unknown>;
 		expect(backupReceipt.kind).toBe('fresh-install');
 		expect(backupReceipt).not.toHaveProperty('journal_path');
@@ -1215,12 +1490,12 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		const second = await upgrade([fixture.root]);
 		expect(existsSync(first.journalPath)).toBe(false);
 		expect(vaultJournals(fixture.root)).toEqual([second.journalPath]);
-		writeFileSync(userNote, '第二次升级后会被回滚\n', 'utf-8');
+		writeFileSync(userNote, '第二次升级后用户继续编辑\n', 'utf-8');
 
 		const restored = await upgrade([fixture.root, '--restore', second.journalPath]);
 
 		expect(restored.journalPath).toBe(second.journalPath);
-		expect(readFileSync(userNote, 'utf-8')).toBe('第二次升级前必须保留\n');
+		expect(readFileSync(userNote, 'utf-8')).toBe('第二次升级后用户继续编辑\n');
 		expect(dbVersion(fixture.dbPath)).toBe(4);
 		expect(vaultJournals(fixture.root)).toEqual([second.journalPath]);
 		const receipt = JSON.parse(
@@ -1234,6 +1509,13 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		expect(JSON.parse(readFileSync(second.journalPath, 'utf-8'))).toMatchObject({
 			state: 'restored',
 		});
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+
+		const yamlPath = join(fixture.root, 'lifeos.yaml');
+		const editedAfterRestore = `${readFileSync(yamlPath, 'utf-8')}# 恢复完成后的用户编辑\n`;
+		writeFileSync(yamlPath, editedAfterRestore, 'utf-8');
+		await upgrade([fixture.root, '--restore', second.journalPath]);
+		expect(readFileSync(yamlPath, 'utf-8')).toBe(editedAfterRestore);
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
@@ -1300,7 +1582,60 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
-	it('显式恢复在两次目录 rename 之间中断后可从 journal 自动续接', async () => {
+	it('旧版完整 Vault journal 在目录切换中断后仍可自动续接恢复', async () => {
+		const cutover = createCutover(fixture.root, '1.8.3', VERSION, 'a'.repeat(64));
+		await backupVault(cutover.journal);
+		expect(cutover.journal.backup_format).toBeUndefined();
+		for (const state of [
+			'prepared',
+			'files_installed',
+			'db_committed',
+			'verified',
+			'opened',
+		] as const) {
+			advanceCutover(cutover.journalPath, cutover.journal, state);
+		}
+		writeFileSync(join(fixture.root, '00_草稿', 'user-note.md'), '旧备份之后的改动\n');
+
+		const interruptedLock = acquireCutoverLock(fixture.root);
+		const boundLock = bindCutoverLock(
+			fixture.root,
+			interruptedLock.token,
+			cutover.journal.cutover_id,
+		);
+		writeFileSync(
+			cutoverLockPath(fixture.root),
+			`${JSON.stringify({ ...boundLock, pid: exitedChildPid() }, null, 2)}\n`,
+			'utf-8',
+		);
+		const staging = join(
+			fixture.parent,
+			`.${basename(fixture.root)}.restore-${cutover.journal.cutover_id}`,
+		);
+		const displaced = join(
+			fixture.parent,
+			`.${basename(fixture.root)}.previous-${cutover.journal.cutover_id}`,
+		);
+		cpSync(cutover.journal.backup_path, staging, {
+			recursive: true,
+			preserveTimestamps: true,
+			verbatimSymlinks: true,
+		});
+		renameSync(fixture.root, displaced);
+
+		await upgrade([fixture.root, '--restore', cutover.journalPath]);
+
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(readFileSync(join(fixture.root, '00_草稿', 'user-note.md'), 'utf-8')).toBe(
+			'用户数据不得丢失\n',
+		);
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(existsSync(staging)).toBe(false);
+		expect(existsSync(displaced)).toBe(false);
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+	});
+
+	it('显式恢复可从已恢复部分写集的中断状态幂等续接', async () => {
 		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
 		const journal = JSON.parse(readFileSync(result.journalPath, 'utf-8')) as {
 			cutover_id: string;
@@ -1313,29 +1648,20 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			`${JSON.stringify({ ...boundLock, pid: exitedChildPid() }, null, 2)}\n`,
 			'utf-8',
 		);
-		const staging = join(
-			fixture.parent,
-			`.${basename(fixture.root)}.restore-${journal.cutover_id}`,
+		writeFileSync(
+			join(fixture.root, 'lifeos.yaml'),
+			readFileSync(join(journal.backup_path, 'payload', 'lifeos.yaml')),
 		);
-		const displaced = join(
-			fixture.parent,
-			`.${basename(fixture.root)}.previous-${journal.cutover_id}`,
-		);
-		cpSync(journal.backup_path, staging, {
-			recursive: true,
-			preserveTimestamps: true,
-			verbatimSymlinks: true,
-		});
-		renameSync(fixture.root, displaced);
-		expect(existsSync(fixture.root)).toBe(false);
+		writeFileSync(join(fixture.root, '00_草稿', 'user-note.md'), '恢复期间的用户编辑必须保留\n');
 
 		const restored = await upgrade([fixture.root, '--restore', result.journalPath]);
 
 		expect(restored.journalPath).toBe(result.journalPath);
 		expect(dbVersion(fixture.dbPath)).toBe(3);
 		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
-		expect(existsSync(staging)).toBe(false);
-		expect(existsSync(displaced)).toBe(false);
+		expect(readFileSync(join(fixture.root, '00_草稿', 'user-note.md'), 'utf-8')).toBe(
+			'恢复期间的用户编辑必须保留\n',
+		);
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 

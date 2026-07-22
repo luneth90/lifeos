@@ -18,6 +18,16 @@ import {
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { cutoverRoot, isValidCutoverId } from '../../cutover-lock.js';
 import { canonicalVaultLocation, canonicalVaultRoot } from '../../utils/safe-path.js';
+import {
+	WRITE_SET_BACKUP_FORMAT,
+	type WriteSetBackupHooks,
+	type WriteSetTarget,
+	assertWriteSetBackupIntegrity,
+	assertWriteSetRestored,
+	assertWriteSetSourceUnchanged,
+	backupWriteSet,
+	restoreWriteSet,
+} from './write-set-backup.js';
 
 export type CutoverState =
 	| 'preparing'
@@ -40,18 +50,29 @@ export interface CutoverJournal {
 	state: CutoverState;
 	backup_path: string;
 	backup_sha256?: string;
+	backup_format?: typeof WRITE_SET_BACKUP_FORMAT;
 	error?: string;
 	backup_receipt_detached?: boolean;
 }
 
 export interface BackupVaultOptions {
 	runtimeReceiptPath?: string;
+	targets?: readonly WriteSetTarget[];
+	retryDelaysMs?: readonly number[];
+	hooks?: WriteSetBackupHooks;
+	onSqliteRetry?: (attempt: number, error: unknown) => void;
 }
 
 interface RuntimeReceiptOverride {
 	relativePath: string;
 	value: Record<string, unknown>;
 	content: Buffer;
+}
+
+function assertKnownBackupFormat(journal: CutoverJournal): void {
+	if (journal.backup_format !== undefined && journal.backup_format !== WRITE_SET_BACKUP_FORMAT) {
+		throw new Error(`cutover backup_format 不受支持：${String(journal.backup_format)}`);
+	}
 }
 
 function fsyncDirectory(path: string): void {
@@ -195,9 +216,30 @@ function standaloneRuntimeReceiptOverride(
 	return { relativePath, value, content };
 }
 
-export function backupVault(journal: CutoverJournal, options: BackupVaultOptions = {}): void {
+export async function backupVault(
+	journal: CutoverJournal,
+	options: BackupVaultOptions = {},
+): Promise<void> {
 	if (existsSync(journal.backup_path)) throw new Error('cutover backup 已存在');
 	const receiptOverride = standaloneRuntimeReceiptOverride(journal, options.runtimeReceiptPath);
+	if (options.targets) {
+		const result = await backupWriteSet({
+			vaultRoot: journal.vault_root,
+			backupPath: journal.backup_path,
+			cutoverId: journal.cutover_id,
+			targets: options.targets,
+			...(receiptOverride
+				? { contentOverrides: new Map([[receiptOverride.relativePath, receiptOverride.content]]) }
+				: {}),
+			...(options.retryDelaysMs ? { retryDelaysMs: options.retryDelaysMs } : {}),
+			...(options.hooks ? { hooks: options.hooks } : {}),
+			...(options.onSqliteRetry ? { onSqliteRetry: options.onSqliteRetry } : {}),
+		});
+		journal.backup_format = WRITE_SET_BACKUP_FORMAT;
+		journal.backup_sha256 = result.backupSha256;
+		journal.backup_receipt_detached = receiptOverride !== null;
+		return;
+	}
 	const sourceHash = treeSha256(journal.vault_root);
 	cpSync(journal.vault_root, journal.backup_path, {
 		recursive: true,
@@ -258,6 +300,17 @@ function ordinaryDirectoryExists(path: string, label: string): boolean {
 
 export function restoreVault(journal: CutoverJournal): void {
 	const { root, backup } = controlledBackup(journal);
+	assertKnownBackupFormat(journal);
+	if (journal.backup_format === WRITE_SET_BACKUP_FORMAT) {
+		if (!journal.backup_sha256) throw new Error('cutover 写集备份哈希缺失');
+		restoreWriteSet({
+			vaultRoot: root,
+			backupPath: backup,
+			cutoverId: journal.cutover_id,
+			backupSha256: journal.backup_sha256,
+		});
+		return;
+	}
 	const relativeBackup = relative(root, backup);
 	if (!existsSync(join(backup, 'lifeos.yaml')) || !journal.backup_sha256) {
 		throw new Error('cutover backup 无效');
@@ -374,12 +427,36 @@ export function assertVaultMatchesCutoverBackup(journal: CutoverJournal): void {
 		throw new Error('cutover backup 哈希缺失或非法');
 	}
 	const { root, backup } = controlledBackup(journal);
+	assertKnownBackupFormat(journal);
+	if (journal.backup_format === WRITE_SET_BACKUP_FORMAT) {
+		assertWriteSetRestored({
+			vaultRoot: root,
+			backupPath: backup,
+			cutoverId: journal.cutover_id,
+			backupSha256: journal.backup_sha256 as string,
+		});
+		return;
+	}
 	if (treeSha256(backup) !== journal.backup_sha256) {
 		throw new Error('cutover backup 哈希校验失败');
 	}
 	if (treeSha256(root) !== journal.backup_sha256) {
 		throw new Error('恢复后的 Vault 与 cutover backup 哈希不一致');
 	}
+}
+
+export function assertCutoverSourceUnchanged(journal: CutoverJournal): void {
+	const { root, backup } = controlledBackup(journal);
+	assertKnownBackupFormat(journal);
+	if (journal.backup_format !== WRITE_SET_BACKUP_FORMAT || !journal.backup_sha256) {
+		throw new Error('当前 cutover 不是可校验源状态的写集备份');
+	}
+	assertWriteSetSourceUnchanged({
+		vaultRoot: root,
+		backupPath: backup,
+		cutoverId: journal.cutover_id,
+		backupSha256: journal.backup_sha256,
+	});
 }
 
 export function readCutoverJournal(path: string): CutoverJournal {
@@ -424,7 +501,15 @@ export function retainOnlyCutoverBundle(vaultRoot: string, keepCutoverId: string
 		throw new Error('保留的 cutover backup 哈希缺失或非法');
 	}
 	const { backup } = controlledBackup(keep.journal);
-	if (treeSha256(backup) !== keep.journal.backup_sha256) {
+	assertKnownBackupFormat(keep.journal);
+	if (keep.journal.backup_format === WRITE_SET_BACKUP_FORMAT) {
+		assertWriteSetBackupIntegrity({
+			vaultRoot: root,
+			backupPath: backup,
+			cutoverId: keepCutoverId,
+			backupSha256: keep.journal.backup_sha256 as string,
+		});
+	} else if (treeSha256(backup) !== keep.journal.backup_sha256) {
 		throw new Error('保留的 cutover backup 哈希校验失败');
 	}
 	const removed: string[] = [];
