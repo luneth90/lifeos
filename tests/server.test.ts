@@ -1,3 +1,5 @@
+import { symlinkSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type TempVault, createTempVault } from './setup.js';
 
@@ -210,6 +212,35 @@ describe('server 最终 V2/V4 契约', () => {
 		expect(coreMock.memoryStartup).toHaveBeenCalledTimes(2);
 	});
 
+	it('memory_forget 使用 camelCase 参数并精确失效归档条目的局部 scope', () => {
+		coreMock.memoryForget.mockReturnValueOnce({
+			itemId: 2,
+			itemKind: 'rule',
+			scope: { type: 'skill', key: 'revise' },
+			status: 'archived',
+		});
+		testing.callMemoryBootstrap({ vault_root: vault.root });
+		const forgotten = testing.callTool('memory_forget', {
+			contract_version: 2,
+			vault_root: vault.root,
+			item_id: 2,
+			reason: '规则已失效',
+		});
+		expect(forgotten).toMatchObject({ scope: { type: 'skill', key: 'revise' } });
+
+		expect(coreMock.memoryForget).toHaveBeenCalledWith({
+			contractVersion: 2,
+			vaultRoot: vault.root,
+			itemId: 2,
+			reason: '规则已失效',
+		});
+		expect(testing.runtimeState({ vault_root: vault.root })).toMatchObject({
+			layer0Dirty: false,
+			globalVersion: 0,
+			scopeVersions: { 'skill:revise': 1 },
+		});
+	});
+
 	it('memory_context 将作用域参数封装为 request，不保留旧上下文字段', () => {
 		testing.callTool('memory_context', {
 			contract_version: 2,
@@ -252,28 +283,116 @@ describe('server 最终 V2/V4 契约', () => {
 		}
 	});
 
-	it('startup 失败被限制在当前 Vault，不会降级到旧路径', () => {
+	it('显式与省略 dbPath 共享同一个 Vault runtime', () => {
+		testing.callMemoryBootstrap({ vault_root: vault.root, db_path: vault.dbPath });
+		testing.callMemoryBootstrap({ vault_root: vault.root });
+		expect(testing.runtimeCount()).toBe(1);
+		expect(coreMock.memoryStartup).toHaveBeenCalledTimes(2);
+	});
+
+	it('成功工具请求会更新 runtime dbPath，后台维护使用最新路径', () => {
+		vi.useFakeTimers();
+		const initialDbPath = join(vault.root, 'initial.db');
+		const currentDbPath = join(vault.root, 'current.db');
+		testing.callMemoryBootstrap({ vault_root: vault.root, db_path: initialDbPath });
+
+		testing.callTool('memory_query', {
+			contract_version: 2,
+			vault_root: vault.root,
+			db_path: currentDbPath,
+			query: '最新路径',
+		});
+		vi.runAllTimers();
+
+		expect(coreMock.memoryStartupMaintenance).toHaveBeenCalledTimes(1);
+		expect(coreMock.memoryStartupMaintenance).toHaveBeenCalledWith({
+			contractVersion: 2,
+			dbPath: currentDbPath,
+			vaultRoot: vault.root,
+		});
+	});
+
+	it('成功刷新会更新 runtime dbPath，后台维护使用刷新请求路径', () => {
+		vi.useFakeTimers();
+		const initialDbPath = join(vault.root, 'initial.db');
+		const refreshedDbPath = join(vault.root, 'refreshed.db');
+		testing.callMemoryBootstrap({ vault_root: vault.root, db_path: initialDbPath });
+
+		testing.callMemoryBootstrap({ vault_root: vault.root, db_path: refreshedDbPath });
+		vi.runAllTimers();
+
+		expect(coreMock.memoryStartup).toHaveBeenNthCalledWith(2, {
+			dbPath: refreshedDbPath,
+			vaultRoot: vault.root,
+		});
+		expect(coreMock.memoryStartupMaintenance).toHaveBeenCalledTimes(1);
+		expect(coreMock.memoryStartupMaintenance).toHaveBeenCalledWith({
+			contractVersion: 2,
+			dbPath: refreshedDbPath,
+			vaultRoot: vault.root,
+		});
+	});
+
+	it.skipIf(process.platform === 'win32')('符号链接别名与真实路径共享同一个 runtime', () => {
+		const alias = `${vault.root}-alias`;
+		symlinkSync(vault.root, alias, 'dir');
+		try {
+			testing.callMemoryBootstrap({ vault_root: alias });
+			testing.callMemoryBootstrap({ vault_root: vault.root });
+			expect(testing.runtimeCount()).toBe(1);
+		} finally {
+			unlinkSync(alias);
+		}
+	});
+
+	it('startup 失败会淘汰残留 runtime，下一次同 Vault 请求可重试', () => {
 		const other = createTempVault();
 		try {
 			coreMock.memoryStartup
 				.mockImplementationOnce(() => {
 					throw new Error('runtime contract invalid');
 				})
+				.mockReturnValueOnce(startupResult('Recovered'))
 				.mockReturnValueOnce(startupResult('Other'));
 
 			const failed = testing.callMemoryBootstrap({ vault_root: vault.root });
 			const repeated = testing.callMemoryBootstrap({ vault_root: vault.root });
 			const recovered = testing.callMemoryBootstrap({ vault_root: other.root });
 			expect(failed).toMatchObject({ status: 'error', startup_error: 'runtime contract invalid' });
-			expect(repeated).toMatchObject({
-				status: 'error',
-				startup_error: 'runtime contract invalid',
-			});
+			expect(repeated).toMatchObject({ status: 'ok', _layer0: 'Recovered' });
 			expect(recovered).toMatchObject({ status: 'ok', _layer0: 'Other' });
-			expect(coreMock.memoryStartup).toHaveBeenCalledTimes(2);
+			expect(coreMock.memoryStartup).toHaveBeenCalledTimes(3);
+			expect(testing.runtimeCount()).toBe(2);
 		} finally {
 			other.cleanup();
 		}
+	});
+
+	it('Layer 0 刷新失败同样淘汰 runtime，并允许下次请求恢复', () => {
+		coreMock.memoryStartup
+			.mockReturnValueOnce(startupResult('Initial', 'ctx-initial'))
+			.mockImplementationOnce(() => {
+				throw new Error('refresh failed');
+			})
+			.mockReturnValueOnce(startupResult('Recovered', 'ctx-recovered'));
+		expect(testing.callMemoryBootstrap({ vault_root: vault.root }).status).toBe('ok');
+		expect(testing.callMemoryBootstrap({ vault_root: vault.root })).toMatchObject({
+			status: 'error',
+			startup_error: 'refresh failed',
+		});
+		expect(testing.runtimeCount()).toBe(0);
+		expect(testing.callMemoryBootstrap({ vault_root: vault.root })).toMatchObject({
+			status: 'ok',
+			_layer0: 'Recovered',
+		});
+	});
+
+	it('不存在的 Vault 返回结构化启动错误且不留下 runtime', () => {
+		const result = testing.callMemoryBootstrap({ vault_root: join(vault.root, 'missing') });
+		expect(result).toMatchObject({ status: 'error', _layer0: '' });
+		expect(result.startup_error).toContain('Vault 不存在');
+		expect(testing.runtimeCount()).toBe(0);
+		expect(coreMock.memoryStartup).not.toHaveBeenCalled();
 	});
 
 	it('公开 schema 只接受 contract 2 和规范 scope', async () => {

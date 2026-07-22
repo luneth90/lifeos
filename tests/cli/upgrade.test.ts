@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
 	chmodSync,
 	cpSync,
@@ -32,6 +32,7 @@ import {
 	releaseCutoverLock,
 } from '../../src/cutover-lock.js';
 import { validateRuntimeContract } from '../../src/runtime-contract.js';
+import { MAX_GLOBAL_HARD_ITEM_PAYLOAD_BYTES } from '../../src/services/global-hard-safety.js';
 
 interface UpgradeFixture {
 	parent: string;
@@ -544,9 +545,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		const upgradedVisual = readFileSync(visualPath, 'utf-8');
 		expect(upgradedGts).toContain('\r\nid: "gts"\r\n---\r\n用户项目内容\r\n');
 		expect(upgradedGts).toContain('status: active # 保留注释');
-		expect(upgradedVisual).toContain(
-			'\r\nid: "visual-group-theory"\r\n---\r\n第二个项目正文\r\n',
-		);
+		expect(upgradedVisual).toContain('\r\nid: "visual-group-theory"\r\n---\r\n第二个项目正文\r\n');
 		expect(upgradedVisual).not.toMatch(/(?<!\r)\n/);
 		expect(statSync(visualPath).mode & 0o777).toBe(originalMode);
 		expect(result.updated).toEqual(
@@ -1035,6 +1034,40 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
+	it('V3 超大 global hard 迁移失败时完整回滚，且不泄漏 opened receipt 或 journal', async () => {
+		const oversized = 'a'.repeat(MAX_GLOBAL_HARD_ITEM_PAYLOAD_BYTES * 64);
+		const db = new Database(fixture.dbPath);
+		try {
+			db.prepare('UPDATE memory_items SET content = ? WHERE slot_key = ?').run(
+				oversized,
+				'content:language',
+			);
+		} finally {
+			db.close();
+		}
+		const oversizedMap = scopeMap();
+		oversizedMap[0] = { ...oversizedMap[0], contentHash: sha256(oversized) };
+		writeFileSync(fixture.mapPath, `${JSON.stringify(oversizedMap, null, 2)}\n`, 'utf-8');
+
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/全局 hard 规则触发运行时安全上限/,
+		);
+
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'runtime-receipt.json'))).toBe(false);
+		const journals = findJournals(join(fixture.parent, '.lifeos-cutovers'));
+		expect(journals).toHaveLength(1);
+		for (const journalPath of journals) {
+			expect(JSON.parse(readFileSync(journalPath, 'utf-8'))).toMatchObject({
+				state: 'restored',
+				contract_version: 2,
+				schema_version: 4,
+			});
+		}
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+	});
+
 	it('显式恢复拒绝活动 owner，随后可用受控 journal 恢复并释放写闸', async () => {
 		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
 		const uncontrolledJournal = join(fixture.parent, 'copied-journal.json');
@@ -1050,7 +1083,9 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		);
 		expect(dbVersion(fixture.dbPath)).toBe(4);
 		expect(readFileSync(cutoverLockPath(fixture.root), 'utf-8')).toBe(lockBefore);
-		expect(JSON.parse(readFileSync(result.journalPath, 'utf-8'))).toMatchObject({ state: 'opened' });
+		expect(JSON.parse(readFileSync(result.journalPath, 'utf-8'))).toMatchObject({
+			state: 'opened',
+		});
 		releaseCutoverLock(fixture.root, liveLock.token);
 
 		const restored = await upgrade([fixture.root, '--restore', result.journalPath]);
@@ -1163,10 +1198,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		};
 		expect(journal.backup_receipt_detached).toBe(true);
 		const backupReceipt = JSON.parse(
-			readFileSync(
-				join(journal.backup_path, '90_系统', '记忆', 'runtime-receipt.json'),
-				'utf-8',
-			),
+			readFileSync(join(journal.backup_path, '90_系统', '记忆', 'runtime-receipt.json'), 'utf-8'),
 		) as Record<string, unknown>;
 		expect(backupReceipt.kind).toBe('fresh-install');
 		expect(backupReceipt).not.toHaveProperty('journal_path');
@@ -1275,11 +1307,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			backup_path: string;
 		};
 		const interruptedLock = acquireCutoverLock(fixture.root);
-		const boundLock = bindCutoverLock(
-			fixture.root,
-			interruptedLock.token,
-			journal.cutover_id,
-		);
+		const boundLock = bindCutoverLock(fixture.root, interruptedLock.token, journal.cutover_id);
 		writeFileSync(
 			cutoverLockPath(fixture.root),
 			`${JSON.stringify({ ...boundLock, pid: exitedChildPid() }, null, 2)}\n`,

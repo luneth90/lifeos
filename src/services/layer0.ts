@@ -4,6 +4,7 @@ import { buildTaskboardFocusSection, countRevisionCandidates } from '../active-d
 import { buildGlobalProfileSummary } from '../active-docs/userprofile.js';
 import type { ContextBudgets, Layer0Context, ScopedMemoryItem } from '../types.js';
 import { estimateTokens } from '../utils/shared.js';
+import { assertGlobalHardSafety } from './global-hard-safety.js';
 import { listMemoryItems } from './memory-items.js';
 
 function snapshot(value: unknown): string {
@@ -62,6 +63,7 @@ export function buildLayer0Context(
 ): Layer0Context {
 	void vaultRoot;
 	const now = new Date().toISOString();
+	assertGlobalHardSafety(db, { now });
 	const rules = listMemoryItems(db, {
 		scope: { type: 'global', key: '' },
 		itemKind: 'rule',

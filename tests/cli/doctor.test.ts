@@ -1,13 +1,18 @@
-import { mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import Database from 'better-sqlite3';
+import { vi } from 'vitest';
 import doctorCommand, {
 	MIN_NODE_VERSION,
 	isNodeVersionSupported,
 } from '../../src/cli/commands/doctor.js';
 import initCommand from '../../src/cli/commands/init.js';
+import rulesCommand from '../../src/cli/commands/rules.js';
+import { memoryStartup } from '../../src/core.js';
 import { initDb } from '../../src/db/schema.js';
+import { MAX_GLOBAL_HARD_ITEM_PAYLOAD_BYTES } from '../../src/services/global-hard-safety.js';
 import { upsertMemoryItem } from '../../src/services/memory-items.js';
 
 function makeTmpDir() {
@@ -17,6 +22,7 @@ function makeTmpDir() {
 
 const FIRST_DIR = { zh: '00_草稿', en: '00_Drafts' } as const;
 const DIGEST_DIR = { zh: join('90_系统', '信息'), en: join('90_System', 'Digest') } as const;
+const GIT_AVAILABLE = spawnSync('git', ['--version']).status === 0;
 
 describe.each(['zh', 'en'] as const)('lifeos doctor --lang %s', (lang) => {
 	test('healthy vault: all checks pass', async () => {
@@ -256,6 +262,149 @@ describe('lifeos doctor', () => {
 		}
 	});
 
+	test.skipIf(!GIT_AVAILABLE)(
+		'Git worktree 中未忽略 WAL/SHM 时只告警且不改 .gitignore',
+		async () => {
+			const { dir, cleanup } = makeTmpDir();
+			try {
+				await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+				spawnSync('git', ['init', dir], { stdio: 'ignore' });
+				const result = await doctorCommand([dir]);
+				expect(result.passed).toBe(true);
+				expect(result.checks).toContainEqual(
+					expect.objectContaining({ name: 'database Git hygiene', status: 'warn' }),
+				);
+				expect(existsSync(join(dir, '.gitignore'))).toBe(false);
+			} finally {
+				cleanup();
+			}
+		},
+	);
+
+	test.skipIf(!GIT_AVAILABLE)('Git worktree 已忽略 WAL/SHM 时通过检查', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			spawnSync('git', ['init', dir], { stdio: 'ignore' });
+			writeFileSync(join(dir, '.gitignore'), '*.db-wal\n*.db-shm\n', 'utf-8');
+			const result = await doctorCommand([dir]);
+			expect(result.checks).toContainEqual(
+				expect.objectContaining({ name: 'database Git hygiene', status: 'pass' }),
+			);
+		} finally {
+			cleanup();
+		}
+	});
+
+	test.skipIf(!GIT_AVAILABLE)(
+		'Git 已跟踪特殊字符路径中的 WAL 时告警且不修改索引或 .gitignore',
+		async () => {
+			const { dir: gitRoot, cleanup } = makeTmpDir();
+			const vaultPath = join(gitRoot, 'Vault [literal] $');
+			try {
+				await initCommand([vaultPath, '--lang', 'zh', '--no-mcp']);
+				expect(spawnSync('git', ['init', gitRoot], { stdio: 'ignore' }).status).toBe(0);
+				const ignorePath = join(gitRoot, '.gitignore');
+				const ignoreBefore = '# 用户已有规则\n*.tmp\n';
+				writeFileSync(ignorePath, ignoreBefore, 'utf-8');
+
+				const walPath = join(vaultPath, '90_系统', '记忆', 'memory.db-wal');
+				const walRelativePath = relative(gitRoot, walPath).replace(/\\/g, '/');
+				writeFileSync(walPath, '仅用于验证 Git 索引状态', 'utf-8');
+				const addResult = spawnSync(
+					'git',
+					['--literal-pathspecs', '-C', gitRoot, 'add', '-f', '--', walRelativePath],
+					{ encoding: 'utf8' },
+				);
+				expect(addResult.status, addResult.stderr).toBe(0);
+				unlinkSync(walPath);
+
+				const result = await doctorCommand([vaultPath]);
+				const hygiene = result.checks.find((check) => check.name === 'database Git hygiene');
+				expect(result.passed).toBe(true);
+				expect(hygiene).toMatchObject({ status: 'warn' });
+				expect(hygiene?.detail).toContain('已被 Git 跟踪');
+				expect(hygiene?.detail).toContain(walRelativePath);
+				expect(readFileSync(ignorePath, 'utf-8')).toBe(ignoreBefore);
+
+				const trackedResult = spawnSync(
+					'git',
+					[
+						'--literal-pathspecs',
+						'-C',
+						gitRoot,
+						'ls-files',
+						'--error-unmatch',
+						'--',
+						walRelativePath,
+					],
+					{ encoding: 'utf8' },
+				);
+				expect(trackedResult.status, trackedResult.stderr).toBe(0);
+			} finally {
+				cleanup();
+			}
+		},
+	);
+
+	test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		let db: Database.Database | undefined;
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
+			db = new Database(dbPath);
+			const now = new Date().toISOString();
+			const content = 'x'.repeat(MAX_GLOBAL_HARD_ITEM_PAYLOAD_BYTES + 1);
+			const inserted = db
+				.prepare(`
+					INSERT INTO memory_items(
+						slot_key, content, item_kind, scope_type, scope_key, priority,
+						enforcement, source, related_files, manual_flag, status,
+						created_at, updated_at, expires_at, archived_at, archive_reason
+					) VALUES ('safety:legacy', ?, 'rule', 'global', '', 50, 'hard',
+						'preference', '[]', 0, 'active', ?, ?, NULL, NULL, NULL)
+				`)
+				.run(content, now, now);
+			const itemId = Number(inserted.lastInsertRowid);
+
+			expect(() => memoryStartup({ vaultRoot: dir })).toThrow(/全局 hard 规则触发运行时安全上限/);
+			const result = await doctorCommand([dir]);
+			const safety = result.checks.find((check) => check.name === 'global hard runtime safety');
+			expect(safety).toMatchObject({ status: 'fail' });
+			expect(safety?.detail).toContain(`Vault=${JSON.stringify(dir)}`);
+			expect(safety?.detail).toContain(`item_id=${itemId}`);
+			expect(safety?.detail).toContain('lifeos rules archive');
+			expect(safety?.detail).toContain('reason=缩减全局 hard 规则');
+			expect(safety?.detail).not.toContain(content);
+			expect(safety?.detail?.length).toBeLessThan(1_000);
+
+			db.close();
+			db = undefined;
+			const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+			try {
+				const archived = (await rulesCommand([
+					'archive',
+					dir,
+					'--id',
+					String(itemId),
+					'--reason',
+					'缩减全局 hard 规则',
+				])) as { status: string; archiveReason: string };
+				expect(archived).toMatchObject({
+					status: 'archived',
+					archiveReason: '缩减全局 hard 规则',
+				});
+			} finally {
+				logSpy.mockRestore();
+			}
+			expect(() => memoryStartup({ vaultRoot: dir })).not.toThrow();
+		} finally {
+			db?.close();
+			cleanup();
+		}
+	});
+
 	test('Schema V3 和超预算 global hard rule 都是硬失败', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		let db: Database.Database | undefined;
@@ -266,7 +415,7 @@ describe('lifeos doctor', () => {
 			initDb(db);
 			upsertMemoryItem(db, {
 				slotKey: 'content:oversized',
-				content: '必须遵守'.repeat(2000),
+				content: '必须遵守'.repeat(500),
 				itemKind: 'rule',
 				scope: { type: 'global', key: '' },
 				enforcement: 'hard',

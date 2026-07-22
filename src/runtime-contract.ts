@@ -40,6 +40,7 @@ export type RuntimeReceipt = {
 export interface RuntimeContractOptions {
 	vaultRoot: string;
 	db?: Database.Database;
+	config?: VaultConfig;
 	runtimeVersion?: string;
 	verifyManagedAssets?: boolean;
 	allowActiveCutover?: boolean;
@@ -100,8 +101,8 @@ export function runtimePackageSha256(): string {
 	return hash.digest('hex');
 }
 
-function receiptPath(vaultRoot: string): string {
-	return join(resolveConfig(vaultRoot).memoryDir(), RUNTIME_RECEIPT_FILENAME);
+function receiptPath(vaultRoot: string, config?: VaultConfig): string {
+	return join((config ?? resolveConfig(vaultRoot)).memoryDir(), RUNTIME_RECEIPT_FILENAME);
 }
 
 function safeAssetPath(vaultRoot: string, assetPath: string): string | null {
@@ -112,8 +113,12 @@ function safeAssetPath(vaultRoot: string, assetPath: string): string | null {
 	return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? null : candidate;
 }
 
-function readReceipt(vaultRoot: string, issues: string[]): RuntimeReceipt | undefined {
-	const path = receiptPath(vaultRoot);
+function readReceipt(
+	vaultRoot: string,
+	config: VaultConfig,
+	issues: string[],
+): RuntimeReceipt | undefined {
+	const path = receiptPath(vaultRoot, config);
 	if (!existsSync(path)) {
 		issues.push(`缺少 ${RUNTIME_RECEIPT_FILENAME}`);
 		return undefined;
@@ -355,9 +360,13 @@ export function validateRuntimeContract(options: RuntimeContractOptions): Runtim
 	} catch (error) {
 		issues.push(error instanceof Error ? error.message : 'cutover lock 无法读取');
 	}
-	let config: ReturnType<typeof resolveConfig>;
+	let config: VaultConfig;
 	try {
-		config = resolveConfig(vaultRoot);
+		config = options.config ?? resolveConfig(vaultRoot);
+		if (canonicalVaultRoot(config.vaultRoot) !== vaultRoot) {
+			issues.push('显式配置快照不属于当前 Vault');
+			return { ok: false, issues };
+		}
 	} catch (error) {
 		issues.push(error instanceof Error ? error.message : 'lifeos.yaml 无效');
 		return { ok: false, issues };
@@ -366,7 +375,7 @@ export function validateRuntimeContract(options: RuntimeContractOptions): Runtim
 	if (raw.memory.contract_version !== CONTRACT_VERSION) {
 		issues.push('memory.contract_version 必须为 2');
 	}
-	const receipt = readReceipt(vaultRoot, issues);
+	const receipt = readReceipt(vaultRoot, config, issues);
 	if (receipt) {
 		try {
 			if (receipt.package_sha256 !== runtimePackageSha256()) {

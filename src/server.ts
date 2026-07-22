@@ -16,6 +16,7 @@ import * as core from './core.js';
 import { SCHEMA_VERSION } from './db/schema.js';
 import { CONTRACT_VERSION } from './runtime-contract.js';
 import type { MemoryScope, ScopeType, StartupResult } from './types.js';
+import { canonicalVaultRoot } from './utils/safe-path.js';
 
 export const slotKeySchema = z
 	.string()
@@ -110,11 +111,11 @@ function resolveRuntimeIdentity(params: Record<string, unknown>): {
 		(typeof params.vaultRoot === 'string' && params.vaultRoot) ||
 		process.env.LIFEOS_VAULT_ROOT ||
 		process.cwd();
-	const vaultRoot = resolve(rawVault);
+	const vaultRoot = canonicalVaultRoot(rawVault);
 	const dbPath =
 		typeof params.dbPath === 'string' && params.dbPath ? resolve(params.dbPath) : undefined;
 	return {
-		key: `${vaultRoot}\u0000${dbPath ?? ''}`,
+		key: vaultRoot,
 		vaultRoot,
 		dbPath,
 	};
@@ -231,17 +232,22 @@ function ensureStartup(runtime: RuntimeContext): { startedThisCall: boolean } {
 		runtime.startupResult = null;
 		runtime.startupError = error instanceof Error ? error.message : String(error);
 		console.warn(`[lifeos] 启动失败（${runtime.vaultRoot}）:`, error);
+		evictRuntime(runtime);
 		return { startedThisCall: false };
 	}
 }
 
-function refreshLayer0(runtime: RuntimeContext): { ok: boolean; changed: boolean } {
+function refreshLayer0(
+	runtime: RuntimeContext,
+	dbPath: string | undefined = runtime.dbPath,
+): { ok: boolean; changed: boolean } {
 	const previousSnapshot = runtime.startupResult?.layer0.snapshotId ?? null;
 	try {
 		runtime.startupResult = core.memoryStartup({
-			dbPath: runtime.dbPath,
+			dbPath,
 			vaultRoot: runtime.vaultRoot,
 		});
+		runtime.dbPath = dbPath;
 		runtime.startupError = null;
 		runtime.layer0Dirty = false;
 		return {
@@ -251,6 +257,7 @@ function refreshLayer0(runtime: RuntimeContext): { ok: boolean; changed: boolean
 	} catch (error) {
 		runtime.startupError = error instanceof Error ? error.message : String(error);
 		console.warn(`[lifeos] Layer 0 刷新失败（${runtime.vaultRoot}）:`, error);
+		evictRuntime(runtime);
 		return { ok: false, changed: false };
 	}
 }
@@ -327,6 +334,12 @@ function closeRuntime(runtime: RuntimeContext): void {
 	runtime.pendingFiles.clear();
 }
 
+function evictRuntime(runtime: RuntimeContext): void {
+	if (runtimes.get(runtime.key) !== runtime) return;
+	closeRuntime(runtime);
+	runtimes.delete(runtime.key);
+}
+
 function resetRuntimeState(): void {
 	for (const runtime of runtimes.values()) closeRuntime(runtime);
 	runtimes.clear();
@@ -356,41 +369,40 @@ interface BootstrapOutput {
 	startup_error?: string;
 }
 
+function bootstrapError(error: unknown): BootstrapOutput {
+	return {
+		contract_version: CONTRACT_VERSION,
+		schema_version: SCHEMA_VERSION,
+		status: 'error',
+		startup_ran: false,
+		layer0_refreshed: false,
+		snapshot_id: '',
+		_layer0: '',
+		layer0_meta: null,
+		scope_hints: null,
+		startup_error: error instanceof Error ? error.message : String(error),
+	};
+}
+
 function runMemoryBootstrap(params: Record<string, unknown>): BootstrapOutput {
 	const converted = normalizeParams(params);
-	const runtime = getRuntime(converted);
+	let runtime: RuntimeContext;
+	try {
+		runtime = getRuntime(converted);
+	} catch (error) {
+		return bootstrapError(error);
+	}
 	const { startedThisCall } = ensureStartup(runtime);
 	if (runtime.startupError) {
-		return {
-			contract_version: CONTRACT_VERSION,
-			schema_version: SCHEMA_VERSION,
-			status: 'error',
-			startup_ran: false,
-			layer0_refreshed: false,
-			snapshot_id: '',
-			_layer0: '',
-			layer0_meta: null,
-			scope_hints: null,
-			startup_error: runtime.startupError,
-		};
+		return bootstrapError(runtime.startupError);
 	}
 
 	let layer0Refreshed = false;
 	if (!startedThisCall) {
-		const refreshed = refreshLayer0(runtime);
+		const requestDbPath = typeof converted.dbPath === 'string' ? converted.dbPath : undefined;
+		const refreshed = refreshLayer0(runtime, requestDbPath);
 		if (!refreshed.ok) {
-			return {
-				contract_version: CONTRACT_VERSION,
-				schema_version: SCHEMA_VERSION,
-				status: 'error',
-				startup_ran: false,
-				layer0_refreshed: false,
-				snapshot_id: '',
-				_layer0: '',
-				layer0_meta: null,
-				scope_hints: null,
-				startup_error: runtime.startupError ?? 'Layer 0 刷新失败',
-			};
+			return bootstrapError(runtime.startupError ?? 'Layer 0 刷新失败');
 		}
 		layer0Refreshed = refreshed.changed;
 	}
@@ -447,12 +459,21 @@ function runTool<P extends Record<string, unknown>>(
 	const converted = normalizeParams(params);
 	// 必须早于 getRuntime/ensureStartup，保证旧客户端不会触碰 Vault 或数据库。
 	assertRequestContract(converted);
-	const runtime = getRuntime(converted);
+	let runtime: RuntimeContext;
+	try {
+		runtime = getRuntime(converted);
+	} catch (error) {
+		return {
+			status: 'error' as const,
+			startup_error: error instanceof Error ? error.message : String(error),
+		};
+	}
 	ensureStartup(runtime);
 	if (runtime.startupError) {
 		return { status: 'error' as const, startup_error: runtime.startupError };
 	}
 	const result = coreFn(converted);
+	runtime.dbPath = typeof converted.dbPath === 'string' ? converted.dbPath : undefined;
 	options.afterSuccess?.(runtime, converted, result);
 	return result;
 }
@@ -473,13 +494,17 @@ function handleBootstrap<P extends Record<string, unknown>>(): (
 
 function invalidateFromMemoryLog(
 	runtime: RuntimeContext,
+	params: Record<string, unknown>,
+	result: unknown,
+): void {
+	invalidateFromArchivedItem(runtime, params, result);
+}
+
+function invalidateFromArchivedItem(
+	runtime: RuntimeContext,
 	_params: Record<string, unknown>,
 	result: unknown,
 ): void {
-	invalidateFromArchivedItem(runtime, result);
-}
-
-function invalidateFromArchivedItem(runtime: RuntimeContext, result: unknown): void {
 	if (!result || typeof result !== 'object') return;
 	const record = result as Record<string, unknown>;
 	const scope = record.scope;

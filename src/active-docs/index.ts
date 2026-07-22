@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
-import { getOrCreateVaultConfig } from '../config.js';
+import { type VaultConfig, getOrCreateVaultConfig } from '../config.js';
 import type { ActiveDocTarget, RefreshResult } from '../types.js';
 import { buildTaskboardSections } from './taskboard.js';
 import { buildUserprofileSections } from './userprofile.js';
@@ -39,8 +39,13 @@ const CONFIGS: Record<ActiveDocTarget, ActiveDocConfig> = {
 	},
 };
 
-function memoryDir(root: string): string {
-	return getOrCreateVaultConfig(root).memoryDir();
+interface ActiveDocOptions {
+	section?: string;
+	config?: VaultConfig;
+}
+
+function memoryDir(root: string, config?: VaultConfig): string {
+	return (config ?? getOrCreateVaultConfig(root)).memoryDir();
 }
 
 export function taskboardRelativePath(): string {
@@ -62,8 +67,8 @@ function skeleton(config: ActiveDocConfig): string {
 	return `---\ntype: ${config.type}\ncreated: "${date}"\n---\n\n# ${config.title}\n\n${body}\n`;
 }
 
-export function ensureActiveDocsExist(vaultRoot: string): void {
-	const directory = memoryDir(vaultRoot);
+export function ensureActiveDocsExist(vaultRoot: string, config?: VaultConfig): void {
+	const directory = memoryDir(vaultRoot, config);
 	mkdirSync(directory, { recursive: true });
 	for (const config of Object.values(CONFIGS)) {
 		const path = join(directory, config.file);
@@ -109,10 +114,10 @@ export function refreshActiveDoc(
 	db: Database.Database,
 	vaultRoot: string,
 	target: ActiveDocTarget,
-	opts?: { section?: string },
+	opts?: ActiveDocOptions,
 ): RefreshResult {
 	const config = CONFIGS[target];
-	const directory = memoryDir(vaultRoot);
+	const directory = memoryDir(vaultRoot, opts?.config);
 	mkdirSync(directory, { recursive: true });
 	const path = join(directory, config.file);
 	const exists = existsSync(path);
@@ -142,7 +147,7 @@ export function refreshActiveDoc(
 export function refreshTaskboard(
 	db: Database.Database,
 	root: string,
-	opts?: { section?: string },
+	opts?: ActiveDocOptions,
 ): RefreshResult {
 	return refreshActiveDoc(db, root, 'TaskBoard', opts);
 }
@@ -150,7 +155,7 @@ export function refreshTaskboard(
 export function refreshUserprofile(
 	db: Database.Database,
 	root: string,
-	opts?: { section?: string },
+	opts?: ActiveDocOptions,
 ): RefreshResult {
 	return refreshActiveDoc(db, root, 'UserProfile', opts);
 }

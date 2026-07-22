@@ -9,6 +9,7 @@ import type {
 	ScopedMemoryItem,
 } from '../types.js';
 import { estimateTokens } from '../utils/shared.js';
+import { assertGlobalHardSafety } from './global-hard-safety.js';
 import { listMemoryItems } from './memory-items.js';
 import { resolveMemoryScopes } from './scope-resolver.js';
 
@@ -121,6 +122,7 @@ export function buildMemoryContext(
 		fetchScopes.push({ type: 'global', key: '' });
 	}
 	const now = new Date().toISOString();
+	assertGlobalHardSafety(db, { now });
 	const candidates = fetchScopes
 		.flatMap((scope) => listMemoryItems(db, { scope, status: 'active', limit: 10_000 }))
 		.filter((item) => ['rule', 'decision', 'fact'].includes(item.itemKind))

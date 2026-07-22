@@ -1,10 +1,15 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { extname, join, relative, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { parse as parseYaml } from 'yaml';
 import { ConfigValidationError, resolveConfig } from '../../config.js';
 import type { LifeOSConfig } from '../../config.js';
 import { validateRuntimeContract } from '../../runtime-contract.js';
+import {
+	describeGlobalHardSafety,
+	inspectGlobalHardSafety,
+} from '../../services/global-hard-safety.js';
 import { estimateTokens } from '../../utils/shared.js';
 import { assetsDir } from '../utils/assets.js';
 import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
@@ -197,6 +202,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 
 	// 10. Database health
 	checkDbHealth(targetPath, resolvedConfig, check);
+	checkGitDatabaseArtifacts(targetPath, resolvedConfig, check);
 
 	printSummary(result);
 	return result;
@@ -379,13 +385,26 @@ function checkDbHealth(
 		).filter((row) => !repositoryIds.has(row.scope_key)).length;
 		const orphanCount = projectOrphans + fileOrphans + repositoryOrphans;
 		check('memory scopes', orphanCount === 0 ? 'pass' : 'fail', `${orphanCount} orphan`);
+		const hardSafety = inspectGlobalHardSafety(db);
+		const recoveryItemId = hardSafety.offenders[0]?.itemId;
+		const recovery =
+			recoveryItemId === undefined
+				? ''
+				: `；恢复方式：lifeos rules archive；Vault=${JSON.stringify(targetPath)}；item_id=${recoveryItemId}；reason=缩减全局 hard 规则`;
+		check(
+			'global hard runtime safety',
+			hardSafety.ok ? 'pass' : 'fail',
+			`${describeGlobalHardSafety(hardSafety)}${recovery}`,
+		);
+		if (!hardSafety.ok) return;
 		const hardRules = db
 			.prepare(`
 				SELECT slot_key, content FROM memory_items
 				WHERE status = 'active' AND scope_type = 'global'
 				  AND item_kind = 'rule' AND enforcement = 'hard'
+				  AND (expires_at IS NULL OR expires_at >= ?)
 			`)
-			.all() as Array<{ slot_key: string; content: string }>;
+			.all(new Date().toISOString()) as Array<{ slot_key: string; content: string }>;
 		const hardTokens = estimateTokens(
 			hardRules.map((row) => `- **${row.slot_key}**: ${row.content}`).join('\n'),
 		);
@@ -422,6 +441,112 @@ function checkDbHealth(
 	} finally {
 		db?.close();
 	}
+}
+
+function checkGitDatabaseArtifacts(
+	targetPath: string,
+	config: LifeOSConfig,
+	check: (name: string, status: 'pass' | 'warn' | 'fail', detail?: string) => void,
+): void {
+	const rootResult = spawnSync('git', ['-C', targetPath, 'rev-parse', '--show-toplevel'], {
+		encoding: 'utf8',
+	});
+	if (rootResult.error) {
+		check('database Git hygiene', 'warn', `无法执行 Git 检查：${rootResult.error.message}`);
+		return;
+	}
+	if (rootResult.status !== 0) {
+		const detail = rootResult.stderr.trim();
+		if (/not a git repository/i.test(detail)) {
+			check('database Git hygiene', 'pass', '未检测到 Git worktree；未修改任何 Git 配置');
+		} else {
+			check(
+				'database Git hygiene',
+				'warn',
+				`Git worktree 检测失败：${detail || `退出码 ${rootResult.status}`}`,
+			);
+		}
+		return;
+	}
+	let gitRoot: string;
+	let canonicalTargetPath: string;
+	try {
+		gitRoot = realpathSync.native(resolve(rootResult.stdout.trim()));
+		canonicalTargetPath = realpathSync.native(targetPath);
+	} catch (error) {
+		check(
+			'database Git hygiene',
+			'warn',
+			`无法规范化 Git 路径：${error instanceof Error ? error.message : String(error)}`,
+		);
+		return;
+	}
+	const dbPath = join(
+		canonicalTargetPath,
+		config.directories.system,
+		config.subdirectories.system.memory,
+		config.memory.db_name,
+	);
+	const artifacts = [`${dbPath}-wal`, `${dbPath}-shm`].map((path) => ({
+		path,
+		relativePath: relative(gitRoot, path).replace(/\\/g, '/'),
+	}));
+	if (artifacts.some((artifact) => artifact.relativePath.startsWith('../'))) {
+		check('database Git hygiene', 'warn', '数据库临时文件不在当前 Git worktree 内，无法检查');
+		return;
+	}
+
+	const tracked: string[] = [];
+	const unignored: string[] = [];
+	for (const artifact of artifacts) {
+		const trackedResult = spawnSync(
+			'git',
+			[
+				'--literal-pathspecs',
+				'-C',
+				gitRoot,
+				'ls-files',
+				'--error-unmatch',
+				'--',
+				artifact.relativePath,
+			],
+			{ encoding: 'utf8' },
+		);
+		if (trackedResult.status === 0) tracked.push(artifact.relativePath);
+		else if (trackedResult.status !== 1) {
+			check('database Git hygiene', 'warn', `无法检查跟踪状态：${artifact.relativePath}`);
+			return;
+		}
+
+		const ignoredResult = spawnSync(
+			'git',
+			['-C', gitRoot, 'check-ignore', '--no-index', '--stdin', '-z'],
+			{ encoding: 'utf8', input: `${artifact.relativePath}\0` },
+		);
+		if (ignoredResult.status === 1) unignored.push(artifact.relativePath);
+		else if (ignoredResult.status !== 0) {
+			check('database Git hygiene', 'warn', `无法检查忽略状态：${artifact.relativePath}`);
+			return;
+		}
+	}
+
+	if (tracked.length > 0) {
+		check(
+			'database Git hygiene',
+			'warn',
+			`SQLite 临时文件已被 Git 跟踪：${tracked.join('、')}。请逐个确认后运行 git rm --cached -- <路径>，再添加忽略规则；doctor 未修改仓库。`,
+		);
+		return;
+	}
+	if (unignored.length > 0) {
+		check(
+			'database Git hygiene',
+			'warn',
+			`SQLite 临时文件未被忽略：${unignored.join('、')}。建议在合适的 .gitignore 中添加精确路径或 *.db-wal、*.db-shm；doctor 未修改仓库。`,
+		);
+		return;
+	}
+	check('database Git hygiene', 'pass', 'SQLite WAL/SHM 临时文件未被跟踪且已忽略');
 }
 
 function printSummary(result: DoctorResult) {

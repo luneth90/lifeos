@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+	DEFAULT_LIFEOS_SKILL_IDS,
 	type LegacyMemoryInventoryItem,
 	REVIEW_REQUIRED_SCOPE_KEY,
 	computeV4ScopeMapContextFingerprint,
@@ -8,6 +11,7 @@ import {
 	generateV4ScopeMap,
 	verifyV4ScopeMapFingerprints,
 } from '../../../src/cli/migrations/v4-scope-map.js';
+import { assetsDir } from '../../../src/cli/utils/assets.js';
 
 function hash(content: string): string {
 	return createHash('sha256').update(content, 'utf8').digest('hex');
@@ -34,6 +38,14 @@ function item(
 const generatedAt = '2026-07-21T08:00:00+08:00';
 
 describe('V4 scope map 自动生成', () => {
+	it('默认 skill ID 与打包资产目录保持一一对应', () => {
+		const packaged = readdirSync(join(assetsDir(), 'skills'), { withFileTypes: true })
+			.filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
+			.map((entry) => entry.name)
+			.sort();
+		expect([...DEFAULT_LIFEOS_SKILL_IDS].sort()).toEqual(packaged);
+	});
+
 	it('自动确认已知 global、skill、tool 和唯一 project 匹配', () => {
 		const document = generateV4ScopeMap(
 			[

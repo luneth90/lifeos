@@ -18,6 +18,7 @@ import {
 	MEMORY_SCOPE_TYPES,
 	MEMORY_SOURCES,
 } from '../types.js';
+import { assertGlobalHardItemSafety, assertGlobalHardSafety } from './global-hard-safety.js';
 
 const MEMORY_COLUMNS = `
 	item_id, slot_key, content, item_kind, scope_type, scope_key, priority,
@@ -165,6 +166,18 @@ export function upsertMemoryItem(
 			? null
 			: normalizeTimestamp(input.expiresAt, 'expiresAt');
 	const now = new Date().toISOString();
+	const writesGlobalHard =
+		input.scope.type === 'global' &&
+		input.itemKind === 'rule' &&
+		enforcement === 'hard' &&
+		(!expiresAt || expiresAt >= now);
+	if (writesGlobalHard) {
+		assertGlobalHardItemSafety({
+			slotKey: input.slotKey,
+			content: input.content,
+			relatedFiles,
+		});
+	}
 
 	const write = db.transaction((): UpsertMemoryItemResult => {
 		const existing = db
@@ -199,7 +212,9 @@ export function upsertMemoryItem(
 				expiresAt,
 				existing.item_id,
 			);
-			return { ...rowToItem(requireById(db, existing.item_id)), action: 'updated' };
+			const item = rowToItem(requireById(db, existing.item_id));
+			if (writesGlobalHard) assertGlobalHardSafety(db, { now, operation: 'write' });
+			return { ...item, action: 'updated' };
 		}
 		const result = db
 			.prepare(`
@@ -224,7 +239,9 @@ export function upsertMemoryItem(
 				expiresAt,
 			);
 		const itemId = Number(result.lastInsertRowid);
-		return { ...rowToItem(requireById(db, itemId)), action: 'created' };
+		const item = rowToItem(requireById(db, itemId));
+		if (writesGlobalHard) assertGlobalHardSafety(db, { now, operation: 'write' });
+		return { ...item, action: 'created' };
 	});
 	return write.immediate();
 }
@@ -338,7 +355,16 @@ export function restoreMemoryItem(
 			UPDATE memory_items SET status = ?, archived_at = NULL,
 			archive_reason = NULL, updated_at = ? WHERE item_id = ?
 		`).run(nextStatus, restoredAt, input.itemId);
-		return rowToItem(requireById(db, input.itemId));
+		const item = rowToItem(requireById(db, input.itemId));
+		if (
+			item.status === 'active' &&
+			item.scope.type === 'global' &&
+			item.itemKind === 'rule' &&
+			item.enforcement === 'hard'
+		) {
+			assertGlobalHardSafety(db, { now: restoredAt, operation: 'write' });
+		}
+		return item;
 	});
 	return restore.immediate();
 }
@@ -372,7 +398,16 @@ export function reclassifyMemoryItem(
 			}
 			throw error;
 		}
-		return rowToItem(requireById(db, input.itemId));
+		const item = rowToItem(requireById(db, input.itemId));
+		if (
+			item.status === 'active' &&
+			item.scope.type === 'global' &&
+			item.itemKind === 'rule' &&
+			item.enforcement === 'hard'
+		) {
+			assertGlobalHardSafety(db, { now: updatedAt, operation: 'write' });
+		}
+		return item;
 	});
 	return reclassify.immediate();
 }

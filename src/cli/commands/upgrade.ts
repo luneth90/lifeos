@@ -40,6 +40,7 @@ import {
 	validateRuntimeContract,
 	writeRuntimeReceipt,
 } from '../../runtime-contract.js';
+import { assertGlobalHardSafety } from '../../services/global-hard-safety.js';
 import {
 	assertManagedTreeSafe,
 	assertVaultPathSafe,
@@ -1010,6 +1011,7 @@ export default async function upgrade(args: string[]): Promise<UpgradeResult> {
 			runtimeConfig,
 			appliedProjects.catalog,
 		);
+		assertGlobalHardSafety(db, { operation: 'write' });
 		db.exec('COMMIT');
 		transactionOpen = false;
 		db.close();

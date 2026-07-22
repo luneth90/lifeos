@@ -240,4 +240,30 @@ describe('runtime contract 最终 V2/V4 门禁', () => {
 			expect.arrayContaining([expect.stringMatching(/^runtime-receipt\.json\.tmp-/)]),
 		);
 	});
+
+	it('显式配置快照贯穿校验，不会在读取 receipt 时二次解析 YAML', () => {
+		const config = resolveConfig(vault.root);
+		writeFileSync(join(vault.root, 'lifeos.yaml'), '{{broken yaml', 'utf-8');
+		const result = validateRuntimeContract({
+			vaultRoot: vault.root,
+			config,
+			verifyManagedAssets: false,
+		});
+		expect(result.ok).toBe(true);
+	});
+
+	it('拒绝把其他 Vault 的配置快照注入当前 runtime', () => {
+		const other = createTempVault();
+		try {
+			const result = validateRuntimeContract({
+				vaultRoot: vault.root,
+				config: resolveConfig(other.root),
+				verifyManagedAssets: false,
+			});
+			expect(result.ok).toBe(false);
+			expect(result.issues).toContain('显式配置快照不属于当前 Vault');
+		} finally {
+			other.cleanup();
+		}
+	});
 });

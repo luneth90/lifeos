@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { _resetDefaultInstance } from '../src/config.js';
+import { _resetDefaultInstance, getOrCreateVaultConfig } from '../src/config.js';
 import {
 	memoryContext,
 	memoryForget,
@@ -67,6 +67,17 @@ describe('memoryStartup 最终 V2/V4 契约', () => {
 			'managed asset 哈希不匹配：AGENTS.md',
 		);
 		expect(() => memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root })).not.toThrow();
+	});
+
+	it('每次请求只使用一份新配置快照，不受已预热 singleton 污染', () => {
+		getOrCreateVaultConfig(vault.root);
+		const yamlPath = join(vault.root, 'lifeos.yaml');
+		const before = readFileSync(yamlPath, 'utf-8');
+		expect(before).toContain('layer0_total: 1800');
+		writeFileSync(yamlPath, before.replace('layer0_total: 1800', 'layer0_total: 321'), 'utf-8');
+
+		const result = memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root });
+		expect(result.layer0.meta.tokenBudget).toBe(321);
 	});
 });
 
@@ -190,6 +201,59 @@ describe('scoped memory 核心接口', () => {
 			reason: '规则已失效',
 		});
 		expect(archived).toMatchObject({ status: 'archived', archiveReason: '规则已失效' });
+	});
+
+	it('repository binding 的配置更新在下一次请求立即生效', () => {
+		getOrCreateVaultConfig(vault.root);
+		const yamlPath = join(vault.root, 'lifeos.yaml');
+		const before = readFileSync(yamlPath, 'utf-8');
+		expect(before).toContain('repository_bindings: {}');
+		writeFileSync(
+			yamlPath,
+			before.replace(
+				'repository_bindings: {}',
+				'repository_bindings:\n    lifeos:\n      - /Users/example/code/lifeos',
+			),
+			'utf-8',
+		);
+
+		const result = memoryLog({
+			contractVersion: CONTRACT_VERSION,
+			dbPath: vault.dbPath,
+			vaultRoot: vault.root,
+			slotKey: 'repository:release',
+			content: '发布前执行完整验证',
+			scope: { type: 'repository', key: 'lifeos' },
+			itemKind: 'rule',
+		});
+		expect(result).toMatchObject({
+			action: 'created',
+			scope: { type: 'repository', key: 'lifeos' },
+		});
+	});
+
+	it('未知 repository 提供可直接照抄的 lifeos.yaml 修复提示', () => {
+		let message = '';
+		try {
+			memoryLog({
+				contractVersion: CONTRACT_VERSION,
+				dbPath: vault.dbPath,
+				vaultRoot: vault.root,
+				slotKey: 'repository:release',
+				content: '发布前执行完整验证',
+				scope: { type: 'repository', key: 'lifeos' },
+				itemKind: 'rule',
+			});
+		} catch (error) {
+			message = error instanceof Error ? error.message : String(error);
+		}
+		expect(message).toContain('unknown_repository');
+		expect(message).toContain(join(vault.root, 'lifeos.yaml'));
+		expect(message).toContain('现有的 memory.repository_bindings 下合并');
+		expect(message).toContain('真实 Git 根目录的绝对路径');
+		expect(message).toContain('"lifeos"');
+		expect(message).toContain('"/请替换为真实仓库绝对路径"');
+		expect(message).not.toContain('\nmemory:');
 	});
 });
 

@@ -1,8 +1,8 @@
 /**
  * core.ts — LifeOS V2 核心编排层。
  *
- * 所有非 bootstrap 调用在打开数据库前校验契约版本。数据库连接仍按调用创建，
- * 但配置缓存按 Vault 根目录隔离，避免跨 Vault 复用运行时状态。
+ * 所有非 bootstrap 调用在打开数据库前校验契约版本。数据库连接与配置快照均按调用创建，
+ * 同一次调用显式传播同一份配置，避免 singleton 污染或中途重读产生不一致。
  */
 
 import { existsSync } from 'node:fs';
@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { refreshUserprofile } from './active-docs/index.js';
 import { VERSION } from './cli/utils/version.js';
-import { type VaultConfig, getOrCreateVaultConfig } from './config.js';
+import { type VaultConfig, resolveConfig } from './config.js';
 import { assertNoActiveCutover } from './cutover-lock.js';
 import { assertSchemaV4 } from './db/schema.js';
 import { CONTRACT_VERSION, assertRuntimeContract } from './runtime-contract.js';
@@ -75,7 +75,7 @@ function resolveDbAndVault(dbPath?: string, vaultRoot?: string): ResolvedRuntime
 	}
 	assertVaultPathSafe(vault, yamlPath);
 	assertNoActiveCutover(vault);
-	const config = getOrCreateVaultConfig(vault);
+	const config = resolveConfig(vault);
 	const configuredDbPath = assertVaultPathSafe(vault, config.dbPath());
 	const resolvedDbPath = dbPath ? assertVaultPathSafe(vault, dbPath) : configuredDbPath;
 	if (resolvedDbPath !== configuredDbPath) {
@@ -90,6 +90,7 @@ function resolveDbAndVault(dbPath?: string, vaultRoot?: string): ResolvedRuntime
 		assertRuntimeContract({
 			vaultRoot: vault,
 			db,
+			config,
 			runtimeVersion: VERSION,
 			verifyManagedAssets: false,
 		});
@@ -113,9 +114,13 @@ function withResolvedDb<T>(
 	}
 }
 
-function refreshMemoryAuditView(db: Database.Database, vaultRoot: string): void {
+function refreshMemoryAuditView(
+	db: Database.Database,
+	vaultRoot: string,
+	config: VaultConfig,
+): void {
 	try {
-		refreshUserprofile(db, vaultRoot);
+		refreshUserprofile(db, vaultRoot, { config });
 	} catch (error) {
 		console.warn('[lifeos] UserProfile 审计视图刷新失败：', error);
 	}
@@ -125,7 +130,9 @@ export function memoryStartup(opts: {
 	dbPath?: string;
 	vaultRoot?: string;
 }): StartupResult {
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => runStartup(db, vault));
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault, config }) =>
+		runStartup(db, vault, config),
+	);
 }
 
 export function memoryStartupMaintenance(
@@ -135,8 +142,8 @@ export function memoryStartupMaintenance(
 	},
 ): StartupMaintenanceResult {
 	assertContractVersion(opts.contractVersion);
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) =>
-		runStartupMaintenance(db, vault),
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault, config }) =>
+		runStartupMaintenance(db, vault, config),
 	);
 }
 
@@ -192,7 +199,17 @@ export function memoryLog(
 		});
 		if (resolution.unresolvedScopes.length > 0) {
 			const unresolved = resolution.unresolvedScopes[0];
-			throw new Error(`Unresolved memory scope: ${unresolved.scope.type}:${unresolved.scope.key}`);
+			if (unresolved.reason === 'unknown_repository') {
+				const yamlPath = join(vault, 'lifeos.yaml');
+				const repositoryId = JSON.stringify(unresolved.scope.key);
+				throw new Error(
+					`unknown_repository：repository scope ${repositoryId} 尚未绑定。请在 ${yamlPath} 现有的 memory.repository_bindings 下合并以下条目，并把占位符替换为真实 Git 根目录的绝对路径：\n` +
+						`${repositoryId}:\n  - "/请替换为真实仓库绝对路径"`,
+				);
+			}
+			throw new Error(
+				`无法解析 memory scope：${unresolved.scope.type}:${unresolved.scope.key}（${unresolved.reason}）`,
+			);
 		}
 		const scope = resolution.resolvedScopes[0];
 		if (!scope) throw new Error('Unresolved memory scope');
@@ -208,7 +225,7 @@ export function memoryLog(
 			relatedFiles: opts.relatedFiles,
 			expiresAt: opts.expiresAt,
 		});
-		refreshMemoryAuditView(db, vault);
+		refreshMemoryAuditView(db, vault, config);
 		return result;
 	});
 }
@@ -235,10 +252,10 @@ export function memoryForget(
 	},
 ): ScopedMemoryItem {
 	assertContractVersion(opts.contractVersion);
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) => {
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault, config }) => {
 		const input: ArchiveMemoryItemInput = { itemId: opts.itemId, reason: opts.reason };
 		const result = archiveMemoryItem(db, input);
-		refreshMemoryAuditView(db, vault);
+		refreshMemoryAuditView(db, vault, config);
 		return result;
 	});
 }
@@ -252,8 +269,8 @@ export function memoryNotify(
 	},
 ) {
 	assertContractVersion(opts.contractVersion);
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) =>
-		notifyFileChanged(db, vault, opts.filePath, opts.previousFilePath),
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault, config }) =>
+		notifyFileChanged(db, vault, opts.filePath, opts.previousFilePath, config),
 	);
 }
 
@@ -265,7 +282,7 @@ export function memoryNotifyBatch(
 	},
 ) {
 	assertContractVersion(opts.contractVersion);
-	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault }) =>
-		notifyFilesChanged(db, vault, opts.filePaths),
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault, config }) =>
+		notifyFilesChanged(db, vault, opts.filePaths, config),
 	);
 }
