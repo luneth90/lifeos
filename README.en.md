@@ -57,7 +57,19 @@ Compared with a memory model that mixes cross-directory content and global conve
 
 ## Quick Start
 
-Verified setups: Claude Code CLI, Codex (CLI / Desktop), and OpenCode (CLI / Desktop) on macOS; Codex Desktop and OpenCode Desktop on Windows. Other platforms or client combinations have not been validated yet.
+### Supported Clients
+
+`lifeos init` / `lifeos upgrade` automatically register project-level MCP configs. Client config paths and verification status:
+
+| Client | Config file | Verification |
+| --- | --- | --- |
+| **Claude Code** CLI | `.mcp.json` | Verified on macOS |
+| **Codex** CLI / Desktop | `.codex/config.toml` | Verified on macOS CLI / Desktop and Windows Desktop |
+| **OpenCode** CLI / Desktop | `opencode.json` | Verified on macOS CLI / Desktop and Windows Desktop |
+| **Grok Build** | `.mcp.json` (loads Claude Code format for compatibility) | Verified on macOS |
+| **Antigravity** CLI | `.agents/mcp_config.json` | Project-level MCP auto-registration supported; platform combinations not yet verified |
+
+Launch any supported client in the vault directory to use all skills. Other platforms or client combinations have not been validated yet.
 
 ### Prerequisites
 
@@ -81,16 +93,6 @@ lifeos init ./my-vault
 lifeos init ./my-vault --lang zh   # Chinese
 lifeos init ./my-vault --lang en   # English
 ```
-
-After init, MCP server configs are automatically registered for:
-
-| Tool | Config file |
-|---|---|
-| **Claude Code** | `.mcp.json` |
-| **Codex** | `.codex/config.toml` |
-| **OpenCode** | `opencode.json` |
-
-Launch any of these tools in the vault directory to use all skills.
 
 If you want version control for the vault, initialize and manage Git yourself. LifeOS does not create or manage Git metadata for you.
 
@@ -209,7 +211,7 @@ Create a `.md` file in your vault's Prompts directory (`{system directory}/Promp
 - ✅ LifeOS 1.0 is now basically usable
 - ✅ The CLI supports directory customization
 - ✅ The CLI `upgrade` command supports offline atomic cutover, automatic recovery, and explicit rollback
-- ✅ Verified on macOS (Claude Code CLI, Codex CLI/Desktop, OpenCode CLI/Desktop) and Windows (Codex Desktop, OpenCode Desktop)
+- ✅ Verified on macOS (Claude Code CLI, Codex CLI/Desktop, OpenCode CLI/Desktop, Grok Build) and Windows (Codex Desktop, OpenCode Desktop)
 - ✅ The `/digest` skill supports multilingual weekly digests with multi-source paper fetching
 - ☐ Improve memory-system precision
 - ☐ Support custom skills

@@ -79,7 +79,19 @@ memory_bootstrap
 
 ## 快速开始
 
-已验证可用：macOS 上的 Claude Code CLI、Codex（CLI / Desktop）、OpenCode（CLI / Desktop）；Windows 上的 Codex Desktop、OpenCode Desktop。Antigravity CLI 已支持项目级 MCP 配置自动注册，其他平台或客户端组合尚未验证。
+### 支持的客户端
+
+`lifeos init` / `lifeos upgrade` 会自动注册项目级 MCP 配置。各客户端的配置路径与验证状态如下：
+
+| 客户端 | 配置文件 | 验证状态 |
+| --- | --- | --- |
+| **Claude Code** CLI | `.mcp.json` | macOS 已验证 |
+| **Codex** CLI / Desktop | `.codex/config.toml` | macOS CLI / Desktop、Windows Desktop 已验证 |
+| **OpenCode** CLI / Desktop | `opencode.json` | macOS CLI / Desktop、Windows Desktop 已验证 |
+| **Grok Build** | `.mcp.json`（兼容加载 Claude Code 格式） | macOS 已验证 |
+| **Antigravity** CLI | `.agents/mcp_config.json` | 项目级 MCP 自动注册已支持；平台组合尚未验证 |
+
+在 Vault 目录下启动任一已支持的客户端即可使用全部技能。其他平台或客户端组合尚未验证。
 
 ### 前置要求
 
@@ -103,17 +115,6 @@ lifeos init ./my-vault
 lifeos init ./my-vault --lang zh   # 中文
 lifeos init ./my-vault --lang en   # 英文
 ```
-
-安装完成后，MCP server 配置会自动注册到以下工具：
-
-| 工具 | 配置文件 |
-|---|---|
-| **Claude Code** | `.mcp.json` |
-| **Codex** | `.codex/config.toml` |
-| **OpenCode** | `opencode.json` |
-| **Antigravity CLI** | `.agents/mcp_config.json` |
-
-在 Vault 目录下启动任一工具即可使用所有技能。
 
 ## 升级
 
@@ -235,7 +236,7 @@ lifeos --version                                          # 查看版本
 - ✅ CLI upgrade 支持 V1/V2/V3 → V4 离线原子升级与失败恢复
 - ✅ 记忆系统支持全局、技能、项目、仓库、工具和文件 scope
 - ✅ CLI 支持为 Antigravity CLI 自动注册项目级 MCP 配置
-- ✅ 已完成 macOS（Claude Code CLI、Codex CLI/Desktop、OpenCode CLI/Desktop）与 Windows（Codex Desktop、OpenCode Desktop）的验证
+- ✅ 已完成 macOS（Claude Code CLI、Codex CLI/Desktop、OpenCode CLI/Desktop、Grok Build）与 Windows（Codex Desktop、OpenCode Desktop）的验证
 - ✅ `/digest` 技能已支持中英双语信息周报与多来源论文抓取
 - ☐ 强化记忆系统精准性
 - ☐ 支持自定义技能
