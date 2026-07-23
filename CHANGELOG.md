@@ -1,5 +1,15 @@
 # 更新日志
 
+## 2.1.0 (2026-07-23)
+
+### 新增
+
+- 新增 `file` 作用域防写校验：`assertNotTemporaryFileScope` 按 `vault_index.type` 拦截对 `plan`/`draft` 类型临时文件的记忆写入，`upsertMemoryItem` 与 `reclassifyMemoryItem` 双入口生效，杜绝阶段性决策误污染 Scope Memory
+- 新增 `forgetScopeMemoryItems` 批量归档 API：按 scope 一键清理全部活跃记忆，禁止批量归档 `global` 作用域，仅处理 `active` 条目
+- `memory_forget` MCP 工具扩展为双模式：`item_id` 单条归档与 `scope` 批量归档互斥，批量分支补充 scope 缓存失效
+- `archive` 技能新增子步骤「清理关联 Scope 记忆」，在项目/草稿/计划归档时自动调用 `memory_forget` 批量清理
+- `memory-protocol` 协议补充临时文件禁写规范与批量归档用法
+
 ## 2.0.3 (2026-07-23)
 
 ### 新增
