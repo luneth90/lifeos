@@ -39,6 +39,7 @@ lifeos doctor ./tmp/lifeos-integration
 | Claude Code | `.mcp.json` |
 | Codex | `.codex/config.toml` |
 | OpenCode | `opencode.json` |
+| Antigravity CLI | `.agents/mcp_config.json` |
 
 分别启动客户端，确认不会连接旧的全局 LifeOS 服务实例。
 

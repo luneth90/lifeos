@@ -1278,6 +1278,7 @@ setTimeout(() => {
 	});
 
 	it('事务迁移失败时恢复 V3 升级写集，并留下 restored journal', async () => {
+		const antigravityPath = join(fixture.root, '.agents', 'mcp_config.json');
 		if (process.platform !== 'win32') chmodSync(fixture.dbPath, 0o600);
 		const invalidMap = scopeMap();
 		invalidMap[1] = { ...invalidMap[1], status: 'archived' };
@@ -1296,6 +1297,7 @@ setTimeout(() => {
 			expect(statSync(fixture.dbPath).mode & 0o777).toBe(0o600);
 		}
 		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'runtime-receipt.json'))).toBe(false);
+		expect(existsSync(antigravityPath)).toBe(false);
 		const journals = findJournals(join(fixture.parent, '.lifeos-cutovers'));
 		expect(journals).toHaveLength(1);
 		expect(JSON.parse(readFileSync(journals[0] ?? '', 'utf-8'))).toMatchObject({
@@ -1341,7 +1343,21 @@ setTimeout(() => {
 	});
 
 	it('显式恢复拒绝活动 owner，随后可用受控 journal 恢复并释放写闸', async () => {
+		const antigravityPath = join(fixture.root, '.agents', 'mcp_config.json');
+		const originalAntigravity =
+			'{"mcpServers":{"other":{"command":"other"},"lifeos":{"command":"legacy-lifeos"}}}\n';
+		mkdirSync(dirname(antigravityPath), { recursive: true });
+		writeFileSync(antigravityPath, originalAntigravity, 'utf-8');
 		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		expect(JSON.parse(readFileSync(antigravityPath, 'utf-8'))).toEqual({
+			mcpServers: {
+				other: { command: 'other' },
+				lifeos: {
+					command: 'lifeos',
+					args: ['--vault-root', realpathSync.native(fixture.root)],
+				},
+			},
+		});
 		const uncontrolledJournal = join(fixture.parent, 'copied-journal.json');
 		writeFileSync(uncontrolledJournal, readFileSync(result.journalPath, 'utf-8'), 'utf-8');
 		await expect(upgrade([fixture.root, '--restore', uncontrolledJournal])).rejects.toThrow(
@@ -1364,6 +1380,7 @@ setTimeout(() => {
 		expect(restored.journalPath).toBe(result.journalPath);
 		expect(dbVersion(fixture.dbPath)).toBe(3);
 		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(readFileSync(antigravityPath, 'utf-8')).toBe(originalAntigravity);
 		expect(JSON.parse(readFileSync(result.journalPath, 'utf-8'))).toMatchObject({
 			state: 'restored',
 			error: '用户显式执行恢复',

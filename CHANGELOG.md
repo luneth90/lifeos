@@ -1,5 +1,12 @@
 # 更新日志
 
+## 2.0.3 (2026-07-23)
+
+### 新增
+
+- 新增对 Antigravity CLI 项目级 MCP 配置的支持：`lifeos init` 与 `lifeos upgrade` 自动生成或合并 `.agents/mcp_config.json`，保留已有顶层字段与其他 MCP Server
+- 将 Antigravity 配置纳入升级路径安全检查、精确写集备份、失败回滚与显式恢复，并补充初始化、合并和恢复测试
+
 ## 2.0.2 (2026-07-22)
 
 ### 修复

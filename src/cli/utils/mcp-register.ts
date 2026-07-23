@@ -41,6 +41,11 @@ export async function registerMcp(vaultRoot: string, mode: MergeMode = 'replace'
 	);
 	registered.push(`OpenCode → ${dim(opencodePath)}`);
 
+	// Antigravity — project-level .agents/mcp_config.json
+	const antigravityPath = join(vaultRoot, '.agents', 'mcp_config.json');
+	mergeJsonConfig(antigravityPath, 'mcpServers', 'lifeos', { ...entry }, mode);
+	registered.push(`Antigravity → ${dim(antigravityPath)}`);
+
 	for (const r of registered) {
 		log(green('✔'), r);
 	}

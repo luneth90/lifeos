@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { registerMcp } from '../../../src/cli/utils/mcp-register.js';
 
@@ -89,5 +89,57 @@ command = "two"
 		writeFileSync(malformedPath, malformed, 'utf-8');
 		await expect(registerMcp(malformedRoot, 'replace')).rejects.toThrow(/无法安全定位/);
 		expect(readFileSync(malformedPath, 'utf-8')).toBe(malformed);
+	});
+
+	it('自动生成并合并 Antigravity 的 .agents/mcp_config.json 配置', async () => {
+		const root = makeRoot();
+		await registerMcp(root, 'replace');
+
+		const path = join(root, '.agents', 'mcp_config.json');
+		expect(existsSync(path)).toBe(true);
+
+		const parsed = JSON.parse(readFileSync(path, 'utf-8'));
+		expect(parsed).toEqual({
+			mcpServers: {
+				lifeos: {
+					command: 'lifeos',
+					args: ['--vault-root', root],
+				},
+			},
+		});
+	});
+
+	it('合并 Antigravity 配置时保留现有字段和其他 MCP Server', async () => {
+		const root = makeRoot();
+		const path = join(root, '.agents', 'mcp_config.json');
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(
+			path,
+			`${JSON.stringify(
+				{
+					projectSetting: 'keep',
+					mcpServers: {
+						other: { command: 'other' },
+						lifeos: { command: 'legacy-lifeos', disabled: true },
+					},
+				},
+				null,
+				2,
+			)}\n`,
+			'utf-8',
+		);
+
+		await registerMcp(root, 'replace');
+
+		expect(JSON.parse(readFileSync(path, 'utf-8'))).toEqual({
+			projectSetting: 'keep',
+			mcpServers: {
+				other: { command: 'other' },
+				lifeos: {
+					command: 'lifeos',
+					args: ['--vault-root', root],
+				},
+			},
+		});
 	});
 });

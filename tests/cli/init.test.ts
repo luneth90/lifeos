@@ -142,6 +142,22 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(versions.assets).toBe(VERSION);
 	});
 
+	test('为 Antigravity 生成项目级 MCP 配置', async () => {
+		await init([dir, '--lang', lang]);
+
+		const config = JSON.parse(
+			readFileSync(join(dir, '.agents', 'mcp_config.json'), 'utf-8'),
+		) as Record<string, unknown>;
+		expect(config).toEqual({
+			mcpServers: {
+				lifeos: {
+					command: 'lifeos',
+					args: ['--vault-root', dir],
+				},
+			},
+		});
+	});
+
 	test('写入 opened 的最终 V2/V4 fresh-install 收据', async () => {
 		await init([dir, '--lang', lang, '--no-mcp']);
 
