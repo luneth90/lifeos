@@ -176,7 +176,12 @@ After user confirmation, for each item to archive:
 4. **Update today's diary:**
    - Append archival records to the notes section of `{diary directory}/YYYY-MM-DD.md` (if the file exists)
 
-5. **Cleanup check:**
+5. **Cleanup Scope Memory:**
+   - For archived projects, call `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="Project archival cleanup")` to batch archive all active memory entries under that scope
+   - For archived drafts/plans that had `file` scope memory attached, call `memory_forget(contract_version=2, scope={type: "file", key: "<entity_id or file path>"}, reason="Draft/plan archival cleanup")` to batch archive
+   - Then call `memory_notify` to notify the file move (`previous_file_path` pointing to the original path)
+
+6. **Cleanup check:**
    - Check if there are orphaned associated resources in `{resources directory}/`
    - If so, ask the user whether to clean them up as well
 

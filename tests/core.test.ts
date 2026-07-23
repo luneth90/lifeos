@@ -203,6 +203,80 @@ describe('scoped memory 核心接口', () => {
 		expect(archived).toMatchObject({ status: 'archived', archiveReason: '规则已失效' });
 	});
 
+	it('memory_forget 同时传入 item_id 和 scope、或两者都不传时被互斥校验拒绝', () => {
+		expect(() =>
+			memoryForget({
+				contractVersion: CONTRACT_VERSION,
+				dbPath: vault.dbPath,
+				vaultRoot: vault.root,
+				itemId: 1,
+				scope: { type: 'project', key: 'project-1' },
+				reason: '互斥校验',
+			}),
+		).toThrow(/itemId 与 scope 必须且只能传其一/);
+		expect(() =>
+			memoryForget({
+				contractVersion: CONTRACT_VERSION,
+				dbPath: vault.dbPath,
+				vaultRoot: vault.root,
+				reason: '互斥校验',
+			}),
+		).toThrow(/itemId 与 scope 必须且只能传其一/);
+	});
+
+	it('memory_forget 传入 scope 时正确路由到批量归档并刷新审计视图', () => {
+		writeTestNote(
+			vault.root,
+			'20_项目/project-gc.md',
+			{ id: 'project-gc', title: 'GC 项目', type: 'project', status: 'active' },
+			'项目内容',
+		);
+		memoryNotify({
+			contractVersion: CONTRACT_VERSION,
+			dbPath: vault.dbPath,
+			vaultRoot: vault.root,
+			filePath: '20_项目/project-gc.md',
+		});
+		_resetDefaultInstance();
+		memoryLog({
+			contractVersion: CONTRACT_VERSION,
+			dbPath: vault.dbPath,
+			vaultRoot: vault.root,
+			slotKey: 'workflow:a',
+			content: '项目规则甲',
+			scope: { type: 'project', key: 'project-gc' },
+			itemKind: 'rule',
+		});
+		memoryLog({
+			contractVersion: CONTRACT_VERSION,
+			dbPath: vault.dbPath,
+			vaultRoot: vault.root,
+			slotKey: 'workflow:b',
+			content: '项目规则乙',
+			scope: { type: 'project', key: 'project-gc' },
+			itemKind: 'rule',
+		});
+		_resetDefaultInstance();
+
+		const result = memoryForget({
+			contractVersion: CONTRACT_VERSION,
+			dbPath: vault.dbPath,
+			vaultRoot: vault.root,
+			scope: { type: 'project', key: 'project-gc' },
+			reason: '项目归档清理',
+		});
+		expect(result).toEqual({ archived: 2 });
+
+		_resetDefaultInstance();
+		const listed = memoryRules({
+			contractVersion: CONTRACT_VERSION,
+			dbPath: vault.dbPath,
+			vaultRoot: vault.root,
+			filters: { scope: { type: 'project', key: 'project-gc' }, status: 'active' },
+		});
+		expect(listed.items).toHaveLength(0);
+	});
+
 	it('repository binding 的配置更新在下一次请求立即生效', () => {
 		getOrCreateVaultConfig(vault.root);
 		const yamlPath = join(vault.root, 'lifeos.yaml');

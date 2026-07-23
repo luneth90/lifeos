@@ -82,6 +82,23 @@ function validateScope(scope: MemoryScope): void {
 	}
 }
 
+const TEMPORARY_FILE_TYPES = ['plan', 'draft'];
+
+// 拦截逻辑：严禁为临时计划/草稿文件写入持久 rule/decision/fact/profile 记忆。
+// file scope key 经 resolveMemoryScopes 规范化为 entity_id || file_path，两种形式都查；
+// 命中 vault_index 且 type 为 plan/draft 即拒绝，查不到记录时不拦截。
+export function assertNotTemporaryFileScope(db: Database.Database, scope: MemoryScope): void {
+	if (scope.type !== 'file') return;
+	const row = db
+		.prepare('SELECT type FROM vault_index WHERE file_path = ? OR entity_id = ?')
+		.get(scope.key, scope.key) as { type: string } | undefined;
+	if (row && TEMPORARY_FILE_TYPES.includes(row.type)) {
+		throw new MemoryItemValidationError(
+			`[Memory Policy Violation] 严禁为临时计划或草稿文件 (${scope.key}) 写入持久记忆。阶段性方案请保留在 Markdown 正文中。`,
+		);
+	}
+}
+
 function parseRelatedFiles(value: string): string[] {
 	try {
 		const parsed: unknown = JSON.parse(value);
@@ -145,6 +162,7 @@ export function upsertMemoryItem(
 		throw new MemoryItemValidationError('event 不能通过 memory_log 新建或更新');
 	}
 	validateScope(input.scope);
+	assertNotTemporaryFileScope(db, input.scope);
 	const priority = input.priority ?? 50;
 	if (!Number.isInteger(priority) || priority < 0 || priority > 100) {
 		throw new MemoryItemValidationError('priority 必须是 0–100 的整数');
@@ -334,6 +352,27 @@ export function archiveMemoryItem(
 	return archive.immediate();
 }
 
+export function forgetScopeMemoryItems(
+	db: Database.Database,
+	scope: MemoryScope,
+	reason: string,
+): number {
+	validateScope(scope);
+	if (scope.type === 'global') {
+		// 安全保护：禁止一键清空全部全局行为约束（Layer 0），全局条目须逐条 item_id 归档
+		throw new MemoryItemValidationError('禁止批量归档 global scope，请改用逐条 item_id 归档');
+	}
+	if (!reason.trim()) throw new MemoryItemValidationError('归档原因不能为空');
+	// 仅清理 active 条目；expired 已是终态、不出现在 active 上下文，保留不动（预期语义）
+	const stmt = db.prepare(`
+		UPDATE memory_items
+		SET status = 'archived', archived_at = ?, archive_reason = ?, updated_at = ?
+		WHERE scope_type = ? AND scope_key = ? AND status = 'active'
+	`);
+	const now = new Date().toISOString();
+	return stmt.run(now, reason.trim(), now, scope.type, scope.key).changes;
+}
+
 export function restoreMemoryItem(
 	db: Database.Database,
 	input: RestoreMemoryItemInput,
@@ -380,6 +419,7 @@ export function reclassifyMemoryItem(
 		const slotKey = input.slotKey ?? existing.slot_key;
 		const itemKind = input.itemKind ?? existing.item_kind;
 		validateScope(scope);
+		assertNotTemporaryFileScope(db, scope);
 		validateSlotKey(slotKey);
 		if (!MEMORY_ITEM_KINDS.includes(itemKind)) {
 			throw new MemoryItemValidationError(`非法 itemKind：${itemKind}`);

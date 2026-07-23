@@ -502,7 +502,7 @@ function invalidateFromMemoryLog(
 
 function invalidateFromArchivedItem(
 	runtime: RuntimeContext,
-	_params: Record<string, unknown>,
+	params: Record<string, unknown>,
 	result: unknown,
 ): void {
 	if (!result || typeof result !== 'object') return;
@@ -519,7 +519,12 @@ function invalidateFromArchivedItem(
 		const normalized = { type: scopeType as ScopeType, key: scopeKey };
 		if (scopeType === 'global') invalidateLayer0(runtime);
 		else invalidateScope(runtime, normalized);
+		return;
 	}
+	// 批量归档分支：result 为 { archived: number }，从 params 取 scope 失效缓存；
+	// global 已被服务层禁止，无需处理 invalidateLayer0 分支
+	const paramScope = params.scope;
+	if (isMemoryScope(paramScope)) invalidateScope(runtime, paramScope);
 }
 
 const server = new McpServer({ name: 'lifeos', version: VERSION });
@@ -617,12 +622,13 @@ server.tool(
 
 server.tool(
 	'memory_forget',
-	'按 item_id 软归档记忆条目，并强制记录原因。',
+	'按 item_id 软归档单条记忆，或按 scope 批量归档该作用域下所有活跃记忆；item_id 与 scope 必须且只能传其一，并强制记录原因。',
 	{
 		contract_version: contractVersionSchema,
 		db_path: z.string().default(''),
 		vault_root: z.string().default(''),
-		item_id: z.number().int().positive(),
+		item_id: z.number().int().positive().optional(),
+		scope: memoryScopeSchema.optional(),
 		reason: z.string().min(1),
 	},
 	handleTool(core.memoryForget, { afterSuccess: invalidateFromArchivedItem }),

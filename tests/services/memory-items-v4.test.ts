@@ -1,11 +1,13 @@
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { buildScopedRulesIndexSection } from '../../src/active-docs/userprofile.js';
 import { initDb } from '../../src/db/schema.js';
 import {
 	MemoryItemConflictError,
 	MemoryItemValidationError,
 	archiveMemoryItem,
 	expireMemoryItems,
+	forgetScopeMemoryItems,
 	getMemoryItemById,
 	listMemoryItems,
 	reclassifyMemoryItem,
@@ -246,5 +248,234 @@ describe('V4 记忆条目治理', () => {
 		});
 		expect(getMemoryItemById(db, expired.itemId)?.status).toBe('expired');
 		expect(getMemoryItemById(db, future.itemId)?.status).toBe('active');
+	});
+});
+
+describe('临时文件作用域防写校验', () => {
+	let db: Database.Database;
+
+	beforeEach(() => {
+		db = new Database(':memory:');
+		initDb(db);
+		db.prepare(
+			`INSERT INTO vault_index (file_path, title, type, status, entity_id)
+			 VALUES (?, ?, ?, ?, ?)`,
+		).run('60_计划/Plan_test.md', '测试计划', 'plan', 'active', 'plan-test');
+		db.prepare(
+			`INSERT INTO vault_index (file_path, title, type, status, entity_id)
+			 VALUES (?, ?, ?, ?, ?)`,
+		).run('00_草稿/ask_test.md', '测试草稿', 'draft', 'pending', 'ask-test');
+		db.prepare(
+			`INSERT INTO vault_index (file_path, title, type, status, entity_id)
+			 VALUES (?, ?, ?, ?, ?)`,
+		).run('60_计划/Plan_no_id.md', '无 id 计划', 'plan', 'active', null);
+		db.prepare(
+			`INSERT INTO vault_index (file_path, title, type, status, entity_id)
+			 VALUES (?, ?, ?, ?, ?)`,
+		).run('40_知识/note.md', '知识笔记', 'knowledge', 'active', 'note-1');
+	});
+
+	afterEach(() => db.close());
+
+	it('禁止为 plan 类型文件的 file 作用域（entity_id 形式 key）写入 memory_log', () => {
+		expect(() =>
+			upsertMemoryItem(db, {
+				slotKey: 'decision:route',
+				content: '阶段性路线决策',
+				itemKind: 'decision',
+				scope: { type: 'file', key: 'plan-test' },
+			}),
+		).toThrow(MemoryItemValidationError);
+		expect(() =>
+			upsertMemoryItem(db, {
+				slotKey: 'decision:route',
+				content: '阶段性路线决策',
+				itemKind: 'decision',
+				scope: { type: 'file', key: 'plan-test' },
+			}),
+		).toThrow(/临时计划或草稿文件/);
+	});
+
+	it('禁止为 draft 类型文件的 file 作用域（entity_id 形式 key）写入 memory_log', () => {
+		expect(() =>
+			upsertMemoryItem(db, {
+				slotKey: 'fact:temp',
+				content: '草稿阶段事实',
+				itemKind: 'fact',
+				scope: { type: 'file', key: 'ask-test' },
+			}),
+		).toThrow(MemoryItemValidationError);
+	});
+
+	it('禁止为无 frontmatter id、key 为路径形式的 plan/draft 文件写入 memory_log', () => {
+		expect(() =>
+			upsertMemoryItem(db, {
+				slotKey: 'decision:route',
+				content: '阶段性路线决策',
+				itemKind: 'decision',
+				scope: { type: 'file', key: '60_计划/Plan_no_id.md' },
+			}),
+		).toThrow(MemoryItemValidationError);
+	});
+
+	it('正常 file 作用域（vault_index 中 type 非 plan/draft）不受拦截', () => {
+		const byId = upsertMemoryItem(db, {
+			slotKey: 'fact:note',
+			content: '知识笔记事实',
+			itemKind: 'fact',
+			scope: { type: 'file', key: 'note-1' },
+		});
+		expect(byId.action).toBe('created');
+		const byPath = upsertMemoryItem(db, {
+			slotKey: 'fact:note-path',
+			content: '路径形式 key 的知识笔记事实',
+			itemKind: 'fact',
+			scope: { type: 'file', key: '40_知识/note.md' },
+		});
+		expect(byPath.action).toBe('created');
+	});
+
+	it('reclassifyMemoryItem 改挂到 plan/draft 文件作用域被阻断', () => {
+		const created = upsertMemoryItem(db, {
+			slotKey: 'fact:movable',
+			content: '可移动事实',
+			itemKind: 'fact',
+			scope: { type: 'project', key: 'project-1' },
+		});
+		expect(() =>
+			reclassifyMemoryItem(db, {
+				itemId: created.itemId,
+				scope: { type: 'file', key: 'plan-test' },
+			}),
+		).toThrow(MemoryItemValidationError);
+		expect(() =>
+			reclassifyMemoryItem(db, {
+				itemId: created.itemId,
+				scope: { type: 'file', key: '60_计划/Plan_no_id.md' },
+			}),
+		).toThrow(MemoryItemValidationError);
+		expect(getMemoryItemById(db, created.itemId)?.scope).toEqual({
+			type: 'project',
+			key: 'project-1',
+		});
+	});
+});
+
+describe('forgetScopeMemoryItems 批量归档', () => {
+	let db: Database.Database;
+
+	beforeEach(() => {
+		db = new Database(':memory:');
+		initDb(db);
+	});
+
+	afterEach(() => db.close());
+
+	it('成功批量归档指定 Scope 的所有 active 记忆，返回正确 changes 数', () => {
+		upsertMemoryItem(db, {
+			slotKey: 'rule:a',
+			content: '规则甲',
+			itemKind: 'rule',
+			scope: { type: 'project', key: 'project-1' },
+		});
+		upsertMemoryItem(db, {
+			slotKey: 'rule:b',
+			content: '规则乙',
+			itemKind: 'rule',
+			scope: { type: 'project', key: 'project-1' },
+		});
+		upsertMemoryItem(db, {
+			slotKey: 'rule:c',
+			content: '其他项目规则',
+			itemKind: 'rule',
+			scope: { type: 'project', key: 'project-2' },
+		});
+
+		const archived = forgetScopeMemoryItems(db, { type: 'project', key: 'project-1' }, '项目归档清理');
+		expect(archived).toBe(2);
+		expect(listMemoryItems(db, { scope: { type: 'project', key: 'project-1' }, status: 'active' }))
+			.toHaveLength(0);
+		expect(listMemoryItems(db, { scope: { type: 'project', key: 'project-2' }, status: 'active' }))
+			.toHaveLength(1);
+	});
+
+	it('归档后 archived_at 和 archive_reason 字段正确写入', () => {
+		const created = upsertMemoryItem(db, {
+			slotKey: 'rule:a',
+			content: '规则甲',
+			itemKind: 'rule',
+			scope: { type: 'project', key: 'project-1' },
+		});
+		forgetScopeMemoryItems(db, { type: 'project', key: 'project-1' }, '项目归档清理');
+		const item = getMemoryItemById(db, created.itemId);
+		expect(item?.status).toBe('archived');
+		expect(item?.archivedAt).toEqual(expect.any(String));
+		expect(item?.archiveReason).toBe('项目归档清理');
+	});
+
+	it('对不存在的 scope 返回 changes: 0', () => {
+		expect(forgetScopeMemoryItems(db, { type: 'project', key: 'missing' }, '清理')).toBe(0);
+	});
+
+	it('禁止批量归档 global scope', () => {
+		expect(() => forgetScopeMemoryItems(db, { type: 'global', key: '' }, '清理')).toThrow(
+			MemoryItemValidationError,
+		);
+		expect(() => forgetScopeMemoryItems(db, { type: 'global', key: '' }, '清理')).toThrow(
+			/禁止批量归档 global scope/,
+		);
+	});
+
+	it('归档原因不能为空', () => {
+		expect(() => forgetScopeMemoryItems(db, { type: 'project', key: 'project-1' }, '  ')).toThrow(
+			MemoryItemValidationError,
+		);
+	});
+
+	it('只清 active，expired 条目保持不动', () => {
+		const expired = upsertMemoryItem(db, {
+			slotKey: 'fact:old',
+			content: '已过期事实',
+			itemKind: 'fact',
+			scope: { type: 'project', key: 'project-1' },
+			expiresAt: '2026-07-20T00:00:00.000Z',
+		});
+		expireMemoryItems(db, { now: '2026-07-21T00:00:00.000Z' });
+		upsertMemoryItem(db, {
+			slotKey: 'rule:active',
+			content: '活跃规则',
+			itemKind: 'rule',
+			scope: { type: 'project', key: 'project-1' },
+		});
+
+		const archived = forgetScopeMemoryItems(db, { type: 'project', key: 'project-1' }, '项目归档清理');
+		expect(archived).toBe(1);
+		const expiredItem = getMemoryItemById(db, expired.itemId);
+		expect(expiredItem?.status).toBe('expired');
+		expect(expiredItem?.archivedAt).toBeNull();
+		expect(expiredItem?.archiveReason).toBeNull();
+	});
+
+	it('归档后 UserProfile scoped-rules-index 不再展示已清理作用域', () => {
+		upsertMemoryItem(db, {
+			slotKey: 'rule:a',
+			content: '规则甲',
+			itemKind: 'rule',
+			scope: { type: 'project', key: 'project-1' },
+		});
+		upsertMemoryItem(db, {
+			slotKey: 'rule:b',
+			content: '规则乙',
+			itemKind: 'rule',
+			scope: { type: 'skill', key: 'revise' },
+		});
+		const before = buildScopedRulesIndexSection(db);
+		expect(before).toContain('project:project-1');
+		expect(before).toContain('skill:revise');
+
+		forgetScopeMemoryItems(db, { type: 'project', key: 'project-1' }, '项目归档清理');
+		const after = buildScopedRulesIndexSection(db);
+		expect(after).not.toContain('project:project-1');
+		expect(after).toContain('skill:revise');
 	});
 });

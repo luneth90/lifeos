@@ -50,6 +50,8 @@ Vault 目录布局定义在根目录 `lifeos.yaml` 中。默认映射：
 
 **始终生效：** 用户表达需要持久遵守的规则时，立即调用 `memory_log(contract_version=2, slot_key=..., content=..., scope={type: ..., key: ...}, item_kind="rule")` 写入。global 也必须显式声明空 key；无法确定作用域时先确认，禁止默认写入 global。记忆身份是 `(scope.type, scope.key, slot_key)`。
 
+**临时文件禁写（硬约束）：** 禁止为 `plan`/`draft` 类型的临时文件（计划、草稿）写入 `file` 作用域的 `memory_log` 持久记忆，无论 key 是 entity_id 还是文件路径形式。阶段性方案与过程决策一律保留在对应 Markdown 正文或计划文档中，源码层已强制拦截，违规写入会被拒绝。
+
 > 分层激活规则、规则捕获规范、噪声防护等完整协议见 `memory-protocol.md`。
 
 ---

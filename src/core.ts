@@ -16,7 +16,13 @@ import { assertSchemaV4 } from './db/schema.js';
 import { CONTRACT_VERSION, assertRuntimeContract } from './runtime-contract.js';
 import { notifyFileChanged, notifyFilesChanged } from './services/capture.js';
 import { buildMemoryContext } from './services/context-router.js';
-import { archiveMemoryItem, listMemoryItems, upsertMemoryItem } from './services/memory-items.js';
+import {
+	MemoryItemValidationError,
+	archiveMemoryItem,
+	forgetScopeMemoryItems,
+	listMemoryItems,
+	upsertMemoryItem,
+} from './services/memory-items.js';
 import { type VaultQueryResult, queryVaultIndex } from './services/retrieval.js';
 import { resolveMemoryScopes } from './services/scope-resolver.js';
 import { runStartup, runStartupMaintenance } from './services/startup.js';
@@ -247,13 +253,24 @@ export function memoryForget(
 	opts: ContractRequest & {
 		dbPath?: string;
 		vaultRoot?: string;
-		itemId: number;
+		itemId?: number;
+		scope?: MemoryScope;
 		reason: string;
 	},
-): ScopedMemoryItem {
+): ScopedMemoryItem | { archived: number } {
 	assertContractVersion(opts.contractVersion);
+	const hasItemId = opts.itemId !== undefined;
+	const hasScope = opts.scope !== undefined;
+	if (hasItemId === hasScope) {
+		throw new MemoryItemValidationError('itemId 与 scope 必须且只能传其一');
+	}
 	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault, config }) => {
-		const input: ArchiveMemoryItemInput = { itemId: opts.itemId, reason: opts.reason };
+		if (hasScope && opts.scope) {
+			const archived = forgetScopeMemoryItems(db, opts.scope, opts.reason);
+			refreshMemoryAuditView(db, vault, config);
+			return { archived };
+		}
+		const input: ArchiveMemoryItemInput = { itemId: opts.itemId as number, reason: opts.reason };
 		const result = archiveMemoryItem(db, input);
 		refreshMemoryAuditView(db, vault, config);
 		return result;

@@ -137,7 +137,8 @@ memory_log(
 - Use `source="correction"` for user corrections. A later preference cannot downgrade a correction.
 - `related_files` identifies evidence or authoritative source documents. Use `expires_at` only for genuinely temporary memory.
 - One-off completion records are events and cannot be written through normal `memory_log`.
-- Archive with `memory_forget(contract_version=2, item_id=..., reason="...")`; hard deletion is not available.
+- **Writing `file` scope memory for `plan`/`draft` type files is prohibited**, regardless of whether the key is an entity_id or file path. This is enforced at the source level via `vault_index.type`. Interim decisions and work-in-progress schemes must remain in the corresponding Markdown body or plan document.
+- Archive with `memory_forget(contract_version=2, item_id=..., reason="...")`; hard deletion is not available. To batch archive all active memory entries under a scope, use `memory_forget(contract_version=2, scope={type: ..., key: ...}, reason="...")` (`item_id` and `scope` are mutually exclusive; batch archiving `global` scope is prohibited).
 
 ### Capture Decision
 

@@ -137,7 +137,8 @@ memory_log(
 - 用户纠正行为时使用 `source="correction"`；后续 preference 写入不能降低 correction。
 - `related_files` 保存证据或权威原文路径；`expires_at` 只用于确有期限的记忆。
 - 一次性完成记录属于 event，不允许通过普通 `memory_log` 写入。
-- 归档使用 `memory_forget(contract_version=2, item_id=..., reason="...")`，禁止硬删除。
+- **禁止为 `plan`/`draft` 类型的临时文件写入 `file` 作用域记忆**，无论 key 是 entity_id 还是文件路径形式；源码层按 `vault_index.type` 强制拦截。阶段性方案与过程决策保留在对应 Markdown 正文或计划文档中。
+- 归档使用 `memory_forget(contract_version=2, item_id=..., reason="...")`，禁止硬删除；批量清理某作用域下全部活跃记忆用 `memory_forget(contract_version=2, scope={type: ..., key: ...}, reason="...")`（`item_id` 与 `scope` 互斥，`global` 作用域禁止批量归档）。
 
 ### 规则捕获判断
 

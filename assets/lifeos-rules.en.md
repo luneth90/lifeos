@@ -50,6 +50,8 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 
 **Always active:** When the user expresses a persistent rule, immediately call `memory_log(contract_version=2, slot_key=..., content=..., scope={type: ..., key: ...}, item_kind="rule")`. Global writes still require an explicit empty key. Ask when the scope is unclear; never default it to global. Memory identity is `(scope.type, scope.key, slot_key)`.
 
+**Temporary file write ban (hard enforcement):** Writing persistent `memory_log` entries under `file` scope for `plan`/`draft` type files is prohibited, regardless of whether the key is an entity_id or file path. Interim decisions and work-in-progress schemes must remain in the corresponding Markdown body or plan document. This is enforced at the source code level; violations will be rejected.
+
 > For the full layered activation rules, rule capture conventions, and noise protection, see `memory-protocol.md`.
 
 ---

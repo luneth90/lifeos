@@ -241,6 +241,30 @@ describe('server 最终 V2/V4 契约', () => {
 		});
 	});
 
+	it('memory_forget 批量归档分支从 params 失效对应 scope 缓存', () => {
+		coreMock.memoryForget.mockReturnValueOnce({ archived: 2 });
+		testing.callMemoryBootstrap({ vault_root: vault.root });
+		const result = testing.callTool('memory_forget', {
+			contract_version: 2,
+			vault_root: vault.root,
+			scope: { type: 'project', key: 'project-gc' },
+			reason: '项目归档清理',
+		});
+		expect(result).toEqual({ archived: 2 });
+
+		expect(coreMock.memoryForget).toHaveBeenCalledWith({
+			contractVersion: 2,
+			vaultRoot: vault.root,
+			scope: { type: 'project', key: 'project-gc' },
+			reason: '项目归档清理',
+		});
+		expect(testing.runtimeState({ vault_root: vault.root })).toMatchObject({
+			layer0Dirty: false,
+			globalVersion: 0,
+			scopeVersions: { 'project:project-gc': 1 },
+		});
+	});
+
 	it('memory_context 将作用域参数封装为 request，不保留旧上下文字段', () => {
 		testing.callTool('memory_context', {
 			contract_version: 2,

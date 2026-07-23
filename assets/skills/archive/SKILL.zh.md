@@ -176,7 +176,12 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 4. **更新今日日记：**
    - 在 `{日记目录}/YYYY-MM-DD.md` 的备注区追加归档记录（若文件存在）
 
-5. **清理检查：**
+5. **清理关联 Scope 记忆：**
+   - 对已归档的项目，调用 `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="项目归档清理")` 批量清理该作用域下所有活跃记忆条目
+   - 对已归档的草稿/计划，若曾挂载 `file` 作用域记忆，调用 `memory_forget(contract_version=2, scope={type: "file", key: "<entity_id 或文件路径>"}, reason="草稿/计划归档清理")` 批量清理
+   - 再调用 `memory_notify` 通知文件移动（`previous_file_path` 指向原路径）
+
+6. **清理检查：**
    - 检查 `{资源目录}/` 中是否有关联的孤立资源
    - 若有，询问用户是否一并清理
 
