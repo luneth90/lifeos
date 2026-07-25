@@ -34,7 +34,12 @@ describe('memoryStartup 最终 V2/V4 契约', () => {
 
 		expect(result.layer0.text).toEqual(expect.any(String));
 		expect(result.layer0.snapshotId).toMatch(/^ctx-/);
-		expect(result.scopeHints).toEqual({ availableProjects: [], availableSkills: [] });
+		expect(result.scopeHints).toEqual({
+			availableProjects: [],
+			availableSkills: [],
+			availableTools: [],
+			toolBindings: {},
+		});
 		expect(result.vaultStats).toMatchObject({ maintenancePending: true });
 		expect(result).not.toHaveProperty('layer0_summary');
 		expect(result).not.toHaveProperty('vault_stats');

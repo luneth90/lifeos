@@ -144,6 +144,34 @@ describe('最终协议文档门禁', () => {
 		expect(contract).toContain('`memory_context` 只返回 `rule`、`decision`、`fact`');
 	});
 
+	it('中英文记忆路由资产保持新增作用域与工具别名语义一致', () => {
+		const assets = [
+			{
+				rules: read('assets/lifeos-rules.zh.md'),
+				protocol: read('assets/skills/_shared/memory-protocol.zh.md'),
+				incremental: /增量调用 `memory_context`/,
+			},
+			{
+				rules: read('assets/lifeos-rules.en.md'),
+				protocol: read('assets/skills/_shared/memory-protocol.en.md'),
+				incremental: /incrementally call `memory_context`/i,
+			},
+		] as const;
+
+		for (const asset of assets) {
+			expect(asset.rules).toMatch(asset.incremental);
+			expect(asset.protocol).toMatch(asset.incremental);
+			for (const marker of [
+				'scope_hints.available_tools',
+				'scope_hints.tool_bindings',
+				'memory.tool_bindings',
+				'ambiguous_tool_alias',
+			]) {
+				expect(asset.protocol).toContain(marker);
+			}
+		}
+	});
+
 	it('升级文档只允许 V1/V2/V3 到 V4 的离线 cutover', () => {
 		for (const path of ['docs/memory-contract-v2.md', ...PROTOCOL_DOCS.slice(2)]) {
 			const content = read(path);

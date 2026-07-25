@@ -17,8 +17,12 @@ memory_bootstrap
 
 1. 进入 LifeOS Vault 会话时先调用 `memory_bootstrap`，只读取全局 Layer 0。
 2. 完成任务路由后调用 `memory_context`。空作用域只会返回空局部上下文，不会加载全部记忆。
-3. 需要笔记原文时再调用 `memory_query`；它检索 Vault 文件，不替代规则路由。
-4. 除 bootstrap 外，所有请求都必须携带 `contract_version=2`。
+3. 若任务执行途中新增了技能、项目、仓库、工具或文件作用域，在首次使用该对象前增量调用 `memory_context` 补载新作用域；不得假设首次路由已经覆盖后续新增对象。
+4. `memory_bootstrap` 返回的 `scope_hints.available_tools` 与 `scope_hints.tool_bindings` 只用于识别工具作用域，不会把工具规则正文注入 Layer 0。
+5. 需要笔记原文时再调用 `memory_query`；它检索 Vault 文件，不替代规则路由。
+6. 除 bootstrap 外，所有请求都必须携带 `contract_version=2`。
+
+工具命令名或技能名与稳定工具 ID 不一致时，可直接把别名作为 `tool` scope key 传给 `memory_context`；解析器会依据 `memory.tool_bindings` 规范化。别名匹配多个工具时返回 `ambiguous_tool_alias`，不得猜测。
 
 ## 最终工具表
 

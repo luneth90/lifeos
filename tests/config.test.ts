@@ -161,6 +161,17 @@ describe('VaultConfig — zh preset (default)', () => {
 		expect(budgets).not.toHaveProperty('userprofile_rules');
 		expect(budgets).not.toHaveProperty('revises_summary');
 	});
+
+	it('toolBindings 返回内置工具别名的独立副本', () => {
+		tmp = createTempDir();
+		const cfg = new VaultConfig(tmp.root);
+		const first = cfg.toolBindings();
+		expect(first).toEqual({
+			obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
+		});
+		first.obsidian.commands.push('已修改');
+		expect(cfg.toolBindings().obsidian.commands).toEqual(['obsidian']);
+	});
 });
 
 describe('VaultConfig — lifeos.yaml loading', () => {

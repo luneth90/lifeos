@@ -65,12 +65,14 @@ memory_notify(contract_version=2, file_path="40_知识/笔记/群论.md")
 | `skill` | 技能稳定名称，例如 `translate` |
 | `project` | 项目 frontmatter 中非占位且唯一的稳定 `id` |
 | `repository` | `lifeos.yaml` 的 `memory.repository_bindings` 中已声明的稳定名称 |
-| `tool` | 工具稳定名称，例如 `obsidian-cli` |
+| `tool` | 工具稳定名称，例如 `obsidian`；命令或技能别名由 `memory.tool_bindings` 映射 |
 | `file` | 优先使用索引中的稳定 `entity_id`，没有时使用 Vault 相对路径 |
 
 ## Layer 0 与局部上下文
 
 新会话第一步必须调用 `memory_bootstrap()`。它只返回全局 Layer 0，包括全局规则、全局画像摘要、TaskBoard 当前焦点和复习提醒；不会注入任何局部 scope 记忆。
+
+`memory_bootstrap()` 的 `scope_hints.available_tools` 列出存在活跃记忆的工具作用域，`scope_hints.tool_bindings` 提供命令名或技能名到稳定工具 ID 的映射。它们只用于路由，不包含工具规则正文。`memory_context` 会按该配置规范化工具别名；若同一别名匹配多个工具，则返回 `ambiguous_tool_alias`，不会猜测。
 
 完成任务分类后，再调用 `memory_context`：
 
@@ -79,6 +81,17 @@ memory_notify(contract_version=2, file_path="40_知识/笔记/群论.md")
 3. 全局 `hard` 规则始终阻止局部同 slot 覆盖。
 4. `memory_context` 只返回 `rule`、`decision`、`fact`；画像仍属于全局摘要链路。
 5. 单条预算与总预算超限时，调用方必须检查诊断字段，不得假设全部条目已加载。
+6. 若任务执行途中新增了 scope，必须在首次使用对应对象前增量调用 `memory_context`；首次调用形成的作用域集合不是固定快照。
+
+工具别名配置示例：
+
+```yaml
+memory:
+  tool_bindings:
+    obsidian:
+      commands: [obsidian]
+      skills: [obsidian-cli]
+```
 
 ## 数据库与离线升级
 

@@ -68,15 +68,26 @@ describe('V4 启动路径', () => {
 			itemKind: 'rule',
 			scope: { type: 'skill', key: 'translate' },
 		});
+		upsertMemoryItem(db, {
+			slotKey: 'runtime:cli-outside-sandbox',
+			content: 'Obsidian CLI 必须在沙盒外执行',
+			itemKind: 'rule',
+			scope: { type: 'tool', key: 'obsidian' },
+		});
 
 		const result = runStartup(db, vault.root);
 		expect(result.scopeHints).toEqual({
 			availableProjects: ['project-algebra'],
 			availableSkills: ['translate'],
+			availableTools: ['obsidian'],
+			toolBindings: {
+				obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
+			},
 		});
 		expect(result.vaultStats.totalFiles).toBe(1);
 		expect(result.layer0.text).toContain('必须使用中文');
 		expect(result.layer0.text).not.toContain('保持术语一致');
+		expect(result.layer0.text).not.toContain('Obsidian CLI 必须在沙盒外执行');
 		expect(result.layer0.snapshotId).toMatch(/^ctx-[0-9a-f]{20}$/);
 	});
 

@@ -1,5 +1,14 @@
 # 更新日志
 
+## 2.1.1 (2026-07-26)
+
+### 修复
+
+- `memory_bootstrap` 新增 `scope_hints.available_tools` 与 `scope_hints.tool_bindings` 路由元数据，使调用方能够识别存在活跃记忆的工具作用域，但不把工具规则正文注入 Layer 0
+- 新增 `memory.tool_bindings` 配置与工具别名规范化：`obsidian-cli` 等技能名或命令名可解析到稳定工具 ID；别名匹配多个工具时返回 `ambiguous_tool_alias`，禁止猜测
+- 记忆协议明确要求任务中途首次引入技能、项目、仓库、工具或文件时，先增量调用 `memory_context` 补载对应作用域
+- 同步更新中英文启动规则和记忆协议资产，并增加双语语义一致性、作用域解析、启动提示与服务端输出测试
+
 ## 2.1.0 (2026-07-23)
 
 ### 新增

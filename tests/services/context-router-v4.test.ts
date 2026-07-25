@@ -18,6 +18,9 @@ const DEFAULT_BUDGETS: ContextBudgets = {
 function config(budgets: Partial<ContextBudgets> = {}): VaultConfig {
 	return {
 		repositoryBindings: () => ({}),
+		toolBindings: () => ({
+			obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
+		}),
 		contextBudgets: () => ({ ...DEFAULT_BUDGETS, ...budgets }),
 	} as unknown as VaultConfig;
 }
@@ -167,5 +170,21 @@ describe('V4 context router', () => {
 			{ scope: { type: 'project', key: 'missing' }, reason: 'unknown_project' },
 		]);
 		expect(first.snapshotId).toBe(second.snapshotId);
+	});
+
+	it('memory_context 通过工具别名加载规范工具作用域', () => {
+		put(
+			{ type: 'tool', key: 'obsidian' },
+			'runtime:cli-outside-sandbox',
+			'Obsidian CLI 必须在沙盒外执行',
+		);
+		const result = buildMemoryContext(
+			db,
+			'/unused',
+			{ scopes: [{ type: 'tool', key: 'obsidian-cli' }] },
+			{ config: config() },
+		);
+		expect(result.matchedScopes).toEqual([{ type: 'tool', key: 'obsidian' }]);
+		expect(result.rules.map((item) => item.slotKey)).toEqual(['runtime:cli-outside-sandbox']);
 	});
 });

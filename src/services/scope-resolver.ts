@@ -50,6 +50,18 @@ function hasMemoryScope(db: Database.Database, scope: MemoryScope): boolean {
 	);
 }
 
+function resolveToolAlias(config: VaultConfig | undefined, key: string): string[] {
+	if (!config) return [];
+	const bindings = config.toolBindings();
+	return Object.entries(bindings)
+		.filter(
+			([toolId, binding]) =>
+				toolId === key || binding.commands.includes(key) || binding.skills.includes(key),
+		)
+		.map(([toolId]) => toolId)
+		.sort();
+}
+
 export function resolveMemoryScopes(
 	db: Database.Database,
 	scopes: MemoryScope[],
@@ -105,6 +117,20 @@ export function resolveMemoryScopes(
 				(!options.requireRepositoryBinding && hasMemoryScope(db, scope))
 					? scope
 					: null;
+		} else if (scope.type === 'tool') {
+			if (hasMemoryScope(db, scope)) {
+				canonical = scope;
+			} else {
+				const aliases = resolveToolAlias(options.config, scope.key);
+				if (aliases.length === 1) {
+					const candidate = { type: 'tool', key: aliases[0] } as const;
+					canonical = options.allowCreate || hasMemoryScope(db, candidate) ? candidate : null;
+				} else if (aliases.length === 0 && options.allowCreate) {
+					canonical = scope;
+				} else {
+					unresolvedReason = aliases.length > 1 ? 'ambiguous_tool_alias' : 'unknown_tool';
+				}
+			}
 		} else {
 			canonical = options.allowCreate || hasMemoryScope(db, scope) ? scope : null;
 		}

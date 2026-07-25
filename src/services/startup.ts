@@ -51,9 +51,26 @@ export function runStartup(
 			`)
 			.all() as Array<{ scope_key: string }>
 	).map((row) => row.scope_key);
+	const availableTools = (
+		db
+			.prepare(`
+				SELECT DISTINCT scope_key
+				FROM memory_items
+				WHERE status = 'active' AND scope_type = 'tool'
+				ORDER BY scope_key
+			`)
+			.all() as Array<{ scope_key: string }>
+	).map((row) => row.scope_key);
+	const configuredToolBindings = config.toolBindings();
+	const toolBindings = Object.fromEntries(
+		availableTools.flatMap((toolId) => {
+			const binding = configuredToolBindings[toolId];
+			return binding ? [[toolId, binding] as const] : [];
+		}),
+	);
 	return {
 		layer0: buildLayer0Context(db, vaultRoot, config.contextBudgets()),
-		scopeHints: { availableProjects, availableSkills },
+		scopeHints: { availableProjects, availableSkills, availableTools, toolBindings },
 		vaultStats: {
 			totalFiles,
 			updatedSinceLast: 0,

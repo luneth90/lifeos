@@ -56,3 +56,7 @@ memory:
     scoped_context: 1200
     single_item_max: 220
   repository_bindings: {}
+  tool_bindings:
+    obsidian:
+      commands: [obsidian]
+      skills: [obsidian-cli]

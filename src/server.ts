@@ -437,6 +437,8 @@ function runMemoryBootstrap(params: Record<string, unknown>): BootstrapOutput {
 			? {
 					available_projects: result.scopeHints.availableProjects,
 					available_skills: result.scopeHints.availableSkills,
+					available_tools: result.scopeHints.availableTools,
+					tool_bindings: result.scopeHints.toolBindings,
 				}
 			: null,
 	};

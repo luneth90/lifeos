@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, resolve, win32 } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
-import type { ContextBudgets } from './types.js';
+import type { ContextBudgets, ToolBindings } from './types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +48,7 @@ export interface MemoryConfig {
 	excluded_prefixes: string[];
 	context_budgets: ContextBudgets;
 	repository_bindings: RepositoryBindings;
+	tool_bindings: ToolBindings;
 }
 
 interface ManagedAssetRecord {
@@ -142,6 +143,9 @@ const ZH_PRESET: LifeOSConfig = {
 		excluded_prefixes: ['system'],
 		context_budgets: { ...DEFAULT_CONTEXT_BUDGETS },
 		repository_bindings: {},
+		tool_bindings: {
+			obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
+		},
 	},
 };
 
@@ -194,6 +198,9 @@ const EN_PRESET: LifeOSConfig = {
 		excluded_prefixes: ['system'],
 		context_budgets: { ...DEFAULT_CONTEXT_BUDGETS },
 		repository_bindings: {},
+		tool_bindings: {
+			obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
+		},
 	},
 };
 
@@ -339,6 +346,20 @@ const repositoryIdSchema = z
 	.string()
 	.regex(/^[a-z0-9][a-z0-9._-]*$/, 'repository id 必须是可移植的小写 ASCII 标识符');
 
+const toolIdSchema = z
+	.string()
+	.regex(/^[a-z0-9][a-z0-9._-]*$/, 'tool id 必须是可移植的小写 ASCII 标识符');
+
+const toolBindingSchema = z
+	.object({
+		commands: z.array(z.string().min(1)).default([]),
+		skills: z.array(z.string().min(1)).default([]),
+	})
+	.strict()
+	.refine((binding) => binding.commands.length > 0 || binding.skills.length > 0, {
+		message: 'tool binding 必须至少声明一个 command 或 skill 别名',
+	});
+
 const memorySchema = z
 	.object({
 		contract_version: z.literal(2),
@@ -359,6 +380,7 @@ const memorySchema = z
 		excluded_prefixes: z.array(z.enum(directoriesKeys)).default(['system']),
 		context_budgets: contextBudgetsSchema,
 		repository_bindings: z.record(repositoryIdSchema, z.array(z.string().min(1)).min(1)),
+		tool_bindings: z.record(toolIdSchema, toolBindingSchema).default({}),
 	})
 	.strict();
 
@@ -569,6 +591,15 @@ export class VaultConfig {
 			Object.entries(this._config.memory.repository_bindings).map(([id, roots]) => [
 				id,
 				[...roots],
+			]),
+		);
+	}
+
+	toolBindings(): ToolBindings {
+		return Object.fromEntries(
+			Object.entries(this._config.memory.tool_bindings).map(([id, binding]) => [
+				id,
+				{ commands: [...binding.commands], skills: [...binding.skills] },
 			]),
 		);
 	}

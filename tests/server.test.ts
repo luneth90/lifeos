@@ -24,7 +24,14 @@ function startupResult(text = 'Layer0', snapshotId = 'ctx-test') {
 				},
 			},
 		},
-		scopeHints: { availableProjects: ['gts'], availableSkills: ['revise'] },
+		scopeHints: {
+			availableProjects: ['gts'],
+			availableSkills: ['revise'],
+			availableTools: ['obsidian'],
+			toolBindings: {
+				obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
+			},
+		},
 		vaultStats: {
 			totalFiles: 0,
 			updatedSinceLast: 0,
@@ -122,6 +129,10 @@ describe('server 最终 V2/V4 契约', () => {
 			scope_hints: {
 				available_projects: ['gts'],
 				available_skills: ['revise'],
+				available_tools: ['obsidian'],
+				tool_bindings: {
+					obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
+				},
 			},
 		});
 	});

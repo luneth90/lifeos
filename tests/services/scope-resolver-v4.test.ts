@@ -96,6 +96,49 @@ describe('V4 scope resolver', () => {
 		);
 	});
 
+	it('tool 可通过配置中的命令或技能别名解析为稳定 ID', () => {
+		upsertMemoryItem(db, {
+			slotKey: 'runtime:cli-outside-sandbox',
+			content: 'Obsidian CLI 必须在沙盒外执行',
+			itemKind: 'rule',
+			scope: { type: 'tool', key: 'obsidian' },
+		});
+		const config = {
+			repositoryBindings: () => ({}),
+			toolBindings: () => ({
+				obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
+			}),
+		} as unknown as VaultConfig;
+		const result = resolveMemoryScopes(
+			db,
+			[
+				{ type: 'tool', key: 'obsidian-cli' },
+				{ type: 'tool', key: 'obsidian' },
+			],
+			{ config },
+		);
+		expect(result.resolvedScopes).toEqual([{ type: 'tool', key: 'obsidian' }]);
+		expect(result.unresolvedScopes).toEqual([]);
+	});
+
+	it('tool 别名映射存在歧义时拒绝猜测', () => {
+		const config = {
+			repositoryBindings: () => ({}),
+			toolBindings: () => ({
+				'obsidian-a': { commands: ['obsidian'], skills: [] },
+				'obsidian-b': { commands: ['obsidian'], skills: [] },
+			}),
+		} as unknown as VaultConfig;
+		const result = resolveMemoryScopes(db, [{ type: 'tool', key: 'obsidian' }], {
+			config,
+			allowCreate: true,
+		});
+		expect(result.resolvedScopes).toEqual([]);
+		expect(result.unresolvedScopes).toEqual([
+			{ scope: { type: 'tool', key: 'obsidian' }, reason: 'ambiguous_tool_alias' },
+		]);
+	});
+
 	it('global 只接受空 key，并对无效 scope 返回诊断而非抛错', () => {
 		const invalidType = { type: 'unknown', key: 'x' } as unknown as MemoryScope;
 		const result = resolveMemoryScopes(db, [

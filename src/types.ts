@@ -46,6 +46,13 @@ export interface ContextBudgets {
 	single_item_max: number;
 }
 
+export interface ToolBinding {
+	commands: string[];
+	skills: string[];
+}
+
+export type ToolBindings = Record<string, ToolBinding>;
+
 // ─── DB row interfaces ────────────────────────────────────────────────────────
 // These map 1:1 to the SQLite column names (snake_case) as returned by better-sqlite3.
 
@@ -188,6 +195,8 @@ export interface StartupResult {
 	scopeHints: {
 		availableProjects: string[];
 		availableSkills: string[];
+		availableTools: string[];
+		toolBindings: ToolBindings;
 	};
 	vaultStats: {
 		totalFiles: number;
