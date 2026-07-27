@@ -117,11 +117,6 @@ aliases: []
 - Main note (research report): {research directory}/Domain/Topic/Topic.md
 - Examples/resources (optional): {research directory}/Domain/Topic/examples/
 - Visualization (optional): {research directory}/Domain/Topic/Topic_Map.canvas
-
-## Clarification Question Answers
-
-Knowledge level: [To be filled by user]
-Method preference: [To be filled by user]
 ```
 
 ## Step 7: Return Result

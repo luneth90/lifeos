@@ -22,7 +22,6 @@ Pay attention to the following key fields:
 
 - Trigger mode (FILE MODE or TOPIC MODE)
 - Local draft materials (listed file paths)
-- Clarification question answers (user's knowledge level and method preference)
 - Expert persona (file path, applicability mode, special format requirements)
 
 **Persona application rules (based on applicability mode):**
@@ -53,8 +52,6 @@ Pay attention to the following key fields:
 Path: `{research directory}/Domain/Topic/Topic.md`
 
 > ⚠️ `/research` must never create files under `{knowledge directory}/` — that is the responsibility of `/knowledge`.
-
-Adjust depth and style based on user's knowledge level and method preference.
 
 **Default chapter structure** (used when persona applicability mode is not `Full apply`):
 

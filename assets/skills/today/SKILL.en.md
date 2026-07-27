@@ -1,7 +1,7 @@
 ---
 name: today
 description: "Plan the day and generate today's diary when the user starts a new day, asks what to do, or says '/today'."
-version: 2.1.1
+version: 2.1.2
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Daily_Template.md"
@@ -42,7 +42,7 @@ You are LifeOS's daily planning assistant, helping users quickly get into work m
 
 # Goal
 
-Help the user start a new day: review yesterday's progress, create today's diary with priorities, connect active project tasks, and capture new ideas. Generate the diary directly without intermediate planning files.
+Help the user start a new day: review yesterday's progress, create today's diary with priorities, and connect active project tasks. Generate the diary directly without intermediate planning files.
 
 # Workflow
 
@@ -108,19 +108,11 @@ Help the user start a new day: review yesterday's progress, create today's diary
 
 ## Step 2: Collect User Input (Interactive)
 
-Use the AskUserQuestion tool to collect the following information:
+Use the AskUserQuestion tool to ask only one thing:
 
-**Question 1:** "What are your main goals for today?"
+**Question:** "What will you work on today?"
 
-- Options based on active projects + "Other"
-
-**Question 2:** "Any new ideas or tasks?"
-
-- Free text, to be captured as drafts
-
-**Question 3:** "Any blockers or concerns?"
-
-- Free text
+- Candidates are based on yesterday's carryover, active-project next steps, incomplete review answers, and notes pending review, with an "Other" option
 
 ## Step 3: Create Today's Diary
 
@@ -129,7 +121,7 @@ Use the AskUserQuestion tool to collect the following information:
    - If not: create from template `{system directory}/{templates subdirectory}/Daily_Template.md`
 
 2. **Populate diary content:**
-   - **To-do items**: Fill in by priority (order: yesterday's carryover → incomplete review answers → user's today goals → project next steps → notes pending review)
+   - **To-do items**: Fill in by priority (order: yesterday's carryover → incomplete review answers → user-selected items for today → project next steps → notes pending review)
      - If there are review files with `status: pending` (user received questions but hasn't answered), prioritize the reminder: `📝 Complete review answers: [[Review_YYYY-MM-DD]] ([[chapter note name]])`
      - If there are notes pending review (only `status: review`), list each as `/revise [[note name]]` in to-dos
    - **Log**: Leave empty for the user
@@ -173,25 +165,7 @@ Based on the signals collected in Step 1, only write structured profile slots wh
 
 > Note: Skip this step when there is no stable signal across conversations.
 
-## Step 4: Capture New Ideas (from Question 2)
-
-For each new idea/task mentioned in Question 2:
-
-1. Check if it already exists in `{projects directory}/`
-2. If new, create `{drafts directory}/[short title].md`:
-
-```yaml
----
-created: "YYYY-MM-DD"
-status: pending
-domain: math
----
-[user description]
-```
-
-> `status: pending` indicates the draft has not been processed yet. It will be skipped by `/archive` and picked up by `/research`, `/project`, or `/knowledge` for processing, after which the status will be updated.
-
-## Step 5: Present Summary
+## Step 4: Present Summary
 
 Output a concise summary:
 
@@ -208,10 +182,6 @@ Output a concise summary:
 **Active projects ([N]):**
 - [[Project1]] - status
 - [[Project2]] - status
-
-**New ideas captured ([N]):**
-- [[Idea1]]
-- [[Idea2]]
 
 **Notes pending review ([N]):**
 - [[NoteTitle1]] (review)
@@ -238,7 +208,6 @@ Ready to go! Quick actions:
 - **Do not overwrite existing content** — if today's diary already exists, update carefully without overwriting
 - **Use the template format** — keep diary structure consistent
 - **Add wikilinks everywhere** — use double-bracket links for projects and concepts
-- **New drafts must have `status: pending`** — this is the signal for `/archive` to skip and `/research`/`/project` to pick up
 - **Stay efficient** — minimize round-trips so the user can get started quickly
 
 # Edge Cases
@@ -248,7 +217,7 @@ Ready to go! Quick actions:
 - **Weekend/Monday:** Note the gap, ask if a weekly retrospective is needed
 - **Today's diary already exists:** Read and merge priorities, avoid duplicates
 - **Empty drafts pool:** Focus on project execution
-- **AskUserQuestion no response:** After timeout, continue with reasonable defaults (goal = clear backlog, no new ideas), note this in the summary
+- **AskUserQuestion no response:** After timeout, continue with a reasonable default (goal = clear backlog), note this in the summary
 - **File read failure:** Skip that step, note "[filename] read failed, skipped" in the summary notes
 
 # Template

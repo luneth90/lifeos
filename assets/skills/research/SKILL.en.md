@@ -1,7 +1,7 @@
 ---
 name: research
 description: "Research a topic or draft in depth, producing a research plan and structured report."
-version: 2.1.1
+version: 2.1.2
 dependencies:
   templates: []
   prompts:
@@ -55,14 +55,14 @@ Follow `_shared/dual-agent-orchestrator.md` Phase 0, with entity type `filters.t
 | Phase   | Actor              | Responsibility                                           |
 | ------- | ------------------ | -------------------------------------------------------- |
 | Phase 1 | Planning Agent     | Scan local drafts, formulate research strategy, generate plan file |
-| Phase 2 | Orchestrator (you) | Ask user clarification questions, wait for confirmation  |
+| Phase 2 | Orchestrator (you) | Present the research plan and wait for user confirmation |
 | Phase 3 | Execution Agent    | Execute research per the plan, write report, and update the plan to `status: done` |
 
 # Your Responsibilities as Orchestrator
 
 Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.md`. The following are additional responsibilities specific to the research skill:
 
-- During Phase 2 (user review), you directly ask the user clarification questions in the conversation, write answers into the plan file, then prompt the user to review and confirm
+- During Phase 2 (user review), present the plan path and wait for user confirmation; only when the plan's Domain is TBD, additionally ask for the domain and write it back to the plan
 
 # Input Context
 
@@ -75,22 +75,15 @@ Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.md`. 
 
 Follow `_shared/dual-agent-orchestrator.md` Phase 1. Replace the placeholder `[user's input]` with the user's actual input.
 
-After the Planning Agent returns, **directly** ask the user in the conversation:
+After the Planning Agent returns, **directly** notify the user in the conversation:
 
 ```
 I've created a research plan for "[Topic]" at: `[plan file path]`
 
-Please answer the following questions, and I'll write them into the plan before starting execution:
-
-1. What is your current familiarity with this topic? (Beginner / Intermediate / Advanced)
-2. Do you prefer theoretical understanding or example-driven practice?
+Please review the plan. Once you confirm it, I'll start execution.
 ```
 
-After receiving answers:
-
-1. Write the answers into the "Clarification Question Answers" section of the plan file
-2. If the Domain in the plan is TBD, additionally ask about the domain
-3. Prompt the user to review the plan, wait for confirmation
+If the Domain in the plan is TBD, additionally ask for the domain and write the answer into the plan file. Then wait for the user's review confirmation.
 
 # Phase 2: Launch Execution Agent (After User Confirmation)
 

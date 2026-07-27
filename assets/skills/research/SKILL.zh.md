@@ -1,7 +1,7 @@
 ---
 name: research
 description: '深入研究主题或草稿时使用；产出研究计划与结构化研究报告。'
-version: 2.1.1
+version: 2.1.2
 dependencies:
   templates: []
   prompts:
@@ -55,14 +55,14 @@ memory_context(
 | 阶段    | 执行者             | 职责                                     |
 | ------- | ------------------ | ---------------------------------------- |
 | Phase 1 | Planning Agent     | 扫描本地草稿、制定研究策略、生成计划文件 |
-| Phase 2 | Orchestrator（你） | 向用户提出澄清问题、等待确认             |
+| Phase 2 | Orchestrator（你） | 展示研究计划、等待用户确认               |
 | Phase 3 | Execution Agent    | 按计划执行研究、撰写报告，并将计划更新为 `status: done` |
 
 # 你作为 Orchestrator 的职责
 
 按 `_shared/dual-agent-orchestrator.md` 的标准编排流程执行，以下为研究技能的额外职责：
 
-- 阶段2（用户审核）中，你在对话中直接向用户提出澄清问题，收到回答后写入计划文件，再提示用户审核确认
+- 阶段2（用户审核）中，你在对话中展示计划路径并等待用户确认；仅当计划中的 Domain 为 TBD 时，额外追问领域并写回计划
 
 # 输入上下文
 
@@ -75,22 +75,15 @@ memory_context(
 
 按 `_shared/dual-agent-orchestrator.md` 阶段1 执行。占位符 `[user's input]` 替换为用户实际输入。
 
-Planning Agent 返回后，在**对话中直接**向用户提问：
+Planning Agent 返回后，在**对话中直接**通知用户：
 
 ```
 我已为「[主题]」制定了研究计划，路径：`[plan file path]`
 
-请回答以下问题，我将写入计划后开始执行：
-
-1. 你目前对该主题的了解程度？（初级 / 中级 / 高级）
-2. 你更偏向理论理解，还是示例驱动的实践？
+请审核计划；确认后我将开始执行。
 ```
 
-收到回答后：
-
-1. 将答案写入计划文件的「澄清问题回答」区块
-2. 若计划中 Domain 为 TBD，额外追问领域
-3. 提示用户审核计划，等待确认
+若计划中 Domain 为 TBD，额外追问领域并将答案写入计划文件。随后等待用户审核确认。
 
 # 阶段2：启动 Execution Agent（用户确认后）
 
