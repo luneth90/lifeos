@@ -117,11 +117,6 @@ aliases: []
 - 主笔记（研究报告）: {研究目录}/Domain/Topic/Topic.md
 - 示例/资源（可选）: {研究目录}/Domain/Topic/examples/
 - 可视化（可选）: {研究目录}/Domain/Topic/Topic_Map.canvas
-
-## 澄清问题回答
-
-知识水平: [待用户填写]
-方法偏好: [待用户填写]
 ```
 
 ## 步骤七：返回结果

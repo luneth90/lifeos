@@ -22,7 +22,6 @@ parent_skill: research
 
 - 触发方式（FILE MODE or TOPIC MODE）
 - 本地草稿资料（列出的文件路径）
-- 澄清问题回答（用户的知识水平和方法偏好）
 - 专家人格（文件路径、适用模式、特殊格式要求）
 
 **人格应用规则（基于适用模式）：**
@@ -53,8 +52,6 @@ parent_skill: research
 路径：`{研究目录}/Domain/Topic/Topic.md`
 
 > ⚠️ `/research` 绝不在 `{知识目录}/` 下创建文件，那是 `/knowledge` 的职责。
-
-根据用户知识水平和方法偏好调整深度与风格。
 
 **默认章节结构**（当 persona 适用模式不是`全量应用`时使用）：
 
