@@ -1,7 +1,7 @@
 ---
 name: research
 description: "Research a topic or draft in depth, producing a research plan and structured report."
-version: 2.1.1
+version: 2.1.2
 dependencies:
   templates: []
   prompts:
