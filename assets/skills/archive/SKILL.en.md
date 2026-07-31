@@ -142,8 +142,7 @@ After scanning, process every eligible item in the execution list by default:
      obsidian move path="source-path/project-folder" to="target-directory/2026/"
      ```
    - Ensure the destination parent directory exists before each operation (`mkdir -p`)
-   - **Fallback:** If `obsidian` CLI is unavailable (command not found or Obsidian not running), fall back to system `mv`
-     - After fallback, mark the completion report with "⚠️ mv fallback used; wikilinks may not be updated. Run `obsidian unresolved` to check"
+   - **Degradation:** If `obsidian` CLI is unavailable, stop and present the impact of missing link updates. Use a recorded move only after explicit user acceptance of degradation; never silently fall back to bare `mv`.
    - **Never** simulate a move by writing a new file and then deleting the original file
    - Folder projects must be moved as whole directories, not rebuilt file-by-file
 
@@ -224,7 +223,7 @@ After scanning, process every eligible item in the execution list by default:
 - **Only archive completed plans** — only plans with `status: done` can be archived; plans with `status: active` are never archived
 - **Only archive diary entries older than the most recent 7 days** — `{diary directory}/` always keeps the most recent 7 days, including today
 - **Never delete** — only move, never destroy content
-- **Prefer Obsidian CLI for moves** — `obsidian move` auto-updates wikilinks; fall back to `mv` when unavailable, noting link breakage risk
+- **Prefer Obsidian CLI for moves** — `obsidian move` auto-updates wikilinks; when unavailable, require explicit degradation acceptance and never silently use `mv`
 - **No simulated moves** — do not simulate a move with “write new file + delete old file”
 - **Organize by archive rule** — projects by completion year, drafts and diary entries by archival year and month, plans in `{archived plans subdirectory}`
 - **Archive all by default** — after scanning, automatically process every eligible candidate without requiring review, selection, confirmation, or a reply
@@ -241,7 +240,7 @@ After scanning, process every eligible item in the execution list by default:
 - **Large project with resources:** Leave associated resources in `{resources directory}/`, list them in the completion report, and do not move or clean them automatically
 - **Recently completed project:** Archive it normally, then suggest an optional retrospective in the completion report
 - **File move failure:** Stop archiving the current item, inform the user of the specific failed file, continue processing remaining items, and report the failure list at the end
-- **Obsidian CLI unavailable:** Fall back to system `mv`; after completion, note in the report that "wikilinks may not be updated" and suggest running `obsidian unresolved` to check broken links
+- **Obsidian CLI unavailable:** Stop and wait for explicit user acceptance of a degradation; move no files without it
 
 # Archive Structure
 
@@ -320,3 +319,16 @@ After archival is complete, suggestions:
 2. Check frozen projects and consider reactivating or archiving them
 3. Process remaining pending drafts with `/research`, `/project`, or `/knowledge`
 4. Continue or review plans that are still `active`, then rerun `/archive` after they are done
+
+## Archive Transaction Contract
+
+Read `_shared/operation-safety.md` and complete preflight: enumerate every candidate in a directory, resolve safe source/destination paths, and check collision before any move. Create a per-file move manifest: `{ run_id, moves, collisions, notified, errors }`. Prefer `move_with_link_update`; when unavailable, use an explicit degrade only after explicit user acceptance, never silent bare `mv`. Call `memory_notify(previous_file_path=...)` after each move; call `memory_forget` for the old project scope only after the new path index is confirmed. On failure retain the manifest, completed moves, and executable recovery action; use the same `run_id` to resume.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: archive
+run_id: stable(archive, candidate-paths, archive-date)
+target_path: "{system directory}/{archive subdirectory}/..."
+decision: [create, merge, resume, skip, replace]
+```

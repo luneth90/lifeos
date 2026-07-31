@@ -266,3 +266,16 @@ Rules:
 - Cap granularity at a second-level domain such as `math_group_theory` or `swift_concurrency`
 - If the trend is not stable, do not write it
 - Write project profile items only for a resolved project scope; use global only for genuinely cross-project signals, and write nothing when the signal is unstable
+
+## Resumable Review Contract
+
+Read `_shared/operation-safety.md`. For equal knowledge note and mode, prefer `resume` for a `status: pending` review record instead of generating new questions; read only the latest records and aggregate weak-point index. Each question carries stable `knowledge_point_id`, `source_refs`, and hidden `rubric`; check the knowledge-note hash before grading and regenerate on change. `quiz`, `feynman`, and `blindspot` use separate rubrics; blindspot self-assessment cannot advance knowledge status. Calculate partial score from rubric points and pass only when `score >= 80%`. Keep review-link indexing separate from status-advance records.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: revise
+run_id: stable(revise, knowledge-note-id, mode, note-hash)
+target_path: "{knowledge directory}/<chapter>/Review_<run-id>.md"
+decision: [create, merge, resume, skip, replace]
+```

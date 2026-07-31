@@ -233,3 +233,7 @@ aliases: []
 | WebSearch 无结果 | 跳过该查询，继续 |
 | 配置解析失败 | 报错并提示具体问题 |
 | 所有来源均失败 | 不生成周报，报告失败原因 |
+
+## 幂等运行
+
+执行前计算 `run_id = stable(config-hash, time-window)` 并预检现有周报。命中时 `merge` 已有来源台账，不重复创建；来源台账逐条记录 `published_at`、`fetched_at`、`health` 和 `errors`。单个来源失败不提前完成，全部来源失败保持非完成状态。输入 JSON 仅经 stdin 或受控文件传递，禁止 `echo` 组装。

@@ -234,3 +234,7 @@ All weekly digests generated:
 | WebSearch returns nothing | skip that query and continue |
 | config parsing fails | raise an error with the concrete problem |
 | every source fails | do not generate a digest; report the failure reasons |
+
+## Idempotent Runs
+
+Calculate `run_id = stable(config-hash, time-window)` and preflight an existing digest before execution. On a match, `merge` its source ledger rather than create a duplicate; every source record includes `published_at`, `fetched_at`, `health`, and `errors`. One source failure never declares completion early, and all sources failed remains non-completed. Pass JSON only through stdin or a controlled file, never assembled by `echo`.

@@ -99,3 +99,7 @@
 - [下次复习重点，针对 ❌ 和 ⚠️ 概念]
 - [若有疑问深化需求：可用 /brainstorm 或 /ask 探索]
 ```
+
+## 评分输入与状态门槛
+
+每题记录 `knowledge_point_id`、`source_refs`、隐藏 `rubric` 与分值。批改前读取知识笔记 hash；hash 不同则停止并要求重新出题。`quiz`、`feynman`、`blindspot` 采用独立 rubric；blindspot 仅更新弱项索引，绝不推进知识笔记状态。部分得分严格按 rubric 累加，只有 `score >= 80%` 才为 pass。

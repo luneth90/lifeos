@@ -125,8 +125,10 @@ For arXiv specifically:
 
 Invoke it like this:
 
+Pass configuration through stdin or a controlled input file; never construct JSON with shell `echo`:
+
 ```bash
-echo '<json_input>' | python3 .agents/skills/digest/references/rss-arxiv-script.py
+python3 .agents/skills/digest/references/rss-arxiv-script.py < "<validated-config.json>"
 ```
 
 JSON input shape:
@@ -199,4 +201,17 @@ After the digest file is written into the Vault, call:
 
 ```text
 memory_notify(contract_version=2, file_path="{drafts directory}/<TopicName>-MMDD-MMDD.md")
+```
+
+## Rerunnable and Source-Failure Contract
+
+Read `_shared/operation-safety.md`. `run_id = stable(digest, config-hash, time-window)`; equal configuration and window may only `merge` the same digest and source ledger. Each source record has `published_at`, `fetched_at`, `health`, and `errors`; notify immediately after configuration is written. An unknown module, missing required configuration, or all sources failed must return a non-completed status and must not mark the draft complete. A single failed source may preserve healthy sources and structured errors.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: digest
+run_id: stable(digest, config-hash, time-window)
+target_path: "{drafts directory}/<topic>-<window>.md"
+decision: [create, merge, resume, skip, replace]
 ```

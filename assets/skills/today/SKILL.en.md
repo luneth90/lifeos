@@ -235,3 +235,16 @@ Use `{system directory}/{templates subdirectory}/Daily_Template.md` as the base 
 # Memory System Integration
 
 > Common protocol (file change notifications, behavior rule logging) is in `_shared/memory-protocol.md`. This skill has no skill-specific pre-check queries (context gathering is already defined in Step 1).
+
+## Rerunnable Diary Contract
+
+Read `_shared/operation-safety.md`. The same day reuses the same `run_id` and diary path with `merge`; update only `BEGIN AUTO` / `END AUTO` managed regions. Every automatic task carries a stable `task_id` derived from normalized source object and action, and is updated by `task_id` rather than appended, so a repeat run cannot duplicate tasks or related projects.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: today
+run_id: stable(today, YYYY-MM-DD, selected-items)
+target_path: "{diary directory}/YYYY-MM-DD.md"
+decision: [create, merge, resume, skip, replace]
+```

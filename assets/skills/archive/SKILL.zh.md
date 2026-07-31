@@ -142,8 +142,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
      obsidian move path="源路径/项目文件夹" to="目标目录/2026/"
      ```
    - 每次操作前先确保目标父目录已存在（`mkdir -p`）
-   - **回退：** 若 `obsidian` CLI 不可用（命令不存在或 Obsidian 未运行），回退到系统 `mv`
-     - 回退后需在完成报告中标注「⚠️ 使用了 mv 回退，wikilink 可能未更新，建议运行 `obsidian unresolved` 检查」
+   - **降级：** 若 `obsidian` CLI 不可用，先停止并呈现链接更新不可用的影响；只有用户明确接受降级后，才可使用受记录的移动方案。不得静默回退到裸 `mv`。
    - **严禁**通过"写入新文件，再删除原文件"的方式模拟移动
    - 文件夹项目必须整体移动目录，不要逐文件复制重建
 
@@ -224,7 +223,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 - **只归档已完成的计划** — `status: done` 的计划才可归档，`status: active` 绝不归档
 - **只归档超出最近 7 天的日记** — `{日记目录}/` 始终保留最近 7 天（含今天）的日记
 - **永不删除** — 只移动，不销毁内容
-- **优先使用 Obsidian CLI 移动** — `obsidian move` 自动更新 wikilink；不可用时回退到 `mv`，并标注链接断裂风险
+- **优先使用 Obsidian CLI 移动** — `obsidian move` 自动更新 wikilink；不可用时必须由用户明确接受降级，不能静默 `mv`
 - **禁止模拟移动** — 禁止通过“写新文件 + 删除原文件”模拟移动
 - **按规则组织** — 项目按完成年，草稿和日记按归档年月，计划统一放入 `{归档计划子目录}`
 - **默认全部归档** — 扫描后自动执行全部合规候选，不要求用户审核、选择、确认或回复
@@ -241,7 +240,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 - **大型项目含资源：** 关联资源保留在 `{资源目录}/`，在完成报告中列出，不自动移动或清理
 - **刚完成的项目：** 照常归档，并在完成报告中提示可另行补做项目复盘
 - **文件移动失败：** 停止当前条目归档，告知用户具体失败文件，继续处理其余条目，最后汇报失败列表
-- **Obsidian CLI 不可用：** 回退到系统 `mv`，归档完成后在报告中标注「wikilink 可能未更新」，建议用户用 `obsidian unresolved` 检查失效链接
+- **Obsidian CLI 不可用：** 停止等待用户明确同意降级；未同意时不移动任何文件
 
 # 归档结构
 
@@ -320,3 +319,16 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 2. 检查暂停中的项目，考虑重新激活或归档
 3. 用 `/research`、`/project` 或 `/knowledge` 处理仍在 pending 的草稿
 4. 对于仍为 `active` 的计划，继续执行或复查；完成后再运行 `/archive`
+
+## 归档事务契约
+
+先读取 `_shared/operation-safety.md` 并完成 preflight：枚举目录内全部候选、解析安全源/目标路径、在任何移动前检查 collision。创建逐文件 move manifest：`{ run_id, moves, collisions, notified, errors }`。优先使用 `move_with_link_update`；能力不可用时仅在用户明确接受降级后执行降级，绝不静默裸 `mv`。每个移动后立即 `memory_notify(previous_file_path=...)`；只有新路径索引确认后才 `memory_forget` 旧 project scope。失败必须保留 manifest、已完成 move 和可执行恢复动作；以相同 `run_id` resume。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: archive
+run_id: stable(archive, candidate-paths, archive-date)
+target_path: "{系统目录}/{归档子目录}/..."
+decision: [create, merge, resume, skip, replace]
+```

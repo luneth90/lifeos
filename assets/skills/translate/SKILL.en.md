@@ -189,3 +189,16 @@ Usage: Open the original chapter in PDF++, open the translation note on the righ
 # Memory System Integration
 
 > See `_shared/memory-protocol.md` for the general protocol (file change notifications, behavioral rule capture). This skill has no skill-specific pre-queries.
+
+## Resumable Translation Contract
+
+Read `_shared/operation-safety.md`. Build a stable `run_id` from source PDF, chapter range, and extraction hash. A draft with the same `run_id` must `resume`, retaining completed pages, OCR errors, and completeness records; overwrite a completed translation only after explicit user `replace`. Notify the index after each write and keep `draft` for partial failure.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: translate
+run_id: stable(translate, source-pdf, chapter-range, extraction-hash)
+target_path: "{knowledge directory}/<chapter>/Translation_<chapter>.md"
+decision: [create, merge, resume, skip, replace]
+```

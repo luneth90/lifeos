@@ -198,3 +198,16 @@ memory_notify(contract_version=2, file_path="<项目文件相对路径>")
 # 记忆系统集成
 
 > 通用协议（文件变更通知、行为约束写入）见 `_shared/memory-protocol.md`。本技能无特有的前置查询。
+
+## 可恢复翻译契约
+
+先读取 `_shared/operation-safety.md`。以源 PDF、章节范围和提取 hash 生成稳定 `run_id`。同 `run_id` 的 draft 必须 `resume`，保留已翻页、OCR 错误和完整性记录；只有用户明确 `replace` 才覆盖已完成翻译。每次写入后通知索引，部分失败保持 `draft`。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: translate
+run_id: stable(translate, source-pdf, chapter-range, extraction-hash)
+target_path: "{知识目录}/<chapter>/翻译_<chapter>.md"
+decision: [create, merge, resume, skip, replace]
+```

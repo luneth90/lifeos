@@ -172,8 +172,12 @@ Locate `## Categories` and parse the table `Category | Coverage`:
 
 | Problem | Handling |
 |---------|----------|
-| unrecognized module heading | ignore that section |
+| unrecognized module heading | fail closed: return `unknown module`; do not ignore it |
 | missing checkbox | treat as enabled |
 | mismatched table columns | parse the available cells and fill missing values with empty strings |
 | missing required Basic Info field | raise an error and ask the user to complete the note |
 | empty or malformed config note | raise an error and suggest running `/digest setup` |
+
+## Run Ledger Fields
+
+The parsed result must retain normalized configuration and time window needed for `run_id`. Every source result has `{ published_at, fetched_at, health, errors }`; missing required fields, an unknown module, or all sources failed returns a non-completed status and cannot produce a successful digest.

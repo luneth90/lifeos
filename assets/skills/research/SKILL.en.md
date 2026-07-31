@@ -120,3 +120,16 @@ After execution, the plan file remains in `{plans directory}/` with status `done
 ### Pre-query
 
 See Phase 0 for query code.
+
+## Resumable Run Contract
+
+Read `_shared/operation-safety.md`. Build a stable `run_id` from normalized research input, confirmed plan hash, and plan revision. When a draft or manifest with that `run_id` exists, use `resume` and retain verified artifacts and errors; overwrite a completed report only after an explicit user `replace`. Persist every decision and target path in the manifest and call `memory_notify` after a real modification.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: research
+run_id: stable(research, normalized-input, plan_revision, confirmed_hash)
+target_path: "{research directory}/<research-id>.md"
+decision: [create, merge, resume, skip, replace]
+```

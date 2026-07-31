@@ -99,3 +99,7 @@ Append to the log section of `{diary directory}/YYYY-MM-DD.md` (if the file exis
 - [Next review focus, targeting ❌ and ⚠️ concepts]
 - [If deeper exploration is needed: use /brainstorm or /ask]
 ```
+
+## Grading Inputs and State Gate
+
+Each question records `knowledge_point_id`, `source_refs`, hidden `rubric`, and points. Read the knowledge-note hash before grading; on hash mismatch, stop and require question regeneration. `quiz`, `feynman`, and `blindspot` use independent rubrics; blindspot updates only the weak-point index and never advances knowledge status. Sum partial credit strictly from rubric points; only `score >= 80%` is a pass.

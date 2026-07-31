@@ -124,3 +124,16 @@ Planning Agent 返回后，在**对话中直接**通知用户：
 ### 前置查询
 
 见阶段 0 中的查询代码。
+
+## 可恢复运行契约
+
+先读取 `_shared/operation-safety.md`。以规范化研究输入、确认的计划 hash 和计划 revision 生成稳定 `run_id`。已有同 `run_id` 的 draft 或 manifest 时选择 `resume`，保留已验证 artifacts 与错误；只有用户明确要求 `replace` 才覆盖已完成报告。每次决策和目标路径写入 manifest，并在真实修改后 `memory_notify`。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: research
+run_id: stable(research, normalized-input, plan_revision, confirmed_hash)
+target_path: "{研究目录}/<research-id>.md"
+decision: [create, merge, resume, skip, replace]
+```

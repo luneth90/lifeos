@@ -235,3 +235,16 @@ memory_notify(contract_version=2, file_path="{日记目录}/YYYY-MM-DD.md")
 # 记忆系统集成
 
 > 通用协议（文件变更通知、行为约束写入）见 `_shared/memory-protocol.md`。本技能无特有的前置查询（上下文收集已在步骤一中定义）。
+
+## 可重跑日记契约
+
+先读取 `_shared/operation-safety.md`。同日运行固定复用同一 `run_id` 与日记路径，选择 `merge`；只更新 `BEGIN AUTO` / `END AUTO` 托管区块。每条自动任务必须携带稳定 `task_id`（来自规范化的来源对象与动作），按 `task_id` 更新而非追加，故重复运行不得复制任务或相关项目。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: today
+run_id: stable(today, YYYY-MM-DD, selected-items)
+target_path: "{日记目录}/YYYY-MM-DD.md"
+decision: [create, merge, resume, skip, replace]
+```

@@ -254,3 +254,16 @@ Rules:
 - Require repeated confirmation or correction before writing
 - Do not write one-off tone preferences
 - Do not write a profile item unless the signal is stable across conversations
+
+## Rerunnable Draft Contract
+
+Read `_shared/operation-safety.md` and preflight the same-day normalized topic and target draft. When the same draft ID exists, choose `merge`, update only managed regions, and merge a deduplicated source list; choose `create` only when it does not exist.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: ask
+run_id: stable(ask, normalized-topic, YYYY-MM-DD)
+target_path: "{drafts directory}/<draft-id>.md"
+decision: [create, merge, resume, skip, replace]
+```

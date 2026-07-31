@@ -120,8 +120,10 @@ RSS + paper source 抓取通过参数化 Python 脚本执行。技能先解析�
 
 调用方式：
 
+通过 stdin 或受控输入文件传递配置，禁止用 shell `echo` 拼接 JSON：
+
 ```bash
-echo '<json_input>' | python3 .agents/skills/digest/references/rss-arxiv-script.py
+python3 .agents/skills/digest/references/rss-arxiv-script.py < "<validated-config.json>"
 ```
 
 JSON 输入格式：
@@ -194,4 +196,17 @@ aliases: []
 
 ```text
 memory_notify(contract_version=2, file_path="{草稿目录}/<TopicName>-MMDD-MMDD.md")
+```
+
+## 可重跑与来源失败契约
+
+先读取 `_shared/operation-safety.md`。`run_id = stable(digest, config-hash, time-window)`；相同配置和时间窗只允许 `merge` 同一周报与来源台账。每条来源台账含 `published_at`、`fetched_at`、`health`、`errors`，配置写入后立即 `memory_notify`。未知模块、缺失必填配置或全部来源失败必须返回非完成状态，且不得将草稿标为完成；单一来源失败可保留健康来源和结构化错误。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: digest
+run_id: stable(digest, config-hash, time-window)
+target_path: "{草稿目录}/<topic>-<window>.md"
+decision: [create, merge, resume, skip, replace]
 ```

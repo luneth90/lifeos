@@ -254,3 +254,16 @@ memory_log(contract_version=2,
 - 至少有连续确认或纠正时才写
 - 单次语气偏好不写
 - 没有跨对话稳定信号时不写入画像
+
+## 可重跑草稿契约
+
+先读取 `_shared/operation-safety.md` 并预检同日、规范化主题和目标草稿。命中同一 draft ID 时选择 `merge`，只更新托管区块并合并去重后的来源列表；未命中才 `create`，不得创建同主题重复草稿。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: ask
+run_id: stable(ask, normalized-topic, YYYY-MM-DD)
+target_path: "{草稿目录}/<draft-id>.md"
+decision: [create, merge, resume, skip, replace]
+```

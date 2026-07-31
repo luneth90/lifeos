@@ -266,3 +266,16 @@ memory_query(contract_version=2, query="<章节主题或原书约定关键词> �
 - 粒度上限为二级领域，如 `math_group_theory`、`swift_concurrency`
 - 没有稳定趋势时不要写，宁可漏写也不要泛写
 - 只在已解析项目作用域内写项目画像；确实跨项目稳定时才改用 global，信号不稳定则不写
+
+## 可恢复复习契约
+
+先读取 `_shared/operation-safety.md`。同一知识笔记和 mode 命中 `status: pending` 的复习记录时优先 `resume`，不新建题目；只读取最近记录和聚合弱项索引，避免无界加载历史。题目必须携带稳定 `knowledge_point_id`、`source_refs` 和隐藏 `rubric`；批改前核对知识笔记 hash，变化时重新出题。`quiz`、`feynman`、`blindspot` 分别用各自 rubric，blindspot 自评不得推进知识状态；按 rubric 分值计算部分得分，`score >= 80%` 才 pass。复习文件链接索引与状态推进记录分别维护。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+operation: revise
+run_id: stable(revise, knowledge-note-id, mode, note-hash)
+target_path: "{知识目录}/<chapter>/复习_<run-id>.md"
+decision: [create, merge, resume, skip, replace]
+```
