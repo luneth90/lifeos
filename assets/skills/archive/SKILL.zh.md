@@ -173,7 +173,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 3. **通过发布事务适配器执行移动、索引与 Scope 清理：**
    - 调用 `scripts/archive_transaction.mjs` 的 `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })`。`adapters` 必须提供 `persist_manifest`、`verify_manifest_receipt`、`move_with_link_update`、`memory_notify`、`confirm_index` 与 `memory_forget`；每个回调只接受严格成功结构，并为副作用返回受信回执。
-   1. `persist_manifest` 必须把完整 manifest 与当前 Vault 身份写入调用者不可伪造的受信存储并返回 persistence receipt。Vault 身份由 root 的 `realpath`、`dev` 与 `ino` 组成，并显式进入 manifest、candidate、move、intent、派生 ID/idempotency key 及持久化/认证 payload。恢复时先捕获当前身份并与 envelope 精确匹配，再调用 `verify_manifest_receipt` 验证完整 manifest、身份与 receipt；Vault 被移动、替换或重建时禁止自动恢复。
+   1. `persist_manifest` 必须把完整 manifest 与当前 Vault 身份写入调用者不可伪造的受信存储并返回 persistence receipt。Vault 身份由 run 开始时冻结的 root `realpath`、`dev` 与 `ino` 组成，并显式进入 manifest、candidate、move、intent、派生 ID/idempotency key 及持久化/认证 payload。每个外部等待前后、创建或刷新任何 guard 前以及返回 complete 前，都重新捕获当前 root 并与冻结身份精确匹配。恢复时还必须在调用 `verify_manifest_receipt` 前完成匹配；Vault 被移动、替换或重建时禁止继续持久化、创建新 guard、自动恢复或执行后续副作用。
    2. 每个副作用都先把 intent 持久化。move intent 持久化后重新计算冻结 inventory，再创建全新的 source/target guards；最后一次 guard 复核与 `move_with_link_update` 调用之间不得插入持久化、等待或其他回调。移动后保留 `advanceVaultPathGuard` 返回的新 guards，并持久化逐文件 `moves` 与 move receipt。
    3. 每次持久化或外部等待返回后，立即重新验证所有已推进目标的 guard 和当前 target inventory；`memory_notify`、`confirm_index`、`memory_forget`、每次成功回执持久化及最终 complete 持久化都适用。回调成功回执持久化后才能跳过；否则只能使用同一 `idempotency_key` 安全重放或失败关闭。返回 complete 前再执行一次同步复核，此后不得继续等待或调用外部能力。
    4. 只有同一项目全部候选的全部文件都持有确认回执后，才调用一次 `memory_forget`。空项目不能借由空集合自动通过；草稿、计划和日记不得调用 `memory_forget`。
@@ -375,11 +375,18 @@ persistence:
   schema: recursive_exact_keys_and_derived_ids
 vault_binding:
   identity_fields: [realpath, root_dev, root_ino]
+  frozen_for_run: true
   manifest: required
   candidate_move_intent: explicit
   derived_keys: [candidate_key, move_id, idempotency_key]
   persistence_payloads: explicit
   resume: exact_match_before_receipt_verification
+  revalidate_at:
+    - before_external_await
+    - after_external_await
+    - before_guard_create_or_refresh
+    - before_complete_return
+  all_external_callbacks: true
   changed_root: fail_closed_manual_recovery
 untrusted_resume:
   trust_checks: [schema, vault_identity, receipt]

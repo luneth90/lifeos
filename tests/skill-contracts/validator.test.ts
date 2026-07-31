@@ -384,6 +384,7 @@ describe('技能契约校验器', () => {
 			'identity_fields: [realpath, root_dev, root_ino]',
 			'identity_fields: [realpath]',
 		],
+		['Vault 身份贯穿复核时点', '  - after_external_await', '  - after_selected_external_await'],
 		['未受信失败持久化', 'persist_manifest: forbidden', 'persist_manifest: allowed'],
 		[
 			'最终同步复核后继续 await',
@@ -896,6 +897,13 @@ describe('技能契约校验器', () => {
 						'identity_fields: [realpath, root_dev, root_ino]',
 						'identity_fields: [realpath]',
 					),
+				),
+		],
+		[
+			'Vault 身份不再贯穿外部等待',
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace('  - after_external_await', '  - after_selected_external_await'),
 				),
 		],
 		[

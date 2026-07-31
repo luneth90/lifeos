@@ -183,6 +183,14 @@ function assertVaultIdentity(current, expected) {
 	if (!sameValue(current, expected)) throw codedError('vault_identity_mismatch');
 }
 
+function assertFrozenVaultIdentity(vaultRoot, expected) {
+	try {
+		assertVaultIdentity(captureVaultIdentity(vaultRoot), expected);
+	} catch (error) {
+		throw codedError('vault_identity_mismatch', error);
+	}
+}
+
 function stableKey(vaultIdentity, runId, step, ...parts) {
 	return `${runId}:${step}:${hash(
 		JSON.stringify({ vault_identity: vaultIdentity, run_id: runId, step, parts }),
@@ -783,6 +791,22 @@ function requireAdapters(adapters) {
 	}
 }
 
+function bindAdaptersToVaultIdentity(adapters, vaultRoot, vaultIdentity) {
+	const bound = { ...adapters };
+	for (const name of REQUIRED_ADAPTERS) {
+		const callback = adapters[name];
+		bound[name] = async (...args) => {
+			assertFrozenVaultIdentity(vaultRoot, vaultIdentity);
+			try {
+				return await callback.apply(adapters, args);
+			} finally {
+				assertFrozenVaultIdentity(vaultRoot, vaultIdentity);
+			}
+		};
+	}
+	return bound;
+}
+
 function validReceiptResult(value) {
 	return (
 		hasExactKeys(value, ['ok', 'receipt']) &&
@@ -892,6 +916,9 @@ function targetStable(vaultRoot, item) {
 }
 
 function advancedTargetsStable(vaultRoot, prepared) {
+	const vaultIdentity = prepared[0]?.candidate?.vault_identity;
+	if (!vaultIdentity) throw codedError('vault_identity_mismatch');
+	assertFrozenVaultIdentity(vaultRoot, vaultIdentity);
 	for (const item of prepared) {
 		if (item.target_guard) targetStable(vaultRoot, item);
 	}
@@ -939,6 +966,7 @@ export async function runArchiveTransaction({
 	requireAdapters(adapters);
 	const vaultIdentity = captureVaultIdentity(vault_root);
 	const vaultRoot = vaultIdentity.realpath;
+	adapters = bindAdaptersToVaultIdentity(adapters, vaultRoot, vaultIdentity);
 	const candidates = requestedCandidates.map((candidate) =>
 		normalizeCandidate(vaultRoot, vaultIdentity, run_id, candidate),
 	);
@@ -1080,6 +1108,7 @@ export async function runArchiveTransaction({
 	);
 	for (const targetParent of targetParents) {
 		try {
+			advancedTargetsStable(vaultRoot, prepared);
 			const directoryGuard = createVaultDirectoryGuard(vaultRoot, targetParent);
 			ensureVaultDirectory(directoryGuard);
 		} catch (error) {
@@ -1094,6 +1123,7 @@ export async function runArchiveTransaction({
 	}
 	for (const item of prepared) {
 		try {
+			advancedTargetsStable(vaultRoot, prepared);
 			const observed = captureGuardedInventory(
 				vaultRoot,
 				item.candidate,
@@ -1139,6 +1169,7 @@ export async function runArchiveTransaction({
 			let sourceGuard;
 			let targetGuard;
 			try {
+				advancedTargetsStable(vaultRoot, prepared);
 				const observed = captureGuardedInventory(vaultRoot, candidate, 'source').inventory;
 				assertInventoryMatch(observed, inventory);
 				sourceGuard = createVaultPathGuard(vaultRoot, candidate.source_path);
@@ -1271,6 +1302,7 @@ export async function runArchiveTransaction({
 			}
 		} else {
 			try {
+				advancedTargetsStable(vaultRoot, prepared);
 				const observed = captureGuardedInventory(vaultRoot, candidate, 'target');
 				assertInventoryMatch(observed.inventory, inventory);
 				item.target_guard = observed.guard;

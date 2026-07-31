@@ -173,7 +173,7 @@ After scanning, process every eligible item in the execution list by default:
 
 3. **Use the published transaction adapter for moves, indexing, and Scope cleanup:**
    - Call `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })` from `scripts/archive_transaction.mjs`. `adapters` must provide `persist_manifest`, `verify_manifest_receipt`, `move_with_link_update`, `memory_notify`, `confirm_index`, and `memory_forget`. Every callback accepts only a strict success shape and returns a trusted receipt for a side effect.
-   1. `persist_manifest` must write the complete manifest and current Vault identity to a trusted store the caller cannot forge and return a persistence receipt. Vault identity comprises the root `realpath`, `dev`, and `ino`, and is explicit in the manifest, candidates, moves, intents, derived IDs/idempotency keys, and persistence/authentication payloads. Resume captures and exactly compares the current identity before `verify_manifest_receipt` authenticates the complete manifest, identity, and receipt. Moving, replacing, or recreating the Vault forbids automatic resume.
+   1. `persist_manifest` must write the complete manifest and current Vault identity to a trusted store the caller cannot forge and return a persistence receipt. Vault identity comprises the root `realpath`, `dev`, and `ino` frozen when the run starts, and is explicit in the manifest, candidates, moves, intents, derived IDs/idempotency keys, and persistence/authentication payloads. Recapture and exactly compare the current root with that frozen identity before and after every external wait, before creating or refreshing any guard, and before returning complete. Resume also performs the comparison before calling `verify_manifest_receipt`. Moving, replacing, or recreating the Vault forbids later persistence, new guard creation, automatic resume, and subsequent side effects.
    2. Persist an intent before every side effect. After persisting a move intent, recompute the frozen inventory and create fresh source and target guards. Nothing asynchronous, no persistence, and no other callback may occur between the last guard revalidation and invoking `move_with_link_update`. Retain the new guards returned by `advanceVaultPathGuard`, then persist per-file `moves` and the move receipt.
    3. Immediately after every persistence call or external wait returns, revalidate every advanced target guard and current target inventory. This includes `memory_notify`, `confirm_index`, `memory_forget`, every successful receipt persistence, and final complete persistence. A step may be skipped only when its successful trusted receipt was persisted; otherwise replay safely with the same `idempotency_key` or fail closed. Perform one final synchronous revalidation immediately before returning complete, with no later wait or external call.
    4. Call `memory_forget` once only after every file from every candidate for the same project has a confirmation receipt. An empty project cannot pass vacuously. Never call `memory_forget` for drafts, plans, or diaries.
@@ -375,11 +375,18 @@ persistence:
   schema: recursive_exact_keys_and_derived_ids
 vault_binding:
   identity_fields: [realpath, root_dev, root_ino]
+  frozen_for_run: true
   manifest: required
   candidate_move_intent: explicit
   derived_keys: [candidate_key, move_id, idempotency_key]
   persistence_payloads: explicit
   resume: exact_match_before_receipt_verification
+  revalidate_at:
+    - before_external_await
+    - after_external_await
+    - before_guard_create_or_refresh
+    - before_complete_return
+  all_external_callbacks: true
   changed_root: fail_closed_manual_recovery
 untrusted_resume:
   trust_checks: [schema, vault_identity, receipt]

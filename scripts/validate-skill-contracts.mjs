@@ -198,8 +198,15 @@ function isValidOperationSafetyContract(contract) {
 	};
 	const vaultBinding = {
 		identity_fields: ['realpath', 'root_dev', 'root_ino'],
+		frozen_for_run: true,
 		required_for_resumable_operations: true,
 		resume_exact_match_before_receipt_verification: true,
+		revalidate_at: [
+			'before_external_await',
+			'after_external_await',
+			'before_guard_create_or_refresh',
+			'before_complete_return',
+		],
 		changed_root: 'fail_closed_manual_recovery',
 	};
 	const untrustedResume = {
@@ -343,11 +350,19 @@ function isValidArchiveTransactionContract(contract) {
 		}) &&
 		sameValue(contract.vault_binding, {
 			identity_fields: ['realpath', 'root_dev', 'root_ino'],
+			frozen_for_run: true,
 			manifest: 'required',
 			candidate_move_intent: 'explicit',
 			derived_keys: ['candidate_key', 'move_id', 'idempotency_key'],
 			persistence_payloads: 'explicit',
 			resume: 'exact_match_before_receipt_verification',
+			revalidate_at: [
+				'before_external_await',
+				'after_external_await',
+				'before_guard_create_or_refresh',
+				'before_complete_return',
+			],
+			all_external_callbacks: true,
 			changed_root: 'fail_closed_manual_recovery',
 		}) &&
 		sameValue(contract.untrusted_resume, {

@@ -51,6 +51,15 @@ function moveReal({
 	);
 }
 
+function replaceVaultRoot(root: string, replacementPath: string): string {
+	const retired = `${root}-retired`;
+	renameSync(root, retired);
+	mkdirSync(root);
+	write(root, replacementPath, 'replacement-root-content');
+	mkdirSync(join(root, 'Archive'), { recursive: true });
+	return retired;
+}
+
 function files(root: string, current = root): string[] {
 	return readdirSync(current, { withFileTypes: true })
 		.flatMap((entry) => {
@@ -1724,6 +1733,264 @@ describe('Archive Vault 绑定与未受信恢复边界', () => {
 		expect(first.manifest.vault_identity).not.toEqual(third.manifest.vault_identity);
 		expect(firstKeys.some((key) => secondKeys.includes(key))).toBe(false);
 		expect(firstKeys.some((key) => thirdKeys.includes(key))).toBe(false);
+	});
+});
+
+describe('Archive 冻结 Vault 身份贯穿全部等待窗口', () => {
+	it('新事务首次 persist_manifest 返回前同路径重建 Vault，禁止把 guard 绑定到新 root', async () => {
+		const { runArchiveTransaction } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-root-first-persist-'));
+		const source = '20_Projects/Demo.md';
+		const target = 'Archive/Demo.md';
+		write(root, source, 'project');
+		const store = createTrustedManifestStore();
+		let persistCount = 0;
+		let moveCount = 0;
+		let forgetCount = 0;
+		const result = await runArchiveTransaction({
+			vault_root: root,
+			run_id: 'archive-root-first-persist',
+			candidates: [candidate(source, target)],
+			adapters: secureCallbacks(
+				{
+					async persist_manifest(payload: Record<string, unknown>) {
+						persistCount += 1;
+						const receipt = await store.persist_manifest(payload);
+						if (persistCount === 1) replaceVaultRoot(root, source);
+						return receipt;
+					},
+					move_with_link_update() {
+						moveCount += 1;
+						return { ok: true, receipt: 'move:unexpected' };
+					},
+					async memory_forget() {
+						forgetCount += 1;
+						return { ok: true, receipt: 'forget:unexpected' };
+					},
+				},
+				store,
+			),
+		});
+
+		expect(result).toMatchObject({
+			persistence_receipt: null,
+			persistence_state: 'unverified',
+			manifest: {
+				status: 'failed',
+				errors: [
+					expect.objectContaining({
+						code: 'vault_identity_mismatch',
+						recovery_action: 'manual_recovery_required',
+					}),
+				],
+			},
+		});
+		expect(persistCount).toBe(1);
+		expect(moveCount).toBe(0);
+		expect(forgetCount).toBe(0);
+		expect(readFileSync(join(root, source), 'utf8')).toBe('replacement-root-content');
+		expect(existsSync(join(root, target))).toBe(false);
+	});
+
+	it.each(['verify_manifest_receipt', 'persist_manifest'] as const)(
+		'恢复流程在 %s 等待期间同路径重建 Vault 后停止，且不继续业务回调',
+		async (window) => {
+			const { runArchiveTransaction } = await loadModule();
+			const root = mkdtempSync(join(tmpdir(), `lifeos-archive-root-resume-${window}-`));
+			const source = '20_Projects/Demo.md';
+			const target = 'Archive/Demo.md';
+			write(root, source, 'project');
+			const store = createTrustedManifestStore();
+			const interrupted = (await runArchiveTransaction({
+				vault_root: root,
+				run_id: `archive-root-resume-${window}`,
+				candidates: [candidate(source, target)],
+				adapters: secureCallbacks(
+					{
+						async memory_notify() {
+							throw Object.assign(new Error('offline'), { code: 'notify_offline' });
+						},
+					},
+					store,
+				),
+			})) as TestEnvelope;
+			let replaced = false;
+			let resumePersistCount = 0;
+			const businessCalls: string[] = [];
+			const replaceOnce = () => {
+				if (replaced) return;
+				replaced = true;
+				replaceVaultRoot(root, target);
+			};
+			const result = await runArchiveTransaction({
+				vault_root: root,
+				run_id: `archive-root-resume-${window}`,
+				candidates: [candidate(source, target)],
+				manifest: interrupted,
+				adapters: secureCallbacks(
+					{
+						async verify_manifest_receipt(payload: Record<string, unknown>) {
+							const verification = await store.verify_manifest_receipt(
+								payload as Parameters<typeof store.verify_manifest_receipt>[0],
+							);
+							if (window === 'verify_manifest_receipt') replaceOnce();
+							return verification;
+						},
+						async persist_manifest(payload: Record<string, unknown>) {
+							resumePersistCount += 1;
+							const receipt = await store.persist_manifest(payload);
+							if (window === 'persist_manifest') replaceOnce();
+							return receipt;
+						},
+						async memory_notify() {
+							businessCalls.push('notify');
+							return { ok: true, receipt: 'notify:unexpected' };
+						},
+						async confirm_index() {
+							businessCalls.push('confirm');
+							return { ok: true, confirmed: true, receipt: 'confirm:unexpected' };
+						},
+						async memory_forget() {
+							businessCalls.push('forget');
+							return { ok: true, receipt: 'forget:unexpected' };
+						},
+					},
+					store,
+				),
+			});
+
+			const manifest = manifestFrom(result as Record<string, unknown>);
+			expect(result).toMatchObject({
+				persistence_receipt: null,
+				persistence_state: 'unverified',
+			});
+			expect(manifest.status).toBe('failed');
+			expect(manifest.errors.some((error) => error.code === 'vault_identity_mismatch')).toBe(true);
+			expect(resumePersistCount).toBe(window === 'persist_manifest' ? 1 : 0);
+			expect(businessCalls).toEqual([]);
+			expect(readFileSync(join(root, target), 'utf8')).toBe('replacement-root-content');
+			expect(existsSync(join(root, source))).toBe(false);
+		},
+	);
+
+	it.each(['move_with_link_update', 'memory_notify', 'confirm_index', 'memory_forget'] as const)(
+		'%s 等待期间同路径重建 Vault 后统一报告身份不匹配且不执行后续业务回调',
+		async (window) => {
+			const { runArchiveTransaction } = await loadModule();
+			const root = mkdtempSync(join(tmpdir(), `lifeos-archive-root-${window}-`));
+			const source = '20_Projects/Demo.md';
+			const target = 'Archive/Demo.md';
+			write(root, source, 'project');
+			const calls: string[] = [];
+			const store = createTrustedManifestStore();
+			let replaced = false;
+			let persistAfterReplacement = 0;
+			const replacementPath = window === 'move_with_link_update' ? source : target;
+			const replaceAfter = (name: string) => {
+				calls.push(name);
+				if (name === window) {
+					replaceVaultRoot(root, replacementPath);
+					replaced = true;
+				}
+			};
+			const result = await runArchiveTransaction({
+				vault_root: root,
+				run_id: `archive-root-${window}`,
+				candidates: [candidate(source, target)],
+				adapters: secureCallbacks(
+					{
+						async persist_manifest(payload: Record<string, unknown>) {
+							if (replaced) persistAfterReplacement += 1;
+							return store.persist_manifest(payload);
+						},
+						async move_with_link_update(
+							payload: Parameters<typeof moveReal>[0] & { idempotency_key: string },
+						) {
+							moveReal(payload);
+							replaceAfter('move_with_link_update');
+							return { ok: true, receipt: `move:${payload.idempotency_key}` };
+						},
+						async memory_notify({ idempotency_key }: { idempotency_key: string }) {
+							replaceAfter('memory_notify');
+							return { ok: true, receipt: `notify:${idempotency_key}` };
+						},
+						async confirm_index({ idempotency_key }: { idempotency_key: string }) {
+							replaceAfter('confirm_index');
+							return { ok: true, confirmed: true, receipt: `confirm:${idempotency_key}` };
+						},
+						async memory_forget({ idempotency_key }: { idempotency_key: string }) {
+							replaceAfter('memory_forget');
+							return { ok: true, receipt: `forget:${idempotency_key}` };
+						},
+					},
+					store,
+				),
+			});
+
+			const manifest = manifestFrom(result as Record<string, unknown>);
+			expect(result).toMatchObject({
+				persistence_receipt: null,
+				persistence_state: 'unverified',
+			});
+			expect(manifest.status).toBe('failed');
+			expect(
+				manifest.errors.some(
+					(error) =>
+						error.code === 'vault_identity_mismatch' &&
+						error.recovery_action === 'manual_recovery_required',
+				),
+			).toBe(true);
+			const expectedCalls = [
+				'move_with_link_update',
+				'memory_notify',
+				'confirm_index',
+				'memory_forget',
+			].slice(0, calls.indexOf(window) + 1);
+			expect(calls).toEqual(expectedCalls);
+			expect(persistAfterReplacement).toBe(0);
+			expect(readFileSync(join(root, replacementPath), 'utf8')).toBe('replacement-root-content');
+		},
+	);
+
+	it('最终 complete 持久化等待期间同路径重建 Vault 后不追加失败持久化且不返回 complete', async () => {
+		const { runArchiveTransaction } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-root-final-persist-'));
+		const source = '20_Projects/Demo.md';
+		const target = 'Archive/Demo.md';
+		write(root, source, 'project');
+		const store = createTrustedManifestStore();
+		let persistCount = 0;
+		let persistCountAtReplacement = 0;
+		const result = await runArchiveTransaction({
+			vault_root: root,
+			run_id: 'archive-root-final-persist',
+			candidates: [candidate(source, target)],
+			adapters: secureCallbacks(
+				{
+					async persist_manifest(payload: Record<string, unknown>) {
+						persistCount += 1;
+						const receipt = await store.persist_manifest(payload);
+						if (payloadManifest(payload).status === 'complete') {
+							replaceVaultRoot(root, target);
+							persistCountAtReplacement = persistCount;
+						}
+						return receipt;
+					},
+				},
+				store,
+			),
+		});
+
+		expect(result).toMatchObject({
+			persistence_receipt: null,
+			persistence_state: 'unverified',
+			manifest: {
+				status: 'failed',
+				errors: [expect.objectContaining({ code: 'vault_identity_mismatch' })],
+			},
+		});
+		expect(persistCount).toBe(persistCountAtReplacement);
+		expect(readFileSync(join(root, target), 'utf8')).toBe('replacement-root-content');
 	});
 });
 
