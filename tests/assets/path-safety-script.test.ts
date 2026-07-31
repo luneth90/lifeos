@@ -1,9 +1,11 @@
 import { spawnSync } from 'node:child_process';
 import {
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	realpathSync,
 	renameSync,
+	statSync,
 	symlinkSync,
 	unlinkSync,
 	writeFileSync,
@@ -245,5 +247,92 @@ describe('路径安全脚本', () => {
 		expect(() => advanceVaultPathGuard(guard, { before: 'missing', after: 'existing' })).toThrow(
 			'path_guard_changed',
 		);
+	});
+
+	it('逐级创建嵌套目录且每一级只创建单个叶节点', async () => {
+		const { createVaultDirectoryGuard, ensureVaultDirectory } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		mkdirSync(join(root, 'archive'));
+		const guard = createVaultDirectoryGuard(root, 'archive/projects/2026');
+		expect(guard.steps.map((step) => [step.relative_path, step.state])).toEqual([
+			['archive', 'existing'],
+			['archive/projects', 'missing'],
+			['archive/projects/2026', 'missing'],
+		]);
+
+		const result = ensureVaultDirectory(guard);
+
+		expect(result.created).toEqual(['archive/projects', 'archive/projects/2026']);
+		expect(statSync(join(root, 'archive', 'projects', '2026')).isDirectory()).toBe(true);
+		expect(result.guards.every((pathGuard) => pathGuard.leaf.type === 'directory')).toBe(true);
+	});
+
+	it('逐级目录 guard 拒绝已存在的非目录叶节点', async () => {
+		const { createVaultDirectoryGuard } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		writeFileSync(join(root, 'archive'), 'not-a-directory', 'utf8');
+
+		expect(() => createVaultDirectoryGuard(root, 'archive/projects')).toThrow('path_not_directory');
+	});
+
+	it('逐级目录 guard 拒绝任一已有符号链接目录', async () => {
+		const { createVaultDirectoryGuard } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		const outside = mkdtempSync(join(tmpdir(), 'lifeos-outside-'));
+		symlinkSync(outside, join(root, 'archive'));
+
+		expect(() => createVaultDirectoryGuard(root, 'archive/projects')).toThrow('vault_escape');
+	});
+
+	it('缺失目录创建前祖先被同路径新目录替换时失败关闭', async () => {
+		const { createVaultDirectoryGuard, ensureVaultDirectory } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		mkdirSync(join(root, 'archive'));
+		const guard = createVaultDirectoryGuard(root, 'archive/projects');
+
+		expect(() =>
+			ensureVaultDirectory(guard, {
+				before_create({ relative_path }) {
+					if (relative_path !== 'archive/projects') return;
+					renameSync(join(root, 'archive'), join(root, 'archive-original'));
+					mkdirSync(join(root, 'archive'));
+				},
+			}),
+		).toThrow('path_guard_changed');
+		expect(existsSync(join(root, 'archive', 'projects'))).toBe(false);
+	});
+
+	it('缺失目录叶节点在紧邻复核前被替换时失败关闭', async () => {
+		const { createVaultDirectoryGuard, ensureVaultDirectory } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		mkdirSync(join(root, 'archive'));
+		const guard = createVaultDirectoryGuard(root, 'archive/projects');
+
+		expect(() =>
+			ensureVaultDirectory(guard, {
+				before_create({ absolute_path }) {
+					writeFileSync(absolute_path, 'replacement', 'utf8');
+				},
+			}),
+		).toThrow('path_guard_changed');
+		expect(statSync(join(root, 'archive', 'projects')).isFile()).toBe(true);
+	});
+
+	it('CLI 逐级目录创建模式返回结构化 JSON', () => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		const result = spawnSync('node', [scriptPath], {
+			encoding: 'utf8',
+			input: JSON.stringify({
+				mode: 'ensure-directory',
+				vault_root: root,
+				relative_path: 'archive/projects/2026',
+			}),
+		});
+
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toMatchObject({
+			path: join(realpathSync(root), 'archive', 'projects', '2026'),
+			created: ['archive', 'archive/projects', 'archive/projects/2026'],
+		});
 	});
 });

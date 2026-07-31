@@ -15,7 +15,9 @@ describe('阶段五可执行协议场景', () => {
 		const root = mkdtempSync(join(tmpdir(), 'lifeos-operation-fixture-'));
 		const result = await executeFixture(root);
 		expect(result.context).toBe('protocol-adapter-fixture');
-		expect(result.boundary).toBe('验证技能操作协议，不执行真实客户端或网络抓取');
+		expect(result.boundary).toBe(
+			'验证真实临时文件系统归档事务；外部客户端、MCP 与网络能力使用记录型适配器',
+		);
 		expect(Object.keys(result.scenarios)).toEqual([
 			'today',
 			'digest',
@@ -30,7 +32,7 @@ describe('阶段五可执行协议场景', () => {
 			research: ['create', 'resume'],
 			translate: ['create', 'resume'],
 			revise: ['create', 'resume'],
-			archive: ['skip', 'skip'],
+			archive: ['create', 'resume'],
 		})) {
 			const runs = result.scenarios[name].runs;
 			expect(runs).toHaveLength(2);
@@ -45,6 +47,8 @@ describe('阶段五可执行协议场景', () => {
 				'30_Research/agent-memory.md',
 				'70_Resources/Translations/Book/Chapter-1.md',
 				'40_Knowledge/Notes/Book/Chapter-1/revise.md',
+				'90_System/Archive/Projects/2026/Demo/Demo.md',
+				'90_System/Archive/Projects/2026/Demo/docs/Guide.md',
 			]),
 		);
 	});
@@ -80,19 +84,22 @@ describe('阶段五可执行协议场景', () => {
 		});
 	});
 
-	it('Archive 碰撞在任何移动前失败并给出恢复记录', async () => {
+	it('Archive 使用发布事务适配器整体移动目录并在 resume 时去重', async () => {
 		const root = mkdtempSync(join(tmpdir(), 'lifeos-operation-fixture-'));
 		const result = await executeFixture(root);
 		const archive = result.scenarios.archive;
-		expect(archive.manifest.moves).toEqual([]);
-		expect(archive.manifest.collisions).toEqual([
-			{ source: '20_Projects/Demo.md', target: '90_System/Archive/Projects/2026/Demo.md' },
-		]);
-		expect(archive.manifest.errors).toEqual(['collision_preflight']);
-		expect(archive.manifest.recovery).toEqual(['resolve_collision_then_resume_same_run_id']);
-		expect(readFileSync(join(root, '20_Projects/Demo.md'), 'utf8')).toBe('source');
-		expect(readFileSync(join(root, '90_System/Archive/Projects/2026/Demo.md'), 'utf8')).toBe(
-			'existing-target',
+		expect(archive.manifest.status).toBe('complete');
+		expect(archive.move_calls).toHaveLength(1);
+		expect(archive.manifest.moves).toHaveLength(2);
+		expect(archive.notify_calls).toHaveLength(2);
+		expect(archive.confirm_calls).toHaveLength(2);
+		expect(archive.forget_calls).toHaveLength(1);
+		expect(archive.manifest.errors).toEqual([]);
+		expect(readFileSync(join(root, '90_System/Archive/Projects/2026/Demo/Demo.md'), 'utf8')).toBe(
+			'project',
 		);
+		expect(
+			readFileSync(join(root, '90_System/Archive/Projects/2026/Demo/docs/Guide.md'), 'utf8'),
+		).toBe('guide');
 	});
 });

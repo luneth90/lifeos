@@ -48,6 +48,12 @@ const sharedContract = {
 		atomic_race_guarantee: false,
 		untrusted_concurrency: 'require_atomic_client_capability',
 	},
+	directory_creation: {
+		create_guard: 'createVaultDirectoryGuard',
+		ensure: 'ensureVaultDirectory',
+		strategy: 'guard_revalidate_single_level_mkdir_advance_revalidate',
+		recursive_mkdir: false,
+	},
 	manifest: { run_id: 'string', moves: [], collisions: [], notified: [], errors: [] },
 };
 
@@ -135,7 +141,33 @@ describe('阶段五幂等与归档契约', () => {
 
 	it('Archive 机器契约固定通知、索引确认和遗忘顺序', () => {
 		const extra = {
-			transaction_steps: ['move', 'memory_notify', 'confirm_index', 'memory_forget'],
+			adapter: 'scripts/archive_transaction.mjs',
+			external_callbacks: [
+				'move_with_link_update',
+				'memory_notify',
+				'confirm_index',
+				'memory_forget',
+			],
+			transaction_steps: [
+				'preflight_all',
+				'create_target_parents',
+				'freeze_inventory',
+				'move_once',
+				'record_file_moves',
+				'memory_notify_each',
+				'confirm_index_each',
+				'memory_forget_project',
+			],
+			directory_creation: {
+				create_guard: 'createVaultDirectoryGuard',
+				ensure: 'ensureVaultDirectory',
+				recursive_mkdir: 'forbidden',
+			},
+			inventory: {
+				freeze_before_move: 'all_candidate_files',
+				directory_move: 'once',
+				manifest_moves: 'per_file_source_target',
+			},
 			move_guards: {
 				source: { before: 'existing', after: 'missing' },
 				target: { before: 'missing', after: 'existing' },
@@ -148,14 +180,31 @@ describe('阶段五幂等与归档契约', () => {
 			},
 			forget: {
 				scope_type: 'project',
-				allowed_after: 'confirm_index',
+				allowed_after: 'all_project_files_confirmed',
+				forbidden_entity_types: ['draft', 'plan', 'diary'],
 				forbidden_when: ['move_failed', 'notify_failed', 'index_unconfirmed'],
 			},
 			manifest_updates: {
+				candidate: 'candidates',
+				inventory: 'inventories',
+				move_state: 'candidate_states',
 				move: 'moves',
 				collision: 'collisions',
 				memory_notify: 'notified',
+				confirm_index: 'confirmed',
+				memory_forget: 'forgotten',
 				failure: 'errors',
+			},
+			resume: {
+				required_match: ['run_id', 'candidates', 'inventories'],
+				moved_state: 'source_missing_target_existing',
+				skip_confirmed_files: true,
+				external_idempotency_key: 'required',
+			},
+			guarantees: {
+				exactly_once: false,
+				atomic_cross_system: false,
+				last_revalidate_to_syscall_atomic: false,
 			},
 			bare_mv: 'forbidden',
 		};
@@ -183,7 +232,11 @@ describe('阶段五幂等与归档契约', () => {
 				},
 			],
 		] as const) {
-			expect(contract(`assets/skills/archive/SKILL.${lang}.md`)).toEqual({
+			const path = `assets/skills/archive/SKILL.${lang}.md`;
+			expect(frontmatter(path).dependencies).toMatchObject({
+				scripts: [{ path: 'scripts/archive_transaction.mjs' }],
+			});
+			expect(contract(path)).toEqual({
 				contract_version: 1,
 				safety_protocol: 'operation-safety-v1',
 				operation: 'archive',
@@ -298,6 +351,10 @@ describe('阶段五幂等与归档契约', () => {
 			const content = read(path);
 			expect(content).not.toMatch(/回退到系统\s*`mv`|fall back to system\s*`mv`/i);
 			expect(content).not.toMatch(/memory_notify\(previous_file_path=/);
+			expect(content).not.toContain('mkdir -p');
+			expect(content).toContain('createVaultDirectoryGuard');
+			expect(content).toContain('ensureVaultDirectory');
+			expect(content).toContain('scripts/archive_transaction.mjs');
 		}
 	});
 });

@@ -160,6 +160,10 @@ function parseDependencyPath(group, requested, locale) {
 				: /^\{system directory\}\/\{prompts subdirectory\}\/$/,
 	};
 	if (group === 'protocols') return requested === '../_shared/operation-safety.md' ? {} : null;
+	if (group === 'scripts') {
+		const match = requested.match(/^scripts\/([A-Za-z0-9][A-Za-z0-9_.-]*\.mjs)$/);
+		return match && isSafeFileName(match[1]) ? { fileName: match[1] } : null;
+	}
 	if (group === 'agents' || group === 'references') {
 		const match = requested.match(/^references\/([A-Za-z0-9][A-Za-z0-9_.-]*)\.md$/);
 		return match && isSafeFileName(match[1]) ? { fileName: match[1] } : null;
@@ -186,6 +190,12 @@ function isValidOperationSafetyContract(contract) {
 		move_target: { before: 'missing', after: 'existing' },
 	};
 	const manifest = { run_id: 'string', moves: [], collisions: [], notified: [], errors: [] };
+	const directoryCreation = {
+		create_guard: 'createVaultDirectoryGuard',
+		ensure: 'ensureVaultDirectory',
+		strategy: 'guard_revalidate_single_level_mkdir_advance_revalidate',
+		recursive_mkdir: false,
+	};
 	const contractKeys = [
 		'contract_version',
 		'preflight',
@@ -197,6 +207,7 @@ function isValidOperationSafetyContract(contract) {
 		'target_path',
 		'decision',
 		'path_guard',
+		'directory_creation',
 		'manifest',
 	];
 	if (!hasExactKeys(contract, contractKeys)) return false;
@@ -210,6 +221,7 @@ function isValidOperationSafetyContract(contract) {
 		contract.run_id !== 'stable(<skill>, <canonical-input>, <time-window-or-mode>)' ||
 		contract.target_path !== 'resolved-vault-relative-path' ||
 		!sameValue(contract.decision, decisions) ||
+		!sameValue(contract.directory_creation, directoryCreation) ||
 		!sameValue(contract.manifest, manifest)
 	)
 		return false;
@@ -246,6 +258,77 @@ function isValidOperationSafetyContract(contract) {
 		guard.on_change === 'abort_and_record' &&
 		guard.atomic_race_guarantee === false &&
 		guard.untrusted_concurrency === 'require_atomic_client_capability'
+	);
+}
+
+function isValidArchiveTransactionContract(contract) {
+	return (
+		contract?.adapter === 'scripts/archive_transaction.mjs' &&
+		sameValue(contract.external_callbacks, [
+			'move_with_link_update',
+			'memory_notify',
+			'confirm_index',
+			'memory_forget',
+		]) &&
+		sameValue(contract.transaction_steps, [
+			'preflight_all',
+			'create_target_parents',
+			'freeze_inventory',
+			'move_once',
+			'record_file_moves',
+			'memory_notify_each',
+			'confirm_index_each',
+			'memory_forget_project',
+		]) &&
+		sameValue(contract.directory_creation, {
+			create_guard: 'createVaultDirectoryGuard',
+			ensure: 'ensureVaultDirectory',
+			recursive_mkdir: 'forbidden',
+		}) &&
+		sameValue(contract.inventory, {
+			freeze_before_move: 'all_candidate_files',
+			directory_move: 'once',
+			manifest_moves: 'per_file_source_target',
+		}) &&
+		sameValue(contract.move_guards, {
+			source: { before: 'existing', after: 'missing' },
+			target: { before: 'missing', after: 'existing' },
+			advance: 'advanceVaultPathGuard',
+		}) &&
+		sameValue(contract.notify, {
+			contract_version: 2,
+			file_path: '<new-vault-relative-path>',
+			previous_file_path: '<old-vault-relative-path>',
+		}) &&
+		sameValue(contract.forget, {
+			scope_type: 'project',
+			allowed_after: 'all_project_files_confirmed',
+			forbidden_entity_types: ['draft', 'plan', 'diary'],
+			forbidden_when: ['move_failed', 'notify_failed', 'index_unconfirmed'],
+		}) &&
+		sameValue(contract.manifest_updates, {
+			candidate: 'candidates',
+			inventory: 'inventories',
+			move_state: 'candidate_states',
+			move: 'moves',
+			collision: 'collisions',
+			memory_notify: 'notified',
+			confirm_index: 'confirmed',
+			memory_forget: 'forgotten',
+			failure: 'errors',
+		}) &&
+		sameValue(contract.resume, {
+			required_match: ['run_id', 'candidates', 'inventories'],
+			moved_state: 'source_missing_target_existing',
+			skip_confirmed_files: true,
+			external_idempotency_key: 'required',
+		}) &&
+		sameValue(contract.guarantees, {
+			exactly_once: false,
+			atomic_cross_system: false,
+			last_revalidate_to_syscall_atomic: false,
+		}) &&
+		contract.bare_mv === 'forbidden'
 	);
 }
 
@@ -767,7 +850,15 @@ export function validateSkillContracts(root) {
 		}
 		const skillDirectory = join(path, '..');
 		const locale = path.endsWith('.zh.md') ? 'zh' : 'en';
-		for (const group of ['templates', 'schemas', 'agents', 'references', 'prompts', 'protocols']) {
+		for (const group of [
+			'templates',
+			'schemas',
+			'agents',
+			'references',
+			'prompts',
+			'protocols',
+			'scripts',
+		]) {
 			for (const dependency of dependencies[group] ?? []) {
 				const requested = typeof dependency === 'string' ? dependency : dependency?.path;
 				if (typeof requested !== 'string') continue;
@@ -785,6 +876,8 @@ export function validateSkillContracts(root) {
 				else if (group === 'schemas') candidates = [join(assets, 'schema', parsed.fileName)];
 				else if (group === 'protocols')
 					candidates = [join(skillDirectory, `../_shared/operation-safety.${locale}.md`)];
+				else if (group === 'scripts')
+					candidates = [join(skillDirectory, 'scripts', parsed.fileName)];
 				else if (group === 'prompts') candidates = [join(assets, 'prompts')];
 				else candidates = [join(skillDirectory, 'references', `${parsed.fileName}.${locale}.md`)];
 				for (const candidate of candidates) {
@@ -1010,6 +1103,19 @@ export function validateSkillContracts(root) {
 					continue;
 				}
 				const expected = expectedArchiveContract(locale);
+				const scriptDependencies = frontmatter?.dependencies?.scripts ?? [];
+				if (
+					!isValidArchiveTransactionContract(operation) ||
+					!scriptDependencies.some(
+						(dependency) => dependency?.path === 'scripts/archive_transaction.mjs',
+					)
+				) {
+					add(
+						'invalid_archive_transaction_contract',
+						assetPath(path),
+						'Archive 发布事务、manifest 或 resume 机器字段非法',
+					);
+				}
 				const mappings = declaredPathPlaceholders(body);
 				const documentedBody = body.split('<!-- operation-safety-v1 -->')[0];
 				for (const key of ARCHIVE_TARGET_KEYS) {

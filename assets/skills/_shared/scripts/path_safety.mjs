@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path';
 
 const RESERVED_NAMES = new Set([
@@ -42,6 +42,10 @@ function vaultEscape() {
 
 function guardChanged() {
 	return codedError('path_guard_changed');
+}
+
+function pathNotDirectory() {
+	return codedError('path_not_directory');
 }
 
 function hasControlCharacters(value) {
@@ -291,6 +295,134 @@ export function advanceVaultPathGuard(guard, transition) {
 	}
 }
 
+function assertDirectoryLeaf(leaf, errorFactory = pathNotDirectory) {
+	if (leaf?.state !== 'existing' || leaf.type !== 'directory') throw errorFactory();
+}
+
+function assertVaultDirectoryRoot(vaultRoot, errorFactory = vaultEscape) {
+	try {
+		const requestedRoot = resolve(vaultRoot);
+		const rootInfo = lstatSync(requestedRoot);
+		if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory()) throw errorFactory();
+		const root = realpathSync(requestedRoot);
+		const snapshot = identity(root);
+		if (snapshot.realpath !== root) throw errorFactory();
+		return { root, snapshot };
+	} catch (error) {
+		if (error?.code === 'vault_escape' || error?.code === 'path_guard_changed') throw error;
+		throw errorFactory();
+	}
+}
+
+export function createVaultDirectoryGuard(vaultRoot, relativePath) {
+	const normalized = normalizedPath(vaultRoot, relativePath);
+	const { root, snapshot } = assertVaultDirectoryRoot(vaultRoot);
+	if (normalized.root !== root) throw vaultEscape();
+	const steps = [];
+	let missing = false;
+	for (let index = 0; index < normalized.components.length; index += 1) {
+		const components = normalized.components.slice(0, index + 1);
+		const relativePathStep = components.join('/');
+		const candidate = join(root, ...components);
+		if (!missing && existsSync(candidate)) {
+			const guard = createVaultPathGuard(root, relativePathStep);
+			assertDirectoryLeaf(guard.leaf);
+			steps.push({ relative_path: relativePathStep, state: 'existing', guard });
+			continue;
+		}
+		missing = true;
+		steps.push({ relative_path: relativePathStep, state: 'missing' });
+	}
+	return {
+		contract_version: 1,
+		guard_type: 'vault_directory_creation',
+		vault_realpath: root,
+		root_identity: snapshot,
+		relative_path: normalized.components.join('/'),
+		components: normalized.components,
+		steps,
+	};
+}
+
+function validateDirectoryGuardBase(directoryGuard) {
+	if (
+		!directoryGuard ||
+		directoryGuard.contract_version !== 1 ||
+		directoryGuard.guard_type !== 'vault_directory_creation' ||
+		!Array.isArray(directoryGuard.components) ||
+		!Array.isArray(directoryGuard.steps) ||
+		directoryGuard.steps.length !== directoryGuard.components.length ||
+		directoryGuard.relative_path !== directoryGuard.components.join('/')
+	) {
+		throw guardChanged();
+	}
+	const { root, snapshot } = assertVaultDirectoryRoot(directoryGuard.vault_realpath, guardChanged);
+	if (
+		root !== directoryGuard.vault_realpath ||
+		snapshot.dev !== directoryGuard.root_identity?.dev ||
+		snapshot.ino !== directoryGuard.root_identity?.ino ||
+		snapshot.realpath !== directoryGuard.root_identity?.realpath
+	) {
+		throw guardChanged();
+	}
+	let sawMissing = false;
+	for (let index = 0; index < directoryGuard.steps.length; index += 1) {
+		const step = directoryGuard.steps[index];
+		const expectedPath = directoryGuard.components.slice(0, index + 1).join('/');
+		if (step?.relative_path !== expectedPath || !['existing', 'missing'].includes(step?.state)) {
+			throw guardChanged();
+		}
+		if (step.state === 'missing') sawMissing = true;
+		else if (sawMissing || !step.guard) throw guardChanged();
+	}
+	return root;
+}
+
+export function ensureVaultDirectory(directoryGuard, options = {}) {
+	const root = validateDirectoryGuardBase(directoryGuard);
+	const guards = [];
+	const created = [];
+	for (const step of directoryGuard.steps) {
+		if (step.state === 'existing') {
+			revalidateVaultPathGuard(step.guard);
+			assertDirectoryLeaf(step.guard.leaf, guardChanged);
+			guards.push(step.guard);
+			continue;
+		}
+		let guard;
+		try {
+			guard = createVaultPathGuard(root, step.relative_path);
+			if (guard.leaf.state !== 'missing') throw guardChanged();
+			if (typeof options.before_create === 'function') {
+				options.before_create({
+					relative_path: step.relative_path,
+					absolute_path: guard.candidate_path,
+				});
+			}
+			revalidateVaultPathGuard(guard);
+			mkdirSync(guard.candidate_path);
+			guard = advanceVaultPathGuard(guard, { before: 'missing', after: 'existing' });
+			assertDirectoryLeaf(guard.leaf, guardChanged);
+			revalidateVaultPathGuard(guard);
+		} catch (error) {
+			if (error?.code === 'path_guard_changed' || error?.code === 'vault_escape') throw error;
+			throw guardChanged();
+		}
+		created.push(step.relative_path);
+		guards.push(guard);
+	}
+	for (const guard of guards) {
+		revalidateVaultPathGuard(guard);
+		assertDirectoryLeaf(guard.leaf, guardChanged);
+	}
+	return {
+		path: join(root, ...directoryGuard.components),
+		relative_path: directoryGuard.relative_path,
+		created,
+		guards,
+	};
+}
+
 function readStdin() {
 	return new Promise((resolveInput, reject) => {
 		let input = '';
@@ -313,7 +445,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		else if (input.mode === 'revalidate') result = { path: revalidateVaultPathGuard(input.guard) };
 		else if (input.mode === 'advance')
 			result = { guard: advanceVaultPathGuard(input.guard, input.transition) };
-		else result = { path: resolveVaultPath(input.vault_root, input.relative_path) };
+		else if (input.mode === 'ensure-directory') {
+			const directoryGuard = createVaultDirectoryGuard(input.vault_root, input.relative_path);
+			const ensured = ensureVaultDirectory(directoryGuard);
+			result = { path: ensured.path, created: ensured.created };
+		} else result = { path: resolveVaultPath(input.vault_root, input.relative_path) };
 		process.stdout.write(`${JSON.stringify(result)}\n`);
 	} catch (error) {
 		process.stderr.write(

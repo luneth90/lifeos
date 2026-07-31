@@ -286,6 +286,44 @@ describe('技能契约校验器', () => {
 		);
 	});
 
+	it('拒绝 Archive 发布事务脚本 dependency 指向不存在的资产', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/skills/archive/SKILL.en.md', (content) =>
+					content.replace('scripts/archive_transaction.mjs', 'scripts/missing_transaction.mjs'),
+				),
+			[
+				{
+					code: 'invalid_archive_transaction_contract',
+					path: 'assets/skills/archive/SKILL.en.md',
+					message: 'Archive 发布事务、manifest 或 resume 机器字段非法',
+				},
+				{
+					code: 'missing_dependency',
+					path: 'assets/skills/archive/SKILL.en.md',
+					related_path: 'assets/skills/archive/scripts/missing_transaction.mjs',
+					message: '依赖不存在：scripts/missing_transaction.mjs',
+				},
+			],
+		);
+	});
+
+	it('拒绝 Archive 仅英文恢复字段漂移', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/skills/archive/SKILL.en.md', (content) =>
+					content.replace('skip_confirmed_files: true', 'skip_confirmed_files: false'),
+				),
+			[
+				{
+					code: 'invalid_archive_transaction_contract',
+					path: 'assets/skills/archive/SKILL.en.md',
+					message: 'Archive 发布事务、manifest 或 resume 机器字段非法',
+				},
+			],
+		);
+	});
+
 	it('拒绝 Read PDF 双语共同声明不存在的 courses 资源配置键', async () => {
 		await expectExactMutatedAssetsDiagnostics(
 			(write) => {
@@ -731,7 +769,10 @@ describe('技能契约校验器', () => {
 			'path_guard 标量',
 			(write) =>
 				write('assets/skills/_shared/operation-safety.en.md', (content) =>
-					content.replace(/path_guard:\n(?: {2}.*\n)+?manifest:/, 'path_guard: invalid\nmanifest:'),
+					content.replace(
+						/path_guard:\n(?: {2}.*\n)+?directory_creation:/,
+						'path_guard: invalid\ndirectory_creation:',
+					),
 				),
 		],
 		[

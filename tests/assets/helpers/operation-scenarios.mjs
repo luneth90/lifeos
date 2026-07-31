@@ -5,6 +5,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	readdirSync,
+	renameSync,
 	statSync,
 	writeFileSync,
 } from 'node:fs';
@@ -15,6 +16,7 @@ import {
 	createVaultPathGuard,
 	revalidateVaultPathGuard,
 } from '../../../assets/skills/_shared/scripts/path_safety.mjs';
+import { runArchiveTransaction } from '../../../assets/skills/archive/scripts/archive_transaction.mjs';
 
 function stableRunId(skill, input) {
 	const hash = createHash('sha256')
@@ -104,36 +106,87 @@ function executeDigest(root) {
 	return result;
 }
 
-function executeArchive(root) {
-	const input = { candidates: ['20_Projects/Demo.md'], archive_date: '2026-07-31' };
-	const runId = stableRunId('archive', input);
-	const source = '20_Projects/Demo.md';
-	const target = '90_System/Archive/Projects/2026/Demo.md';
-	mkdirSync(dirname(join(root, source)), { recursive: true });
-	mkdirSync(dirname(join(root, target)), { recursive: true });
-	writeFileSync(join(root, source), 'source', 'utf8');
-	writeFileSync(join(root, target), 'existing-target', 'utf8');
-	const manifest = {
-		run_id: runId,
-		moves: [],
-		collisions: [{ source, target }],
-		notified: [],
-		errors: ['collision_preflight'],
-		recovery: ['resolve_collision_then_resume_same_run_id'],
+async function executeArchive(root) {
+	const input = {
+		candidates: [
+			{
+				source_path: '20_Projects/Demo',
+				target_path: '90_System/Archive/Projects/2026/Demo',
+				entity_type: 'project',
+				project_id: 'demo-project',
+			},
+		],
+		archive_date: '2026-07-31',
 	};
-	const runs = [];
-	for (let attempt = 1; attempt <= 2; attempt += 1) {
-		writeManifest(root, 'archive', manifest);
-		runs.push({
-			attempt,
-			run_id: runId,
-			target_path: target,
-			decision: 'skip',
-			status: 'failed',
-			manifest: structuredClone(manifest),
-		});
-	}
-	return { input, runs, manifest };
+	const runId = stableRunId('archive', input);
+	const source = '20_Projects/Demo';
+	const target = '90_System/Archive/Projects/2026/Demo';
+	mkdirSync(join(root, source, 'docs'), { recursive: true });
+	writeFileSync(join(root, source, 'Demo.md'), 'project', 'utf8');
+	writeFileSync(join(root, source, 'docs', 'Guide.md'), 'guide', 'utf8');
+	const moveCalls = [];
+	const notifyCalls = [];
+	const confirmCalls = [];
+	const forgetCalls = [];
+	const adapters = {
+		move_with_link_update(payload) {
+			moveCalls.push(structuredClone(payload));
+			renameSync(
+				join(payload.vault_root, ...payload.source_path.split('/')),
+				join(payload.vault_root, ...payload.target_path.split('/')),
+			);
+		},
+		async memory_notify(payload) {
+			notifyCalls.push(structuredClone(payload));
+		},
+		async confirm_index(payload) {
+			confirmCalls.push(structuredClone(payload));
+			return true;
+		},
+		async memory_forget(payload) {
+			forgetCalls.push(structuredClone(payload));
+		},
+	};
+	const first = await runArchiveTransaction({
+		vault_root: root,
+		run_id: runId,
+		candidates: input.candidates,
+		adapters,
+	});
+	const second = await runArchiveTransaction({
+		vault_root: root,
+		run_id: runId,
+		candidates: input.candidates,
+		manifest: first,
+		adapters,
+	});
+	writeManifest(root, 'archive', second);
+	return {
+		input,
+		runs: [
+			{
+				attempt: 1,
+				run_id: runId,
+				target_path: target,
+				decision: 'create',
+				status: first.status,
+				manifest: first,
+			},
+			{
+				attempt: 2,
+				run_id: runId,
+				target_path: target,
+				decision: 'resume',
+				status: second.status,
+				manifest: second,
+			},
+		],
+		manifest: second,
+		move_calls: moveCalls,
+		notify_calls: notifyCalls,
+		confirm_calls: confirmCalls,
+		forget_calls: forgetCalls,
+	};
 }
 
 function walk(root, current = root) {
@@ -147,7 +200,7 @@ function walk(root, current = root) {
 		.sort();
 }
 
-export function runOperationScenarioSuite(root) {
+export async function runOperationScenarioSuite(root) {
 	mkdirSync(root, { recursive: true });
 	const scenarios = {
 		today: executeArtifactTwice({
@@ -187,11 +240,11 @@ export function runOperationScenarioSuite(root) {
 			status: 'pending',
 			artifact: { questions: [{ knowledge_point_id: 'kp-1', source_refs: ['Chapter-1#p1'] }] },
 		}),
-		archive: executeArchive(root),
+		archive: await executeArchive(root),
 	};
 	return {
 		context: 'protocol-adapter-fixture',
-		boundary: '验证技能操作协议，不执行真实客户端或网络抓取',
+		boundary: '验证真实临时文件系统归档事务；外部客户端、MCP 与网络能力使用记录型适配器',
 		fixture_root: root,
 		scenarios,
 		file_tree: walk(root),
@@ -200,5 +253,5 @@ export function runOperationScenarioSuite(root) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
 	const root = mkdtempSync(join(tmpdir(), 'lifeos-operation-fixture-'));
-	process.stdout.write(`${JSON.stringify(runOperationScenarioSuite(root), null, 2)}\n`);
+	process.stdout.write(`${JSON.stringify(await runOperationScenarioSuite(root), null, 2)}\n`);
 }

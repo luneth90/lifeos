@@ -6,6 +6,8 @@ dependencies:
   templates: []
   prompts: []
   schemas: []
+  scripts:
+    - path: scripts/archive_transaction.mjs
   protocols:
     - path: ../_shared/operation-safety.md
   capabilities: [move_with_link_update]
@@ -131,7 +133,8 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 扫描完成后，默认对执行清单中的全部合规待归档条目：
 
 1. **先确定源路径与目标路径**
-   - 先根据归档规则计算目标路径，并确保目标父目录存在
+   - 根据归档规则计算全部目标路径，把候选冻结为显式的 `source_path → target_path`、`entity_type` 与项目 `project_id`
+   - 在任何移动前，对所有候选完成 collision 预检，并冻结每个文件夹内的完整逐文件 inventory；不得边移动边发现后续冲突
    - **不要**为了归档先把整篇文档内容读入上下文；只有在需要更新 frontmatter 时，才在移动后读取目标文件
 
 2. **使用 Obsidian CLI 移动文件（自动更新 wikilink）：**
@@ -144,7 +147,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
      # 文件夹项目（整体移动）
      obsidian move path="源路径/项目文件夹" to="目标目录/2026/"
      ```
-   - 每次操作前先确保目标父目录已存在（`mkdir -p`）
+   - 调用共享 `createVaultDirectoryGuard` 冻结目标父目录逐级状态，再调用 `ensureVaultDirectory` 安全创建缺失目录。每一级都必须执行 guard → 紧邻复核 → 单级创建 → `missing → existing` 推进 → 再复核；禁止递归创建直接跨过 guard
    - 为源和目标分别建立路径 guard：移动前源必须为 `existing`、目标必须为 `missing`，并在实际移动紧邻之前复核两者。移动后立即以 `advanceVaultPathGuard` 将源从 `existing` 推进为 `missing`、目标从 `missing` 推进为 `existing`，后续只使用返回的新 guard；任一状态、身份、符号链接或 Vault 边界校验失败时中止，并写入 manifest 与恢复动作
    - **降级：** 若 `obsidian` CLI 不可用，先停止并呈现链接更新不可用的影响；只有用户明确接受降级后，才可使用受记录的移动方案。不得静默回退到裸 `mv`。
    - **严禁**通过"写入新文件，再删除原文件"的方式模拟移动
@@ -168,12 +171,14 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
    - 保持原文件名不变，按年/月组织
    - 只处理超出最近 7 天的日记
 
-3. **每次移动后立即执行唯一权威的索引与 Scope 清理事务：**
-   1. 移动成功后，先把该文件写入 manifest 的 `moves`。
-   2. 立即调用 `memory_notify(contract_version=2, file_path="<新 Vault 相对路径>", previous_file_path="<旧 Vault 相对路径>")`，成功后写入 manifest 的 `notified`；通知失败写入 `errors` 并停止当前事务。
-   3. 明确查询并确认新路径已经进入索引；未确认时写入 `errors` 并停止，不得调用 `memory_forget`。
-   4. 仅对已确认索引成功的项目调用 `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="项目归档清理")`。
-   5. 草稿和计划禁止拥有 `file` 作用域持久记忆，因此不得为它们调用或清理 `memory_forget`；阶段性信息保留在 Markdown 正文。
+3. **通过发布事务适配器执行移动、索引与 Scope 清理：**
+   - 调用 `scripts/archive_transaction.mjs` 的 `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })`。`adapters` 必须提供 `move_with_link_update`、`memory_notify`、`confirm_index`、`memory_forget`，并按传入的 `idempotency_key` 实现幂等收敛。
+   1. 文件夹只调用一次 `move_with_link_update` 整体移动；移动后把冻结 inventory 中每个文件的旧/新 Vault 相对路径逐项写入 manifest `moves`。
+   2. 对每条 `moves` 逐项调用 `memory_notify(contract_version=2, file_path="<新 Vault 相对路径>", previous_file_path="<旧 Vault 相对路径>")`；成功后写入 `notified`，失败则把步骤、路径、错误码和恢复动作写入 `errors` 并停止。
+   3. 对每个新文件逐项调用 `confirm_index`；未确认时停止并写入 `errors`，不得调用 `memory_forget`。
+   4. 只有同一项目关联的全部文件都已确认后，才可调用一次 `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="项目归档清理")`。
+   5. 草稿、计划和日记不得调用 `memory_forget`；草稿和计划也禁止拥有 `file` 作用域持久记忆，阶段性信息保留在 Markdown 正文。
+   6. 通知中断后，以相同 `run_id` 和原 manifest 恢复；当 source 已缺失、target 已存在且冻结 inventory 一致时，跳过目录整体移动及已确认文件，只续跑未完成的通知、确认与项目清理。`run_id`、候选目标或 inventory 不一致时拒绝恢复。
 
 4. **事务成功后，在目标文件上原地更新 frontmatter：**
    - 新增 `archived: "YYYY-MM-DD"`
@@ -329,7 +334,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 ## 归档事务契约
 
-先读取 `_shared/operation-safety.md` 并完成 preflight：枚举目录内全部候选、解析安全源/目标路径、在任何移动前检查 collision。创建逐文件 move manifest：`{ run_id, moves, collisions, notified, errors }`。优先使用 `move_with_link_update`；能力不可用时仅在用户明确接受降级后执行降级，绝不静默执行裸移动。唯一顺序是 move → 完整 `memory_notify` → confirm_index → `memory_forget`；任何失败都停止后续步骤并保留恢复动作，以相同 `run_id` resume。
+先读取 `_shared/operation-safety.md`，再使用发布资产 `scripts/archive_transaction.mjs`。适配器先预检全部 collision 和路径 guard，安全逐级创建目标父目录，冻结目录内逐文件 inventory，随后执行目录整体单次 move、逐文件 manifest、逐文件通知与确认；只有项目全部相关文件确认后才允许清理项目记忆。manifest 记录候选、inventory、移动状态、通知、确认、清理、错误码和恢复动作；同一 `run_id` resume 会跳过已确认步骤。外部回调必须消费稳定幂等键。该适配器不承诺 exactly-once，也不承诺文件系统、索引和记忆系统之间的跨系统原子性；共享 guard 同样无法消除最后一次复核到系统调用之间的跨平台原子竞态。
 
 <!-- operation-safety-v1 -->
 ```yaml
@@ -344,7 +349,17 @@ target_paths:
   plan: "{系统目录}/{归档计划子目录}/<filename>.md"
   diary: "{系统目录}/{归档日记子目录}/YYYY/MM/YYYY-MM-DD.md"
 decision: [create, merge, resume, skip, replace]
-transaction_steps: [move, memory_notify, confirm_index, memory_forget]
+adapter: scripts/archive_transaction.mjs
+external_callbacks: [move_with_link_update, memory_notify, confirm_index, memory_forget]
+transaction_steps: [preflight_all, create_target_parents, freeze_inventory, move_once, record_file_moves, memory_notify_each, confirm_index_each, memory_forget_project]
+directory_creation:
+  create_guard: createVaultDirectoryGuard
+  ensure: ensureVaultDirectory
+  recursive_mkdir: forbidden
+inventory:
+  freeze_before_move: all_candidate_files
+  directory_move: once
+  manifest_moves: per_file_source_target
 move_guards:
   source: { before: existing, after: missing }
   target: { before: missing, after: existing }
@@ -355,12 +370,27 @@ notify:
   previous_file_path: <old-vault-relative-path>
 forget:
   scope_type: project
-  allowed_after: confirm_index
+  allowed_after: all_project_files_confirmed
+  forbidden_entity_types: [draft, plan, diary]
   forbidden_when: [move_failed, notify_failed, index_unconfirmed]
 manifest_updates:
+  candidate: candidates
+  inventory: inventories
+  move_state: candidate_states
   move: moves
   collision: collisions
   memory_notify: notified
+  confirm_index: confirmed
+  memory_forget: forgotten
   failure: errors
+resume:
+  required_match: [run_id, candidates, inventories]
+  moved_state: source_missing_target_existing
+  skip_confirmed_files: true
+  external_idempotency_key: required
+guarantees:
+  exactly_once: false
+  atomic_cross_system: false
+  last_revalidate_to_syscall_atomic: false
 bare_mv: forbidden
 ```

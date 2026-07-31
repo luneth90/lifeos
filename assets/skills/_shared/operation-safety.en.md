@@ -28,6 +28,11 @@ path_guard:
   on_change: abort_and_record
   atomic_race_guarantee: false
   untrusted_concurrency: require_atomic_client_capability
+directory_creation:
+  create_guard: createVaultDirectoryGuard
+  ensure: ensureVaultDirectory
+  strategy: guard_revalidate_single_level_mkdir_advance_revalidate
+  recursive_mkdir: false
 manifest: { run_id: string, moves: [], collisions: [], notified: [], errors: [] }
 ```
 
@@ -37,7 +42,8 @@ manifest: { run_id: string, moves: [], collisions: [], notified: [], errors: [] 
 2. **Stable run identity**: normalized equal input and time window/mode must produce the same `run_id` and target path. Allow `replace` only after an explicit user request; otherwise use `merge`, `resume`, or `skip`.
 3. **Managed regions**: update only `BEGIN AUTO` / `END AUTO` managed region markers and preserve user-authored material and source lists.
 4. **Path guard and notification**: `resolveVaultPath` is preflight-only; its returned string is not a durable safety capability. Create a `createVaultPathGuard` for the final target. It captures both ancestor identities and the leaf with `lstat`; an existing leaf must not be a symlink and records type, dev, ino, and realpath, while an absent leaf records `missing`. Call `revalidateVaultPathGuard` immediately before each actual write/move; its default expectation is that both ancestor and leaf state and identity remain unchanged. Call it again after an in-place update. When an operation legitimately changes leaf state, call `advanceVaultPathGuard(guard, { before, after })` immediately afterward and replace the old guard with the returned guard. The only allowed transitions are create/update target `missing → existing`, move source `existing → missing`, and move target `missing → existing`. Advancing to `existing` still rejects symlinks and confirms that realpath remains inside the Vault. Abort and record recovery on any unexpected state, type, dev, ino, realpath, or parent identity change. Never retain and reuse a bare path after guard validation. Call `memory_notify` after every real file change; record notification failures and never claim completion.
-5. **Recovery**: persist errors and completed steps in the manifest, provide rollback/recovery actions that reverse it, and use the same `run_id` to `resume`.
+5. **Directory creation**: never bypass guards with recursive creation. Call `createVaultDirectoryGuard` to freeze every level from the existing Vault root to the destination directory, then call `ensureVaultDirectory`. Every missing directory performs create guard → immediate revalidation → single-level `mkdir` → `missing → existing` advance → revalidation. Every existing directory must also validate non-symlink status, directory type, identity, and ancestor identities. Fail closed on any change.
+6. **Recovery**: persist errors and completed steps in the manifest, provide rollback/recovery actions that reverse it, and use the same `run_id` to `resume`.
 
 ## Atomic race boundary
 

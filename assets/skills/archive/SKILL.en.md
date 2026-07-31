@@ -6,6 +6,8 @@ dependencies:
   templates: []
   prompts: []
   schemas: []
+  scripts:
+    - path: scripts/archive_transaction.mjs
   protocols:
     - path: ../_shared/operation-safety.md
   capabilities: [move_with_link_update]
@@ -131,7 +133,8 @@ After scanning, use every eligible candidate in the list as the execution scope 
 After scanning, process every eligible item in the execution list by default:
 
 1. **Determine the source path and destination path first**
-   - Compute the destination path from the archive rule and ensure the destination parent directory exists
+   - Compute every destination path from the archive rules and freeze each candidate as an explicit `source_path → target_path`, `entity_type`, and project `project_id`
+   - Before any move, preflight collisions for every candidate and freeze the complete per-file inventory of every directory; never discover later collisions while moving earlier candidates
    - **Do not** read the full document into context just to archive it; only read the destination file after the move if a frontmatter update is needed
 
 2. **Use Obsidian CLI to move files (auto-updates wikilinks):**
@@ -144,7 +147,7 @@ After scanning, process every eligible item in the execution list by default:
      # Folder project (move whole directory)
      obsidian move path="source-path/project-folder" to="target-directory/2026/"
      ```
-   - Ensure the destination parent directory exists before each operation (`mkdir -p`)
+   - Call the shared `createVaultDirectoryGuard` to freeze every destination-parent level, then call `ensureVaultDirectory` to create missing directories safely. Every level must perform guard → immediate revalidation → single-level creation → `missing → existing` advance → revalidation; recursive creation must never bypass the guard
    - Create separate source and destination guards: before the move, the source must be `existing` and the destination must be `missing`, and both guards must be revalidated immediately before the actual move. Immediately afterward, use `advanceVaultPathGuard` to advance the source from `existing` to `missing` and the destination from `missing` to `existing`, then retain only the returned guards. Abort and record manifest and recovery actions if any state, identity, symlink, or Vault-boundary check fails
    - **Degradation:** If `obsidian` CLI is unavailable, stop and present the impact of missing link updates. Use a recorded move only after explicit user acceptance of degradation; never silently fall back to bare `mv`.
    - **Never** simulate a move by writing a new file and then deleting the original file
@@ -168,12 +171,14 @@ After scanning, process every eligible item in the execution list by default:
    - Keep the original filename unchanged and organize by year/month
    - Only archive diary entries older than the most recent 7 days
 
-3. **Immediately after each move, execute the single authoritative index and Scope cleanup transaction:**
-   1. After a successful move, record the file in manifest `moves`.
-   2. Immediately call `memory_notify(contract_version=2, file_path="<new Vault-relative path>", previous_file_path="<old Vault-relative path>")`, then record success in manifest `notified`; on notification failure, record `errors` and stop the current transaction.
-   3. Explicitly query and confirm that the new path is indexed. If unconfirmed, record `errors`, stop, and never call `memory_forget`.
-   4. Only for a project whose new index entry is confirmed, call `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="Project archival cleanup")`.
-   5. Drafts and plans cannot have persistent `file` scope memory, so never call or clean `memory_forget` for them; retain interim information in their Markdown body.
+3. **Use the published transaction adapter for moves, indexing, and Scope cleanup:**
+   - Call `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })` from `scripts/archive_transaction.mjs`. `adapters` must provide `move_with_link_update`, `memory_notify`, `confirm_index`, and `memory_forget`, and must converge idempotently on the supplied `idempotency_key`.
+   1. Call `move_with_link_update` once to move a directory as a whole. After the move, write every old/new Vault-relative file path from the frozen inventory into manifest `moves`.
+   2. For every `moves` entry, call `memory_notify(contract_version=2, file_path="<new Vault-relative path>", previous_file_path="<old Vault-relative path>")`; record success in `notified`. On failure, record the step, path, error code, and recovery action in `errors`, then stop.
+   3. Call `confirm_index` for every new file. Stop and record `errors` when unconfirmed, and never call `memory_forget` in that state.
+   4. Call `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="Project archival cleanup")` once only after every related file for that project is confirmed.
+   5. Never call `memory_forget` for drafts, plans, or diaries. Drafts and plans also cannot have persistent `file` scope memory; keep interim information in their Markdown body.
+   6. After a notification interruption, resume with the same `run_id` and original manifest. When the source is absent, target exists, and the frozen inventory matches, skip the whole-directory move and every confirmed file, then continue only unfinished notifications, confirmations, and project cleanup. Reject resume when the `run_id`, candidate targets, or inventory differ.
 
 4. **After the transaction succeeds, update frontmatter in place at the destination:**
    - Add `archived: "YYYY-MM-DD"`
@@ -329,7 +334,7 @@ After archival is complete, suggestions:
 
 ## Archive Transaction Contract
 
-Read `_shared/operation-safety.md` and complete preflight: enumerate every candidate in a directory, resolve safe source/destination paths, and check collision before any move. Create a per-file move manifest: `{ run_id, moves, collisions, notified, errors }`. Prefer `move_with_link_update`; when unavailable, use an explicit degradation only after explicit user acceptance, never a silent bare move. The only sequence is move → complete `memory_notify` → confirm_index → `memory_forget`; every failure stops subsequent steps and preserves a recovery action for the same `run_id` to resume.
+Read `_shared/operation-safety.md`, then use the published asset `scripts/archive_transaction.mjs`. The adapter preflights every collision and path guard, safely creates destination parents one level at a time, freezes each directory's per-file inventory, and then performs one whole-directory move followed by per-file manifest entries, notifications, and confirmations. Project memory cleanup is allowed only after every related project file is confirmed. The manifest records candidates, inventory, move state, notifications, confirmations, cleanup, error codes, and recovery actions; a same-`run_id` resume skips confirmed steps. External callbacks must consume stable idempotency keys. This adapter does not promise exactly-once behavior or cross-system atomicity across the filesystem, index, and memory system. The shared guard also cannot eliminate the cross-platform atomic race between the final revalidation and the system call.
 
 <!-- operation-safety-v1 -->
 ```yaml
@@ -344,7 +349,17 @@ target_paths:
   plan: "{system directory}/{archived plans subdirectory}/<filename>.md"
   diary: "{system directory}/{archived diary subdirectory}/YYYY/MM/YYYY-MM-DD.md"
 decision: [create, merge, resume, skip, replace]
-transaction_steps: [move, memory_notify, confirm_index, memory_forget]
+adapter: scripts/archive_transaction.mjs
+external_callbacks: [move_with_link_update, memory_notify, confirm_index, memory_forget]
+transaction_steps: [preflight_all, create_target_parents, freeze_inventory, move_once, record_file_moves, memory_notify_each, confirm_index_each, memory_forget_project]
+directory_creation:
+  create_guard: createVaultDirectoryGuard
+  ensure: ensureVaultDirectory
+  recursive_mkdir: forbidden
+inventory:
+  freeze_before_move: all_candidate_files
+  directory_move: once
+  manifest_moves: per_file_source_target
 move_guards:
   source: { before: existing, after: missing }
   target: { before: missing, after: existing }
@@ -355,12 +370,27 @@ notify:
   previous_file_path: <old-vault-relative-path>
 forget:
   scope_type: project
-  allowed_after: confirm_index
+  allowed_after: all_project_files_confirmed
+  forbidden_entity_types: [draft, plan, diary]
   forbidden_when: [move_failed, notify_failed, index_unconfirmed]
 manifest_updates:
+  candidate: candidates
+  inventory: inventories
+  move_state: candidate_states
   move: moves
   collision: collisions
   memory_notify: notified
+  confirm_index: confirmed
+  memory_forget: forgotten
   failure: errors
+resume:
+  required_match: [run_id, candidates, inventories]
+  moved_state: source_missing_target_existing
+  skip_confirmed_files: true
+  external_idempotency_key: required
+guarantees:
+  exactly_once: false
+  atomic_cross_system: false
+  last_revalidate_to_syscall_atomic: false
 bare_mv: forbidden
 ```
