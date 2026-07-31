@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
-	cpSync,
 	type Dirent,
+	cpSync,
 	existsSync,
 	mkdirSync,
 	readFileSync,
@@ -19,6 +19,14 @@ import { assetsDir, copyDir, ensureDir } from '../../../src/cli/utils/assets.js'
 import { parseArgs } from '../../../src/cli/utils/ui.js';
 
 const contractValidatorPath = join(process.cwd(), 'scripts', 'validate-skill-contracts.mjs');
+const packageSourceEntries = [
+	'package.json',
+	'bin',
+	'assets',
+	'src',
+	'scripts',
+	'tsconfig.json',
+] as const;
 
 async function validateSkillContracts(): Promise<
 	typeof import('../../../scripts/validate-skill-contracts.mjs')
@@ -41,6 +49,13 @@ function extractFrontmatter(content: string): string {
 	return match[1];
 }
 
+function copyPackageSource(source: string, destination: string): void {
+	mkdirSync(destination, { recursive: true });
+	for (const entry of packageSourceEntries) {
+		cpSync(join(source, entry), join(destination, entry), { recursive: true });
+	}
+}
+
 describe('assetsDir', () => {
 	test('发布资产通过双语技能契约校验', async () => {
 		const { validateSkillContracts: validate } = await validateSkillContracts();
@@ -52,11 +67,7 @@ describe('assetsDir', () => {
 		const packageSource = join(directory, 'source');
 		mkdirSync(directory, { recursive: true });
 		try {
-			cpSync(process.cwd(), packageSource, {
-				recursive: true,
-				filter: (source) =>
-					!['.git', 'dist', 'node_modules'].includes(source.split('/').at(-1) ?? ''),
-			});
+			copyPackageSource(process.cwd(), packageSource);
 			symlinkSync(join(process.cwd(), 'node_modules'), join(packageSource, 'node_modules'), 'dir');
 			const environment = { ...process.env, NPM_CONFIG_CACHE: join(directory, 'npm-cache') };
 			const built = spawnSync('npm', ['run', 'build'], {
