@@ -218,8 +218,8 @@ aliases: []
 
 ```text
 ✅ 全部周报已生成：
-- LLM-Agent: 00_草稿/LLM-Agent-0324-0330.md（RSS 12 + arXiv 45 + Web 8）
-- SpatialAI: 00_草稿/SpatialAI-0324-0330.md（RSS 8 + arXiv 67 + Web 5）
+- LLM-Agent: {草稿目录}/LLM-Agent-0324-0330.md（RSS 12 + arXiv 45 + Web 8）
+- SpatialAI: {草稿目录}/SpatialAI-0324-0330.md（RSS 8 + arXiv 67 + Web 5）
 ```
 
 ## 错误处理

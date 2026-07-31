@@ -127,7 +127,7 @@ embedded frontmatter or report heading.
 {resources directory}/{translations subdirectory}/{book name}/{chapter name}.md
 ```
 
-Example: `70_资源/翻译/VGT/第9章_Sylow定理.md`
+Example: `{resources directory}/{translation subdirectory}/VGT/第9章_Sylow定理.md`
 
 ## Step 4: Completeness Validation and File Change Notification
 

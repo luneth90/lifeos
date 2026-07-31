@@ -13,6 +13,14 @@ import { parse as parseYaml } from 'yaml';
 import { assetsDir, copyDir, ensureDir } from '../../../src/cli/utils/assets.js';
 import { parseArgs } from '../../../src/cli/utils/ui.js';
 
+const contractValidatorPath = join(process.cwd(), 'scripts', 'validate-skill-contracts.mjs');
+
+async function validateSkillContracts(): Promise<
+	typeof import('../../../scripts/validate-skill-contracts.mjs')
+> {
+	return import(contractValidatorPath);
+}
+
 function walkFiles(dir: string): string[] {
 	return readdirSync(dir, { withFileTypes: true }).flatMap((entry: Dirent) => {
 		const fullPath = join(dir, entry.name);
@@ -29,6 +37,11 @@ function extractFrontmatter(content: string): string {
 }
 
 describe('assetsDir', () => {
+	test('发布资产通过双语技能契约校验', async () => {
+		const { validateSkillContracts: validate } = await validateSkillContracts();
+		expect(validate(process.cwd())).toEqual({ ok: true, diagnostics: [] });
+	});
+
 	test('points to existing assets/ directory', () => {
 		const dir = assetsDir();
 		expect(existsSync(dir)).toBe(true);

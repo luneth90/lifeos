@@ -2,6 +2,14 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+const skillContractValidatorPath = join(process.cwd(), 'scripts', 'validate-skill-contracts.mjs');
+
+async function validateSkillContracts(): Promise<
+	typeof import('../scripts/validate-skill-contracts.mjs')
+> {
+	return import(skillContractValidatorPath);
+}
+
 const FINAL_TOOLS = [
 	'memory_bootstrap',
 	'memory_query',
@@ -51,6 +59,11 @@ function allProductDocumentation(): Array<{ path: string; content: string }> {
 }
 
 describe('最终协议文档门禁', () => {
+	it('双语技能文档通过跨资产契约检查', async () => {
+		const { validateSkillContracts: validate } = await validateSkillContracts();
+		expect(validate(process.cwd())).toEqual({ ok: true, diagnostics: [] });
+	});
+
 	it('服务端与协议文档固定为七个 MCP 工具', () => {
 		const server = read('src/server.ts');
 		const registered = [...server.matchAll(/server\.tool\(\s*'([^']+)'/g)].map((match) => match[1]);

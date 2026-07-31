@@ -1,5 +1,9 @@
 # 阶段二执行契约行为记录
 
+> 阶段六证据校正：RED 的两次独立上下文压力审阅与自动化 RED 均为可回查证据；GREEN 列表
+> 描述的是迁移后共享协议的静态契约结果，不应当表述为已运行的真实客户端执行。执行清单
+> Schema、能力协议与确认顺序由 `execution-contract.test.ts` 和阶段六校验器持续验证。
+
 ## RED：独立上下文压力场景
 
 两次检查均通过 `collaboration.spawn_agent` 创建，参数为 `fork_turns: "none"`，只读、禁止改文件和提交。
@@ -46,7 +50,7 @@ npx vitest run tests/skill-contracts/execution-contract.test.ts tests/assets/pro
 退出码：`1`。关键汇总：`2` 个测试文件失败、`7` 项测试失败，原因是执行清单 Schema、能力协议、
 项目 ID 脚本和确认摘要编排均不存在。
 
-## GREEN：迁移后的行为
+## GREEN：迁移后的静态契约
 
 1. 确认后计划被编辑时，重新计算 `confirmed_hash`；revision 或 hash 改变即保持 `pending` 并重新确认。
 2. 半成品或来源失败时，Execution Manifest 保留 `errors`，Research 报告保持 `draft`，来源草稿不变，

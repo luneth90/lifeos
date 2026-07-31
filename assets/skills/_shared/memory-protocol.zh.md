@@ -129,7 +129,7 @@ memory_log(
   content="复习问答中不要用不安全的追加方式写入 LaTeX",
   scope={type: "skill", key: "revise"},
   item_kind="rule",
-  related_files=["40_知识/笔记/相关章节.md"]
+  related_files=["{知识目录}/{笔记子目录}/相关章节.md"]
 )
 ```
 

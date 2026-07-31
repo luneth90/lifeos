@@ -1,5 +1,11 @@
 # 第五阶段幂等性与归档行为基线
 
+> 阶段六复查：本记录“可执行协议场景”部分是受控 fixture 的串行重跑证据，不能表述为两个
+> 并发写入者的原子竞态验收。`operation-safety` 明确 `atomic_race_guarantee: false`；若出现
+> 不受信任并发且客户端没有原子、不跟随符号链接的文件能力，正确结果是失败关闭并保留 manifest，
+> 而不是承诺并发收敛。完整场景边界见
+> `development/skill-tests/2026-07-31-phase-6-contract-scenarios.md`。
+
 > agent context=baseline
 >
 > 观察日期：2026-07-31

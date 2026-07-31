@@ -49,6 +49,25 @@ function expectInOrder(content: string, path: string, patterns: RegExp[]): void 
 	}
 }
 
+function expectSameMachineShape(zh: unknown, en: unknown, path: string): void {
+	if (Array.isArray(zh) || Array.isArray(en)) {
+		expect(Array.isArray(en), `${path} 数组类型不一致`).toBe(Array.isArray(zh));
+		expect((en as unknown[]).length, `${path} 数组长度不一致`).toBe((zh as unknown[]).length);
+		for (let index = 0; index < (zh as unknown[]).length; index += 1) {
+			expectSameMachineShape((zh as unknown[])[index], (en as unknown[])[index], `${path}[${index}]`);
+		}
+		return;
+	}
+	if (zh && en && typeof zh === 'object' && typeof en === 'object') {
+		const zhRecord = zh as Record<string, unknown>;
+		const enRecord = en as Record<string, unknown>;
+		expect(Object.keys(enRecord).sort(), `${path} 字段集合不一致`).toEqual(Object.keys(zhRecord).sort());
+		for (const key of Object.keys(zhRecord)) expectSameMachineShape(zhRecord[key], enRecord[key], `${path}.${key}`);
+		return;
+	}
+	expect(typeof en, `${path} 字段类型不一致`).toBe(typeof zh);
+}
+
 describe('阶段二执行契约', () => {
 	it('公开机器可读的执行清单字段和阶段枚举', () => {
 		const schema = JSON.parse(read('assets/schema/Execution_Manifest_Schema.json')) as {
@@ -73,6 +92,7 @@ describe('阶段二执行契约', () => {
 				expect(definition, `${name} 缺少 fallback`).toHaveProperty('fallback');
 			}
 		}
+		expectSameMachineShape(zh, en, 'client-capabilities');
 	});
 
 	it('确认摘要在计划修订或哈希变化后失效，并按独立验收顺序提交', () => {

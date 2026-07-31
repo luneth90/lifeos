@@ -202,7 +202,7 @@ memory_query(contract_version=2, query="<话题关键词>", limit=5)
 handoff:
   target: project
   source: brainstorm
-  source_path: "00_草稿/2026-07-31_图检索构想.md"
+  source_path: "{草稿目录}/2026-07-31_图检索构想.md"
   intent: "把已确认的图检索构想转为开发项目"
   constraints: []
 ```

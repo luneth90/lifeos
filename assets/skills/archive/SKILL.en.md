@@ -6,6 +6,7 @@ dependencies:
   templates: []
   prompts: []
   schemas: []
+  capabilities: [move_with_link_update]
   agents: []
 ---
 
