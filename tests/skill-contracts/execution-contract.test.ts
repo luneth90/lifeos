@@ -128,4 +128,21 @@ describe('阶段二执行契约', () => {
 			expect(content, path).not.toMatch(/planning-agent-prompt/);
 		}
 	});
+
+	it('读取与翻译技能通过 execute_command 解析 Python 3', () => {
+		for (const path of [
+			'assets/skills/read-pdf/SKILL.zh.md',
+			'assets/skills/read-pdf/SKILL.en.md',
+			'assets/skills/translate/SKILL.zh.md',
+			'assets/skills/translate/SKILL.en.md',
+		]) {
+			const content = read(path);
+			expect(content, path).toContain('execute_command');
+			expect(content, path).toContain('python3');
+			expect(content, path).toContain('py -3');
+			expect(content, path).toMatch(/初始化阶段|initialization/i);
+			expect(content, path).toMatch(/Python 2|Python 2/);
+			expect(content, path).not.toMatch(/(?:^|\n)python\s+\.agents\/skills\/read-pdf/m);
+		}
+	});
 });

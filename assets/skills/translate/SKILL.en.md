@@ -8,6 +8,7 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+  capabilities: [execute_command]
   agents: []
 ---
 
@@ -82,8 +83,10 @@ Provide users with a "PDF++ original (left) + Chinese translation note (right)" 
 Invoke `/read-pdf` to extract the specified chapter's text:
 
 ```bash
-python .agents/skills/read-pdf/scripts/read_pdf.py <PDF_path> <page_range_or_chapter>
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py <PDF_path> <page_range_or_chapter>
 ```
+
+Resolve the interpreter through `execute_command`: use Python 3 recorded during initialization first, then try `python3`, and on Windows try `py -3`. Explicitly fail when only Python 2 exists or no interpreter resolves; never treat `python` as the only command.
 
 - Obtain per-page text from the `full_text` field
 - Record the page range for translation note metadata

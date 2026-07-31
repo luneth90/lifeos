@@ -6,6 +6,7 @@ dependencies:
   templates: []
   prompts: []
   schemas: []
+  capabilities: [execute_command, inspect_image]
   agents: []
 ---
 
@@ -45,22 +46,24 @@ memory_context(
 pip install PyMuPDF Pillow
 ```
 
-若用户环境无 Python，提示安装后再继续。
+通过 `execute_command` 解析 Python 3 运行时：优先使用初始化阶段已记录的解释器；否则依次尝试
+`python3` 与 Windows 的 `py -3`。只有 Python 2 或无法解析时，明确失败并提示用户安装 Python 3；
+不得把 `python` 当作唯一命令。
 
 ## 脚本入口
 
 优先调用本地脚本完成 PDF 的页码/章节定位、文字提取、页面渲染：
 
 ```bash
-python .agents/skills/read-pdf/scripts/read_pdf.py <PDF路径> <页码范围或章节名>
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py <PDF路径> <页码范围或章节名>
 ```
 
 示例：
 
 ```bash
-python .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf 245-260
-python .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf "第3章"
-python .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf --list-toc
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf 245-260
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf "第3章"
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf --list-toc
 ```
 
 脚本职责：

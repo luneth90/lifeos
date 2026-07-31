@@ -8,6 +8,7 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
+  capabilities: [execute_command]
   agents: []
 ---
 
@@ -82,8 +83,11 @@ memory_context(
 调用 `/read-pdf` 提取指定章节的文字内容：
 
 ```bash
-python .agents/skills/read-pdf/scripts/read_pdf.py <PDF路径> <页码范围或章节名>
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py <PDF路径> <页码范围或章节名>
 ```
+
+通过 `execute_command` 解析解释器：优先使用初始化阶段已记录的 Python 3，其次尝试 `python3`，Windows
+再尝试 `py -3`。只有 Python 2 或无法解析时明确失败；不得把 `python` 当作唯一命令。
 
 - 获取 `full_text` 字段中的逐页文字
 - 记录页码范围，用于翻译笔记的元数据

@@ -6,6 +6,7 @@ dependencies:
   templates: []
   prompts: []
   schemas: []
+  capabilities: [execute_command, inspect_image]
   agents: []
 ---
 
@@ -45,22 +46,22 @@ Verify dependencies are installed before first use:
 pip install PyMuPDF Pillow
 ```
 
-If the user's environment lacks Python, prompt them to install it before continuing.
+Resolve a Python 3 runtime through `execute_command`: use the interpreter recorded during initialization first; otherwise try `python3`, then Windows `py -3`. Explicitly fail and ask the user to install Python 3 when only Python 2 exists or no interpreter resolves; never treat `python` as the only command.
 
 ## Script Entry Point
 
 Prefer calling the local script for PDF page/chapter lookup, text extraction, and page rendering:
 
 ```bash
-python .agents/skills/read-pdf/scripts/read_pdf.py <PDF path> <page range or chapter name>
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py <PDF path> <page range or chapter name>
 ```
 
 Examples:
 
 ```bash
-python .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf 245-260
-python .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf "Chapter 3"
-python .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf --list-toc
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf 245-260
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf "Chapter 3"
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf --list-toc
 ```
 
 Script responsibilities:
