@@ -28,9 +28,11 @@ Pay attention to the following key fields:
 
 | Applicability mode        | Execution rules                                                                                                                                                                                                                                                                  |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Full apply`              | Read the complete persona file; use the persona's Analytical Framework as the structural skeleton; replace default chapters with the persona's Output Format (always retain: frontmatter, core insights from drafts, related reading, references); enforce the persona's Constraints and Guardrails; match the persona's Interaction Style tone |
-| `Reference apply`         | Read the persona file, borrow its analysis framework to enrich the analysis, but retain the default chapter structure below                                                                                                                                                       |
-| `Not applicable` or `Not found` | Use the default chapter structure below                                                                                                                                                                                                                                    |
+| `Full apply`              | Read the complete persona file; apply its Analytical Framework, evidence standards, Constraints and Guardrails, and Interaction Style to analysis content and expression. The report still uses the complete frontmatter, chapters, and headings from `Research_Template.md`. |
+| `Reference apply`         | Read the persona file and borrow only relevant analytical focus, terminology, and expression to enrich content. The report still uses the complete frontmatter, chapters, and headings from `Research_Template.md`. |
+| `Not applicable` or `Not found` | Use general research content emphasis. The report still uses the complete frontmatter, chapters, and headings from `Research_Template.md`. |
+
+No persona may change, remove, reorder, or replace the chapter structure of `Research_Template.md`.
 
 ## Step 2: Read Local Draft Materials
 

@@ -28,9 +28,11 @@ parent_skill: research
 
 | 适用模式             | 执行规则                                                                                                                                                                                                                                                                  |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `全量应用`           | 读取完整 persona 文件；用 persona 的 Analytical Framework 作为结构骨架；用 persona 的 Output Format 替换默认章节（始终保留：frontmatter、来自草稿的核心洞察、相关阅读、参考资源）；强制执行 persona 的 Constraints and Guardrails；匹配 persona 的 Interaction Style 语气 |
-| `参考应用`           | 读取 persona 文件，借用其分析框架丰富分析，但保留下方默认章节结构                                                                                                                                                                                                         |
-| `不适用` 或 `未找到` | 使用下方默认章节结构                                                                                                                                                                                                                                                      |
+| `全量应用`           | 读取完整 persona 文件；将其 Analytical Framework、证据标准、Constraints and Guardrails 与 Interaction Style 用于分析内容和表达。报告仍严格使用 `Research_Template.md` 的完整 Frontmatter、章节和标题。 |
+| `参考应用`           | 读取 persona 文件，仅借用相关分析重点、术语与表达方式丰富内容；报告仍严格使用 `Research_Template.md` 的完整 Frontmatter、章节和标题。 |
+| `不适用` 或 `未找到` | 使用通用研究内容侧重点；报告仍严格使用 `Research_Template.md` 的完整 Frontmatter、章节和标题。 |
+
+任何 persona 都不得改变、删除、重排或替换 `Research_Template.md` 的章节结构。
 
 ## 步骤二：读取本地草稿素材
 

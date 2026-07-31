@@ -91,11 +91,15 @@ describe('阶段一数据契约', () => {
 	it('研究人格只能调整内容，不得替换 Research 模板结构', () => {
 		for (const path of [
 			'assets/skills/research/references/planning-agent-prompt.zh.md',
+			'assets/skills/research/references/execution-agent-prompt.zh.md',
 			'assets/skills/research/references/planning-agent-prompt.en.md',
+			'assets/skills/research/references/execution-agent-prompt.en.md',
 		]) {
 			const content = read(path);
 			expect(content, path).toMatch(/Research_Template\.md/);
-			expect(content, path).not.toMatch(/替换默认章节结构|replace default chapter structure/i);
+			expect(content, path).not.toMatch(
+			/Output Format.*替换默认章节|替换默认章节结构|replace default chapters|replace default chapter structure/i,
+		);
 		}
 	});
 });
