@@ -167,10 +167,8 @@ function isValidOperationSafetyContract(contract) {
 		contract.notification !== 'memory_notify' ||
 		contract.collision !== 'preflight_required' ||
 		contract.recovery !== 'resume_same_run_id' ||
-		typeof contract.run_id !== 'string' ||
-		!contract.run_id.startsWith('stable(') ||
-		typeof contract.target_path !== 'string' ||
-		contract.target_path.length === 0 ||
+		contract.run_id !== 'stable(<skill>, <canonical-input>, <time-window-or-mode>)' ||
+		contract.target_path !== 'resolved-vault-relative-path' ||
 		!sameValue(contract.decision, decisions) ||
 		!sameValue(contract.manifest, manifest)
 	)

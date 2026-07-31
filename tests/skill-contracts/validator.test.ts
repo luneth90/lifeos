@@ -231,6 +231,65 @@ describe('技能契约校验器', () => {
 
 	it.each([
 		[
+			'run_id',
+			'run_id: stable(<skill>, <canonical-input>, <time-window-or-mode>)',
+			'run_id: stable(englishly-wrong)',
+		],
+		['target_path', 'target_path: resolved-vault-relative-path', 'target_path: englishly-wrong'],
+	])('仅英文漂移也拒绝操作安全机器值：%s', async (_field, original, replacement) => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-safety-single-locale-'));
+		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
+		try {
+			const path = join(root, 'assets/skills/_shared/operation-safety.en.md');
+			writeFileSync(path, readFileSync(path, 'utf8').replace(original, replacement));
+			const { validateSkillContracts } = await loadValidator();
+			expect(validateSkillContracts(root).diagnostics).toEqual([
+				{
+					code: 'invalid_operation_safety_contract',
+					path: 'assets/skills/_shared/operation-safety.en.md',
+					message: '操作安全机器契约字段或值非法',
+				},
+			]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it.each([
+		[
+			'run_id',
+			'run_id: stable(<skill>, <canonical-input>, <time-window-or-mode>)',
+			'run_id: stable(sharedly-wrong)',
+		],
+		['target_path', 'target_path: resolved-vault-relative-path', 'target_path: sharedly-wrong'],
+	])('中英文同步漂移也拒绝操作安全机器值：%s', async (_field, original, replacement) => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-safety-bilingual-'));
+		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
+		try {
+			for (const locale of ['en', 'zh']) {
+				const path = join(root, `assets/skills/_shared/operation-safety.${locale}.md`);
+				writeFileSync(path, readFileSync(path, 'utf8').replace(original, replacement));
+			}
+			const { validateSkillContracts } = await loadValidator();
+			expect(validateSkillContracts(root).diagnostics).toEqual([
+				{
+					code: 'invalid_operation_safety_contract',
+					path: 'assets/skills/_shared/operation-safety.en.md',
+					message: '操作安全机器契约字段或值非法',
+				},
+				{
+					code: 'invalid_operation_safety_contract',
+					path: 'assets/skills/_shared/operation-safety.zh.md',
+					message: '操作安全机器契约字段或值非法',
+				},
+			]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it.each([
+		[
 			'templates',
 			(write) =>
 				write('assets/skills/research/SKILL.en.md', (content) =>
