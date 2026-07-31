@@ -33,20 +33,42 @@ function read(relativePath: string): string {
 describe('阶段一数据契约', () => {
 	it('公开机器可读的状态契约', () => {
 		const schema = readContractYaml(schemaPath, 'frontmatter-contract-v1') as {
-			types: Record<string, { statuses: string[] }>;
+			types: Record<string, { statuses: string[]; template: string | null }>;
 		};
 		expect(schema.types.translation.statuses).toEqual(['draft', 'complete']);
-		expect(schema.types.plan.statuses).toEqual(['pending', 'active', 'done', 'failed', 'cancelled']);
+		expect(schema.types.plan.statuses).toEqual([
+			'pending',
+			'active',
+			'done',
+			'failed',
+			'cancelled',
+		]);
 		expect(schema.types.draft.statuses).toEqual(['pending', 'done']);
 		expect(schema.types.project.statuses).toEqual(['active', 'frozen', 'done']);
+		expect(schema.types['project-doc']).toEqual({ statuses: [], template: null });
+		expect(schema.types.system).toEqual({ statuses: [], template: null });
 		expect(read(schemaPath)).not.toContain('- `active` / `archived`');
+	});
+
+	it('双语生命周期公开 revise-record 的 pending 到 graded 状态机和参与者', () => {
+		for (const path of [
+			'assets/skills/_shared/lifecycle.zh.md',
+			'assets/skills/_shared/lifecycle.en.md',
+		]) {
+			const content = read(path);
+			expect(content, path).toMatch(/revise-record|复习记录/i);
+			expect(content, path).toMatch(/pending[\s\S]{0,160}graded/i);
+			expect(content, path).toMatch(/\/revise[\s\S]{0,240}pending[\s\S]{0,120}graded/i);
+		}
 	});
 
 	it('双语实体模板共享 frontmatter 键并使用动态 ID', () => {
 		for (const paths of pairedAssetPaths('assets/templates')) {
 			const zh = readMarkdownAsset(paths.zh);
 			const en = readMarkdownAsset(paths.en);
-			expect(Object.keys(zh.frontmatter).sort(), paths.zh).toEqual(Object.keys(en.frontmatter).sort());
+			expect(Object.keys(zh.frontmatter).sort(), paths.zh).toEqual(
+				Object.keys(en.frontmatter).sort(),
+			);
 			expect(zh.frontmatter.id, paths.zh).toBe('{{ID}}');
 			expect(en.frontmatter.id, paths.en).toBe('{{ID}}');
 		}
@@ -98,8 +120,8 @@ describe('阶段一数据契约', () => {
 			const content = read(path);
 			expect(content, path).toMatch(/Research_Template\.md/);
 			expect(content, path).not.toMatch(
-			/Output Format.*替换默认章节|替换默认章节结构|replace default chapters|replace default chapter structure/i,
-		);
+				/Output Format.*替换默认章节|替换默认章节结构|replace default chapters|replace default chapter structure/i,
+			);
 		}
 	});
 });

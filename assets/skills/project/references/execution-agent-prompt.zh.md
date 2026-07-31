@@ -63,6 +63,19 @@ parent_skill: project
 5. 禁止创建 `ProjectNameV0.2.md`、`ProjectNameV0.3.md` 之类的版本化主项目文件
 6. 若计划中包含版本路线，版本信息写在主项目字段或正文中，不写入文件名
 
+配套文档的结构化 Frontmatter 至少包含以下机器字段；它不使用独立项目 ID，也没有状态字段：
+
+```markdown
+---
+title: "<DocumentName>"
+type: project-doc
+project: "[[<最终主项目路径>]]"
+created: "YYYY-MM-DD"
+tags: [project-doc]
+aliases: []
+---
+```
+
 **Frontmatter 规范：**
 
 ```yaml
@@ -109,7 +122,7 @@ target_version: V0.2
 
 > **目标:** [学完这个章节后能做什么]
 
-**参考:** [[{资源目录}/Books/<资源名>]] 第1章
+**参考:** [[{资源目录}/{书籍子目录}/<资源名>]] 第1章
 
 **核心内容:** [3-5句话概括]
 

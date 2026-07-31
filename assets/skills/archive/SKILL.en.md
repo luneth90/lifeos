@@ -337,7 +337,12 @@ contract_version: 1
 safety_protocol: operation-safety-v1
 operation: archive
 run_id: stable(archive, candidate-paths, archive-date)
-target_path: "{system directory}/{archive subdirectory}/..."
+target_paths:
+  project-file: "{system directory}/{archived projects subdirectory}/YYYY/<project-name>.md"
+  project-directory: "{system directory}/{archived projects subdirectory}/YYYY/<project-name>/"
+  draft: "{system directory}/{archived drafts subdirectory}/YYYY/MM/<filename>.md"
+  plan: "{system directory}/{archived plans subdirectory}/<filename>.md"
+  diary: "{system directory}/{archived diary subdirectory}/YYYY/MM/YYYY-MM-DD.md"
 decision: [create, merge, resume, skip, replace]
 transaction_steps: [move, memory_notify, confirm_index, memory_forget]
 move_guards:

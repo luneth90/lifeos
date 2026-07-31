@@ -31,6 +31,8 @@ memory_context(
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
 > 路径映射：
 > - `{资源目录}` → directories.resources
+> - `{书籍子目录}` → subdirectories.resources.books
+> - `{文献子目录}` → subdirectories.resources.literature
 > - `{系统目录}` → directories.system
 > - `{规范子目录}` → subdirectories.system.schema
 
@@ -64,9 +66,9 @@ pip install PyMuPDF Pillow
 示例：
 
 ```bash
-<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf 245-260
-<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf "第3章"
-<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/Books/VGT/vgt.pdf --list-toc
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/{书籍子目录}/VGT/vgt.pdf 245-260
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/{书籍子目录}/VGT/vgt.pdf "第3章"
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py {资源目录}/{书籍子目录}/VGT/vgt.pdf --list-toc
 ```
 
 脚本职责：
@@ -100,7 +102,7 @@ pip install PyMuPDF Pillow
 
 | 参数 | 格式 | 示例 |
 |------|------|------|
-| PDF 路径 | Vault 内相对路径或绝对路径 | `{资源目录}/Books/VGT/vgt.pdf` |
+| PDF 路径 | Vault 内相对路径或绝对路径 | `{资源目录}/{书籍子目录}/VGT/vgt.pdf`；论文可用 `{资源目录}/{文献子目录}/<文件>.pdf` |
 | 页码范围 | 页码、范围、或章节名 | `245-260`、`Chapter 5`、`第3章` |
 
 ## 页码解析规则

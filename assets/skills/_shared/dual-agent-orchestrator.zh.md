@@ -5,8 +5,28 @@
 
 ## 阶段 0：记忆与输入检查
 
-调用最小 `memory_query(contract_version=2, ...)`，检查同主题产物、来源草稿的 `status: pending` 与近期决策。
-读取计划、模板、Schema 和来源文件；计划创建时必须写为 `status: pending`。
+先解析当前入口的 skill scope，以及已经明确的 project/file scopes；在首次业务查询前调用
+`memory_context(contract_version=2, scopes=[<skill>, <resolved-project>, <resolved-file>], include_global=false, include_related_files=true)`
+读取规则、偏好和已确认决策。未知 scope 不得传入；后续识别出新对象时先增量补载对应 scope。
+
+完成作用域上下文加载后，才调用最小
+`memory_query(contract_version=2, query="<同主题关键词>", filters={<实体类型或 status: pending>}, limit=<最小值>)`
+查找同主题 Vault 产物、pending 来源草稿和需要回读的来源原文。`memory_query` 不得获取规则、偏好或决策。
+随后读取计划、模板、Schema 和来源文件；计划创建时必须写为 `status: pending`。
+
+<!-- dual-agent-memory-layer-v1 -->
+```yaml
+contract_version: 1
+context:
+  contract_version: 2
+  scopes: [skill, project, file]
+  include_global: false
+  reads: [rules, preferences, decisions]
+query:
+  contract_version: 2
+  reads: [same_topic_outputs, pending_source_drafts, source_content]
+forbidden_query_reads: [rules, preferences, decisions]
+```
 
 ## 阶段 1：规划与确认摘要
 

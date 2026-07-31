@@ -28,6 +28,9 @@ types:
   project:
     statuses: [active, frozen, done]
     template: Project_Template.md
+  project-doc:
+    statuses: []
+    template: null
   plan:
     statuses: [pending, active, done, failed, cancelled]
     template: null
@@ -49,6 +52,9 @@ types:
   retro:
     statuses: []
     template: Retrospective_Template.md
+  system:
+    statuses: []
+    template: null
 ```
 
 ## 通用字段（建议所有笔记都尽量包含）

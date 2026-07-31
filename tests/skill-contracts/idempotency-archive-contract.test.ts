@@ -15,6 +15,12 @@ function contract(path: string): Record<string, unknown> {
 	return parseYaml(match[1]) as Record<string, unknown>;
 }
 
+function frontmatter(path: string): Record<string, unknown> {
+	const match = read(path).match(/^---\n([\s\S]*?)\n---/);
+	if (!match) throw new Error(`缺少 Frontmatter：${path}`);
+	return parseYaml(match[1]) as Record<string, unknown>;
+}
+
 const sharedContract = {
 	contract_version: 1,
 	preflight: 'required',
@@ -87,8 +93,8 @@ const operations = [
 	{
 		name: 'translate',
 		runId: 'stable(translate, source-pdf, chapter-range, extraction-hash)',
-		zh: '{知识目录}/<chapter>/翻译_<chapter>.md',
-		en: '{knowledge directory}/<chapter>/Translation_<chapter>.md',
+		zh: '{资源目录}/{翻译子目录}/<书名>/<章节名>.md',
+		en: '{resources directory}/{translations subdirectory}/<book-name>/<chapter-name>.md',
 		extra: { on_draft: 'resume', replace_requires: 'explicit_user_request' },
 	},
 	{
@@ -153,19 +159,134 @@ describe('阶段五幂等与归档契约', () => {
 			},
 			bare_mv: 'forbidden',
 		};
-		for (const [lang, target] of [
-			['zh', '{系统目录}/{归档子目录}/...'],
-			['en', '{system directory}/{archive subdirectory}/...'],
+		for (const [lang, targets] of [
+			[
+				'zh',
+				{
+					'project-file': '{系统目录}/{归档项目子目录}/YYYY/<project-name>.md',
+					'project-directory': '{系统目录}/{归档项目子目录}/YYYY/<project-name>/',
+					draft: '{系统目录}/{归档草稿子目录}/YYYY/MM/<filename>.md',
+					plan: '{系统目录}/{归档计划子目录}/<filename>.md',
+					diary: '{系统目录}/{归档日记子目录}/YYYY/MM/YYYY-MM-DD.md',
+				},
+			],
+			[
+				'en',
+				{
+					'project-file':
+						'{system directory}/{archived projects subdirectory}/YYYY/<project-name>.md',
+					'project-directory':
+						'{system directory}/{archived projects subdirectory}/YYYY/<project-name>/',
+					draft: '{system directory}/{archived drafts subdirectory}/YYYY/MM/<filename>.md',
+					plan: '{system directory}/{archived plans subdirectory}/<filename>.md',
+					diary: '{system directory}/{archived diary subdirectory}/YYYY/MM/YYYY-MM-DD.md',
+				},
+			],
 		] as const) {
 			expect(contract(`assets/skills/archive/SKILL.${lang}.md`)).toEqual({
 				contract_version: 1,
 				safety_protocol: 'operation-safety-v1',
 				operation: 'archive',
 				run_id: 'stable(archive, candidate-paths, archive-date)',
-				target_path: target,
+				target_paths: targets,
 				decision: decisions,
 				...extra,
 			});
+		}
+	});
+
+	it('Project、Knowledge 与 Brainstorm 声明真实写集及非原子恢复边界', () => {
+		const common = {
+			guard: {
+				artifacts: 'create_or_update_target',
+				status_targets: 'unchanged_until_validated',
+			},
+			manifest: {
+				records: ['artifacts', 'status_mutations', 'validation', 'notified', 'errors'],
+				commit_order: ['guard', 'write', 'validate', 'memory_notify', 'mutate_status'],
+			},
+			recovery: {
+				strategy: 'resume_same_run_id',
+				preserve_sources_on_failure: true,
+				atomic_cross_system_guarantee: false,
+			},
+		};
+		const cases = [
+			{
+				skill: 'project',
+				runId: 'stable(project, normalized-input, plan_revision, confirmed_hash)',
+				zhTargets: {
+					plan: '{计划目录}/Plan_YYYY-MM-DD_Project_<ProjectName>.md',
+					'main-project': '{项目目录}/<ProjectName>.md',
+					'development-main-project': '{项目目录}/<ProjectName>/<ProjectName>.md',
+					'project-doc': '{项目目录}/<ProjectName>/文档/<DocumentName>.md',
+				},
+				enTargets: {
+					plan: '{plans directory}/Plan_YYYY-MM-DD_Project_<ProjectName>.md',
+					'main-project': '{projects directory}/<ProjectName>.md',
+					'development-main-project': '{projects directory}/<ProjectName>/<ProjectName>.md',
+					'project-doc': '{projects directory}/<ProjectName>/Docs/<DocumentName>.md',
+				},
+				statusMutations: [
+					'plan:pending->active->done|failed|cancelled',
+					'source-draft:pending->done(after-validation)',
+					'project:create-active',
+				],
+			},
+			{
+				skill: 'knowledge',
+				runId: 'stable(knowledge, source-hash, project-or-standalone, topic)',
+				zhTargets: {
+					'knowledge-note':
+						'{知识目录}/{笔记子目录}/<Domain>/<SourceName>/<ChapterName>/<ChapterName>.md',
+					wiki: '{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md',
+				},
+				enTargets: {
+					'knowledge-note':
+						'{knowledge directory}/{notes subdirectory}/<Domain>/<SourceName>/<ChapterName>/<ChapterName>.md',
+					wiki: '{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md',
+				},
+				statusMutations: [
+					'knowledge:draft->review(after-validation)',
+					'source-draft:pending->done(after-consumption)',
+					'project:update-mastery(after-validation)',
+				],
+			},
+			{
+				skill: 'brainstorm',
+				runId: 'stable(brainstorm, normalized-topic, YYYY-MM-DD)',
+				zhTargets: {
+					'checkpoint-draft': '{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md',
+					wiki: '{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md',
+				},
+				enTargets: {
+					'checkpoint-draft': '{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md',
+					wiki: '{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md',
+				},
+				statusMutations: ['checkpoint-draft:create-pending'],
+			},
+		] as const;
+
+		for (const testCase of cases) {
+			for (const [locale, targetPaths] of [
+				['zh', testCase.zhTargets],
+				['en', testCase.enTargets],
+			] as const) {
+				const path = `assets/skills/${testCase.skill}/SKILL.${locale}.md`;
+				expect(frontmatter(path).dependencies).toMatchObject({
+					protocols: [{ path: '../_shared/operation-safety.md' }],
+				});
+				expect(contract(path)).toEqual({
+					contract_version: 1,
+					safety_protocol: 'operation-safety-v1',
+					operation: testCase.skill,
+					run_id: testCase.runId,
+					target_paths: targetPaths,
+					decision: decisions,
+					status_mutations: testCase.statusMutations,
+					...common,
+				});
+			}
 		}
 	});
 

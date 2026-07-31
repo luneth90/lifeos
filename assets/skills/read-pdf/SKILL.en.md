@@ -31,6 +31,8 @@ Do not pass unresolved scopes, and never expand an empty scope list into a full-
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
 > Path mappings:
 > - `{resources directory}` → directories.resources
+> - `{books subdirectory}` → subdirectories.resources.books
+> - `{literature subdirectory}` → subdirectories.resources.literature
 > - `{system directory}` → directories.system
 > - `{schema subdirectory}` → subdirectories.system.schema
 
@@ -62,9 +64,9 @@ Prefer calling the local script for PDF page/chapter lookup, text extraction, an
 Examples:
 
 ```bash
-<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf 245-260
-<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf "Chapter 3"
-<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/Books/VGT/vgt.pdf --list-toc
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/{books subdirectory}/VGT/vgt.pdf 245-260
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/{books subdirectory}/VGT/vgt.pdf "Chapter 3"
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/read_pdf.py {resources directory}/{books subdirectory}/VGT/vgt.pdf --list-toc
 ```
 
 Script responsibilities:
@@ -95,7 +97,7 @@ Call `inspect_image` only for `needs_ocr` or `partial` pages, or pages containin
 
 | Parameter | Format | Example |
 |-----------|--------|---------|
-| PDF path | Relative path within Vault or absolute path | `{resources directory}/Books/VGT/vgt.pdf` |
+| PDF path | Relative path within Vault or absolute path | `{resources directory}/{books subdirectory}/VGT/vgt.pdf`; papers may use `{resources directory}/{literature subdirectory}/<file>.pdf` |
 | Page range | Page numbers, range, or chapter name | `245-260`, `Chapter 5`, `Chapter 3` |
 
 ## Page Resolution Rules

@@ -11,6 +11,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [spawn_agent, ask_user, execute_command]
   agents: []
 ---
@@ -286,3 +288,35 @@ Do not write this from a single style preference; require repeated confirmation 
 ### Pre-check Queries
 
 See Phase 0 for query code.
+
+## Operation Safety Contract
+
+Read `_shared/operation-safety.md`. Give the first checkpoint draft and optional Wiki their own path preflight,
+collision check, and guard validation. Reread, validate, and notify every checkpoint/Wiki write. The `/project`
+handoff passes only the public structured input; downstream writes do not enter this skill's manifest. Preserve
+the same-run checkpoint for recovery after failure. This protocol does not claim cross-system atomicity across
+file writes, index notifications, and downstream handoff.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+safety_protocol: operation-safety-v1
+operation: brainstorm
+run_id: stable(brainstorm, normalized-topic, YYYY-MM-DD)
+target_paths:
+  checkpoint-draft: "{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md"
+  wiki: "{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md"
+decision: [create, merge, resume, skip, replace]
+status_mutations:
+  - checkpoint-draft:create-pending
+guard:
+  artifacts: create_or_update_target
+  status_targets: unchanged_until_validated
+manifest:
+  records: [artifacts, status_mutations, validation, notified, errors]
+  commit_order: [guard, write, validate, memory_notify, mutate_status]
+recovery:
+  strategy: resume_same_run_id
+  preserve_sources_on_failure: true
+  atomic_cross_system_guarantee: false
+```

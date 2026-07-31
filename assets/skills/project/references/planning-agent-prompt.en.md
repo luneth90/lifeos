@@ -27,7 +27,7 @@ Execute the following steps:
 - If any existing main project has a missing ID, an ID that is not a YAML string without leading or
   trailing whitespace, a placeholder ID, an ID outside `^[a-z0-9][a-z0-9._-]*$`, or a duplicate
   ID, stop planning and ask the user to run `lifeos upgrade` or repair the projects first
-- Search `{resources directory}/` (Books, Papers, Courses, Links)
+- Search `{resources directory}/{books subdirectory}/` and `{resources directory}/{literature subdirectory}/` separately; never invent an unconfigured resource subdirectory
 - Record the source draft file path (if any) — the Orchestrator uses it to update the draft only after acceptance
 
 Summarize all related content already in the Vault.
@@ -106,9 +106,8 @@ aliases: []
 
 ### Existing Learning Resources
 
-- Books: [List related wikilinks in {resources directory}/Books/]
-- Papers: [List related wikilinks in {resources directory}/Papers/]
-- Courses: [List related wikilinks in {resources directory}/Courses/]
+- Book resources: [List related wikilinks in {resources directory}/{books subdirectory}/]
+- Literature: [List related wikilinks in {resources directory}/{literature subdirectory}/]
 
 ## Project Outline Draft
 
@@ -138,7 +137,7 @@ When generating chapter structure:
 #### Chapter 1: [Chapter Name]
 
 - Objective: [What you can do after completing this chapter]
-- Reference resource: [[{resources directory}/Books/ExactResourceName.pdf]] Chapter 1
+- Reference resource: [[{resources directory}/{books subdirectory}/ExactResourceName.pdf]] Chapter 1
 - Expected knowledge note: [[{knowledge directory}/{notes subdirectory}/Domain/BookName/Chapter1NoteName/Chapter1NoteName]] (chapter directory structure)
 - Expected Wiki: [[{knowledge directory}/{wiki subdirectory}/Domain/ConceptName]]
 

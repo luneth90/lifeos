@@ -126,10 +126,10 @@ embedded frontmatter or report heading.
 ### Output Path
 
 ```
-{resources directory}/{translations subdirectory}/{book name}/{chapter name}.md
+{resources directory}/{translations subdirectory}/<book-name>/<chapter-name>.md
 ```
 
-Example: `{resources directory}/{translation subdirectory}/VGT/第9章_Sylow定理.md`
+Example: `{resources directory}/{translations subdirectory}/VGT/第9章_Sylow定理.md`
 
 ## Step 4: Completeness Validation and File Change Notification
 
@@ -202,7 +202,7 @@ contract_version: 1
 safety_protocol: operation-safety-v1
 operation: translate
 run_id: stable(translate, source-pdf, chapter-range, extraction-hash)
-target_path: "{knowledge directory}/<chapter>/Translation_<chapter>.md"
+target_path: "{resources directory}/{translations subdirectory}/<book-name>/<chapter-name>.md"
 decision: [create, merge, resume, skip, replace]
 on_draft: resume
 replace_requires: explicit_user_request

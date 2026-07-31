@@ -4,7 +4,31 @@ This protocol is the sole commit semantics for Project and Research. Read `clien
 
 ## Phase 0: Memory and Input Check
 
-Call minimal `memory_query(contract_version=2, ...)` checks for same-topic output, source drafts with `status: pending`, and recent decisions. Read the plan, templates, schema, and source files; a newly created plan must use `status: pending`.
+Resolve the entry's skill scope and every already-known project/file scope first. Before the first business
+query, call
+`memory_context(contract_version=2, scopes=[<skill>, <resolved-project>, <resolved-file>], include_global=false, include_related_files=true)`
+to read rules, preferences, and confirmed decisions. Never pass an unresolved scope; when a new object is
+identified later, incrementally load its scope before using it.
+
+Only after scoped context is loaded, call minimal
+`memory_query(contract_version=2, query="<same-topic terms>", filters={<entity type or status: pending>}, limit=<minimum>)`
+queries for same-topic Vault outputs, pending source drafts, and source content that must be reread.
+`memory_query` must not retrieve rules, preferences, or decisions. Then read the plan, templates, schema, and
+source files; a newly created plan must use `status: pending`.
+
+<!-- dual-agent-memory-layer-v1 -->
+```yaml
+contract_version: 1
+context:
+  contract_version: 2
+  scopes: [skill, project, file]
+  include_global: false
+  reads: [rules, preferences, decisions]
+query:
+  contract_version: 2
+  reads: [same_topic_outputs, pending_source_drafts, source_content]
+forbidden_query_reads: [rules, preferences, decisions]
+```
 
 ## Phase 1: Planning and Confirmation Snapshot
 

@@ -66,6 +66,20 @@ If the project category is `development`, the following rules must be followed d
 5. Do not create versioned main project files like `ProjectNameV0.2.md`, `ProjectNameV0.3.md`
 6. If the plan includes a version roadmap, write version information in the main project's fields or body, not in filenames
 
+Supporting documents use at least these structured Frontmatter machine fields. They have no independent
+project ID and no status field:
+
+```markdown
+---
+title: "<DocumentName>"
+type: project-doc
+project: "[[<final main project path>]]"
+created: "YYYY-MM-DD"
+tags: [project-doc]
+aliases: []
+---
+```
+
 **Frontmatter specification:**
 
 ```yaml
@@ -112,7 +126,7 @@ target_version: V0.2
 
 > **Objective:** [What you can do after completing this chapter]
 
-**Reference:** [[{resources directory}/Books/<ResourceName>]] Chapter 1
+**Reference:** [[{resources directory}/{books subdirectory}/<ResourceName>]] Chapter 1
 
 **Core content:** [3-5 sentence summary]
 

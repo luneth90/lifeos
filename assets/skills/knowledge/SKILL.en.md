@@ -9,6 +9,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   agents: []
 ---
 
@@ -39,7 +41,7 @@ Do not pass unresolved scopes, and never expand an empty scope list into a full-
 > - `{notes subdirectory}` → subdirectories.knowledge.notes
 > - `{wiki subdirectory}` → subdirectories.knowledge.wiki
 > - `{books subdirectory}` → subdirectories.resources.books
-> - `{papers subdirectory}` → subdirectories.resources.literature
+> - `{literature subdirectory}` → subdirectories.resources.literature
 > - `{templates subdirectory}` → subdirectories.system.templates
 > - `{schema subdirectory}` → subdirectories.system.schema
 
@@ -96,7 +98,7 @@ Before starting distillation, proactively confirm and collect the following thre
 
 **② Source Content (Required)**
 
-- From the corresponding chapter or section in `{resources directory}/{books subdirectory}/` or `{resources directory}/{papers subdirectory}/`
+- From the corresponding chapter or section in `{resources directory}/{books subdirectory}/` or `{resources directory}/{literature subdirectory}/`
 - Purpose: extract authoritative knowledge points; all content must be strictly based on the original text
 - If not provided: stop execution, prompt the user to provide book/paper chapter content
 
@@ -121,7 +123,7 @@ Before generating any content, you must use file reading capabilities to read th
 For the project-bound path, identify from the project file:
 
 - `Domain`: knowledge domain, using PascalCase (`Math` / `AI` / `Art` / `History` / other)
-- `SourceType`: resource type (`Book` / `Paper`), determined from `{resources directory}/{books subdirectory}/` or `{resources directory}/{papers subdirectory}/` in the project file
+- `SourceType`: resource type (`Book` / `Paper`), determined from `{resources directory}/{books subdirectory}/` or `{resources directory}/{literature subdirectory}/` in the project file
 - `BookName` / `PaperName`: resource name
 - `ChapterName`: current chapter or paper title being processed
 - Corresponding output paths (Notes path, Wiki path)
@@ -223,7 +225,7 @@ After completion, **do not output full file contents in the conversation** (unle
 
 **🔗 Suggested Follow-up Actions:**
 
-- Source links to `[[{resources directory}/Books/...]]` or `[[{resources directory}/Papers/...]]` have been created; if the resource does not exist, click to create it.
+- Source links to `[[{resources directory}/{books subdirectory}/<resource-path>]]` or `[[{resources directory}/{literature subdirectory}/<resource-path>]]` have been created; if the resource does not exist, click to create it.
 - Would you like me to display a specific note's detailed content, or make modifications?
 ```
 
@@ -250,4 +252,38 @@ Project-bound knowledge notes must write a `project` field in frontmatter linkin
 
 ```yaml
 project: "[[Visual-Group-Theory-Learning]]"
+```
+
+## Operation Safety Contract
+
+Read `_shared/operation-safety.md`. Give the knowledge note and every Wiki artifact its own path preflight,
+collision check, and guard validation. Validate templates, links, and the source-consumption audit, notify every
+file, and only then advance knowledge, source-draft, and project-mastery states. Preserve source states on
+failure and resume with the same `run_id`. This protocol does not claim cross-system atomicity across writes,
+index notifications, and status updates.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+safety_protocol: operation-safety-v1
+operation: knowledge
+run_id: stable(knowledge, source-hash, project-or-standalone, topic)
+target_paths:
+  knowledge-note: "{knowledge directory}/{notes subdirectory}/<Domain>/<SourceName>/<ChapterName>/<ChapterName>.md"
+  wiki: "{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md"
+decision: [create, merge, resume, skip, replace]
+status_mutations:
+  - knowledge:draft->review(after-validation)
+  - source-draft:pending->done(after-consumption)
+  - project:update-mastery(after-validation)
+guard:
+  artifacts: create_or_update_target
+  status_targets: unchanged_until_validated
+manifest:
+  records: [artifacts, status_mutations, validation, notified, errors]
+  commit_order: [guard, write, validate, memory_notify, mutate_status]
+recovery:
+  strategy: resume_same_run_id
+  preserve_sources_on_failure: true
+  atomic_cross_system_guarantee: false
 ```

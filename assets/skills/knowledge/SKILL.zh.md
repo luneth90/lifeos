@@ -9,6 +9,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   agents: []
 ---
 
@@ -39,7 +41,7 @@ memory_context(
 > - `{笔记子目录}` → subdirectories.knowledge.notes
 > - `{百科子目录}` → subdirectories.knowledge.wiki
 > - `{书籍子目录}` → subdirectories.resources.books
-> - `{论文子目录}` → subdirectories.resources.literature
+> - `{文献子目录}` → subdirectories.resources.literature
 > - `{模板子目录}` → subdirectories.system.templates
 > - `{规范子目录}` → subdirectories.system.schema
 
@@ -96,7 +98,7 @@ memory_query(contract_version=2, query="<章节关键词>", filters={"type": "kn
 
 **② 原文内容（必须）**
 
-- 来自 `{资源目录}/{书籍子目录}/` 或 `{资源目录}/{论文子目录}/` 的对应章节或段落
+- 来自 `{资源目录}/{书籍子目录}/` 或 `{资源目录}/{文献子目录}/` 的对应章节或段落
 - 用途：提炼权威知识点，所有内容须严格基于原文
 - 若未提供：停止执行，提示用户提供书籍/论文章节内容
 
@@ -121,7 +123,7 @@ memory_query(contract_version=2, query="<章节关键词>", filters={"type": "kn
 项目绑定路径从项目文件中识别：
 
 - `Domain`：知识领域，使用 PascalCase（`Math` / `AI` / `Art` / `History` / 其他）
-- `SourceType`：资源类型（`Book` / `Paper`），从项目文件的 `{资源目录}/{书籍子目录}/` 或 `{资源目录}/{论文子目录}/` 引用路径判断
+- `SourceType`：资源类型（`Book` / `Paper`），从项目文件的 `{资源目录}/{书籍子目录}/` 或 `{资源目录}/{文献子目录}/` 引用路径判断
 - `BookName` / `PaperName`：资源名称
 - `ChapterName`：当前处理的章节或论文标题
 - 对应的产出路径（笔记路径、百科路径）
@@ -223,7 +225,7 @@ memory_query(contract_version=2, query="<章节关键词>", filters={"type": "kn
 
 **🔗 关联动作建议:**
 
-- 已为您创建了指向 `[[{资源目录}/Books/...]]` 或 `[[{资源目录}/Papers/...]]` 的来源链接，若该资源不存在，请点击创建。
+- 已为您创建了指向 `[[{资源目录}/{书籍子目录}/<资源路径>]]` 或 `[[{资源目录}/{文献子目录}/<资源路径>]]` 的来源链接，若该资源不存在，请点击创建。
 - 是否需要我展示某篇特定笔记的详细内容，或进行修改？
 ```
 
@@ -250,4 +252,36 @@ memory_query(contract_version=2, query="<章节关键词>", filters={"type": "kn
 
 ```yaml
 project: "[[Visual-Group-Theory学习]]"
+```
+
+## 操作安全契约
+
+读取 `_shared/operation-safety.md`。知识笔记和每个 Wiki 都分别完成路径 preflight、collision 检查与
+guard 复核；校验模板、链接和来源消费审计后逐文件 `memory_notify`，最后才推进知识笔记、来源草稿和项目
+掌握度状态。失败保留来源状态并用同一 `run_id` 恢复。本协议不宣称文件写入、索引通知和状态更新具有跨系统原子性。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+safety_protocol: operation-safety-v1
+operation: knowledge
+run_id: stable(knowledge, source-hash, project-or-standalone, topic)
+target_paths:
+  knowledge-note: "{知识目录}/{笔记子目录}/<Domain>/<SourceName>/<ChapterName>/<ChapterName>.md"
+  wiki: "{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md"
+decision: [create, merge, resume, skip, replace]
+status_mutations:
+  - knowledge:draft->review(after-validation)
+  - source-draft:pending->done(after-consumption)
+  - project:update-mastery(after-validation)
+guard:
+  artifacts: create_or_update_target
+  status_targets: unchanged_until_validated
+manifest:
+  records: [artifacts, status_mutations, validation, notified, errors]
+  commit_order: [guard, write, validate, memory_notify, mutate_status]
+recovery:
+  strategy: resume_same_run_id
+  preserve_sources_on_failure: true
+  atomic_cross_system_guarantee: false
 ```

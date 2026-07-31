@@ -11,6 +11,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [spawn_agent, ask_user, execute_command]
   agents: []
 ---
@@ -287,3 +289,34 @@ memory_log(contract_version=2,
 ### 前置查询
 
 见阶段 0 中的查询代码。
+
+## 操作安全契约
+
+读取 `_shared/operation-safety.md`。首次 checkpoint 草稿与可选 Wiki 各自完成路径 preflight、collision
+检查和 guard 复核；每次 checkpoint/Wiki 写入后先回读校验并 `memory_notify`。向 `/project` 的交接只传公开
+结构化输入，不把下游写集纳入本技能 manifest。失败保留同一 `run_id` 的 checkpoint 供恢复。本协议不宣称
+文件写入、索引通知和下游交接具备跨系统原子性。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+safety_protocol: operation-safety-v1
+operation: brainstorm
+run_id: stable(brainstorm, normalized-topic, YYYY-MM-DD)
+target_paths:
+  checkpoint-draft: "{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md"
+  wiki: "{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md"
+decision: [create, merge, resume, skip, replace]
+status_mutations:
+  - checkpoint-draft:create-pending
+guard:
+  artifacts: create_or_update_target
+  status_targets: unchanged_until_validated
+manifest:
+  records: [artifacts, status_mutations, validation, notified, errors]
+  commit_order: [guard, write, validate, memory_notify, mutate_status]
+recovery:
+  strategy: resume_same_run_id
+  preserve_sources_on_failure: true
+  atomic_cross_system_guarantee: false
+```

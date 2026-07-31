@@ -120,9 +120,63 @@ describe('阶段三路由与学习链路契约', () => {
 			const content = read(zhPath);
 			const english = read(enPath);
 			for (const value of [content, english]) {
-				expect(value).toMatch(/memory_context[\s\S]{0,700}(规则|偏好|决策|rules|preferences|decisions)/i);
+				expect(value).toMatch(
+					/memory_context[\s\S]{0,700}(规则|偏好|决策|rules|preferences|decisions)/i,
+				);
 				expect(value).toMatch(/memory_query[\s\S]{0,700}(Vault|原文|source documents|笔记原文)/i);
 			}
+		}
+	});
+
+	it('双 Agent 阶段零先读取作用域决策，再只查询同主题 Vault 原文', () => {
+		const contract = expectSameContract<{
+			contract_version: number;
+			context: Record<string, unknown>;
+			query: Record<string, unknown>;
+			forbidden_query_reads: string[];
+		}>(
+			'dual-agent-memory-layer-v1',
+			'assets/skills/_shared/dual-agent-orchestrator.zh.md',
+			'assets/skills/_shared/dual-agent-orchestrator.en.md',
+		);
+		expect(contract).toEqual({
+			contract_version: 1,
+			context: {
+				contract_version: 2,
+				scopes: ['skill', 'project', 'file'],
+				include_global: false,
+				reads: ['rules', 'preferences', 'decisions'],
+			},
+			query: {
+				contract_version: 2,
+				reads: ['same_topic_outputs', 'pending_source_drafts', 'source_content'],
+			},
+			forbidden_query_reads: ['rules', 'preferences', 'decisions'],
+		});
+		for (const path of [
+			'assets/skills/_shared/dual-agent-orchestrator.zh.md',
+			'assets/skills/_shared/dual-agent-orchestrator.en.md',
+		]) {
+			const content = read(path);
+			expect(content.indexOf('memory_context'), path).toBeGreaterThan(-1);
+			expect(content.indexOf('memory_query'), path).toBeGreaterThan(
+				content.indexOf('memory_context'),
+			);
+			expect(content, path).toMatch(
+				/memory_context\(contract_version=2[\s\S]{0,500}include_global=false/i,
+			);
+			expect(content, path).toMatch(
+				/memory_query\(contract_version=2[\s\S]{0,500}(pending|source)/i,
+			);
+		}
+		for (const path of [
+			'assets/skills/project/SKILL.zh.md',
+			'assets/skills/project/SKILL.en.md',
+			'assets/skills/research/SKILL.zh.md',
+			'assets/skills/research/SKILL.en.md',
+		]) {
+			const content = read(path);
+			expect(content, path).toMatch(/dual-agent-orchestrator\.md.*(?:阶段0|Phase 0)/i);
 		}
 	});
 
@@ -133,7 +187,10 @@ describe('阶段三路由与学习链路契约', () => {
 			expect(content).toMatch(/临近截止|nearest deadline/i);
 			expect(content).toMatch(/用户选中|user-selected/i);
 		}
-		for (const path of ['assets/templates/zh/Daily_Template.md', 'assets/templates/en/Daily_Template.md']) {
+		for (const path of [
+			'assets/templates/zh/Daily_Template.md',
+			'assets/templates/en/Daily_Template.md',
+		]) {
 			const body = readMarkdownAsset(path).body;
 			expect(body, path).toContain('<!-- BEGIN AUTO:tasks -->');
 			expect(body, path).toContain('<!-- END AUTO:tasks -->');
@@ -152,14 +209,27 @@ describe('阶段三路由与学习链路契约', () => {
 	});
 
 	it('Brainstorm 为 checkpoint 提供模板化草稿，并只通过公开 Project 入口交接', () => {
-		for (const path of ['assets/skills/brainstorm/SKILL.zh.md', 'assets/skills/brainstorm/SKILL.en.md']) {
+		for (const path of [
+			'assets/skills/brainstorm/SKILL.zh.md',
+			'assets/skills/brainstorm/SKILL.en.md',
+		]) {
 			const content = read(path);
-			expect(content, path).toMatch(/首次.*checkpoint.*创建或复用.*Draft_Template|first.*checkpoint.*create or reuse.*Draft_Template/i);
-			expect(content, path).toMatch(/发散[\s\S]{0,400}memory_notify|Divergence[\s\S]{0,400}memory_notify/i);
-			expect(content, path).toMatch(/收敛[\s\S]{0,400}memory_notify|Convergence[\s\S]{0,400}memory_notify/i);
-			expect(content, path).toMatch(/交接[\s\S]{0,400}memory_notify|Handoff[\s\S]{0,400}memory_notify/i);
+			expect(content, path).toMatch(
+				/首次.*checkpoint.*创建或复用.*Draft_Template|first.*checkpoint.*create or reuse.*Draft_Template/i,
+			);
+			expect(content, path).toMatch(
+				/发散[\s\S]{0,400}memory_notify|Divergence[\s\S]{0,400}memory_notify/i,
+			);
+			expect(content, path).toMatch(
+				/收敛[\s\S]{0,400}memory_notify|Convergence[\s\S]{0,400}memory_notify/i,
+			);
+			expect(content, path).toMatch(
+				/交接[\s\S]{0,400}memory_notify|Handoff[\s\S]{0,400}memory_notify/i,
+			);
 			expect(content, path).toMatch(/\/project.*公共规划入口|\/project.*public planning entry/i);
-			expect(content, path).not.toMatch(/sub-agent Planning Agent|子-agent Planning Agent|子 Agent Planning Agent/i);
+			expect(content, path).not.toMatch(
+				/sub-agent Planning Agent|子-agent Planning Agent|子 Agent Planning Agent/i,
+			);
 		}
 	});
 
@@ -196,7 +266,12 @@ describe('阶段三路由与学习链路契约', () => {
 			for (const heading of ['核心摘录', '前置知识', '问题背景与动机', '核心概念与定义']) {
 				if (template.includes(`## ${heading}`)) expect(skill, skillPath).toContain(`## ${heading}`);
 			}
-			for (const heading of ['Key Excerpts', 'Prerequisites', 'Problem Background and Motivation', 'Core Concepts and Definitions']) {
+			for (const heading of [
+				'Key Excerpts',
+				'Prerequisites',
+				'Problem Background and Motivation',
+				'Core Concepts and Definitions',
+			]) {
 				if (template.includes(`## ${heading}`)) expect(skill, skillPath).toContain(`## ${heading}`);
 			}
 		}

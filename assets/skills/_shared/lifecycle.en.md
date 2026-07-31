@@ -104,15 +104,32 @@ draft ──completeness validation passes──→ complete
 
 **Rule:** /translate may update `draft` to `complete` only after completeness validation passes.
 
+## Revise Record Lifecycle
+
+This section is authoritative for `type: revise-record`.
+
+```
+pending ──completed /revise grading──→ graded
+```
+
+| Status | Meaning | Set by |
+|--------|---------|--------|
+| `pending` | Questions exist and await answers or complete grading | /revise |
+| `graded` | This grading pass is complete; `result: pass | fail` records the outcome | /revise |
+
+**Rule:** /revise writes `pending` when creating a revise record and advances it to `graded` only after
+complete grading records the score, result, and weaknesses. This lifecycle is separate from the knowledge
+note lifecycle `review → revised → mastered`.
+
 ## Skill Participation Matrix
 
-| Skill | Draft Transitions | Knowledge Note Transitions | Project Transitions | Plan Transitions |
-|-------|-------------------|---------------------------|---------------------|------------------|
-| /brainstorm | Creates `pending` | - | - | - |
-| /today | Creates `pending` | - | - | - |
-| /research | `pending` → `done` | - | - | Creates `pending`, confirms to `active`, then updates to `done` after execution |
-| /project | `pending` → `done` | - | Creates `active` | Creates `pending`, confirms to `active`, then updates to `done` after execution |
-| /knowledge | `pending` → `done` | Creates `draft`, then sets `review` after validation | - | - |
-| /revise | - | Default `review` → `revised`; explicit later review may move `revised` → `mastered` | Updates mastery dots | - |
-| /translate | - | - | - | - |
-| /archive | Keeps `done` and writes the archival date | - | Keeps `done` and writes the archival date | Keeps `done` and writes the archival date |
+| Skill | Draft Transitions | Knowledge Note Transitions | Revise Record Transitions | Project Transitions | Plan Transitions |
+|-------|-------------------|---------------------------|---------------------------|---------------------|------------------|
+| /brainstorm | Creates `pending` | - | - | - | - |
+| /today | Creates `pending` | - | - | - | - |
+| /research | `pending` → `done` | - | - | - | Creates `pending`, confirms to `active`, then updates to `done` after execution |
+| /project | `pending` → `done` | - | - | Creates `active` | Creates `pending`, confirms to `active`, then updates to `done` after execution |
+| /knowledge | `pending` → `done` | Creates `draft`, then sets `review` after validation | - | - | - |
+| /revise | - | Default `review` → `revised`; explicit later review may move `revised` → `mastered` | Creates `pending`, then updates to `graded` after complete grading | Updates mastery dots | - |
+| /translate | - | - | - | - | - |
+| /archive | Keeps `done` and writes the archival date | - | - | Keeps `done` and writes the archival date | Keeps `done` and writes the archival date |

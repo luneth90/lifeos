@@ -9,6 +9,8 @@ dependencies:
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
     - path: "{系统目录}/{规范子目录}/Execution_Manifest_Schema.json"
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [spawn_agent, ask_user, execute_command, move_with_link_update]
   agents:
     - path: references/planning-agent-prompt.md
@@ -44,6 +46,8 @@ memory_context(
 > - `{草稿目录}` → directories.drafts
 > - `{项目目录}` → directories.projects
 > - `{资源目录}` → directories.resources
+> - `{书籍子目录}` → subdirectories.resources.books
+> - `{文献子目录}` → subdirectories.resources.literature
 > - `{计划目录}` → directories.plans
 > - `{系统目录}` → directories.system
 > - `{模板子目录}` → subdirectories.system.templates
@@ -226,3 +230,38 @@ memory_log(contract_version=2,
 - `project_slug` 只用 ASCII slug
 - 仅记录会影响后续项目取舍的稳定动机，不记录一次性的情绪表达
 - 项目必须已有最终稳定 `id`；没有稳定动机时不写入画像
+
+## 操作安全契约
+
+读取 `_shared/operation-safety.md`。计划、项目主文件和配套文档都在 preflight 后分别建立 guard；
+Execution Manifest 必须记录 artifacts、验证、通知和拟议状态变更。来源草稿与计划在 artifacts 全部回读校验并
+逐文件 `memory_notify` 前保持原状态；失败以同一 `run_id` 恢复。本协议只定义跨步骤提交顺序，不宣称文件写入、
+索引通知与状态更新具备跨系统原子性。
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+safety_protocol: operation-safety-v1
+operation: project
+run_id: stable(project, normalized-input, plan_revision, confirmed_hash)
+target_paths:
+  plan: "{计划目录}/Plan_YYYY-MM-DD_Project_<ProjectName>.md"
+  main-project: "{项目目录}/<ProjectName>.md"
+  development-main-project: "{项目目录}/<ProjectName>/<ProjectName>.md"
+  project-doc: "{项目目录}/<ProjectName>/文档/<DocumentName>.md"
+decision: [create, merge, resume, skip, replace]
+status_mutations:
+  - plan:pending->active->done|failed|cancelled
+  - source-draft:pending->done(after-validation)
+  - project:create-active
+guard:
+  artifacts: create_or_update_target
+  status_targets: unchanged_until_validated
+manifest:
+  records: [artifacts, status_mutations, validation, notified, errors]
+  commit_order: [guard, write, validate, memory_notify, mutate_status]
+recovery:
+  strategy: resume_same_run_id
+  preserve_sources_on_failure: true
+  atomic_cross_system_guarantee: false
+```

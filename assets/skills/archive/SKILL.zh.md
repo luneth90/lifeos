@@ -337,7 +337,12 @@ contract_version: 1
 safety_protocol: operation-safety-v1
 operation: archive
 run_id: stable(archive, candidate-paths, archive-date)
-target_path: "{系统目录}/{归档子目录}/..."
+target_paths:
+  project-file: "{系统目录}/{归档项目子目录}/YYYY/<project-name>.md"
+  project-directory: "{系统目录}/{归档项目子目录}/YYYY/<project-name>/"
+  draft: "{系统目录}/{归档草稿子目录}/YYYY/MM/<filename>.md"
+  plan: "{系统目录}/{归档计划子目录}/<filename>.md"
+  diary: "{系统目录}/{归档日记子目录}/YYYY/MM/YYYY-MM-DD.md"
 decision: [create, merge, resume, skip, replace]
 transaction_steps: [move, memory_notify, confirm_index, memory_forget]
 move_guards:

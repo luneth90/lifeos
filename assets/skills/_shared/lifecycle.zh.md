@@ -104,15 +104,29 @@ draft ──完整性校验通过──→ complete
 
 **规则：** /translate 只有在完整性校验通过后才能从 `draft` 更新为 `complete`。
 
+## 复习记录生命周期 (Revise Record Lifecycle)
+
+```
+pending ──/revise 完成批改──→ graded
+```
+
+| 状态 | 含义 | 设置者 |
+|------|------|--------|
+| `pending` | 题目已生成，等待作答或完整批改 | /revise |
+| `graded` | 本轮批改已完成，结果另由 `result: pass | fail` 记录 | /revise |
+
+**规则：** /revise 创建复习记录时写 `pending`，只有完整批改并写入得分、结果和薄弱点后才能推进为
+`graded`。复习记录状态与知识笔记的 `review → revised → mastered` 状态机分别维护。
+
 ## 技能参与矩阵
 
-| 技能 | 草稿状态转换 | 知识笔记状态转换 | 项目状态转换 | 计划状态转换 |
-|------|-------------|-----------------|-------------|-------------|
-| /brainstorm | 创建 `pending` | - | - | - |
-| /today | 创建 `pending` | - | - | - |
-| /research | `pending` → `done` | - | - | 创建 `pending`，确认后 `active`，执行后更新为 `done` |
-| /project | `pending` → `done` | - | 创建 `active` | 创建 `pending`，确认后 `active`，执行后更新为 `done` |
-| /knowledge | `pending` → `done` | 创建时 `draft`，完成校验后 `review` | - | - |
-| /revise | - | 默认 `review` → `revised`；明确后续复核达标时 `revised` → `mastered` | 更新掌握度圆点 | - |
-| /translate | - | - | - | - |
-| /archive | 归档后保留 `done` 并写入日期 | - | 归档后保留 `done` 并写入日期 | 归档后保留 `done` 并写入日期 |
+| 技能 | 草稿状态转换 | 知识笔记状态转换 | 复习记录状态转换 | 项目状态转换 | 计划状态转换 |
+|------|-------------|-----------------|-----------------|-------------|-------------|
+| /brainstorm | 创建 `pending` | - | - | - | - |
+| /today | 创建 `pending` | - | - | - | - |
+| /research | `pending` → `done` | - | - | - | 创建 `pending`，确认后 `active`，执行后更新为 `done` |
+| /project | `pending` → `done` | - | - | 创建 `active` | 创建 `pending`，确认后 `active`，执行后更新为 `done` |
+| /knowledge | `pending` → `done` | 创建时 `draft`，完成校验后 `review` | - | - | - |
+| /revise | - | 默认 `review` → `revised`；明确后续复核达标时 `revised` → `mastered` | 创建 `pending`，完整批改后更新为 `graded` | 更新掌握度圆点 | - |
+| /translate | - | - | - | - | - |
+| /archive | 归档后保留 `done` 并写入日期 | - | - | 归档后保留 `done` 并写入日期 | 归档后保留 `done` 并写入日期 |

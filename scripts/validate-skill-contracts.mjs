@@ -33,7 +33,23 @@ const EN_DEFAULT_SUBDIRECTORIES = {
 		},
 	},
 };
-const MODIFIABLE_SKILLS = ['ask', 'today', 'digest', 'research', 'translate', 'revise', 'archive'];
+const MODIFIABLE_SKILLS = [
+	'ask',
+	'today',
+	'digest',
+	'research',
+	'translate',
+	'revise',
+	'archive',
+	'project',
+	'knowledge',
+	'brainstorm',
+];
+const EXTENDED_WRITE_SKILLS = new Set(['project', 'knowledge', 'brainstorm']);
+const ARCHIVE_TARGET_KEYS = ['project-file', 'project-directory', 'draft', 'plan', 'diary'];
+const TEMPLATE_LOCALIZED_FRONTMATTER_FIELDS = {
+	'Revise_Template.md': new Set(['note']),
+};
 
 function normalizePath(path) {
 	return path.split(sep).join('/');
@@ -61,25 +77,44 @@ function relativeAssetPath(root, path) {
 	return normalizePath(relative(root, path));
 }
 
-function readMarkdown(path) {
+function readMarkdown(path, onYamlError) {
 	const content = read(path);
 	const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-	if (!match) return { frontmatter: null, body: content };
-	const parsed = parseYaml(match[1]);
+	if (!match) return { frontmatter: null, body: content, frontmatter_state: 'missing' };
+	let parsed;
+	try {
+		parsed = parseYaml(match[1]);
+	} catch {
+		onYamlError?.();
+		return { frontmatter: null, body: match[2], frontmatter_state: 'invalid_yaml' };
+	}
+	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+		return { frontmatter: null, body: match[2], frontmatter_state: 'non_object' };
+	}
 	return {
-		frontmatter: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null,
+		frontmatter: parsed,
 		body: match[2],
+		frontmatter_state: 'valid',
 	};
 }
 
-function readMarkedYaml(path, marker) {
+function readMarkedYaml(path, marker, onYamlError) {
 	const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const match = read(path).match(
 		new RegExp(`<!--\\s*${escaped}\\s*-->\\s*\\n\`\`\`yaml\\n([\\s\\S]*?)\\n\`\`\``),
 	);
-	if (!match) return null;
-	const parsed = parseYaml(match[1]);
-	return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+	if (!match) return { found: false, invalid: false, value: null };
+	try {
+		const parsed = parseYaml(match[1]);
+		return {
+			found: true,
+			invalid: false,
+			value: parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null,
+		};
+	} catch {
+		onYamlError?.();
+		return { found: true, invalid: true, value: null };
+	}
 }
 
 function extractPlaceholders(content) {
@@ -247,16 +282,102 @@ export function englishDefaultPathConfig() {
 	});
 }
 
-function yamlFences(content) {
-	return [...content.matchAll(/```yaml\n([\s\S]*?)\n```/g)]
-		.map((match) => {
-			try {
-				return parseYaml(match[1]);
-			} catch {
-				return null;
-			}
+function structuredGeneratedDocuments(content) {
+	const documents = [];
+	for (const match of content.matchAll(/```(yaml|markdown)\n([\s\S]*?)\n```/g)) {
+		let source = match[2];
+		if (match[1] === 'markdown') {
+			const frontmatter = source.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+			if (!frontmatter) continue;
+			source = frontmatter[1];
+		} else {
+			const fencedFrontmatter = source.match(/^---\n([\s\S]*?)\n---(?:\n|$)/);
+			if (fencedFrontmatter) source = fencedFrontmatter[1];
+		}
+		try {
+			const parsed = parseYaml(source);
+			if (isRecord(parsed)) documents.push(parsed);
+		} catch {
+			// 标记契约由 readMarkedYaml 产生稳定诊断；其他示例只是不参与生成类型扫描。
+		}
+	}
+	return documents;
+}
+
+function declaredPathPlaceholders(body) {
+	return new Map(
+		[...body.matchAll(/`(\{[^{}\n]+\})`\s*(?:→|->)\s*([A-Za-z0-9_.-]+)/g)].map((match) => [
+			match[1],
+			match[2],
+		]),
+	);
+}
+
+function isNormalizableTarget(target) {
+	if (typeof target !== 'string' || !target || target !== target.normalize('NFC')) return false;
+	if (
+		target.startsWith('/') ||
+		/^[A-Za-z]:[\\/]/.test(target) ||
+		target.includes('\\') ||
+		target.includes('//') ||
+		target.includes('...') ||
+		[...target].some((character) => {
+			const code = character.charCodeAt(0);
+			return code <= 31 || code === 127;
 		})
-		.filter((value) => value && typeof value === 'object' && !Array.isArray(value));
+	)
+		return false;
+	const segments = target.split('/').filter(Boolean);
+	if (!segments.length || segments.some((segment) => segment === '.' || segment === '..'))
+		return false;
+	const withoutTokens = target.replace(/\{[^{}\n]+\}/g, '').replace(/<[^<>/\n]+>/g, '');
+	return !/[{}<>]/.test(withoutTokens);
+}
+
+function operationTargetEntries(contract) {
+	if (typeof contract?.target_path === 'string') return [['target_path', contract.target_path]];
+	if (isRecord(contract?.target_paths)) return Object.entries(contract.target_paths);
+	return [];
+}
+
+function uniqueOutputPath(body, locale) {
+	const heading = locale === 'zh' ? '### 产出路径' : '### Output Path';
+	const start = body.indexOf(heading);
+	if (start < 0) return null;
+	const match = body.slice(start + heading.length).match(/^\s*```(?:text)?\n([^\n]+)\n```/);
+	return match?.[1]?.trim() ?? null;
+}
+
+function isValidExtendedWriteContract(contract) {
+	return (
+		hasExactKeys(contract?.guard, ['artifacts', 'status_targets']) &&
+		contract.guard.artifacts === 'create_or_update_target' &&
+		contract.guard.status_targets === 'unchanged_until_validated' &&
+		hasExactKeys(contract?.manifest, ['records', 'commit_order']) &&
+		sameValue(contract.manifest.records, [
+			'artifacts',
+			'status_mutations',
+			'validation',
+			'notified',
+			'errors',
+		]) &&
+		sameValue(contract.manifest.commit_order, [
+			'guard',
+			'write',
+			'validate',
+			'memory_notify',
+			'mutate_status',
+		]) &&
+		hasExactKeys(contract?.recovery, [
+			'strategy',
+			'preserve_sources_on_failure',
+			'atomic_cross_system_guarantee',
+		]) &&
+		contract.recovery.strategy === 'resume_same_run_id' &&
+		contract.recovery.preserve_sources_on_failure === true &&
+		contract.recovery.atomic_cross_system_guarantee === false &&
+		Array.isArray(contract?.status_mutations)
+	);
 }
 
 /**
@@ -284,9 +405,45 @@ export function validateSkillContracts(root) {
 	const assetPath = (path) => relativeAssetPath(absoluteRoot, path);
 	const skillRoot = join(assets, 'skills');
 	const templateRoot = join(assets, 'templates');
-	const zhConfig = existsSync(join(assets, 'lifeos.yaml'))
-		? parseYaml(read(join(assets, 'lifeos.yaml')))
-		: { directories: {} };
+	const markdownCache = new Map();
+	const markdown = (path) => {
+		if (!markdownCache.has(path)) {
+			markdownCache.set(
+				path,
+				readMarkdown(path, () =>
+					add(
+						'invalid_markdown_frontmatter_yaml',
+						assetPath(path),
+						'Markdown Frontmatter YAML 无法解析',
+					),
+				),
+			);
+		}
+		return markdownCache.get(path);
+	};
+	const markedYamlCache = new Map();
+	const markedYaml = (path, marker) => {
+		const key = `${path}\u0000${marker}`;
+		if (!markedYamlCache.has(key)) {
+			markedYamlCache.set(
+				key,
+				readMarkedYaml(path, marker, () =>
+					add('invalid_marked_yaml', assetPath(path), `标记 YAML 契约无法解析：${marker}`),
+				),
+			);
+		}
+		return markedYamlCache.get(key);
+	};
+	const configPath = join(assets, 'lifeos.yaml');
+	let zhConfig = { directories: {} };
+	if (existsSync(configPath)) {
+		try {
+			const parsed = parseYaml(read(configPath));
+			if (isRecord(parsed)) zhConfig = parsed;
+		} catch {
+			add('invalid_lifeos_yaml', assetPath(configPath), 'lifeos.yaml 无法解析');
+		}
+	}
 	const zhDirectories = Object.values(zhConfig?.directories ?? {}).length
 		? Object.values(zhConfig.directories)
 		: [
@@ -317,6 +474,7 @@ export function validateSkillContracts(root) {
 	]);
 	const markdownFiles = walkFiles(assets).filter((path) => path.endsWith('.md'));
 	const jsonFiles = walkFiles(assets).filter((path) => path.endsWith('.json'));
+	for (const path of markdownFiles) markdown(path);
 
 	for (const path of jsonFiles) {
 		try {
@@ -356,18 +514,27 @@ export function validateSkillContracts(root) {
 	}
 
 	const schemaPath = join(assets, 'schema', 'Frontmatter_Schema.md');
-	const schema = existsSync(schemaPath)
-		? readMarkedYaml(schemaPath, 'frontmatter-contract-v1')
-		: null;
+	const schemaResult = existsSync(schemaPath)
+		? markedYaml(schemaPath, 'frontmatter-contract-v1')
+		: { found: false, invalid: false, value: null };
+	const schema = schemaResult.value;
 	const types = schema?.types && typeof schema.types === 'object' ? schema.types : {};
 
 	for (const path of walkFiles(templateRoot).filter((candidate) => candidate.endsWith('.md'))) {
-		const { frontmatter } = readMarkdown(path);
+		const { frontmatter, frontmatter_state: state } = markdown(path);
+		if (state === 'missing') {
+			add('missing_template_frontmatter', assetPath(path), '模板缺少 Frontmatter');
+			continue;
+		}
+		if (state === 'non_object') {
+			add('invalid_template_frontmatter', assetPath(path), '模板 Frontmatter 必须是对象');
+			continue;
+		}
 		if (!frontmatter) continue;
 		const type = frontmatter.type;
-		if (typeof type !== 'string' || !Object.hasOwn(types, type)) {
+		if (!schemaResult.invalid && (typeof type !== 'string' || !Object.hasOwn(types, type))) {
 			add('unknown_generated_type', assetPath(path), `模板 type 未定义于 Schema：${String(type)}`);
-		} else if (types[type]?.template !== basename(path)) {
+		} else if (!schemaResult.invalid && types[type]?.template !== basename(path)) {
 			add('unknown_generated_type', assetPath(path), `模板与 Schema 映射不一致：${type}`);
 		}
 		if (frontmatter.id !== '{{ID}}')
@@ -382,6 +549,29 @@ export function validateSkillContracts(root) {
 				assetPath(path),
 				`模板 status 不属于 ${type} 生命周期：${frontmatter.status}`,
 			);
+		}
+	}
+	for (const name of walkFiles(join(templateRoot, 'zh'))
+		.map((path) => basename(path))
+		.sort()) {
+		const zhPath = join(templateRoot, 'zh', name);
+		const enPath = join(templateRoot, 'en', name);
+		if (!existsSync(enPath)) continue;
+		const zh = markdown(zhPath);
+		const en = markdown(enPath);
+		if (!zh.frontmatter || !en.frontmatter) continue;
+		const localized = TEMPLATE_LOCALIZED_FRONTMATTER_FIELDS[name] ?? new Set();
+		for (const key of [...new Set([...Object.keys(zh.frontmatter), ...Object.keys(en.frontmatter)])]
+			.filter((candidate) => !localized.has(candidate))
+			.sort()) {
+			if (!sameValue(zh.frontmatter[key], en.frontmatter[key])) {
+				add(
+					'template_frontmatter_mismatch',
+					assetPath(enPath),
+					`中英文模板 Frontmatter 机器字段不一致：${key}`,
+					assetPath(zhPath),
+				);
+			}
 		}
 	}
 	for (const [type, definition] of Object.entries(types)) {
@@ -400,16 +590,18 @@ export function validateSkillContracts(root) {
 
 	const capabilitiesZhPath = join(skillRoot, '_shared', 'client-capabilities.zh.md');
 	const capabilitiesEnPath = join(skillRoot, '_shared', 'client-capabilities.en.md');
-	const capabilitiesZh = existsSync(capabilitiesZhPath)
-		? readMarkedYaml(capabilitiesZhPath, 'client-capabilities-v1')
-		: null;
-	const capabilitiesEn = existsSync(capabilitiesEnPath)
-		? readMarkedYaml(capabilitiesEnPath, 'client-capabilities-v1')
-		: null;
+	const capabilitiesZhResult = existsSync(capabilitiesZhPath)
+		? markedYaml(capabilitiesZhPath, 'client-capabilities-v1')
+		: { found: false, invalid: false, value: null };
+	const capabilitiesEnResult = existsSync(capabilitiesEnPath)
+		? markedYaml(capabilitiesEnPath, 'client-capabilities-v1')
+		: { found: false, invalid: false, value: null };
+	const capabilitiesZh = capabilitiesZhResult.value;
+	const capabilitiesEn = capabilitiesEnResult.value;
 	if (
-		!capabilitiesZh ||
-		!capabilitiesEn ||
-		!sameCapabilityContract(capabilitiesZh, capabilitiesEn)
+		!capabilitiesZhResult.invalid &&
+		!capabilitiesEnResult.invalid &&
+		(!capabilitiesZh || !capabilitiesEn || !sameCapabilityContract(capabilitiesZh, capabilitiesEn))
 	) {
 		add(
 			'capability_contract_mismatch',
@@ -427,7 +619,7 @@ export function validateSkillContracts(root) {
 	for (const path of walkFiles(skillRoot).filter((candidate) =>
 		/\/SKILL\.(zh|en)\.md$/.test(candidate),
 	)) {
-		const { frontmatter, body } = readMarkdown(path);
+		const { frontmatter, body } = markdown(path);
 		if (!frontmatter) continue;
 		const dependencies =
 			frontmatter.dependencies && typeof frontmatter.dependencies === 'object'
@@ -507,17 +699,30 @@ export function validateSkillContracts(root) {
 				}
 			}
 		}
-		for (const document of yamlFences(body)) {
-			if (typeof document.type !== 'string' || typeof document.status !== 'string') continue;
-			if (
-				!Array.isArray(types[document.type]?.statuses) ||
-				!types[document.type].statuses.includes(document.status)
-			) {
-				add(
-					'invalid_lifecycle_transition',
-					assetPath(path),
-					`非法状态：${document.type} / ${document.status}`,
-				);
+	}
+	if (!schemaResult.invalid) {
+		for (const path of walkFiles(skillRoot).filter((candidate) => candidate.endsWith('.md'))) {
+			for (const document of structuredGeneratedDocuments(read(path))) {
+				if (typeof document.type !== 'string') continue;
+				if (!Object.hasOwn(types, document.type)) {
+					add(
+						'unknown_generated_type',
+						assetPath(path),
+						`结构化生成 type 未定义于 Schema：${document.type}`,
+					);
+					continue;
+				}
+				if (
+					typeof document.status === 'string' &&
+					(!Array.isArray(types[document.type]?.statuses) ||
+						!types[document.type].statuses.includes(document.status))
+				) {
+					add(
+						'invalid_lifecycle_transition',
+						assetPath(path),
+						`非法状态：${document.type} / ${document.status}`,
+					);
+				}
 			}
 		}
 	}
@@ -530,15 +735,30 @@ export function validateSkillContracts(root) {
 			if (content.includes(directory))
 				add('hardcoded_logical_path', assetPath(path), `不得写死默认逻辑目录：${directory}`);
 		}
+		for (const token of ['{资源目录}', '{resources directory}']) {
+			const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			const pattern = new RegExp(`${escaped}/(?!\\{)([^/\\s\`|)\\]\\}]+)`, 'g');
+			const fixedChildren = new Set([...content.matchAll(pattern)].map((match) => match[1]));
+			for (const child of fixedChildren) {
+				add(
+					'hardcoded_logical_path',
+					assetPath(path),
+					`逻辑资源目录后不得使用固定子目录：${child}`,
+				);
+			}
+		}
 	}
 
 	const safetyContracts = [];
 	const safetyValid = [];
 	for (const locale of ['zh', 'en']) {
 		const path = join(skillRoot, '_shared', `operation-safety.${locale}.md`);
-		const contract = existsSync(path) ? readMarkedYaml(path, 'operation-safety-v1') : null;
-		const valid = isValidOperationSafetyContract(contract);
-		if (!valid) {
+		const result = existsSync(path)
+			? markedYaml(path, 'operation-safety-v1')
+			: { found: false, invalid: false, value: null };
+		const contract = result.value;
+		const valid = !result.invalid && isValidOperationSafetyContract(contract);
+		if (!result.invalid && !valid) {
 			add('invalid_operation_safety_contract', assetPath(path), '操作安全机器契约字段或值非法');
 		}
 		safetyContracts.push(contract);
@@ -562,7 +782,7 @@ export function validateSkillContracts(root) {
 		for (const locale of ['zh', 'en']) {
 			const path = join(skillRoot, skill, `SKILL.${locale}.md`);
 			if (!existsSync(path)) continue;
-			const { frontmatter } = readMarkdown(path);
+			const { frontmatter, body } = markdown(path);
 			const protocols = frontmatter?.dependencies?.protocols ?? [];
 			if (!protocols.length)
 				add(
@@ -570,13 +790,75 @@ export function validateSkillContracts(root) {
 					assetPath(path),
 					'修改型技能必须在 Frontmatter protocols 声明 operation-safety',
 				);
-			const operation = readMarkedYaml(path, 'operation-safety-v1');
-			if (!operation || operation.safety_protocol !== 'operation-safety-v1')
+			const operationResult = markedYaml(path, 'operation-safety-v1');
+			const operation = operationResult.value;
+			if (
+				!operationResult.invalid &&
+				(!operation || operation.safety_protocol !== 'operation-safety-v1')
+			)
 				add(
 					'missing_operation_safety_reference',
 					assetPath(path),
 					'修改型技能必须结构化引用 operation-safety-v1',
 				);
+			if (!operation || operationResult.invalid) continue;
+			if (
+				operation.contract_version !== 1 ||
+				operation.operation !== skill ||
+				typeof operation.run_id !== 'string' ||
+				!operation.run_id.startsWith(`stable(${skill},`) ||
+				!sameValue(operation.decision, ['create', 'merge', 'resume', 'skip', 'replace'])
+			) {
+				add(
+					'invalid_skill_operation_contract',
+					assetPath(path),
+					'技能级操作契约的版本、操作名、run_id 或 decision 非法',
+				);
+			}
+			if (skill === 'archive') {
+				if (
+					!isRecord(operation.target_paths) ||
+					!hasExactKeys(operation.target_paths, ARCHIVE_TARGET_KEYS) ||
+					Object.hasOwn(operation, 'target_path')
+				) {
+					add(
+						'invalid_archive_target_map',
+						assetPath(path),
+						'Archive 必须完整声明 project-file、project-directory、draft、plan、diary 目标映射',
+					);
+					continue;
+				}
+			}
+			if (EXTENDED_WRITE_SKILLS.has(skill) && !isValidExtendedWriteContract(operation)) {
+				add(
+					'invalid_skill_operation_contract',
+					assetPath(path),
+					'修改型技能必须声明 guard、manifest、recovery 与状态变更边界',
+				);
+			}
+			const declared = declaredPathPlaceholders(body);
+			for (const [, target] of operationTargetEntries(operation)) {
+				if (typeof target !== 'string') {
+					add('invalid_operation_target', assetPath(path), `操作目标无法归一化：${String(target)}`);
+					continue;
+				}
+				if (!isNormalizableTarget(target))
+					add('invalid_operation_target', assetPath(path), `操作目标无法归一化：${target}`);
+				for (const placeholder of new Set(target.match(/\{[^{}\n]+\}/g) ?? [])) {
+					if (!declared.has(placeholder))
+						add(
+							'undeclared_operation_placeholder',
+							assetPath(path),
+							`操作目标使用未声明的逻辑占位符：${placeholder}`,
+						);
+				}
+			}
+			if (skill === 'translate') {
+				const documented = uniqueOutputPath(body, locale);
+				if (typeof operation.target_path !== 'string' || operation.target_path !== documented) {
+					add('operation_target_mismatch', assetPath(path), '机器目标与正文唯一产出路径不一致');
+				}
+			}
 		}
 	}
 

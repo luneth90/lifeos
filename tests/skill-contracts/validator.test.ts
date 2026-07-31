@@ -60,6 +60,25 @@ describe('技能契约校验器', () => {
 		}
 	}
 
+	async function expectExactMutatedAssetsDiagnostics(
+		mutate: (write: (relativePath: string, transform: (content: string) => string) => void) => void,
+		expected: Array<{ code: string; path: string; related_path?: string; message: string }>,
+	): Promise<void> {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-contract-exact-'));
+		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
+		try {
+			const write = (relativePath: string, transform: (content: string) => string) => {
+				const path = join(root, relativePath);
+				writeFileSync(path, transform(readFileSync(path, 'utf8')));
+			};
+			mutate(write);
+			const { validateSkillContracts } = await loadValidator();
+			expect(validateSkillContracts(root).diagnostics).toEqual(expected);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	}
+
 	it.each([
 		[
 			'中文物理路径',
@@ -167,6 +186,298 @@ describe('技能契约校验器', () => {
 		],
 	])('拒绝%s', async (_name, mutate, expected) => {
 		await expectMutatedAssetsDiagnostic(mutate, expected);
+	});
+
+	it.each([
+		['默认物理子目录', 'Books'],
+		['未配置固定子目录', 'Courses'],
+	])('拒绝逻辑资源目录后的%s：%s', async (_name, child) => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write(
+					'assets/skills/read-pdf/SKILL.en.md',
+					(content) => `${content}\n{resources directory}/${child}/leak.pdf\n`,
+				),
+			[
+				{
+					code: 'hardcoded_logical_path',
+					path: 'assets/skills/read-pdf/SKILL.en.md',
+					message: `逻辑资源目录后不得使用固定子目录：${child}`,
+				},
+			],
+		);
+	});
+
+	it.each([
+		[
+			'机器目标使用未声明逻辑占位符',
+			(write) =>
+				write('assets/skills/translate/SKILL.en.md', (content) =>
+					content.replace(
+						'target_path: "{resources directory}/{translations subdirectory}/<book-name>/<chapter-name>.md"',
+						'target_path: "{knowledge directory}/<book-name>/<chapter-name>.md"',
+					),
+				),
+			[
+				{
+					code: 'operation_target_mismatch',
+					path: 'assets/skills/translate/SKILL.en.md',
+					message: '机器目标与正文唯一产出路径不一致',
+				},
+				{
+					code: 'undeclared_operation_placeholder',
+					path: 'assets/skills/translate/SKILL.en.md',
+					message: '操作目标使用未声明的逻辑占位符：{knowledge directory}',
+				},
+			],
+		],
+		[
+			'机器目标不可归一化',
+			(write) =>
+				write('assets/skills/translate/SKILL.en.md', (content) =>
+					content.replace(
+						'target_path: "{resources directory}/{translations subdirectory}/<book-name>/<chapter-name>.md"',
+						'target_path: "../{resources directory}/{translations subdirectory}/<book-name>/<chapter-name>.md"',
+					),
+				),
+			[
+				{
+					code: 'invalid_operation_target',
+					path: 'assets/skills/translate/SKILL.en.md',
+					message:
+						'操作目标无法归一化：../{resources directory}/{translations subdirectory}/<book-name>/<chapter-name>.md',
+				},
+				{
+					code: 'operation_target_mismatch',
+					path: 'assets/skills/translate/SKILL.en.md',
+					message: '机器目标与正文唯一产出路径不一致',
+				},
+			],
+		],
+		[
+			'机器目标与唯一正文输出漂移',
+			(write) =>
+				write('assets/skills/translate/SKILL.en.md', (content) =>
+					content.replace(
+						'target_path: "{resources directory}/{translations subdirectory}/<book-name>/<chapter-name>.md"',
+						'target_path: "{resources directory}/{translations subdirectory}/<book-name>/wrong.md"',
+					),
+				),
+			[
+				{
+					code: 'operation_target_mismatch',
+					path: 'assets/skills/translate/SKILL.en.md',
+					message: '机器目标与正文唯一产出路径不一致',
+				},
+			],
+		],
+	] as const)('拒绝%s', async (_name, mutate, expected) => {
+		await expectExactMutatedAssetsDiagnostics(mutate, [...expected]);
+	});
+
+	it('拒绝 Archive 退回未声明占位符和省略号的共同错误目标', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/skills/archive/SKILL.en.md', (content) =>
+					content.replace(
+						/target_paths:\n(?: {2}.*\n){5}/,
+						'target_path: "{system directory}/{archive subdirectory}/..."\n',
+					),
+				),
+			[
+				{
+					code: 'invalid_archive_target_map',
+					path: 'assets/skills/archive/SKILL.en.md',
+					message:
+						'Archive 必须完整声明 project-file、project-directory、draft、plan、diary 目标映射',
+				},
+			],
+		);
+	});
+
+	it.each(['project', 'knowledge', 'brainstorm'])('拒绝 %s 缺少操作安全协议依赖', async (skill) => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write(`assets/skills/${skill}/SKILL.en.md`, (content) =>
+					content.replace('  protocols:\n    - path: ../_shared/operation-safety.md\n', ''),
+				),
+			[
+				{
+					code: 'missing_operation_safety_reference',
+					path: `assets/skills/${skill}/SKILL.en.md`,
+					message: '修改型技能必须在 Frontmatter protocols 声明 operation-safety',
+				},
+			],
+		);
+	});
+
+	it.each(['project', 'knowledge', 'brainstorm'])(
+		'拒绝 %s 缺少技能级操作安全机器块',
+		async (skill) => {
+			await expectExactMutatedAssetsDiagnostics(
+				(write) =>
+					write(`assets/skills/${skill}/SKILL.en.md`, (content) =>
+						content.replace(/\n<!-- operation-safety-v1 -->\n```yaml\n[\s\S]*?\n```\n?$/, '\n'),
+					),
+				[
+					{
+						code: 'missing_operation_safety_reference',
+						path: `assets/skills/${skill}/SKILL.en.md`,
+						message: '修改型技能必须结构化引用 operation-safety-v1',
+					},
+				],
+			);
+		},
+	);
+
+	it.each([
+		['project-doc', 'assets/skills/project/references/execution-agent-prompt.en.md'],
+		['system', 'assets/skills/digest/references/setup-guide.en.md'],
+		['revise-record', 'assets/templates/en/Revise_Template.md'],
+	])('扫描无状态或模板生成类型 %s', async (type, expectedPath) => {
+		await expectMutatedAssetsDiagnostic(
+			(write) =>
+				write('assets/schema/Frontmatter_Schema.md', (content) =>
+					content.replace(
+						new RegExp(`  ${type}:\\n    statuses: \\[[^\\n]*\\]\\n    template: [^\\n]+\\n`),
+						'',
+					),
+				),
+			{ code: 'unknown_generated_type', path: expectedPath },
+		);
+	});
+
+	it('拒绝引用文件中未知的结构化生成类型，但忽略自然语言 type 字样', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write(
+					'assets/skills/project/references/execution-agent-prompt.en.md',
+					(content) =>
+						`${content}\nA prose mention such as type: conversational is not a generated document.\n\n\`\`\`markdown\n---\ntype: ghost-generated\ntitle: Test\n---\n\`\`\`\n`,
+				),
+			[
+				{
+					code: 'unknown_generated_type',
+					path: 'assets/skills/project/references/execution-agent-prompt.en.md',
+					message: '结构化生成 type 未定义于 Schema：ghost-generated',
+				},
+			],
+		);
+	});
+
+	it('拒绝英文 Project 模板 category 固定化，且只报告字段级差异', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/templates/en/Project_Template.md', (content) =>
+					content.replace('category: "{{CATEGORY}}"', 'category: learning'),
+				),
+			[
+				{
+					code: 'template_frontmatter_mismatch',
+					path: 'assets/templates/en/Project_Template.md',
+					related_path: 'assets/templates/zh/Project_Template.md',
+					message: '中英文模板 Frontmatter 机器字段不一致：category',
+				},
+			],
+		);
+	});
+
+	it('拒绝英文 Project 模板缺失 Frontmatter，且不产生双语泛化噪声', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/templates/en/Project_Template.md', (content) =>
+					content.replace(/^---\n[\s\S]*?\n---\n/, ''),
+				),
+			[
+				{
+					code: 'missing_template_frontmatter',
+					path: 'assets/templates/en/Project_Template.md',
+					message: '模板缺少 Frontmatter',
+				},
+			],
+		);
+	});
+
+	it('拒绝模板 Frontmatter 为非对象值', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/templates/en/Project_Template.md', (content) =>
+					content.replace(/^---\n[\s\S]*?\n---\n/, '---\ninvalid\n---\n'),
+				),
+			[
+				{
+					code: 'invalid_template_frontmatter',
+					path: 'assets/templates/en/Project_Template.md',
+					message: '模板 Frontmatter 必须是对象',
+				},
+			],
+		);
+	});
+
+	it.each([
+		[
+			'Markdown Frontmatter',
+			'assets/templates/en/Project_Template.md',
+			(content: string) => content.replace('tags: [project]', 'tags: [project'),
+			{
+				code: 'invalid_markdown_frontmatter_yaml',
+				path: 'assets/templates/en/Project_Template.md',
+				message: 'Markdown Frontmatter YAML 无法解析',
+			},
+		],
+		[
+			'marked YAML',
+			'assets/skills/_shared/operation-safety.en.md',
+			(content: string) =>
+				content.replace(
+					'decision: [create, merge, resume, skip, replace]',
+					'decision: [create, merge',
+				),
+			{
+				code: 'invalid_marked_yaml',
+				path: 'assets/skills/_shared/operation-safety.en.md',
+				message: '标记 YAML 契约无法解析：operation-safety-v1',
+			},
+		],
+		[
+			'lifeos.yaml',
+			'assets/lifeos.yaml',
+			(content: string) => content.replace('directories:', 'directories: ['),
+			{
+				code: 'invalid_lifeos_yaml',
+				path: 'assets/lifeos.yaml',
+				message: 'lifeos.yaml 无法解析',
+			},
+		],
+	] as const)('非法 %s 返回稳定结构化诊断且不抛异常', async (_name, path, transform, expected) => {
+		await expectExactMutatedAssetsDiagnostics((write) => write(path, transform), [expected]);
+	});
+
+	it('CLI 对非法 YAML 输出稳定 JSON 而不是解析堆栈', () => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-contract-yaml-cli-'));
+		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
+		try {
+			const path = join(root, 'assets/skills/_shared/operation-safety.en.md');
+			writeFileSync(
+				path,
+				readFileSync(path, 'utf8').replace(
+					'decision: [create, merge, resume, skip, replace]',
+					'decision: [create, merge',
+				),
+			);
+			const result = spawnSync(process.execPath, [scriptPath, root], { encoding: 'utf8' });
+			expect(result.status).toBe(1);
+			expect(result.stdout).toBe('');
+			expect(result.stderr.trim().split('\n').map(JSON.parse)).toEqual([
+				{
+					code: 'invalid_marked_yaml',
+					path: 'assets/skills/_shared/operation-safety.en.md',
+					message: '标记 YAML 契约无法解析：operation-safety-v1',
+				},
+			]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	it.each([

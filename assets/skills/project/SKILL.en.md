@@ -9,6 +9,8 @@ dependencies:
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
     - path: "{system directory}/{schema subdirectory}/Execution_Manifest_Schema.json"
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [spawn_agent, ask_user, execute_command, move_with_link_update]
   agents:
     - path: references/planning-agent-prompt.md
@@ -44,6 +46,8 @@ Do not pass unresolved scopes, and never expand an empty scope list into a full-
 > - `{drafts directory}` → directories.drafts
 > - `{projects directory}` → directories.projects
 > - `{resources directory}` → directories.resources
+> - `{books subdirectory}` → subdirectories.resources.books
+> - `{literature subdirectory}` → subdirectories.resources.literature
 > - `{plans directory}` → directories.plans
 > - `{system directory}` → directories.system
 > - `{templates subdirectory}` → subdirectories.system.templates
@@ -232,3 +236,39 @@ Rules:
 - `project_slug` must be ASCII only
 - Only capture durable project motivation that will affect future tradeoffs
 - The project must already have its final stable `id`; write nothing when no stable motivation exists
+
+## Operation Safety Contract
+
+Read `_shared/operation-safety.md`. Create a separate guard for the plan, main project, and each supporting
+document after preflight. The Execution Manifest records artifacts, validations, notifications, and proposed
+status mutations. Keep source drafts and the plan unchanged until every artifact has been reread, validated,
+and notified; recover failures with the same `run_id`. This protocol defines commit ordering and does not claim
+cross-system atomicity across file writes, index notifications, and status updates.
+
+<!-- operation-safety-v1 -->
+```yaml
+contract_version: 1
+safety_protocol: operation-safety-v1
+operation: project
+run_id: stable(project, normalized-input, plan_revision, confirmed_hash)
+target_paths:
+  plan: "{plans directory}/Plan_YYYY-MM-DD_Project_<ProjectName>.md"
+  main-project: "{projects directory}/<ProjectName>.md"
+  development-main-project: "{projects directory}/<ProjectName>/<ProjectName>.md"
+  project-doc: "{projects directory}/<ProjectName>/Docs/<DocumentName>.md"
+decision: [create, merge, resume, skip, replace]
+status_mutations:
+  - plan:pending->active->done|failed|cancelled
+  - source-draft:pending->done(after-validation)
+  - project:create-active
+guard:
+  artifacts: create_or_update_target
+  status_targets: unchanged_until_validated
+manifest:
+  records: [artifacts, status_mutations, validation, notified, errors]
+  commit_order: [guard, write, validate, memory_notify, mutate_status]
+recovery:
+  strategy: resume_same_run_id
+  preserve_sources_on_failure: true
+  atomic_cross_system_guarantee: false
+```

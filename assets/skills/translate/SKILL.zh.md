@@ -126,7 +126,7 @@ memory_context(
 ### 产出路径
 
 ```
-{资源目录}/{翻译子目录}/{书名}/{章节名}.md
+{资源目录}/{翻译子目录}/<书名>/<章节名>.md
 ```
 
 示例：`{资源目录}/{翻译子目录}/VGT/第9章_Sylow定理.md`
@@ -211,7 +211,7 @@ contract_version: 1
 safety_protocol: operation-safety-v1
 operation: translate
 run_id: stable(translate, source-pdf, chapter-range, extraction-hash)
-target_path: "{知识目录}/<chapter>/翻译_<chapter>.md"
+target_path: "{资源目录}/{翻译子目录}/<书名>/<章节名>.md"
 decision: [create, merge, resume, skip, replace]
 on_draft: resume
 replace_requires: explicit_user_request
