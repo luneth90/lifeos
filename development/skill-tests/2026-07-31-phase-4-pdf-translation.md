@@ -127,3 +127,20 @@ python3 assets/skills/read-pdf/scripts/read_pdf.py /tmp/lifeos-phase4-formula-im
 ```
 
 - 结论：图像公式形成有序 `image` block，页面保持 `partial`；中英 Read PDF 与 Translate 都要求调用 `inspect_image`，按 block 顺序合并结果后才可改为 `complete`。翻译模板将数学原文与译注分区，译注不得改写原书定义或符号。
+
+## 修复轮次一补充证据
+
+### 离散请求、部分页与安全渲染目录
+
+真实 PyMuPDF 夹具测试向脚本传入 `1,3`，输出为：
+
+```json
+{"requested_range":{"start":1,"end":3},"requested_pages":[1,3],"pages":[{"pdf_page_index":1},{"pdf_page_index":3}]}
+```
+
+因此包络范围不再被误作连续请求。位图公式的非 `--skip-render` 路径输出
+`partial_pages: 1`、有序 `text/image/text` blocks 和实际保留的 `rendered_images` 路径。
+
+同一真实脚本测试还以已存在的 `blocked-output-images/user-note.txt` 和目录型输出路径触发写包失败：
+脚本为本次调用创建唯一 `blocked-output-images-*` 临时目录后清理它，既有用户文件仍存在。参数缺失、
+非法 `--dpi` 和未知参数均返回非零退出码及 `{"error":{"code":"INVALID_ARGUMENT","message":"..."}}`。

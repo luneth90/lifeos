@@ -3,7 +3,7 @@
 	"$id": "https://lifeos.dev/schema/pdf-extraction-v1.json",
 	"title": "LifeOS PDF Extraction Package",
 	"type": "object",
-	"required": ["schema_version", "source", "extractor", "requested_range", "pages", "summary"],
+	"required": ["schema_version", "source", "extractor", "requested_range", "requested_pages", "pages", "summary"],
 	"properties": {
 		"schema_version": { "const": 1 },
 		"source": {
@@ -34,6 +34,12 @@
 				"end": { "type": "integer", "minimum": 1 }
 			},
 			"additionalProperties": false
+		},
+		"requested_pages": {
+			"type": "array",
+			"minItems": 1,
+			"uniqueItems": true,
+			"items": { "type": "integer", "minimum": 1 }
 		},
 		"pages": {
 			"type": "array",
@@ -66,10 +72,11 @@
 		},
 		"summary": {
 			"type": "object",
-			"required": ["complete_pages", "needs_ocr_pages", "failed_pages"],
+			"required": ["complete_pages", "needs_ocr_pages", "partial_pages", "failed_pages"],
 			"properties": {
 				"complete_pages": { "type": "integer", "minimum": 0 },
 				"needs_ocr_pages": { "type": "integer", "minimum": 0 },
+				"partial_pages": { "type": "integer", "minimum": 0 },
 				"failed_pages": { "type": "integer", "minimum": 0 }
 			},
 			"additionalProperties": false

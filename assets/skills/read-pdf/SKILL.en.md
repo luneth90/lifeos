@@ -78,6 +78,8 @@ Script responsibilities:
 
 Read `pages[*].pdf_page_index` as the one-based physical PDF sequence. A `null`
 `printed_page_label` means unknown; never infer a printed book page from the physical sequence.
+`requested_pages` is the unique, ascending exact selection. `requested_range` is only its min/max envelope;
+never treat an unlisted page inside that envelope as requested or complete.
 
 For every page, inspect:
 
@@ -156,8 +158,9 @@ Merge all extracted results into structured JSON and write to a temporary file:
 ```jsonc
 {
   "schema_version": 1,
+  "requested_pages": [245],
   "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "blocks": []}],
-  "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "failed_pages": 0}
+  "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "partial_pages": 0, "failed_pages": 0}
 }
 ```
 

@@ -38,8 +38,15 @@ class ReadPdfError(Exception):
         self.code = code
 
 
+class JsonArgumentParser(argparse.ArgumentParser):
+    """将 argparse 的用户输入错误交给统一 JSON 错误出口。"""
+
+    def error(self, message: str) -> None:
+        raise ReadPdfError("INVALID_ARGUMENT", message)
+
+
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser = JsonArgumentParser(
         description="按页码范围或章节名提取 PDF 内容，并输出 JSON 文件。"
     )
     parser.add_argument("pdf_path", help="PDF 路径，支持 Vault 相对路径或绝对路径")
@@ -226,6 +233,13 @@ def render_pages(
     return target_dir, images
 
 
+def resolve_images_dir(output_path: Path, raw_images_dir: Optional[str]) -> Tuple[Path, bool]:
+    """显式目录归用户所有；自动目录只能由本次调用创建和清理。"""
+    if raw_images_dir:
+        return Path(raw_images_dir).resolve(), False
+    return Path(tempfile.mkdtemp(prefix=f"{output_path.stem}-images-", dir=str(output_path.parent))), True
+
+
 def source_metadata(resolved_pdf_path: Path, page_count: int) -> Dict[str, Any]:
     stat = resolved_pdf_path.stat()
     return {
@@ -329,6 +343,7 @@ def build_result(
     summary = {
         "complete_pages": sum(page["status"] == "complete" for page in extracted_pages),
         "needs_ocr_pages": sum(page["status"] == "needs_ocr" for page in extracted_pages),
+        "partial_pages": sum(page["status"] == "partial" for page in extracted_pages),
         "failed_pages": sum(page["status"] == "failed" for page in extracted_pages),
     }
     result: Dict[str, Any] = {
@@ -336,6 +351,7 @@ def build_result(
         "source": source,
         "extractor": {"name": "lifeos-read-pdf", "version": "1"},
         "requested_range": {"start": min(pages), "end": max(pages)},
+        "requested_pages": list(pages),
         "pages": list(extracted_pages),
         "summary": summary,
     }
@@ -355,14 +371,13 @@ def ensure_page_limit(pages: Sequence[int], max_pages: int, force_large_range: b
 
 
 def main() -> int:
-    args = parse_args()
-    if not args.target and not args.list_toc:
-        print(json.dumps({"error": {"code": "TARGET_REQUIRED", "message": "缺少 target"}}, ensure_ascii=False), file=sys.stderr)
-        return 2
-
     generated_images_dir: Optional[Path] = None
+    owns_generated_images_dir = False
     package_written = False
     try:
+        args = parse_args()
+        if not args.target and not args.list_toc:
+            raise ReadPdfError("TARGET_REQUIRED", "缺少 target")
         resolved_pdf_path = resolve_pdf_path(args.pdf_path, Path.cwd())
         with fitz.open(str(resolved_pdf_path)) as doc:
             if args.list_toc:
@@ -384,12 +399,8 @@ def main() -> int:
 
             images: List[Dict[str, Any]] = []
             if not args.skip_render:
-                images_dir = (
-                    Path(args.images_dir).resolve()
-                    if args.images_dir
-                    else output_path.with_name(f"{output_path.stem}-images")
-                )
-                generated_images_dir = images_dir
+                images_dir, owns_generated_images_dir = resolve_images_dir(output_path, args.images_dir)
+                generated_images_dir = images_dir if owns_generated_images_dir else None
                 _, images = render_pages(doc, pages, args.dpi, images_dir)
 
             result = build_result(source, pages, extracted_pages, images)
@@ -405,16 +416,17 @@ def main() -> int:
             f"共处理 {len(result['pages'])} 页，"
             f"完整 {result['summary']['complete_pages']} 页，"
             f"待 OCR {result['summary']['needs_ocr_pages']} 页，"
+            f"部分 {result['summary']['partial_pages']} 页，"
             f"失败 {result['summary']['failed_pages']} 页。"
         )
         return 0
     except ReadPdfError as exc:
-        if generated_images_dir and not args.images_dir and not package_written:
+        if generated_images_dir and owns_generated_images_dir and not package_written:
             shutil.rmtree(generated_images_dir, ignore_errors=True)
         print(json.dumps({"error": {"code": exc.code, "message": str(exc)}}, ensure_ascii=False), file=sys.stderr)
         return 2
     except Exception as exc:  # pragma: no cover
-        if generated_images_dir and not args.images_dir and not package_written:
+        if generated_images_dir and owns_generated_images_dir and not package_written:
             shutil.rmtree(generated_images_dir, ignore_errors=True)
         print(json.dumps({"error": {"code": "UNEXPECTED_ERROR", "message": str(exc)}}, ensure_ascii=False), file=sys.stderr)
         return 1

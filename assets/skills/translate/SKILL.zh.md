@@ -90,6 +90,7 @@ memory_context(
 再尝试 `py -3`。只有 Python 2 或无法解析时明确失败；不得把 `python` 当作唯一命令。
 
 - 读取版本化提取包的 `pages`、`blocks`、`status`、`coverage` 与 `errors`；不得读取已废弃的 `full_text`
+- `requested_pages` 是完整性、页码映射与 `PDF_PAGE_RANGE` 的唯一范围依据；不得把 `requested_range` 包络内未请求的页写入翻译或 completeness
 - 同时记录 `pdf_page_index`（物理 PDF 页序）与 `printed_page_label`（书本印刷页码）；后者为 `null` 时写“未知”，不得猜测
 - 对 `needs_ocr`、`partial`、`failed` 页，或含 `image` block 的页面调用 `inspect_image`；将结果按 `block.order` 合并，并重新计算页级 coverage 和状态
 - 任一请求页仍为 `needs_ocr`、`partial` 或 `failed` 时，翻译笔记必须保持 `status: draft`，写入实际 completeness 和缺页；只有全部页 `complete` 才能更新为 `complete`
@@ -99,7 +100,8 @@ memory_context(
 基于提取的原文，按小节组织翻译产出。
 
 在生成前必须读取 `{系统目录}/{模板子目录}/Translation_Template.md`，并替换全部必填占位符：
-`TITLE`、`DATE`、`SOURCE`、`PROJECT`、`PDF_PAGE_RANGE`、`COMPLETENESS`、`DOMAIN`、`ID`。
+`TITLE`、`DATE`、`SOURCE`、`PROJECT`、`PDF_PAGE_RANGE`、`PDF_PAGE_LABELS`、`COMPLETENESS`、`DOMAIN`、`ID`。
+`PDF_PAGE_LABELS` 必须按 `requested_pages` 顺序从 `printed_page_label` 生成；`null` 写为“未知”。
 项目不存在时将 `project` 写为空字符串；不得保留模板占位符。
 
 ### 翻译原则

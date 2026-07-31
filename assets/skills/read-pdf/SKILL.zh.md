@@ -81,6 +81,8 @@ pip install PyMuPDF Pillow
 
 读取 JSON 后，以 `pages[*].pdf_page_index` 作为从 1 开始的物理 PDF 页序；
 `printed_page_label` 为 `null` 时表示未知，禁止从物理页序推断书本印刷页码。
+`requested_pages` 是唯一、升序的精确请求页集合；`requested_range` 只是其最小/最大页的包络，
+不得把包络内未列出的页当作已请求或已完成。
 
 每页必须检查：
 
@@ -161,8 +163,9 @@ for page in package["pages"]:
 ```jsonc
 {
   "schema_version": 1,
+  "requested_pages": [245],
   "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "blocks": []}],
-  "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "failed_pages": 0}
+  "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "partial_pages": 0, "failed_pages": 0}
 }
 ```
 

@@ -89,6 +89,7 @@ Invoke `/read-pdf` to extract the specified chapter's text:
 Resolve the interpreter through `execute_command`: use Python 3 recorded during initialization first, then try `python3`, and on Windows try `py -3`. Explicitly fail when only Python 2 exists or no interpreter resolves; never treat `python` as the only command.
 
 - Read `pages`, `blocks`, `status`, `coverage`, and `errors` from the versioned extraction package; do not read the retired `full_text` field
+- `requested_pages` is the sole basis for completeness, page mapping, and `PDF_PAGE_RANGE`; do not include unrequested pages inside the `requested_range` envelope
 - Record both `pdf_page_index` (physical PDF sequence) and `printed_page_label` (book page label); write “unknown” for a `null` label and never guess it
 - Call `inspect_image` for `needs_ocr`, `partial`, or `failed` pages, or pages with an `image` block; merge results by `block.order` and recompute page coverage and status
 - If any requested page remains `needs_ocr`, `partial`, or `failed`, keep the note at `status: draft`, record actual completeness and missing pages, and update to `complete` only when every page is `complete`
@@ -98,7 +99,8 @@ Resolve the interpreter through `execute_command`: use Python 3 recorded during 
 Based on the extracted text, organize the translation by section.
 
 Before generating, read `{system directory}/{templates subdirectory}/Translation_Template.md` and replace every
-required placeholder: `TITLE`, `DATE`, `SOURCE`, `PROJECT`, `PDF_PAGE_RANGE`, `COMPLETENESS`, `DOMAIN`, and `ID`.
+required placeholder: `TITLE`, `DATE`, `SOURCE`, `PROJECT`, `PDF_PAGE_RANGE`, `PDF_PAGE_LABELS`, `COMPLETENESS`, `DOMAIN`, and `ID`.
+Build `PDF_PAGE_LABELS` in `requested_pages` order from `printed_page_label`; write `unknown` for `null`.
 When no project exists, write an empty `project` value; do not retain any template placeholder.
 
 ### Translation Principles
