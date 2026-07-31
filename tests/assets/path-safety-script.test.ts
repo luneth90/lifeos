@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, renameSync, symlinkSync } from 'node:fs';
+import {
+	mkdirSync,
+	mkdtempSync,
+	realpathSync,
+	renameSync,
+	symlinkSync,
+	unlinkSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -103,6 +111,7 @@ describe('路径安全脚本', () => {
 					realpath: join(realpathSync(root), 'parent'),
 				},
 			],
+			leaf: { state: 'missing' },
 		});
 		expect(revalidateVaultPathGuard(guard)).toBe(join(realpathSync(root), 'parent', 'report.md'));
 
@@ -128,5 +137,113 @@ describe('路径安全脚本', () => {
 		const guard = createVaultPathGuard(root, 'parent/report.md');
 		guard.components[1] = 'other.md';
 		expect(() => revalidateVaultPathGuard(guard)).toThrow('path_guard_changed');
+	});
+
+	it('创建 guard 时拒绝已是符号链接的叶节点', async () => {
+		const { createVaultPathGuard } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		const outside = mkdtempSync(join(tmpdir(), 'lifeos-outside-'));
+		mkdirSync(join(root, 'parent'));
+		writeFileSync(join(outside, 'escaped.md'), 'outside', 'utf8');
+		symlinkSync(join(outside, 'escaped.md'), join(root, 'parent', 'report.md'));
+		expect(() => createVaultPathGuard(root, 'parent/report.md')).toThrow('vault_escape');
+	});
+
+	it('预期不存在的叶节点在复核前变成符号链接时失败', async () => {
+		const { createVaultPathGuard, revalidateVaultPathGuard } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		const outside = mkdtempSync(join(tmpdir(), 'lifeos-outside-'));
+		mkdirSync(join(root, 'parent'));
+		writeFileSync(join(outside, 'escaped.md'), 'outside', 'utf8');
+		const guard = createVaultPathGuard(root, 'parent/report.md');
+		symlinkSync(join(outside, 'escaped.md'), join(root, 'parent', 'report.md'));
+		expect(() => revalidateVaultPathGuard(guard)).toThrow('path_guard_changed');
+	});
+
+	it('已有普通文件被同路径新 inode 替换后复核失败', async () => {
+		const { createVaultPathGuard, revalidateVaultPathGuard } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		mkdirSync(join(root, 'parent'));
+		writeFileSync(join(root, 'parent', 'report.md'), 'before', 'utf8');
+		const guard = createVaultPathGuard(root, 'parent/report.md');
+		expect(guard.leaf).toMatchObject({
+			state: 'existing',
+			type: 'file',
+			dev: expect.any(String),
+			ino: expect.any(String),
+			realpath: join(realpathSync(root), 'parent', 'report.md'),
+		});
+		renameSync(join(root, 'parent', 'report.md'), join(root, 'parent', 'report-original.md'));
+		writeFileSync(join(root, 'parent', 'report.md'), 'after', 'utf8');
+		expect(() => revalidateVaultPathGuard(guard)).toThrow('path_guard_changed');
+	});
+
+	it('已有普通文件被删除后复核失败', async () => {
+		const { createVaultPathGuard, revalidateVaultPathGuard } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		mkdirSync(join(root, 'parent'));
+		writeFileSync(join(root, 'parent', 'report.md'), 'before', 'utf8');
+		const guard = createVaultPathGuard(root, 'parent/report.md');
+		unlinkSync(join(root, 'parent', 'report.md'));
+		expect(() => revalidateVaultPathGuard(guard)).toThrow('path_guard_changed');
+	});
+
+	it('显式推进新目标 missing 到 existing 后可继续复核', async () => {
+		const { advanceVaultPathGuard, createVaultPathGuard, revalidateVaultPathGuard } =
+			await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		mkdirSync(join(root, 'parent'));
+		const guard = createVaultPathGuard(root, 'parent/report.md');
+		writeFileSync(join(root, 'parent', 'report.md'), 'created', 'utf8');
+		expect(() => revalidateVaultPathGuard(guard)).toThrow('path_guard_changed');
+		const advanced = advanceVaultPathGuard(guard, {
+			before: 'missing',
+			after: 'existing',
+		});
+		expect(advanced.leaf).toMatchObject({ state: 'existing', type: 'file' });
+		expect(revalidateVaultPathGuard(advanced)).toBe(
+			join(realpathSync(root), 'parent', 'report.md'),
+		);
+	});
+
+	it('显式推进移动源和目标的 existing/missing 状态后可继续复核', async () => {
+		const { advanceVaultPathGuard, createVaultPathGuard, revalidateVaultPathGuard } =
+			await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		mkdirSync(join(root, 'source'));
+		mkdirSync(join(root, 'target'));
+		writeFileSync(join(root, 'source', 'report.md'), 'source', 'utf8');
+		const sourceGuard = createVaultPathGuard(root, 'source/report.md');
+		const targetGuard = createVaultPathGuard(root, 'target/report.md');
+		renameSync(join(root, 'source', 'report.md'), join(root, 'target', 'report.md'));
+		const advancedSource = advanceVaultPathGuard(sourceGuard, {
+			before: 'existing',
+			after: 'missing',
+		});
+		const advancedTarget = advanceVaultPathGuard(targetGuard, {
+			before: 'missing',
+			after: 'existing',
+		});
+		expect(revalidateVaultPathGuard(advancedSource)).toBe(
+			join(realpathSync(root), 'source', 'report.md'),
+		);
+		expect(revalidateVaultPathGuard(advancedTarget)).toBe(
+			join(realpathSync(root), 'target', 'report.md'),
+		);
+	});
+
+	it('创建后叶节点被替换为 Vault 外符号链接时推进失败', async () => {
+		const { advanceVaultPathGuard, createVaultPathGuard } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		const outside = mkdtempSync(join(tmpdir(), 'lifeos-outside-'));
+		mkdirSync(join(root, 'parent'));
+		writeFileSync(join(outside, 'escaped.md'), 'outside', 'utf8');
+		const guard = createVaultPathGuard(root, 'parent/report.md');
+		writeFileSync(join(root, 'parent', 'report.md'), 'created', 'utf8');
+		unlinkSync(join(root, 'parent', 'report.md'));
+		symlinkSync(join(outside, 'escaped.md'), join(root, 'parent', 'report.md'));
+		expect(() => advanceVaultPathGuard(guard, { before: 'missing', after: 'existing' })).toThrow(
+			'path_guard_changed',
+		);
 	});
 });

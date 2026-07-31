@@ -11,6 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, sep } from 'node:path';
 import {
+	advanceVaultPathGuard,
 	createVaultPathGuard,
 	revalidateVaultPathGuard,
 } from '../../../assets/skills/_shared/scripts/path_safety.mjs';
@@ -29,7 +30,12 @@ function writeGuarded(root, targetPath, value) {
 	const guard = createVaultPathGuard(root, targetPath);
 	revalidateVaultPathGuard(guard);
 	writeFileSync(absolute, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-	revalidateVaultPathGuard(guard);
+	if (guard.leaf.state === 'missing') {
+		const advanced = advanceVaultPathGuard(guard, { before: 'missing', after: 'existing' });
+		revalidateVaultPathGuard(advanced);
+	} else {
+		revalidateVaultPathGuard(guard);
+	}
 }
 
 function writeManifest(root, skill, value) {

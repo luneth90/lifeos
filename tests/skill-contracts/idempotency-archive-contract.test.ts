@@ -24,6 +24,14 @@ const sharedContract = {
 		resolve_scope: 'preflight_only',
 		create: 'createVaultPathGuard',
 		revalidate: 'revalidateVaultPathGuard',
+		advance: 'advanceVaultPathGuard',
+		captures: ['ancestors', 'leaf_state', 'leaf_type', 'leaf_dev', 'leaf_ino', 'leaf_realpath'],
+		default_leaf_expectation: 'unchanged',
+		transitions: {
+			create_or_update_target: { before: 'missing', after: 'existing' },
+			move_source: { before: 'existing', after: 'missing' },
+			move_target: { before: 'missing', after: 'existing' },
+		},
 		required_at: ['before_operation', 'after_operation'],
 		on_change: 'abort_and_record',
 		atomic_race_guarantee: false,
@@ -116,6 +124,11 @@ describe('阶段五幂等与归档契约', () => {
 	it('Archive 机器契约固定通知、索引确认和遗忘顺序', () => {
 		const extra = {
 			transaction_steps: ['move', 'memory_notify', 'confirm_index', 'memory_forget'],
+			move_guards: {
+				source: { before: 'existing', after: 'missing' },
+				target: { before: 'missing', after: 'existing' },
+				advance: 'advanceVaultPathGuard',
+			},
 			notify: {
 				contract_version: 2,
 				file_path: '<new-vault-relative-path>',

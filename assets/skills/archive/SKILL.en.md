@@ -142,7 +142,7 @@ After scanning, process every eligible item in the execution list by default:
      obsidian move path="source-path/project-folder" to="target-directory/2026/"
      ```
    - Ensure the destination parent directory exists before each operation (`mkdir -p`)
-   - Create path guards for source and destination and revalidate immediately before and after the actual move; on change, abort and record manifest and recovery actions
+   - Create separate source and destination guards: before the move, the source must be `existing` and the destination must be `missing`, and both guards must be revalidated immediately before the actual move. Immediately afterward, use `advanceVaultPathGuard` to advance the source from `existing` to `missing` and the destination from `missing` to `existing`, then retain only the returned guards. Abort and record manifest and recovery actions if any state, identity, symlink, or Vault-boundary check fails
    - **Degradation:** If `obsidian` CLI is unavailable, stop and present the impact of missing link updates. Use a recorded move only after explicit user acceptance of degradation; never silently fall back to bare `mv`.
    - **Never** simulate a move by writing a new file and then deleting the original file
    - Folder projects must be moved as whole directories, not rebuilt file-by-file
@@ -336,6 +336,10 @@ run_id: stable(archive, candidate-paths, archive-date)
 target_path: "{system directory}/{archive subdirectory}/..."
 decision: [create, merge, resume, skip, replace]
 transaction_steps: [move, memory_notify, confirm_index, memory_forget]
+move_guards:
+  source: { before: existing, after: missing }
+  target: { before: missing, after: existing }
+  advance: advanceVaultPathGuard
 notify:
   contract_version: 2
   file_path: <new-vault-relative-path>

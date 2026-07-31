@@ -142,7 +142,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
      obsidian move path="源路径/项目文件夹" to="目标目录/2026/"
      ```
    - 每次操作前先确保目标父目录已存在（`mkdir -p`）
-   - 为源和目标建立路径 guard，并在实际移动紧邻的前后复核；变化时中止、写 manifest 与恢复动作
+   - 为源和目标分别建立路径 guard：移动前源必须为 `existing`、目标必须为 `missing`，并在实际移动紧邻之前复核两者。移动后立即以 `advanceVaultPathGuard` 将源从 `existing` 推进为 `missing`、目标从 `missing` 推进为 `existing`，后续只使用返回的新 guard；任一状态、身份、符号链接或 Vault 边界校验失败时中止，并写入 manifest 与恢复动作
    - **降级：** 若 `obsidian` CLI 不可用，先停止并呈现链接更新不可用的影响；只有用户明确接受降级后，才可使用受记录的移动方案。不得静默回退到裸 `mv`。
    - **严禁**通过"写入新文件，再删除原文件"的方式模拟移动
    - 文件夹项目必须整体移动目录，不要逐文件复制重建
@@ -336,6 +336,10 @@ run_id: stable(archive, candidate-paths, archive-date)
 target_path: "{系统目录}/{归档子目录}/..."
 decision: [create, merge, resume, skip, replace]
 transaction_steps: [move, memory_notify, confirm_index, memory_forget]
+move_guards:
+  source: { before: existing, after: missing }
+  target: { before: missing, after: existing }
+  advance: advanceVaultPathGuard
 notify:
   contract_version: 2
   file_path: <new-vault-relative-path>

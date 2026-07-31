@@ -132,6 +132,41 @@ function identity(path) {
 	return { dev: String(info.dev), ino: String(info.ino), realpath: realpathSync(path) };
 }
 
+function leafType(info) {
+	if (info.isFile()) return 'file';
+	if (info.isDirectory()) return 'directory';
+	if (info.isBlockDevice()) return 'block_device';
+	if (info.isCharacterDevice()) return 'character_device';
+	if (info.isFIFO()) return 'fifo';
+	if (info.isSocket()) return 'socket';
+	return 'other';
+}
+
+function captureLeaf(root, candidate, errorFactory) {
+	let info;
+	try {
+		info = lstatSync(candidate);
+	} catch (error) {
+		if (error?.code === 'ENOENT') return { state: 'missing' };
+		throw errorFactory();
+	}
+	if (info.isSymbolicLink()) throw errorFactory();
+	let actualPath;
+	try {
+		actualPath = realpathSync(candidate);
+		assertInside(root, actualPath);
+	} catch {
+		throw errorFactory();
+	}
+	return {
+		state: 'existing',
+		type: leafType(info),
+		dev: String(info.dev),
+		ino: String(info.ino),
+		realpath: actualPath,
+	};
+}
+
 function captureParentAncestors(root, components, errorFactory) {
 	const snapshots = [{ relative_path: '.', ...identity(root) }];
 	let current = root;
@@ -157,19 +192,42 @@ export function createVaultPathGuard(vaultRoot, relativePath) {
 		components,
 		candidate_path: candidate,
 		ancestors: captureParentAncestors(root, components, vaultEscape),
+		leaf: captureLeaf(root, candidate, vaultEscape),
 	};
 }
 
-export function revalidateVaultPathGuard(guard) {
+function validLeafSnapshot(leaf) {
+	if (leaf?.state === 'missing') return true;
+	return (
+		leaf?.state === 'existing' &&
+		typeof leaf.type === 'string' &&
+		typeof leaf.dev === 'string' &&
+		typeof leaf.ino === 'string' &&
+		typeof leaf.realpath === 'string'
+	);
+}
+
+function sameLeafSnapshot(before, after) {
+	if (before.state !== after.state) return false;
+	if (before.state === 'missing') return true;
+	return (
+		before.type === after.type &&
+		before.dev === after.dev &&
+		before.ino === after.ino &&
+		before.realpath === after.realpath
+	);
+}
+
+function validateGuardBase(guard) {
 	if (
 		!guard ||
 		guard.contract_version !== 1 ||
 		!Array.isArray(guard.components) ||
-		!Array.isArray(guard.ancestors)
+		!Array.isArray(guard.ancestors) ||
+		!validLeafSnapshot(guard.leaf)
 	) {
 		throw guardChanged();
 	}
-	let current;
 	try {
 		const root = realpathSync(guard.vault_realpath);
 		if (root !== guard.vault_realpath || lstatSync(root).isSymbolicLink()) throw guardChanged();
@@ -179,7 +237,7 @@ export function revalidateVaultPathGuard(guard) {
 		if (guard.relative_path !== guard.components.join('/') || guard.candidate_path !== candidate)
 			throw guardChanged();
 		assertInside(root, candidate);
-		current = captureParentAncestors(root, guard.components, guardChanged);
+		const current = captureParentAncestors(root, guard.components, guardChanged);
 		if (current.length !== guard.ancestors.length) throw guardChanged();
 		for (let index = 0; index < current.length; index += 1) {
 			const before = guard.ancestors[index];
@@ -193,7 +251,40 @@ export function revalidateVaultPathGuard(guard) {
 				throw guardChanged();
 			}
 		}
+		return { root, candidate };
+	} catch (error) {
+		if (error?.code === 'path_guard_changed') throw error;
+		throw guardChanged();
+	}
+}
+
+export function revalidateVaultPathGuard(guard) {
+	const { root, candidate } = validateGuardBase(guard);
+	try {
+		const currentLeaf = captureLeaf(root, candidate, guardChanged);
+		if (!sameLeafSnapshot(guard.leaf, currentLeaf)) throw guardChanged();
 		return candidate;
+	} catch (error) {
+		if (error?.code === 'path_guard_changed') throw error;
+		throw guardChanged();
+	}
+}
+
+export function advanceVaultPathGuard(guard, transition) {
+	const { root, candidate } = validateGuardBase(guard);
+	try {
+		const allowed =
+			(transition?.before === 'missing' && transition?.after === 'existing') ||
+			(transition?.before === 'existing' && transition?.after === 'missing');
+		if (!allowed || guard.leaf.state !== transition.before) throw guardChanged();
+		const leaf = captureLeaf(root, candidate, guardChanged);
+		if (leaf.state !== transition.after) throw guardChanged();
+		return {
+			...guard,
+			components: [...guard.components],
+			ancestors: guard.ancestors.map((ancestor) => ({ ...ancestor })),
+			leaf,
+		};
 	} catch (error) {
 		if (error?.code === 'path_guard_changed') throw error;
 		throw guardChanged();
@@ -220,6 +311,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 		else if (input.mode === 'guard')
 			result = { guard: createVaultPathGuard(input.vault_root, input.relative_path) };
 		else if (input.mode === 'revalidate') result = { path: revalidateVaultPathGuard(input.guard) };
+		else if (input.mode === 'advance')
+			result = { guard: advanceVaultPathGuard(input.guard, input.transition) };
 		else result = { path: resolveVaultPath(input.vault_root, input.relative_path) };
 		process.stdout.write(`${JSON.stringify(result)}\n`);
 	} catch (error) {
