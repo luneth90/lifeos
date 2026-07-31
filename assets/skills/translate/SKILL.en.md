@@ -3,7 +3,8 @@ name: translate
 description: "Translate English PDF chapters into Chinese companion notes and update the linked learning project's progress."
 version: 2.1.2
 dependencies:
-  templates: []
+  templates:
+    - path: "{system directory}/{templates subdirectory}/Translation_Template.md"
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
@@ -34,6 +35,7 @@ Do not pass unresolved scopes, and never expand an empty scope list into a full-
 > - `{projects directory}` → directories.projects
 > - `{system directory}` → directories.system
 > - `{schema subdirectory}` → subdirectories.system.schema
+> - `{templates subdirectory}` → subdirectories.system.templates
 
 You are LifeOS's translation assistant, converting English PDF chapters into fluent Chinese reading notes. Your output is a companion document that users open alongside PDF++ for side-by-side reading — not word-by-word machine translation, but naturally flowing Chinese organized by section.
 
@@ -90,6 +92,10 @@ python .agents/skills/read-pdf/scripts/read_pdf.py <PDF_path> <page_range_or_cha
 
 Based on the extracted text, organize the translation by section.
 
+Before generating, read `{system directory}/{templates subdirectory}/Translation_Template.md` and replace every
+required placeholder: `TITLE`, `DATE`, `SOURCE`, `PROJECT`, `PDF_PAGE_RANGE`, `COMPLETENESS`, `DOMAIN`, and `ID`.
+When no project exists, write an empty `project` value; do not retain any template placeholder.
+
 ### Translation Principles
 
 1. **Organize by section**: Preserve the book's section heading structure (translate title, keep English in parentheses)
@@ -104,37 +110,9 @@ Based on the extracted text, organize the translation by section.
 
 ### Output Format
 
-```markdown
----
-title: "{chapter name} Chinese Companion"
-type: translation
-created: "YYYY-MM-DD"
-source: "[[PDF filename]]"
-pages: "start-end"
-project: "[[project name]]"
-domain: "[[domain]]"
-status: done
-tags: [translation]
-aliases: []
----
-
-# {Chinese chapter name}（{English chapter name}）
-
-> This is a Chinese reading companion for [[PDF filename]] Chapter X, for side-by-side use with PDF++.
-> Page range: p.XX — p.XX
-
-## X.1 Section Title（Original Section Title）
-
-Translated content...
-
-> 📖 See original p.XX Figure X.X
-
-Translated content continues...
-
-## X.2 Section Title（Original Section Title）
-
-Translated content...
-```
+The report structure, frontmatter, and completeness record come only from `Translation_Template.md`. Put the
+translation in its Chinese companion section and keep the initial status as `draft`; do not maintain another
+embedded frontmatter or report heading.
 
 ### Output Path
 
@@ -144,7 +122,11 @@ Translated content...
 
 Example: `70_资源/翻译/VGT/第9章_Sylow定理.md`
 
-## Step 4: File Change Notification
+## Step 4: Completeness Validation and File Change Notification
+
+After writing, reread the note and confirm the requested page range is fully covered, every required placeholder
+is replaced, the frontmatter is complete, and the project update (when applicable) is complete. On failure, keep
+`status: draft` and record the gap; update to `status: complete` only after validation passes.
 
 ```
 memory_notify(contract_version=2, file_path="<translation file relative path>")
@@ -159,7 +141,7 @@ memory_notify(contract_version=2, file_path="<translation file relative path>")
 3. Fill in the wikilink for the generated translation:
    - Format: `[[{translations subdirectory}/{book name}/{chapter name}|✓]]`
    - Chapters without translations keep `—`
-4. Notify file change:
+4. Notify the file change, then perform the Step 4 completeness validation after the update:
 ```
 memory_notify(contract_version=2, file_path="<project file relative path>")
 ```

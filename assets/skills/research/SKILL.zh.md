@@ -3,7 +3,8 @@ name: research
 description: '深入研究主题或草稿时使用；产出研究计划与结构化研究报告。'
 version: 2.1.2
 dependencies:
-  templates: []
+  templates:
+    - path: "{系统目录}/{模板子目录}/Research_Template.md"
   prompts:
     - path: "{系统目录}/提示词/"
       scan: true
@@ -56,7 +57,7 @@ memory_context(
 | ------- | ------------------ | ---------------------------------------- |
 | Phase 1 | Planning Agent     | 扫描本地草稿、制定研究策略、生成计划文件 |
 | Phase 2 | Orchestrator（你） | 展示研究计划、等待用户确认               |
-| Phase 3 | Execution Agent    | 按计划执行研究、撰写报告，并将计划更新为 `status: done` |
+| Phase 3 | Execution Agent    | 按计划执行研究、从模板撰写报告，并将计划更新为 `status: done` |
 
 # 你作为 Orchestrator 的职责
 
@@ -73,7 +74,7 @@ memory_context(
 
 # 阶段1：启动 Planning Agent
 
-按 `_shared/dual-agent-orchestrator.md` 阶段1 执行。占位符 `[user's input]` 替换为用户实际输入。
+按 `_shared/dual-agent-orchestrator.md` 阶段1 执行。将 `{{RESEARCH_INPUT}}` 替换为用户实际输入。
 
 Planning Agent 返回后，在**对话中直接**通知用户：
 
@@ -87,7 +88,7 @@ Planning Agent 返回后，在**对话中直接**通知用户：
 
 # 阶段2：启动 Execution Agent（用户确认后）
 
-按 `_shared/dual-agent-orchestrator.md` 阶段3 执行。
+按 `_shared/dual-agent-orchestrator.md` 阶段3 执行，并向 Execution Agent 传入已确认的 `{{RESEARCH_INPUT}}` 与计划文件路径。
 
 # 边界情况
 

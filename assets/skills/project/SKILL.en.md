@@ -103,7 +103,7 @@ project frontmatter as `id`. Only a `type: project` main note receives a project
    changing a version must never regenerate it. An existing ID must be a YAML string without
    leading or trailing whitespace, match `^[a-z0-9][a-z0-9._-]*$`, and not be a placeholder.
    Otherwise, stop and ask the user to run `lifeos upgrade` or repair the existing project first.
-2. A newly generated project ID must match `^[a-z0-9]+(?:-[a-z0-9]+)*$`. It must not contain `{{...}}` or
+2. A newly generated project ID must match `^[a-z0-9]+(?:-[a-z0-9]+)*$`. It must not contain a double-brace placeholder or
    `placeholder`, and must not equal `Project_Template` or `project-template`.
 3. Build the base slug by trying the project title and then the main project filename without its
    extension. Apply NFKD normalization, remove combining marks, lowercase it, replace runs of
@@ -133,7 +133,7 @@ scan all current projects, confirming that:
   string without leading or trailing whitespace
 - `id` exactly matches the plan's final `project_id`; new projects satisfy strict kebab-case while
   existing projects satisfy the portable-ID format
-- the frontmatter `id` contains no `{{ID}}`, `Project_Template`, or other placeholder value
+- the frontmatter `id` contains no ID-template placeholder, `Project_Template`, or other placeholder value
 - no other `type: project` in the Vault uses the same `id`
 
 If any check fails, require the Execution Agent to repair the result and rerun acceptance. Until all
@@ -156,7 +156,7 @@ Even if only the main project file is created initially with no supporting docum
 
 # Phase 1: Launch Planning Agent
 
-Follow `_shared/dual-agent-orchestrator.md` Phase 1. Replace the placeholder `[user's idea/draft note]` with the user's actual input.
+Follow `_shared/dual-agent-orchestrator.md` Phase 1. Replace `{{PROJECT_INPUT}}` with the user's actual input.
 
 After the Planning Agent returns, notify the user in English:
 
@@ -174,7 +174,7 @@ Please review and modify as needed. Once confirmed, I'll generate the formal pro
 
 # Phase 2: Launch Execution Agent (After User Confirmation)
 
-Follow `_shared/dual-agent-orchestrator.md` Phase 3.
+Follow `_shared/dual-agent-orchestrator.md` Phase 3 and pass the confirmed `{{PROJECT_INPUT}}` with the plan path to the Execution Agent.
 
 After the Execution Agent returns, first perform the post-creation acceptance under "Stable Project ID".
 For `development` projects, then verify the "Development Project Directory Convention". Require

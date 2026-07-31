@@ -3,9 +3,11 @@ title: "{{TOPIC}}"
 type: research
 domain: "{{DOMAIN}}"
 created: "{{DATE}}"
+status: draft
+completeness: "{{COMPLETENESS}}"
 tags: [research]
 aliases: []
-id: Research_Template
+id: "{{ID}}"
 ---
 # {{TOPIC}}
 

@@ -128,30 +128,12 @@ memory_query(contract_version=2, query="<问题关键词>", limit=5)
 
 **草稿内容：**
 
-```markdown
----
-created: "YYYY-MM-DD"
-status: pending
-domain: <从回答内容推断的领域>
-source: ask
-tags: [ask]
----
-
-## 问题
-
-<用户的原始问题>
-
-## 回答
-
-<本次回答的完整内容>
-
-## 相关笔记
-
-- <回答中引用的 Vault 笔记 wikilinks，若无则省略此节>
-```
+先读取 `{系统目录}/{模板子目录}/Draft_Template.md`，实例化模板并替换全部必填占位符
+`TITLE`、`DATE`、`DOMAIN`、`ID`；随后将本次问题与回答写入模板正文，并追加
+`source: ask`。不得手写另一套 inline Frontmatter 或保留模板占位符。
 
 **规则：**
-- `status: pending` — 进入草稿生命周期，可被 `/research`、`/knowledge`、`/project` 后续消化
+- `status: pending` — 来自模板，进入草稿生命周期，可被 `/research`、`/knowledge`、`/project` 后续消化
 - `domain` 从回答内容推断（如 Math、AI、History 等），无法确定时写 `general`
 - `source: ask` 标记来源技能，便于追溯
 - 主题关键词从问题中提取，保持简短（2-4 个字）

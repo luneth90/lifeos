@@ -6,7 +6,7 @@ domain: "{{DOMAIN}}"
 status: pending
 tags: [draft]
 aliases: []
-id: Draft_Template
+id: "{{ID}}"
 ---
 ## {{TITLE}}
 

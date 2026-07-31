@@ -10,7 +10,7 @@ score:
 result:
 tags: [revise-record]
 aliases: []
-id: Review_Template
+id: "{{ID}}"
 ---
 ## 复习题目
 

@@ -10,11 +10,11 @@ parent_skill: research
 > 路径逻辑名（如 `{研究目录}`、`{草稿目录}`）由 Orchestrator 从 `lifeos.yaml` 解析后注入上下文。映射关系见主技能文件 `research/SKILL.md` 的配置块。
 
 > 此文件由 `research/SKILL.md` 的 Orchestrator 在用户确认计划后读取，作为 Task 工具的完整 prompt 使用。
-> 使用时将 `[plan file path]` 替换为实际计划文件路径。
+> 使用时将 `{{RESEARCH_INPUT}}` 替换为已确认的研究输入，并从中读取实际计划文件路径。
 
 ---
 
-执行以下路径的研究计划：[计划文件路径]
+执行以下研究输入对应的已确认计划：{{RESEARCH_INPUT}}
 
 ## 步骤一：完整读取计划文件
 
@@ -49,55 +49,14 @@ parent_skill: research
 
 ## 步骤四：撰写研究报告
 
-路径：`{研究目录}/Domain/Topic/Topic.md`
+路径由已确认计划指定；报告文件必须位于 `{研究目录}/` 下。
 
 > ⚠️ `/research` 绝不在 `{知识目录}/` 下创建文件，那是 `/knowledge` 的职责。
 
-**默认章节结构**（当 persona 适用模式不是`全量应用`时使用）：
-
-```markdown
----
-title: "Topic"
-type: research
-created: "YYYY-MM-DD"
-domain: "[[DomainName]]"
-status: complete
-tags: [research]
-aliases: []
----
-
-## 概述
-
-（结论先行：这是什么、解决什么问题、适用边界）
-
-## 来自草稿的核心洞察
-
-（仅当有本地草稿时：整合用户原始想法，标注来源文件。无草稿时省略此节）
-
-## 核心概念框架
-
-（术语表/模块/组件/关键机制；可用 [[wikilink]] 指向已有知识/概念，但不新建 {知识目录} 文件）
-
-## 工作原理
-
-（必要的技术细节）
-
-## 示例
-
-（代码/场景/操作步骤，如适用）
-
-## 最佳实践
-
-## 常见陷阱
-
-## 相关阅读
-
-（仅 wikilinks：Vault 内相关研究/项目/知识笔记）
-
-## 参考资源
-
-（外部链接：docs/articles/videos）
-```
+在撰写前必须读取 `{系统目录}/{模板子目录}/Research_Template.md`，并替换全部必填占位符：
+`TOPIC`、`DOMAIN`、`DATE`、`COMPLETENESS`、`ID`。报告结构只来自该模板；persona 只能补充
+分析内容，不能维护第二套 Frontmatter 或章节标题。先以 `status: draft` 落盘，完整性校验通过后才更新为
+`status: complete`。
 
 **数学公式格式规范**（当 Math persona 激活，或报告含公式时）：
 
@@ -131,6 +90,11 @@ aliases: []
 - 研究报告完成后，将计划文件的 frontmatter 中 `status` 更新为 `done`
 - 保持计划文件仍位于 `{计划目录}/`
 - 后续由 `/archive` 统一将 `status: done` 的计划移动到 `{系统目录}/{归档计划子目录}/`
+
+## 步骤十：研究完整性校验
+
+回读研究报告，确认模板的全部必填占位符均已替换、报告内容满足计划范围且 Frontmatter 完整。未通过时
+保持 `status: draft` 并报告缺口；通过后才更新为 `status: complete`。
 
 ---
 

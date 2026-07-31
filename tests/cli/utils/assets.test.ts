@@ -70,17 +70,17 @@ describe('assetsDir', () => {
 
 		expect(schema).toContain('- `plan`');
 		expect(schema).toContain('### plan');
-		expect(schema).toContain('- `active` / `done` / `archived`');
+		expect(schema).toContain('- `pending` / `active` / `done` / `failed` / `cancelled`');
 
 		expect(lifecycleZh).toContain('## 计划生命周期');
-		expect(lifecycleZh).toContain('active ──/project,/research──→ done ──/archive──→ archived');
+		expect(lifecycleZh).toContain('pending ──确认后──→ active ──执行完成──→ done ──/archive──→ 保留 done');
 		expect(lifecycleEn).toContain('## Plan Lifecycle');
-		expect(lifecycleEn).toContain('active ──/project,/research──→ done ──/archive──→ archived');
+		expect(lifecycleEn).toContain('pending ──confirmation──→ active ──execution completes──→ done ──/archive──→ keep done');
 
 		expect(projectPlanZh).toContain('type: plan');
-		expect(projectPlanZh).toContain('status: active');
+		expect(projectPlanZh).toContain('status: pending');
 		expect(researchPlanZh).toContain('type: plan');
-		expect(researchPlanZh).toContain('status: active');
+		expect(researchPlanZh).toContain('status: pending');
 
 		expect(projectExecZh).toContain(
 			'不得修改来源草稿状态，不得把计划改为 `done`，不得写入 project scope 记忆',

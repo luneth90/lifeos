@@ -1,12 +1,12 @@
 ---
 title: "{{TITLE}}"
-type: review
-review_type: ""
-period: ""
+type: retro
+revise_type: "{{REVISE_TYPE}}"
+period: "{{PERIOD}}"
 created: "{{DATE}}"
-tags: [review]
+tags: [retro]
 aliases: []
-id: Retrospective_Template
+id: "{{ID}}"
 ---
 # {{TITLE}}
 

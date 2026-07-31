@@ -354,7 +354,9 @@ describe('项目技能稳定 ID 契约', () => {
 			);
 			expect(content, `${contract.path} 缺少与计划 ID 一致性验证`).toMatch(contract.matchesPlan);
 			expect(content, `${contract.path} 缺少占位符残留验证`).toMatch(contract.noPlaceholder);
-			expect(content, `${contract.path} 必须显式检查 ID 占位符`).toContain('{{ID}}');
+			expect(content, `${contract.path} 必须显式检查 ID 占位符`).toMatch(
+				/ID[^\n]*(?:占位符|placeholder)/i,
+			);
 			expectInOrder(content, contract.path, [
 				{ label: '创建后回读自检', pattern: contract.reread },
 				{ label: '向 Orchestrator 返回结果', pattern: contract.returnResult },

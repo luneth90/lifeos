@@ -3,7 +3,7 @@
 调用 `/project` 的规划阶段，将头脑风暴摘要作为项目种子：
 
 1. 读取 `project/references/planning-agent-prompt.md` 的完整内容作为 Task prompt
-2. 将 Phase 2 总结全文注入到 prompt 中 `[用户输入的想法或草稿]` 占位符处
+2. 将 Phase 2 总结全文注入到 prompt 中 `{{PROJECT_INPUT}}` 占位符处
 3. 在计划文件的「来源草稿」字段填写"头脑风暴会话（YYYY-MM-DD）"
 4. Planning Agent 只完成规划阶段，返回计划文件路径
 
@@ -30,17 +30,8 @@ Orchestrator 收到计划文件路径后，告知用户：
    - 使用模板：`{系统目录}/{模板子目录}/Wiki_Template.md`
    - 每篇百科只记一个概念
 
-3. **Frontmatter**：
-
-```yaml
----
-type: wiki
-created: "YYYY-MM-DD"
-domain: "[[Domain]]"
-tags: [brainstorm]
-source: brainstorming-session
----
-```
+3. **模板实例化**：先读取 `{系统目录}/{模板子目录}/Wiki_Template.md`，替换 `TITLE`、`DATE`、
+   `DOMAIN`、`ID` 等全部必填占位符，再追加 `source: brainstorming-session`；不得手写 inline Frontmatter。
 
 4. **链接一切**：
    - 概念间互加 wikilinks
@@ -53,6 +44,7 @@ source: brainstorming-session
 1. 在 `{草稿目录}/` 创建草稿笔记：
    - 路径：`{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md`
    - 使用模板：`{系统目录}/{模板子目录}/Draft_Template.md`
+   - 替换 `TITLE`、`DATE`、`DOMAIN`、`ID` 等全部必填占位符
 
 2. 写入内容：
    - Phase 2 头脑风暴总结全文

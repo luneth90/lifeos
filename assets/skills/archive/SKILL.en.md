@@ -167,7 +167,7 @@ After scanning, process every eligible item in the execution list by default:
 
 3. **After the move, update frontmatter in place at the destination:**
    - Add `archived: "YYYY-MM-DD"`
-   - Update `status: done` to `status: archived` (unified for drafts, projects, and plans)
+   - Preserve the business terminal state (`status: done` for drafts, projects, and plans)
    - Keep other fields unchanged
 
 4. **Update today's diary:**
@@ -196,8 +196,8 @@ After scanning, process every eligible item in the execution list by default:
 - Draft2.md → archived/drafts/2026/02/ (done)
 
 **Archived [N] plans to `{system directory}/{archived plans subdirectory}/`:**
-- Plan_2026-03-27_Project_LifeOS.md → archived/plans/ (status: archived)
-- Plan_2026-03-27_Research_Agents.md → archived/plans/ (status: archived)
+- Plan_2026-03-27_Project_LifeOS.md → archived/plans/ (keeps done; archival date written)
+- Plan_2026-03-27_Research_Agents.md → archived/plans/ (keeps done; archival date written)
 
 **Archived [N] diary entries to `{system directory}/{archived diary subdirectory}/YYYY/MM/`:**
 - 2026-03-18.md → archived/diary/2026/03/
@@ -228,7 +228,7 @@ After scanning, process every eligible item in the execution list by default:
 - **No simulated moves** — do not simulate a move with “write new file + delete old file”
 - **Organize by archive rule** — projects by completion year, drafts and diary entries by archival year and month, plans in `{archived plans subdirectory}`
 - **Archive all by default** — after scanning, automatically process every eligible candidate without requiring review, selection, confirmation, or a reply
-- **Update frontmatter** — write the `archived` date; for plans also set `status: archived`
+- **Update frontmatter** — write the `archived` date and preserve the business terminal state
 - **Log in diary** — append archival actions to today's diary
 
 # Edge Cases

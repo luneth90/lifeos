@@ -167,7 +167,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 3. **移动完成后，再在目标文件上原地更新 frontmatter：**
    - 新增 `archived: "YYYY-MM-DD"`
-   - 将 `status: done` 更新为 `status: archived`（草稿、项目、计划均统一处理）
+   - 保留原有业务终态（草稿、项目、计划均保持 `status: done`）
    - 其他字段保持不变
 
 4. **更新今日日记：**
@@ -196,8 +196,8 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 - 草稿2.md → 归档/草稿/2026/02/ (done)
 
 **已归档 [N] 个计划至 `{系统目录}/{归档计划子目录}/`:**
-- Plan_2026-03-27_Project_LifeOS.md → 归档/计划/（status: archived）
-- Plan_2026-03-27_Research_Agents.md → 归档/计划/（status: archived）
+- Plan_2026-03-27_Project_LifeOS.md → 归档/计划/（保留 done，已写归档日期）
+- Plan_2026-03-27_Research_Agents.md → 归档/计划/（保留 done，已写归档日期）
 
 **已归档 [N] 篇日记至 `{系统目录}/{归档日记子目录}/YYYY/MM/`:**
 - 2026-03-18.md → 归档/日记/2026/03/
@@ -228,7 +228,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 - **禁止模拟移动** — 禁止通过“写新文件 + 删除原文件”模拟移动
 - **按规则组织** — 项目按完成年，草稿和日记按归档年月，计划统一放入 `{归档计划子目录}`
 - **默认全部归档** — 扫描后自动执行全部合规候选，不要求用户审核、选择、确认或回复
-- **更新 frontmatter** — 写入 `archived` 日期；计划同步更新为 `status: archived`
+- **更新 frontmatter** — 写入 `archived` 日期，保留原有业务终态
 - **记录到日记** — 在今日日记追加归档动作
 
 # 边界情况

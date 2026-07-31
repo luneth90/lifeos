@@ -3,7 +3,8 @@ name: research
 description: "Research a topic or draft in depth, producing a research plan and structured report."
 version: 2.1.2
 dependencies:
-  templates: []
+  templates:
+    - path: "{system directory}/{templates subdirectory}/Research_Template.md"
   prompts:
     - path: "{system directory}/Prompts/"
       scan: true
@@ -56,7 +57,7 @@ Follow `_shared/dual-agent-orchestrator.md` Phase 0, with entity type `filters.t
 | ------- | ------------------ | -------------------------------------------------------- |
 | Phase 1 | Planning Agent     | Scan local drafts, formulate research strategy, generate plan file |
 | Phase 2 | Orchestrator (you) | Present the research plan and wait for user confirmation |
-| Phase 3 | Execution Agent    | Execute research per the plan, write report, and update the plan to `status: done` |
+| Phase 3 | Execution Agent    | Execute research per the plan, write the report from its template, and update the plan to `status: done` |
 
 # Your Responsibilities as Orchestrator
 
@@ -73,7 +74,7 @@ Follow the standard orchestration flow in `_shared/dual-agent-orchestrator.md`. 
 
 # Phase 1: Launch Planning Agent
 
-Follow `_shared/dual-agent-orchestrator.md` Phase 1. Replace the placeholder `[user's input]` with the user's actual input.
+Follow `_shared/dual-agent-orchestrator.md` Phase 1. Replace `{{RESEARCH_INPUT}}` with the user's actual input.
 
 After the Planning Agent returns, **directly** notify the user in the conversation:
 
@@ -87,7 +88,7 @@ If the Domain in the plan is TBD, additionally ask for the domain and write the 
 
 # Phase 2: Launch Execution Agent (After User Confirmation)
 
-Follow `_shared/dual-agent-orchestrator.md` Phase 3.
+Follow `_shared/dual-agent-orchestrator.md` Phase 3 and pass the confirmed `{{RESEARCH_INPUT}}` with the plan path to the Execution Agent.
 
 # Edge Cases
 

@@ -5,19 +5,19 @@ This document defines the state transition rules for all note types in the LifeO
 ## Draft Lifecycle
 
 ```
-pending ──/research,/project,/knowledge──→ done ──/archive──→ archived
+pending ──/research,/project,/knowledge──→ done ──/archive──→ keep done
 ```
 
 | Status | Meaning | Set by |
 |--------|---------|--------|
 | `pending` | Created by /brainstorm or /today, not yet processed | /brainstorm, /today |
 | `done` | Consumed by /research, /project, or /knowledge | /research, /project, /knowledge |
-| `archived` | Moved to archive directory by /archive | /archive |
 
 **Rules:**
 
 - /archive only archives drafts with status `done`.
 - /archive never archives `pending` drafts.
+- After moving a file, /archive only appends `archived: "YYYY-MM-DD"` and keeps `status: done`.
 
 ## Knowledge Note Lifecycle
 
@@ -42,7 +42,7 @@ draft ──/knowledge validation──→ review ──completed /revise gradin
 ## Project Lifecycle
 
 ```
-active ⇄ frozen ──→ done ──/archive──→ archived
+active ⇄ frozen ──→ done ──/archive──→ keep done
 ```
 
 | Status | Meaning | Set by |
@@ -50,31 +50,59 @@ active ⇄ frozen ──→ done ──/archive──→ archived
 | `active` | Currently being worked on | /project |
 | `frozen` | Short-term freeze — retains all data, hidden from TaskBoard focus/active-projects/revise panels | Manual |
 | `done` | Completed, ready for archival | Manual |
-| `archived` | Moved to archive directory by /archive | /archive |
 
 **Frozen rules:**
 
 - User manually sets frontmatter `status: frozen` to freeze, changes back to `status: active` to unfreeze
 - Knowledge notes linked to a frozen project (via `project` field) are hidden from the review list
 - A frozen project can transition directly to `done` or be unfrozen back to `active`
+- When archiving a `done` project, /archive only appends `archived: "YYYY-MM-DD"`.
 
 ## Plan Lifecycle
 
 ```
-active ──/project,/research──→ done ──/archive──→ archived
+pending ──confirmation──→ active ──execution completes──→ done ──/archive──→ keep done
+                             └──execution fails──→ failed
+                             └──cancelled──→ cancelled
 ```
 
 | Status | Meaning | Set by |
 |--------|---------|--------|
-| `active` | Created by /project or /research and kept in `{plans directory}/` while waiting for execution or review | /project, /research |
+| `pending` | Generated and waiting for user confirmation | /project, /research |
+| `active` | Confirmed and executing or waiting for review | /project, /research |
 | `done` | The corresponding project or research work has finished and is waiting for /archive | /project, /research |
-| `archived` | Moved into `{system directory}/{archived plans subdirectory}/` by /archive | /archive |
+| `failed` | Execution failed; failure details are retained for recovery | /project, /research |
+| `cancelled` | Cancelled by the user and not executed | User |
 
 **Rules:**
 
-- /project and /research must write `type: plan` and `status: active` when creating a plan file
+- /project and /research must write `type: plan` and `status: pending` when creating a plan file
 - /project and /research only update the plan status to `done` after execution; they do not move the plan file directly
-- /archive only archives plans with `status: done` and updates them to `archived` after moving
+- /archive only archives plans with `status: done` and appends `archived: "YYYY-MM-DD"` after moving
+
+## Research Lifecycle
+
+```
+draft ──completeness validation passes──→ complete
+```
+
+| Status | Meaning | Set by |
+|--------|---------|--------|
+| `draft` | The report is being generated or awaits completeness validation | /research |
+| `complete` | The report passed its completeness validation | /research |
+
+## Translation Lifecycle
+
+```
+draft ──completeness validation passes──→ complete
+```
+
+| Status | Meaning | Set by |
+|--------|---------|--------|
+| `draft` | The requested page range is not fully translated or validated | /translate |
+| `complete` | The requested range, frontmatter, and file notification have all been validated | /translate |
+
+**Rule:** /translate may update `draft` to `complete` only after completeness validation passes.
 
 ## Skill Participation Matrix
 
@@ -82,8 +110,9 @@ active ──/project,/research──→ done ──/archive──→ archived
 |-------|-------------------|---------------------------|---------------------|------------------|
 | /brainstorm | Creates `pending` | - | - | - |
 | /today | Creates `pending` | - | - | - |
-| /research | `pending` → `done` | - | - | Creates `active`, then updates to `done` after execution |
-| /project | `pending` → `done` | - | Creates `active` | Creates `active`, then updates to `done` after execution |
+| /research | `pending` → `done` | - | - | Creates `pending`, confirms to `active`, then updates to `done` after execution |
+| /project | `pending` → `done` | - | Creates `active` | Creates `pending`, confirms to `active`, then updates to `done` after execution |
 | /knowledge | `pending` → `done` | Creates `draft`, then sets `review` after validation | - | - |
 | /revise | - | Default `review` → `revised`; explicit later review may move `revised` → `mastered` | Updates mastery dots | - |
-| /archive | `done` → `archived` | - | `done` → `archived` | `done` → `archived` |
+| /translate | - | - | - | - |
+| /archive | Keeps `done` and writes the archival date | - | Keeps `done` and writes the archival date | Keeps `done` and writes the archival date |

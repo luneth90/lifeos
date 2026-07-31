@@ -10,11 +10,11 @@ parent_skill: project
 > 路径逻辑名（如 `{项目目录}`、`{草稿目录}`）由 Orchestrator 从 `lifeos.yaml` 解析后注入上下文。映射关系见主技能文件 `project/SKILL.md` 的配置块。
 
 > 此文件由 `project/SKILL.md` 的 Orchestrator 读取，作为 Task 工具的完整 prompt 使用。
-> 使用时将 `[用户输入的想法或草稿]` 替换为用户实际输入内容。
+> 使用时将 `{{PROJECT_INPUT}}` 替换为用户实际输入内容。
 
 ---
 
-为以下内容创建项目启动计划：[用户输入的想法或草稿]
+为以下内容创建项目启动计划：{{PROJECT_INPUT}}
 
 按以下步骤执行：
 
@@ -67,7 +67,7 @@ parent_skill: project
 ---
 title: "Plan: [项目名称]"
 type: plan
-status: active
+status: pending
 created: "YYYY-MM-DD"
 source: project
 project: "[项目名称]"
@@ -83,7 +83,7 @@ aliases: []
 - 项目类别: [learning / development / creative / general]
 - 知识领域 (Domain): [如 Math, AI 等，决定知识库子目录]
 - 项目稳定 ID: `[project-id]`
-- 主项目文件: `{项目目录}/<最终主项目路径>.md`
+- 最终主项目路径: `<最终主项目路径>`（包含一个 `.md` 后缀的 Vault 相对路径）
 - 难度: [入门 / 进阶 / 高级]（学习类必填）
 - 预估投入: [X小时/周 × Y周] 或 [总计约X小时]
 
@@ -183,7 +183,7 @@ aliases: []
 ## 步骤四：返回结果
 
 回读计划文件，确认 frontmatter 顶层 `project_id` 键只出现一次且是无首尾空格的带引号字符串：新项目符合严格
-kebab-case 格式，更新项目符合可移植 ID 格式；不得含 `{{ID}}`、`Project_Template` 或其他
+kebab-case 格式，更新项目符合可移植 ID 格式；不得含 ID 模板占位符、`Project_Template` 或其他
 占位值，并须与正文分类区一致。确认主项目路径已经固定。
 任一检查失败时先修复计划，不得返回成功。
 

@@ -5,7 +5,7 @@ created: "{{DATE}}"
 tags:
   - daily
 aliases: []
-id: Daily_Template
+id: "{{ID}}"
 ---
 # {{date:YYYY-MM-DD}}
 

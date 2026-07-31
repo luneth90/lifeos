@@ -3,7 +3,7 @@
 Invoke the `/project` planning phase, using the brainstorm summary as the project seed:
 
 1. Read the full content of `project/references/planning-agent-prompt.md` as the Task prompt
-2. Inject the full Phase 2 summary into the prompt at the `[user's idea or draft]` placeholder
+2. Inject the full Phase 2 summary into the prompt at the `{{PROJECT_INPUT}}` placeholder
 3. Fill "brainstorming session (YYYY-MM-DD)" in the plan file's "source draft" field
 4. The Planning Agent only completes the planning phase and returns the plan file path
 
@@ -30,17 +30,9 @@ Please review the plan. Once confirmed, I'll formally create the project (invoki
    - Use template: `{system directory}/{templates subdirectory}/Wiki_Template.md`
    - Each wiki note covers one concept
 
-3. **Frontmatter**:
-
-```yaml
----
-type: wiki
-created: "YYYY-MM-DD"
-domain: "[[Domain]]"
-tags: [brainstorm]
-source: brainstorming-session
----
-```
+3. **Template instantiation**: Read `{system directory}/{templates subdirectory}/Wiki_Template.md`, replace every
+   required placeholder including `TITLE`, `DATE`, `DOMAIN`, and `ID`, then append
+   `source: brainstorming-session`; do not hand-write inline frontmatter.
 
 4. **Link everything**:
    - Add wikilinks between concepts
@@ -53,6 +45,7 @@ source: brainstorming-session
 1. Create a draft note in `{drafts directory}/`:
    - Path: `{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md`
    - Use template: `{system directory}/{templates subdirectory}/Draft_Template.md`
+   - Replace every required placeholder including `TITLE`, `DATE`, `DOMAIN`, and `ID`
 
 2. Write content:
    - Full Phase 2 brainstorm summary

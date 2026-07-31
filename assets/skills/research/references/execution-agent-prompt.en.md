@@ -10,11 +10,11 @@ parent_skill: research
 > Path logical names (e.g., `{research directory}`, `{drafts directory}`) are resolved by the Orchestrator from `lifeos.yaml` and injected into context. See the main skill file `research/SKILL.md` for the mapping.
 
 > This file is read by the `research/SKILL.md` Orchestrator after the user confirms the plan, and used as the complete prompt for the Task tool.
-> Replace `[plan file path]` with the actual plan file path when using.
+> Replace `{{RESEARCH_INPUT}}` with the confirmed research input and obtain the actual plan path from it.
 
 ---
 
-Execute the research plan at the following path: [plan file path]
+Execute the confirmed plan for the following research input: {{RESEARCH_INPUT}}
 
 ## Step 1: Read the Plan File in Full
 
@@ -49,55 +49,14 @@ Pay attention to the following key fields:
 
 ## Step 4: Write the Research Report
 
-Path: `{research directory}/Domain/Topic/Topic.md`
+The confirmed plan specifies the path; the report file must remain under `{research directory}/`.
 
 > ⚠️ `/research` must never create files under `{knowledge directory}/` — that is the responsibility of `/knowledge`.
 
-**Default chapter structure** (used when persona applicability mode is not `Full apply`):
-
-```markdown
----
-title: "Topic"
-type: research
-created: "YYYY-MM-DD"
-domain: "[[DomainName]]"
-status: complete
-tags: [research]
-aliases: []
----
-
-## Overview
-
-(Conclusion first: what it is, what problem it solves, scope of applicability)
-
-## Core Insights from Drafts
-
-(Only when local drafts exist: integrate the user's original ideas, cite source files. Omit this section if no drafts)
-
-## Core Concept Framework
-
-(Glossary/modules/components/key mechanisms; may use [[wikilink]] to point to existing knowledge/concepts, but do not create new {knowledge directory} files)
-
-## How It Works
-
-(Necessary technical details)
-
-## Examples
-
-(Code/scenarios/step-by-step procedures, if applicable)
-
-## Best Practices
-
-## Common Pitfalls
-
-## Related Reading
-
-(Wikilinks only: related research/projects/knowledge notes within the Vault)
-
-## References
-
-(External links: docs/articles/videos)
-```
+Before writing, read `{system directory}/{templates subdirectory}/Research_Template.md` and replace every
+required placeholder: `TOPIC`, `DOMAIN`, `DATE`, `COMPLETENESS`, and `ID`. The report structure comes only
+from that template; a persona may enrich analysis content but must not maintain a second frontmatter or heading
+set. Write initially with `status: draft`, then update to `status: complete` only after completeness validation.
 
 **Math formula format specification** (when Math persona is active, or when the report contains formulas):
 
@@ -131,6 +90,12 @@ If `{diary directory}/YYYY-MM-DD.md` exists, append a brief research summary. Sk
 - After the research report is complete, update the plan file frontmatter `status` to `done`
 - Keep the plan file in `{plans directory}/`
 - `/archive` later moves plans with `status: done` into `{system directory}/{archived plans subdirectory}/`
+
+## Step 10: Research Completeness Validation
+
+Reread the research report and confirm every required template placeholder is replaced, the report covers the
+approved plan, and the frontmatter is complete. On failure, keep `status: draft` and report the gap; update to
+`status: complete` only when validation passes.
 
 ---
 

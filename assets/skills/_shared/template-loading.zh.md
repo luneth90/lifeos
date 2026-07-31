@@ -10,6 +10,7 @@
    - Obsidian Callouts 格式（`> [!info]`、`> [!note]` 等）
    - frontmatter 字段结构和必填字段
    - 区块标记和分隔符
+4. 生成前必须替换模板中的全部必填 `{{PLACEHOLDER}}`；不得保留占位符，也不得以固定模板 ID 落盘
 
 ## AI 指令注释处理
 
@@ -30,6 +31,7 @@
 | 复习记录 | `Revise_Template.md` |
 | 通用知识笔记 | `Knowledge_Template.md` |
 | 深度研究报告 | `Research_Template.md` |
+| 翻译对照笔记 | `Translation_Template.md` |
 | 周期复盘 | `Retrospective_Template.md` |
 
 ## 模板路径解析

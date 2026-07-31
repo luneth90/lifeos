@@ -66,7 +66,7 @@ parent_skill: research
 ---
 title: "Plan: [主题]"
 type: plan
-status: active
+status: pending
 created: "YYYY-MM-DD"
 source: research
 topic: "[主题]"

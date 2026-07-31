@@ -10,6 +10,7 @@ This protocol applies to all skills that need to read Vault template files.
    - Obsidian Callouts format (`> [!info]`, `> [!note]`, etc.)
    - Frontmatter field structure and required fields
    - Block markers and separators
+4. Before writing, replace every required `{{PLACEHOLDER}}`; never retain a placeholder or persist a fixed template ID
 
 ## AI Instruction Comment Handling
 
@@ -30,6 +31,7 @@ If a template contains AI instructions in HTML comment form (`<!-- AI instructio
 | Review record | `Revise_Template.md` |
 | General knowledge note | `Knowledge_Template.md` |
 | In-depth research report | `Research_Template.md` |
+| Translation companion note | `Translation_Template.md` |
 | Periodic retrospective | `Retrospective_Template.md` |
 
 ## Template Path Resolution

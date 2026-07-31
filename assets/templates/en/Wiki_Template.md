@@ -5,7 +5,7 @@ domain: "{{DOMAIN}}"
 created: "{{DATE}}"
 tags: [wiki]
 aliases: []
-id: Wiki_Template
+id: "{{ID}}"
 ---
 # {{TITLE}}
 

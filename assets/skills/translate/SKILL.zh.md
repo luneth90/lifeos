@@ -3,7 +3,8 @@ name: translate
 description: '翻译英文 PDF 章节时使用；生成中文对照阅读笔记并回填学习项目进度。'
 version: 2.1.2
 dependencies:
-  templates: []
+  templates:
+    - path: "{系统目录}/{模板子目录}/Translation_Template.md"
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
@@ -34,6 +35,7 @@ memory_context(
 > - `{项目目录}` → directories.projects
 > - `{系统目录}` → directories.system
 > - `{规范子目录}` → subdirectories.system.schema
+> - `{模板子目录}` → subdirectories.system.templates
 
 你是 LifeOS 的翻译助手，将英文 PDF 章节转化为流畅的中文阅读笔记。你的产出是供用户在 PDF++ 旁边打开对照阅读的辅助材料——不是逐词机翻，而是按小节组织的、自然流畅的中文表述。
 
@@ -90,6 +92,10 @@ python .agents/skills/read-pdf/scripts/read_pdf.py <PDF路径> <页码范围或�
 
 基于提取的原文，按小节组织翻译产出。
 
+在生成前必须读取 `{系统目录}/{模板子目录}/Translation_Template.md`，并替换全部必填占位符：
+`TITLE`、`DATE`、`SOURCE`、`PROJECT`、`PDF_PAGE_RANGE`、`COMPLETENESS`、`DOMAIN`、`ID`。
+项目不存在时将 `project` 写为空字符串；不得保留模板占位符。
+
 ### 翻译原则
 
 1. **按小节分段**：保持原书的小节标题结构（翻译标题，括号内保留英文原标题）
@@ -104,37 +110,8 @@ python .agents/skills/read-pdf/scripts/read_pdf.py <PDF路径> <页码范围或�
 
 ### 产出格式
 
-```markdown
----
-title: "{章节名} 中文对照"
-type: translation
-created: "YYYY-MM-DD"
-source: "[[PDF文件名]]"
-pages: "起始页-结束页"
-project: "[[项目名]]"
-domain: "[[领域]]"
-status: done
-tags: [translation]
-aliases: []
----
-
-# {章节中文名}（{章节英文名}）
-
-> 本文为 [[PDF文件名]] 第X章的中文对照阅读笔记，供在 PDF++ 旁对照使用。
-> 页码范围：p.XX — p.XX
-
-## X.1 小节标题（Original Section Title）
-
-翻译内容...
-
-> 📖 见原书 p.XX 图 X.X
-
-翻译内容继续...
-
-## X.2 小节标题（Original Section Title）
-
-翻译内容...
-```
+报告结构、Frontmatter 和完整性记录只来自 `Translation_Template.md`。将翻译内容填入「中文对照」区块，
+初始状态保持 `draft`；不得维护第二套内嵌 Frontmatter 或报告标题。
 
 ### 产出路径
 
@@ -144,7 +121,10 @@ aliases: []
 
 示例：`70_资源/翻译/VGT/第9章_Sylow定理.md`
 
-## 步骤四：文件变更通知
+## 步骤四：完整性校验与文件变更通知
+
+落盘后回读文件，确认请求页范围全部覆盖、全部必填占位符已替换、Frontmatter 完整且项目回填（如适用）
+已完成。未通过时保持 `status: draft` 并记录缺口；通过后才更新为 `status: complete`。
 
 ```
 memory_notify(contract_version=2, file_path="<翻译文件相对路径>")
@@ -169,7 +149,7 @@ memory_notify(contract_version=2, file_path="<翻译文件相对路径>")
 | 第10章 Galois理论 | ⚪ 未学 | — | — | — |
 ```
 
-4. 通知文件变更：
+4. 通知文件变更，并在回填完成后执行步骤四的完整性校验：
 ```
 memory_notify(contract_version=2, file_path="<项目文件相对路径>")
 ```

@@ -1,7 +1,7 @@
 ---
 title: "{{TITLE}}"
 type: project
-category: learning
+category: "{{CATEGORY}}"
 status: active
 domain: "{{DOMAIN}}"
 created: "{{DATE}}"

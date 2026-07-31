@@ -14,6 +14,37 @@ id: Frontmatter_Schema
 
 目标：让模板、Dataview、Agent 生成内容保持一致，减少字段漂移。
 
+<!-- frontmatter-contract-v1 -->
+```yaml
+contract_version: 1
+archive_field: archived
+types:
+  draft:
+    statuses: [pending, done]
+    template: Draft_Template.md
+  project:
+    statuses: [active, frozen, done]
+    template: Project_Template.md
+  plan:
+    statuses: [pending, active, done, failed, cancelled]
+    template: null
+  research:
+    statuses: [draft, complete]
+    template: Research_Template.md
+  translation:
+    statuses: [draft, complete]
+    template: Translation_Template.md
+  knowledge:
+    statuses: [draft, review, revised, mastered]
+    template: Knowledge_Template.md
+  revise-record:
+    statuses: [pending, graded]
+    template: Revise_Template.md
+  retro:
+    statuses: []
+    template: Retrospective_Template.md
+```
+
 ## 通用字段（建议所有笔记都尽量包含）
 
 - `title`: 字符串。建议与文件名一致或可读标题
@@ -36,6 +67,7 @@ id: Frontmatter_Schema
 - `draft`：草稿 / 想法捕获
 - `note`：日记 / 笔记
 - `research`：研究报告
+- `translation`：翻译对照笔记
 - `plan`：执行计划文件
 - `retro`：复盘
 - `system`：系统
@@ -61,11 +93,11 @@ id: Frontmatter_Schema
 
 ### research
 
-- `complete`
+- `draft` / `complete`
 
 ### plan
 
-- `active` / `done` / `archived`
+- `pending` / `active` / `done` / `failed` / `cancelled`
 
 ### revise-record
 
@@ -73,7 +105,11 @@ id: Frontmatter_Schema
 
 ### draft
 
-- `pending`（待处理）/ `done`（已处理）/ `archived`（已归档）
+- `pending`（待处理）/ `done`（已处理）
+
+### translation
+
+- `draft`（翻译尚未通过完整性校验）/ `complete`（请求范围已完整翻译）
 
 ### note
 
@@ -86,6 +122,8 @@ id: Frontmatter_Schema
 - `archived`: `"YYYY-MM-DD"`（归档日期）
 
 此字段与 `status` 独立，不改变原有 status 值。
+
+归档保留笔记原有的业务终态（例如 `done`），不得把 `status` 改写为归档状态。
 
 ## 字段说明（按 type 补充）
 

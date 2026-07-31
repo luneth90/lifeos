@@ -10,7 +10,7 @@ created: "{{DATE}}"
 status: draft
 tags: [knowledge]
 aliases: []
-id: Knowledge_Template
+id: "{{ID}}"
 ---
 # {{CHAPTER}}
 

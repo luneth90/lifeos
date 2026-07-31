@@ -10,11 +10,11 @@ parent_skill: project
 > Path logical names (e.g., `{projects directory}`, `{drafts directory}`) are resolved by the Orchestrator from `lifeos.yaml` and injected into context. See the main skill file `project/SKILL.md` for the mapping.
 
 > This file is read by the `project/SKILL.md` Orchestrator and used as the complete prompt for the Task tool.
-> Replace `[user's idea/draft note]` with the user's actual input when using.
+> Replace `{{PROJECT_INPUT}}` with the user's actual input when using.
 
 ---
 
-Create a project launch plan for the following: [user's idea/draft note]
+Create a project launch plan for the following: {{PROJECT_INPUT}}
 
 Execute the following steps:
 
@@ -72,7 +72,7 @@ Path: `{plans directory}/Plan_YYYY-MM-DD_Project_ProjectName.md`
 ---
 title: "Plan: [Project Name]"
 type: plan
-status: active
+status: pending
 created: "YYYY-MM-DD"
 source: project
 project: "[Project Name]"
@@ -88,7 +88,7 @@ aliases: []
 - Project category: [learning / development / creative / general]
 - Knowledge domain (Domain): [e.g., Math, AI — determines knowledge base subdirectory]
 - Stable project ID: `[project-id]`
-- Main project file: `{projects directory}/<final-main-project-path>.md`
+- Final main project path: `<final-main-project-path>` (a Vault-relative path with one `.md` suffix)
 - Difficulty: [Beginner / Intermediate / Advanced] (required for learning)
 - Estimated effort: [X hours/week × Y weeks] or [approx. X hours total]
 
@@ -189,7 +189,7 @@ When generating chapter structure:
 
 Reread the plan and verify that the top-level frontmatter `project_id` key occurs exactly once and is a quoted string without
 leading or trailing whitespace. A new project must satisfy strict kebab-case; an updated project
-must satisfy the portable-ID format. It must contain no `{{ID}}`, `Project_Template`, or other
+must satisfy the portable-ID format. It must contain no ID-template placeholder, `Project_Template`, or other
 placeholder and must match the classification section. Confirm that the final main project path is
 fixed. Repair the plan instead of reporting success when any check fails.
 

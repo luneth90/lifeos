@@ -102,7 +102,7 @@ memory_context(
    必须是无首尾空格的 YAML 字符串、匹配 `^[a-z0-9][a-z0-9._-]*$` 且不是占位值，
    否则先停止并提示运行 `lifeos upgrade` 或修复原项目。
 2. 新生成的项目 ID 必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，且不得包含
-   `{{...}}`、`placeholder`，也不得等于 `Project_Template` 或 `project-template`。
+   双花括号占位符、`placeholder`，也不得等于 `Project_Template` 或 `project-template`。
 3. 生成基础 slug：依次尝试项目标题、去掉扩展名的主项目文件名；执行 NFKD 规范化、
    移除组合音标、转小写、把连续非 ASCII 字母数字替换为 `-`，再移除首尾 `-`。
    某个候选为空、包含 `placeholder` 或等于 `project-template` 时继续尝试下一来源。
@@ -124,7 +124,7 @@ Execution Agent 完成后，Orchestrator 必须独立回读主项目并扫描当
 - frontmatter 中 `type: project` 与 `id` 都只出现一次，且 `id` 被 YAML 解析为无首尾空格的字符串
 - `id` 与计划中的最终 `project_id` 完全一致；新项目符合严格 kebab-case 格式，已有项目
   符合可移植 ID 格式
-- frontmatter 的 `id` 不再包含 `{{ID}}`、`Project_Template` 或其他占位值
+- frontmatter 的 `id` 不再包含 ID 模板占位符、`Project_Template` 或其他占位值
 - 当前 Vault 中没有另一个 `type: project` 使用同一 `id`
 
 任一检查失败时，必须让 Execution Agent 修复并重新验收。验收通过前，禁止把计划或来源草稿
@@ -146,7 +146,7 @@ Execution Agent 完成后，Orchestrator 必须独立回读主项目并扫描当
 
 # 阶段1：启动 Planning Agent
 
-按 `_shared/dual-agent-orchestrator.md` 阶段1 执行。占位符 `[user's idea/draft note]` 替换为用户实际输入。
+按 `_shared/dual-agent-orchestrator.md` 阶段1 执行。将 `{{PROJECT_INPUT}}` 替换为用户实际输入。
 
 Planning Agent 返回后，用中文通知用户：
 
@@ -164,7 +164,7 @@ Planning Agent 返回后，用中文通知用户：
 
 # 阶段2：启动 Execution Agent（用户确认后）
 
-按 `_shared/dual-agent-orchestrator.md` 阶段3 执行。
+按 `_shared/dual-agent-orchestrator.md` 阶段3 执行，并向 Execution Agent 传入已确认的 `{{PROJECT_INPUT}}` 与计划文件路径。
 
 Execution Agent 返回后先执行“项目稳定 ID”的创建后验收。若项目类别为 `development`，再验证
 生成结果是否符合“开发类项目目录规范”；任一检查不符合都要求立即修正后再交付。全部通过后：

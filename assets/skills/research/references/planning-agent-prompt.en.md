@@ -66,7 +66,7 @@ Path: `{plans directory}/Plan_YYYY-MM-DD_Research_Topic.md`
 ---
 title: "Plan: [Topic]"
 type: plan
-status: active
+status: pending
 created: "YYYY-MM-DD"
 source: research
 topic: "[Topic]"

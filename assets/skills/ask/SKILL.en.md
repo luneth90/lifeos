@@ -128,30 +128,12 @@ When the user says "save", "save this", "record this", "save as draft", etc., sa
 
 **Draft content:**
 
-```markdown
----
-created: "YYYY-MM-DD"
-status: pending
-domain: <domain inferred from the answer content>
-source: ask
-tags: [ask]
----
-
-## Question
-
-<user's original question>
-
-## Answer
-
-<full content of this answer>
-
-## Related Notes
-
-- <Vault note wikilinks cited in the answer; omit this section if none>
-```
+First read `{system directory}/{templates subdirectory}/Draft_Template.md`, instantiate it, and replace every
+required placeholder: `TITLE`, `DATE`, `DOMAIN`, and `ID`. Then write the question and answer into the template
+body and append `source: ask`. Do not hand-write another inline frontmatter or retain a template placeholder.
 
 **Rules:**
-- `status: pending` — enters the draft lifecycle; can be consumed later by `/research`, `/knowledge`, `/project`
+- `status: pending` — comes from the template, enters the draft lifecycle, and can later be consumed by `/research`, `/knowledge`, `/project`
 - `domain` is inferred from the answer content (e.g., Math, AI, History); use `general` when uncertain
 - `source: ask` marks the originating skill for traceability
 - Topic keywords are extracted from the question and kept short (2-4 words)
