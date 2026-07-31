@@ -9,7 +9,7 @@ parent_skill: research
 
 > Path logical names (e.g., `{research directory}`, `{drafts directory}`) are resolved by the Orchestrator from `lifeos.yaml` and injected into context. See the main skill file `research/SKILL.md` for the mapping.
 
-> This file is read by the `research/SKILL.md` Orchestrator after the user confirms the plan, and used as the complete prompt for the Task tool.
+> This file is run by the `research/SKILL.md` Orchestrator through `spawn_agent` after confirmation validation.
 > Replace `{{RESEARCH_INPUT}}` with the confirmed research input and obtain the actual plan path from it.
 
 ---
@@ -43,11 +43,11 @@ No persona may change, remove, reorder, or replace the chapter structure of `Res
 
 ## Step 3: External Research
 
-- Use WebSearch to retrieve current information, official documentation, authoritative sources
-- Use WebFetch to read documentation pages
+- Use `web_search` to retrieve current information, official documentation, authoritative sources
+- Use `web_fetch` to read documentation pages
 - Cross-validate local draft insights with external sources
-- **When WebSearch returns nothing**: rely on local drafts, note limitations in the report
-- **When WebFetch fails**: mark in "References" as "(link inaccessible, for reference only)"
+- **When `web_search` returns nothing**: rely on local drafts, note limitations in the report
+- **When `web_fetch` fails**: mark in "References" as "(link inaccessible, for reference only)"
 
 ## Step 4: Write the Research Report
 
@@ -76,22 +76,17 @@ Path: `{research directory}/Domain/Topic/Topic_Map.canvas`
 
 Path: `{research directory}/Domain/Topic/examples/`
 
-## Step 7: Update Draft Status (Critical)
+## Step 7: Preserve Source Status (Critical)
 
-For each draft file used from "Local Draft Materials":
-
-- Update the `status` in its frontmatter to `done`
-- This marks the draft as processed, allowing `/archive` to identify and archive it
+Do not change any source draft or plan status. Record `claim`, `source`, `published_at`, `fetched_at`, and access result for every source in the source ledger. On partial source failure, retain errors, keep the report `status: draft`, and return for Orchestrator acceptance.
 
 ## Step 8: Update Today's Diary
 
 If `{diary directory}/YYYY-MM-DD.md` exists, append a brief research summary. Skip this step if the diary file does not exist.
 
-## Step 9: Update Plan Status (Critical)
+## Step 9: Return Execution Manifest (Critical)
 
-- After the research report is complete, update the plan file frontmatter `status` to `done`
-- Keep the plan file in `{plans directory}/`
-- `/archive` later moves plans with `status: done` into `{system directory}/{archived plans subdirectory}/`
+Return a manifest conforming to `Execution_Manifest_Schema.json` with `contract_version`, `run_id`, `phase`, `plan_revision`, `confirmed_hash`, `inputs`, `artifacts`, `status_mutations`, `validation`, and `errors`. Only the Orchestrator may commit source and plan statuses after independent validation and per-file notification.
 
 ## Step 10: Research Completeness Validation
 
@@ -114,9 +109,9 @@ After completion, report in English:
 - Visualization: [Yes/No] (if any)
 
 **Integrated draft sources:**
-- [List draft files used, or "None"] → status updated to done
+- [List draft files used, or "None"] → status unchanged, awaiting independent acceptance
 
-**Plan status:** {plans directory}/Plan_YYYY-MM-DD_Research_Topic.md → `status: done` (waiting for `/archive` to move it into `{system directory}/{archived plans subdirectory}/`)
+**Plan status:** current status retained, awaiting Orchestrator acceptance
 
 **Key takeaways:**
 1. [Takeaway 1]

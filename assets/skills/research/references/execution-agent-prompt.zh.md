@@ -9,7 +9,7 @@ parent_skill: research
 
 > 路径逻辑名（如 `{研究目录}`、`{草稿目录}`）由 Orchestrator 从 `lifeos.yaml` 解析后注入上下文。映射关系见主技能文件 `research/SKILL.md` 的配置块。
 
-> 此文件由 `research/SKILL.md` 的 Orchestrator 在用户确认计划后读取，作为 Task 工具的完整 prompt 使用。
+> 此文件由 `research/SKILL.md` 的 Orchestrator 通过 `spawn_agent` 语义能力在确认校验后执行。
 > 使用时将 `{{RESEARCH_INPUT}}` 替换为已确认的研究输入，并从中读取实际计划文件路径。
 
 ---
@@ -43,11 +43,11 @@ parent_skill: research
 
 ## 步骤三：外部研究
 
-- 使用 WebSearch 检索当前信息、官方文档、权威来源
-- 使用 WebFetch 读取文档页面
+- 使用 `web_search` 检索当前信息、官方文档、权威来源
+- 使用 `web_fetch` 读取文档页面
 - 将本地草稿洞察与外部来源交叉验证
-- **WebSearch 无结果时**：依赖本地草稿，在报告中注明局限性
-- **WebFetch 失败时**：在「参考资源」标注"(链接无法访问，仅供参考)"
+- **`web_search` 无结果时**：依赖本地草稿，在报告中注明局限性
+- **`web_fetch` 失败时**：在「参考资源」标注"(链接无法访问，仅供参考)"
 
 ## 步骤四：撰写研究报告
 
@@ -76,22 +76,20 @@ parent_skill: research
 
 路径：`{研究目录}/Domain/Topic/examples/`
 
-## 步骤七：更新草稿状态（关键）
+## 步骤七：保留来源状态（关键）
 
-对「本地草稿资料」中每个已使用的草稿文件：
-
-- 将 frontmatter 中的 `status` 更新为 `done`
-- 这标记该草稿已被处理，使 `/archive` 可识别并归档
+不得修改任何来源草稿或计划状态。逐条写入来源台账：`claim`、`source`、`published_at`、`fetched_at`、
+访问结果。部分来源失败时保留 errors，报告保持 `status: draft`，返回给 Orchestrator 验收。
 
 ## 步骤八：更新今日日记
 
 若 `{日记目录}/YYYY-MM-DD.md` 存在，追加简短研究摘要。若日记文件不存在则跳过此步骤。
 
-## 步骤九：更新计划状态（关键）
+## 步骤九：返回执行清单（关键）
 
-- 研究报告完成后，将计划文件的 frontmatter 中 `status` 更新为 `done`
-- 保持计划文件仍位于 `{计划目录}/`
-- 后续由 `/archive` 统一将 `status: done` 的计划移动到 `{系统目录}/{归档计划子目录}/`
+返回符合 `Execution_Manifest_Schema.json` 的 manifest，其中包含 `contract_version`、`run_id`、`phase`、
+`plan_revision`、`confirmed_hash`、`inputs`、`artifacts`、`status_mutations`、`validation`、`errors`。只有
+Orchestrator 独立验收并逐文件通知后才可提交来源与计划状态。
 
 ## 步骤十：研究完整性校验
 
@@ -113,9 +111,9 @@ parent_skill: research
 - 可视化: [是/否]（如有）
 
 **整合的草稿来源:**
-- [列出使用的草稿文件，或"无"] → 状态已更新为 done
+- [列出使用的草稿文件，或"无"] → 状态保持不变，等待独立验收
 
-**计划状态:** {计划目录}/Plan_YYYY-MM-DD_Research_Topic.md → `status: done`（待 `/archive` 归档到 `{系统目录}/{归档计划子目录}/`）
+**计划状态:** 保持当前状态，等待 Orchestrator 验收后提交
 
 **核心要点:**
 1. [要点1]

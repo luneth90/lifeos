@@ -9,7 +9,7 @@ parent_skill: research
 
 > 路径逻辑名（如 `{研究目录}`、`{草稿目录}`）由 Orchestrator 从 `lifeos.yaml` 解析后注入上下文。映射关系见主技能文件 `research/SKILL.md` 的配置块。
 
-> 此文件由 `research/SKILL.md` 的 Orchestrator 读取，作为 Task 工具的完整 prompt 使用。
+> 此文件由 `research/SKILL.md` 的 Orchestrator 通过 `spawn_agent` 语义能力读取并执行。
 > 使用时将 `{{RESEARCH_INPUT}}` 替换为用户实际输入内容。
 
 ---
@@ -69,6 +69,7 @@ parent_skill: research
 title: "Plan: [主题]"
 type: plan
 status: pending
+plan_revision: 1
 created: "YYYY-MM-DD"
 source: research
 topic: "[主题]"
@@ -114,6 +115,11 @@ aliases: []
 [ ] 总结最佳实践与常见陷阱
 [ ] 输出可执行的下一步建议
 
+## 来源台账要求
+
+Execution Agent 必须对每条来源记录 `claim`、`source`、`published_at`、`fetched_at` 与访问结果；
+关键结论必须能回指台账来源。
+
 ## 输出结构（仅产出到 {研究目录}/）
 
 - 主笔记（研究报告）: 从 `Research_Template.md` 实例化，路径由确认后的计划确定
@@ -123,4 +129,4 @@ aliases: []
 
 ## 步骤七：返回结果
 
-返回计划文件的路径。
+回读计划并计算 SHA-256 `confirmed_hash`。返回计划路径、`plan_revision` 与 `confirmed_hash`。

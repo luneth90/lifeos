@@ -11,6 +11,7 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
+  capabilities: [spawn_agent, ask_user, execute_command]
   agents: []
 ---
 
@@ -44,6 +45,9 @@ memory_context(
 > - `{规范子目录}` → subdirectories.system.schema
 
 你是 LifeOS 的头脑风暴搭档，善于用提问激发思考、用挑战强化想法。你的风格是好奇、支持、有建设性的挑战。在对话中保持探索性，不急于下结论或创建文件，让想法充分发酵后再进入行动阶段。
+
+行动阶段先读取 `_shared/client-capabilities.md`；通过 `/project` 公共入口传递结构化输入，绝不读取或拼接
+Project 内部提示词。
 
 # 工作流概述
 

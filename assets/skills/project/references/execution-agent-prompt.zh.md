@@ -8,7 +8,7 @@ parent_skill: project
 
 > 路径逻辑名（如 `{项目目录}`、`{草稿目录}`）由 Orchestrator 从 `lifeos.yaml` 解析后注入上下文。映射关系见主技能文件 `project/SKILL.md` 的配置块。
 
-> 此文件由 `project/SKILL.md` 的 Orchestrator 在用户确认计划后读取，作为 Task 工具的完整 prompt 使用。
+> 此文件由 `project/SKILL.md` 的 Orchestrator 通过 `spawn_agent` 语义能力在确认校验后执行。
 > 使用时将 `{{PROJECT_INPUT}}` 替换为已确认的项目输入，并从中读取实际计划文件路径。
 
 ---
@@ -47,13 +47,8 @@ parent_skill: project
    不得因改名、移动或版本变化重新生成。
 3. 新项目的计划 `project_id` 必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，不得包含
    双花括号占位符、`placeholder`，也不得等于 `Project_Template` 或 `project-template`。
-4. 若计划确认期间出现 ID 冲突或最终路径变化，按以下算法重算，并先把新 ID 和最终路径回写计划：
-   - 依次取项目标题、去掉扩展名的主文件名，执行 NFKD 规范化、移除组合音标、转小写、
-     把连续非 ASCII 字母数字替换为 `-`、移除首尾 `-`；不可用候选继续尝试下一来源。
-   - 基础 slug 唯一时直接使用。否则，对包含 `.md` 的完整 Vault 相对路径进行 NFC 规范化、
-     统一 `/` 分隔符，并对 UTF-8 字节计算 SHA-256。
-   - 无 slug 时用 `project-<摘要前10位>`；slug 冲突时用 `<slug>-<摘要前10位>`；仍冲突时
-     每次扩展 2 位摘要，完整摘要仍冲突则追加 `-2`、`-3`……。
+4. 若确认期间出现 ID 冲突或路径变化，调用 `_shared/scripts/project_identity.mjs` 并校验结果。结果变化时
+   不得回写后继续执行：返回变更，由 Orchestrator 增加 `plan_revision`、更新 `confirmed_hash` 并重新确认。
 5. 从模板生成文件时，必须替换所有必填占位符；其中 ID 必须写为带引号的最终 `project_id`，
    分类必须写为计划中的项目类别。禁止省略 ID、保留模板占位符或把 ID 写成非字符串。
 
@@ -149,7 +144,9 @@ target_version: V0.2
 ## 步骤五：返回 Orchestrator 验收
 
 - 返回主项目路径、最终 ID、来源草稿路径、计划路径和上述自检结果
-- 不得修改来源草稿状态，不得把计划改为 `done`，不得写入 project scope 记忆
+- 不得修改来源草稿状态、计划状态或 project scope 记忆
+- 返回符合 `Execution_Manifest_Schema.json` 的 manifest：包含 `contract_version`、`run_id`、`phase`、
+  `plan_revision`、`confirmed_hash`、`inputs`、`artifacts`、`status_mutations`、`validation`、`errors`
 - Orchestrator 独立验收并确认项目 scope 可解析后，才负责更新状态和最终交付
 
 ---

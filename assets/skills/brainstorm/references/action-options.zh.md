@@ -1,11 +1,10 @@
 ## 选项1：创建项目
 
-调用 `/project` 的规划阶段，将头脑风暴摘要作为项目种子：
+调用 `/project` 公共规划入口，将结构化输入作为项目种子：
 
-1. 读取 `project/references/planning-agent-prompt.md` 的完整内容作为 Task prompt
-2. 将 Phase 2 总结全文注入到 prompt 中 `{{PROJECT_INPUT}}` 占位符处
-3. 在计划文件的「来源草稿」字段填写"头脑风暴会话（YYYY-MM-DD）"
-4. Planning Agent 只完成规划阶段，返回计划文件路径
+1. 传入 `{ seed: <Phase 2 总结全文>, source: "头脑风暴会话（YYYY-MM-DD）", origin: "brainstorm" }`
+2. `/project` 自行解析 `spawn_agent` 能力并只完成规划阶段
+3. 接收计划文件路径、`plan_revision` 与 `confirmed_hash`；不读取 Project 内部提示词
 
 Orchestrator 收到计划文件路径后，告知用户：
 
@@ -16,7 +15,7 @@ Orchestrator 收到计划文件路径后，告知用户：
 **知识领域:** [Domain]
 **缺失资源:** [如有]
 
-请查看计划，确认后我将正式创建项目（调用 /project 执行阶段）。
+请查看计划；确认摘要绑定当前 revision 和 hash，确认后我将调用 /project 公共执行入口。
 ```
 
 ## 选项2：整理知识

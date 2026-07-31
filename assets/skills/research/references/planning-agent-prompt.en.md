@@ -9,7 +9,7 @@ parent_skill: research
 
 > Path logical names (e.g., `{research directory}`, `{drafts directory}`) are resolved by the Orchestrator from `lifeos.yaml` and injected into context. See the main skill file `research/SKILL.md` for the mapping.
 
-> This file is read by the `research/SKILL.md` Orchestrator and used as the complete prompt for the Task tool.
+> This file is read and run by the `research/SKILL.md` Orchestrator through the semantic `spawn_agent` capability.
 > Replace `{{RESEARCH_INPUT}}` with the user's actual input when using.
 
 ---
@@ -69,6 +69,7 @@ Path: `{plans directory}/Plan_YYYY-MM-DD_Research_Topic.md`
 title: "Plan: [Topic]"
 type: plan
 status: pending
+plan_revision: 1
 created: "YYYY-MM-DD"
 source: research
 topic: "[Topic]"
@@ -114,6 +115,10 @@ aliases: []
 [ ] Summarize best practices and common pitfalls
 [ ] Output actionable next-step recommendations
 
+## Source Ledger Requirement
+
+The Execution Agent must record `claim`, `source`, `published_at`, `fetched_at`, and access result for every source. Every key conclusion must trace back to a ledger source.
+
 ## Output Structure (output only to {research directory}/)
 
 - Main note (research report): instantiate `Research_Template.md`; the confirmed plan determines its path
@@ -123,4 +128,4 @@ aliases: []
 
 ## Step 7: Return Result
 
-Return the path to the plan file.
+Reread the plan and compute its SHA-256 `confirmed_hash`. Return plan path, `plan_revision`, and `confirmed_hash`.

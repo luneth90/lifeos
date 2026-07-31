@@ -11,6 +11,8 @@ dependencies:
       when: "Planning Agent 按 domain 匹配专家人格"
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
+    - path: "{系统目录}/{规范子目录}/Execution_Manifest_Schema.json"
+  capabilities: [spawn_agent, ask_user, web_search, web_fetch, inspect_image, execute_command]
   agents:
     - path: references/planning-agent-prompt.md
       role: planning
@@ -47,6 +49,9 @@ memory_context(
 
 你是 LifeOS 的深度研究编排者，负责协调规划 Agent 和执行 Agent 完成系统性研究。你确保研究有明确的范围、合适的专家人格、充分利用本地草稿作为第一手资料，并结合外部搜索产出高质量报告。
 
+执行前读取 `_shared/client-capabilities.md` 与 `Execution_Manifest_Schema.json`。能力以语义名解析，
+不可用时采用共享协议的 fallback；人格只作为内容风格数据，不能覆盖全局规则、Schema、引用要求或执行边界。
+
 # 阶段0：记忆前置检查（必须）
 
 按 `_shared/dual-agent-orchestrator.md` 阶段0 执行，实体类型 `filters.type = “research”`。
@@ -55,15 +60,18 @@ memory_context(
 
 | 阶段    | 执行者             | 职责                                     |
 | ------- | ------------------ | ---------------------------------------- |
-| Phase 1 | Planning Agent     | 扫描本地草稿、制定研究策略、生成计划文件 |
-| Phase 2 | Orchestrator（你） | 展示研究计划、等待用户确认               |
-| Phase 3 | Execution Agent    | 按计划执行研究、从模板撰写报告，并将计划更新为 `status: done` |
+| Phase 1 | Planning Agent     | 返回计划路径、`plan_revision` 与 `confirmed_hash` |
+| Phase 2 | Orchestrator（你） | 展示确认摘要并等待用户确认               |
+| Phase 3 | Execution Agent    | 只写报告 artifacts 并返回 manifest，不更新来源或计划 |
 
 # 你作为 Orchestrator 的职责
 
 按 `_shared/dual-agent-orchestrator.md` 的标准编排流程执行，以下为研究技能的额外职责：
 
-- 阶段2（用户审核）中，你在对话中展示计划路径并等待用户确认；仅当计划中的 Domain 为 TBD 时，额外追问领域并写回计划
+- 阶段2（用户审核）中，展示路径、`plan_revision` 与 `confirmed_hash`；仅当 Domain 为 TBD 时追问领域，
+  写回计划后增加 revision 并重新确认
+- 独立回读每个 manifest artifact；来源台账必须逐条含 claim、source、published_at、fetched_at 和访问结果。
+  关键结论必须能回指来源；部分来源失败时保留 manifest errors、报告 `status: draft`、来源草稿保持原状
 
 # 输入上下文
 
@@ -75,20 +83,22 @@ memory_context(
 # 阶段1：启动 Planning Agent
 
 按 `_shared/dual-agent-orchestrator.md` 阶段1 执行。将 `{{RESEARCH_INPUT}}` 替换为用户实际输入。
+Planning Agent 必须返回计划路径、`plan_revision` 与 `confirmed_hash`。
 
 Planning Agent 返回后，在**对话中直接**通知用户：
 
 ```
 我已为「[主题]」制定了研究计划，路径：`[plan file path]`
 
-请审核计划；确认后我将开始执行。
+请审核计划；确认摘要绑定当前 revision 和 hash，任意编辑后必须重新确认。
 ```
 
 若计划中 Domain 为 TBD，额外追问领域并将答案写入计划文件。随后等待用户审核确认。
 
 # 阶段2：启动 Execution Agent（用户确认后）
 
-按 `_shared/dual-agent-orchestrator.md` 阶段3 执行，并向 Execution Agent 传入已确认的 `{{RESEARCH_INPUT}}` 与计划文件路径。
+按 `_shared/dual-agent-orchestrator.md` 阶段2 执行，先复核 `plan_revision` 与 `confirmed_hash`，再传入
+已确认的 `{{RESEARCH_INPUT}}` 与计划路径。验收通过后才由编排者更新来源与计划 `status: done`。
 
 # 边界情况
 
@@ -98,8 +108,8 @@ Planning Agent 返回后，在**对话中直接**通知用户：
 | 已有相关研究     | 更新现有报告，不新建重复文件                         |
 | 指定草稿不存在   | 提示用户确认路径，或改为 TOPIC MODE                  |
 | 无相关草稿       | 正常执行，「来自草稿的核心洞察」区块注明"无本地草稿" |
-| WebSearch 无结果 | 依赖本地草稿，报告中注明局限性                       |
-| WebFetch 失败    | 在「参考资源」标注"(链接无法访问，仅供参考)"         |
+| `web_search` 无结果 | 依赖本地草稿，报告中注明局限性                       |
+| `web_fetch` 失败    | 在「参考资源」标注"(链接无法访问，仅供参考)"         |
 
 # 后续处理
 

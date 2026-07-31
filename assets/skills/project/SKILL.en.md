@@ -8,6 +8,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+    - path: "{system directory}/{schema subdirectory}/Execution_Manifest_Schema.json"
+  capabilities: [spawn_agent, ask_user, execute_command, move_with_link_update]
   agents:
     - path: references/planning-agent-prompt.md
       role: planning
@@ -48,6 +50,9 @@ You are LifeOS's project creation orchestrator, responsible for coordinating the
 
 **Language rule**: All responses and generated files must be in English.
 
+Before execution, read `_shared/client-capabilities.md`, `_shared/project-identity.md`, and
+`Execution_Manifest_Schema.json`. Dependencies use semantic capability names; client-specific tool names belong only in capability-protocol examples.
+
 # Phase 0: Memory Pre-check (Required)
 
 Follow `_shared/dual-agent-orchestrator.md` Phase 0, with entity type `filters.type = "project"`.
@@ -56,10 +61,10 @@ Follow `_shared/dual-agent-orchestrator.md` Phase 0, with entity type `filters.t
 
 | Phase   | Actor              | Responsibility                                              |
 | ------- | ------------------ | ----------------------------------------------------------- |
-| Phase 1 | Planning Agent     | Gather context, classify project, design structure, create plan file |
-| Phase 2 | Orchestrator (you) | Notify user to review the plan, wait for confirmation       |
-| Phase 3 | Execution Agent    | Create and self-check the project note with a clean context; return without changing plan/draft status |
-| Phase 4 | Orchestrator (you) | Independently accept the ID, update the index, then mark the plan/source draft `done` |
+| Phase 1 | Planning Agent     | Return plan path, `plan_revision`, and `confirmed_hash` |
+| Phase 2 | Orchestrator (you) | Present confirmation snapshot and wait through `ask_user` |
+| Phase 3 | Execution Agent    | Write artifacts only and return an Execution Manifest without changing plan/draft status |
+| Phase 4 | Orchestrator (you) | Independently validate and notify each file before committing status |
 
 # Your Responsibilities as Orchestrator
 
@@ -97,6 +102,10 @@ must generate `project_id` in the plan, and the Execution Agent must write that 
 project frontmatter as `id`. Only a `type: project` main note receives a project ID;
 `type: project-doc` must not receive an independent project ID.
 
+`_shared/project-identity.md` is the single algorithm authority. Planning Agent and Execution Agent must call
+`_shared/scripts/project_identity.mjs`; do not copy it into this skill or its prompts. A changed recomputation increments
+`plan_revision`, updates `confirmed_hash`, and requires re-confirmation.
+
 ## Allocation Rules
 
 1. When updating an existing project, preserve its current portable `id`; renaming, moving, or
@@ -105,24 +114,10 @@ project frontmatter as `id`. Only a `type: project` main note receives a project
    Otherwise, stop and ask the user to run `lifeos upgrade` or repair the existing project first.
 2. A newly generated project ID must match `^[a-z0-9]+(?:-[a-z0-9]+)*$`. It must not contain a double-brace placeholder or
    `placeholder`, and must not equal `Project_Template` or `project-template`.
-3. Build the base slug by trying the project title and then the main project filename without its
-   extension. Apply NFKD normalization, remove combining marks, lowercase it, replace runs of
-   non-ASCII alphanumerics with `-`, and trim leading or trailing `-`. Continue to the next source
-   when a candidate is empty, contains `placeholder`, or equals `project-template`.
-4. Before writing the plan, scan every existing `type: project` ID under `{projects directory}`.
-   Stop and request upgrade or repair if an existing ID is missing, invalid, or duplicated. Use a
-   nonempty base slug only when it is unused by existing projects and every other new project in
-   the same run. If no base slug can be produced, use
-   `project-<path-digest>`; if the base slug conflicts, use `<base-slug>-<path-digest>`.
-5. The path digest is the first 10 hexadecimal characters of SHA-256 over the UTF-8 bytes of the
-   complete main-project Vault-relative path, including `.md`, after NFC normalization and
-   converting separators to `/`. If it still conflicts, extend the digest by two characters at a
-   time until unique. If a full digest still conflicts, append `-2`, `-3`, and so on until unique.
-6. The Planning Agent first fixes the main project's Vault-relative path, then writes the final ID
-   to both the plan frontmatter `project_id` and its classification section. The Execution Agent
-   rescans current IDs immediately before writing. If the final path changed or a conflict appeared
-   while awaiting confirmation, recompute with the same algorithm and update the plan's ID and
-   final path before creating the file.
+3. Before writing the plan, scan every existing `type: project` ID under `{projects directory}`.
+   Stop and request upgrade or repair if an existing ID is missing, invalid, or duplicated.
+4. Planning Agent fixes the main path and calls the shared script, writing its result to `project_id` and the
+   classification section. Execution Agent calls it again before writing; a changed result invalidates confirmation.
 
 ## Post-creation Acceptance
 
@@ -157,6 +152,7 @@ Even if only the main project file is created initially with no supporting docum
 # Phase 1: Launch Planning Agent
 
 Follow `_shared/dual-agent-orchestrator.md` Phase 1. Replace `{{PROJECT_INPUT}}` with the user's actual input.
+The Planning Agent must return plan path, `plan_revision`, and `confirmed_hash`.
 
 After the Planning Agent returns, notify the user in English:
 
@@ -169,16 +165,16 @@ I've created a project launch plan at `[plan file path]`.
 **Source draft:** [{drafts directory}/filename.md, or "None"]
 **Missing resources:** [List resources needed but not yet in the Vault, or "None"]
 
-Please review and modify as needed. Once confirmed, I'll generate the formal project.
+Please review and modify as needed. The confirmation snapshot binds this revision and hash; every edit requires re-confirmation.
 ```
 
 # Phase 2: Launch Execution Agent (After User Confirmation)
 
-Follow `_shared/dual-agent-orchestrator.md` Phase 3 and pass the confirmed `{{PROJECT_INPUT}}` with the plan path to the Execution Agent.
+Follow `_shared/dual-agent-orchestrator.md` Phase 2: check `plan_revision` and `confirmed_hash`, then pass the confirmed `{{PROJECT_INPUT}}` and plan path to the Execution Agent.
 
-After the Execution Agent returns, first perform the post-creation acceptance under "Stable Project ID".
-For `development` projects, then verify the "Development Project Directory Convention". Require
-immediate correction before delivery when either check fails. After every check passes:
+After the Execution Agent returns its manifest, independently reread every artifact, perform the post-creation acceptance
+under "Stable Project ID", and verify every planned file, chapter, or phase is complete. For `development`, verify the directory
+convention too. Any failed check or manifest error writes `status: failed` and preserves source drafts. After all checks pass:
 
 1. Call `memory_notify(contract_version=2, file_path="<Vault-relative main project path>")` to update
    the index.

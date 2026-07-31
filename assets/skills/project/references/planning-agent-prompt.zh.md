@@ -9,7 +9,7 @@ parent_skill: project
 
 > 路径逻辑名（如 `{项目目录}`、`{草稿目录}`）由 Orchestrator 从 `lifeos.yaml` 解析后注入上下文。映射关系见主技能文件 `project/SKILL.md` 的配置块。
 
-> 此文件由 `project/SKILL.md` 的 Orchestrator 读取，作为 Task 工具的完整 prompt 使用。
+> 此文件由 `project/SKILL.md` 的 Orchestrator 通过 `spawn_agent` 语义能力读取并执行。
 > 使用时将 `{{PROJECT_INPUT}}` 替换为用户实际输入内容。
 
 ---
@@ -45,17 +45,10 @@ parent_skill: project
 
 ## 步骤二点五：固定主路径并生成稳定 ID（强制）
 
-先确定唯一主项目文件的 Vault 相对路径。更新已有项目时沿用原 `id`；新建项目时按以下算法生成：
-
-1. 依次对项目标题、去掉扩展名的主文件名执行 NFKD 规范化、移除组合音标、转小写、
-   把连续非 ASCII 字母数字替换为 `-`、移除首尾 `-`，得到基础 slug。
-2. 基础 slug 必须匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，不得包含 `placeholder`，也不得等于
-   `project-template`；某个候选不可用时继续尝试下一个来源。基础 slug 非空且未被现有
-   项目或本次其他新项目使用时直接采用。
-3. 完整 Vault 相对 Markdown 路径（包含 `.md`）先经 NFC 规范化并把分隔符统一为 `/`，
-   再对 UTF-8 字节计算 SHA-256。无基础 slug 时使用 `project-<摘要前10位>`；slug 冲突时
-   使用 `<slug>-<摘要前10位>`。
-4. 若仍冲突，每次把摘要延长 2 位直至唯一；完整摘要仍冲突时追加 `-2`、`-3`……。
+先确定唯一主项目文件的 Vault 相对路径。更新已有项目时沿用原 `id`；新建项目必须调用
+`_shared/scripts/project_identity.mjs`，传入 `{ title, filename, existing_ids }`，再用其
+`validateProjectIdentity` 校验返回值。不得复制、修改或补充该算法。
+已有 ID 或新计算结果发生冲突时，把 `existing_ids` 原样传给共享脚本，由脚本递增消歧。
 
 把最终主路径和 ID 写入计划。计划确认前不得创建项目主文件。
 
@@ -68,6 +61,7 @@ parent_skill: project
 title: "Plan: [项目名称]"
 type: plan
 status: pending
+plan_revision: 1
 created: "YYYY-MM-DD"
 source: project
 project: "[项目名称]"
@@ -187,4 +181,4 @@ kebab-case 格式，更新项目符合可移植 ID 格式；不得含 ID 模板�
 占位值，并须与正文分类区一致。确认主项目路径已经固定。
 任一检查失败时先修复计划，不得返回成功。
 
-返回计划文件的路径。
+回读计划并计算其 SHA-256 `confirmed_hash`。返回计划文件路径、`plan_revision` 与 `confirmed_hash`。

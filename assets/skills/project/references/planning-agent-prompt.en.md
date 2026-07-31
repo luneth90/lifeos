@@ -9,7 +9,7 @@ parent_skill: project
 
 > Path logical names (e.g., `{projects directory}`, `{drafts directory}`) are resolved by the Orchestrator from `lifeos.yaml` and injected into context. See the main skill file `project/SKILL.md` for the mapping.
 
-> This file is read by the `project/SKILL.md` Orchestrator and used as the complete prompt for the Task tool.
+> This file is read and run by the `project/SKILL.md` Orchestrator through the semantic `spawn_agent` capability.
 > Replace `{{PROJECT_INPUT}}` with the user's actual input when using.
 
 ---
@@ -46,21 +46,11 @@ If the project category is `development`, the plan must include directory struct
 
 ## Step 2.5: Fix the Main Path and Generate a Stable ID (Mandatory)
 
-First determine the only main project's Vault-relative file path. Preserve the original `id` when
-updating an existing project. For a new project, use this algorithm:
-
-1. Try the project title and then the main filename without its extension. For each candidate,
-   apply NFKD normalization, remove combining marks, lowercase it, replace runs of non-ASCII
-   alphanumerics with `-`, and trim leading or trailing `-`.
-2. A usable base slug must match `^[a-z0-9]+(?:-[a-z0-9]+)*$`, must not contain `placeholder`, and
-   must not equal `project-template`. Treat an unusable candidate as absent and continue to the next
-   source. Use a nonempty base slug directly only when no existing project or other new project in
-   the same run uses it.
-3. NFC-normalize the complete Vault-relative Markdown path, including `.md`, and convert separators
-   to `/`. Compute SHA-256 over the UTF-8 bytes. With no base slug, use
-   `project-<first-10-hex>`; on a slug conflict, use `<slug>-<first-10-hex>`.
-4. If that still conflicts, extend the digest by two hexadecimal characters at a time until unique.
-   If the full digest still conflicts, append `-2`, `-3`, and so on.
+First determine the only main project's Vault-relative file path. Preserve the original `id` for an
+existing project. For a new project, call `_shared/scripts/project_identity.mjs` with
+`{ title, filename, existing_ids }`, then validate the result with `validateProjectIdentity`. Do not
+copy, modify, or supplement that algorithm.
+When an existing ID or new result conflicts, pass `existing_ids` unchanged to the shared script for incremental disambiguation.
 
 Write the final main path and ID into the plan. Do not create the main project before plan approval.
 
@@ -73,6 +63,7 @@ Path: `{plans directory}/Plan_YYYY-MM-DD_Project_ProjectName.md`
 title: "Plan: [Project Name]"
 type: plan
 status: pending
+plan_revision: 1
 created: "YYYY-MM-DD"
 source: project
 project: "[Project Name]"
@@ -193,4 +184,4 @@ must satisfy the portable-ID format. It must contain no ID-template placeholder,
 placeholder and must match the classification section. Confirm that the final main project path is
 fixed. Repair the plan instead of reporting success when any check fails.
 
-Return the path to the plan file.
+Reread the plan and compute its SHA-256 `confirmed_hash`. Return plan path, `plan_revision`, and `confirmed_hash`.

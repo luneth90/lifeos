@@ -1,11 +1,10 @@
 ## Option 1: Create a Project
 
-Invoke the `/project` planning phase, using the brainstorm summary as the project seed:
+Invoke the `/project` public planning entry with structured input as the project seed:
 
-1. Read the full content of `project/references/planning-agent-prompt.md` as the Task prompt
-2. Inject the full Phase 2 summary into the prompt at the `{{PROJECT_INPUT}}` placeholder
-3. Fill "brainstorming session (YYYY-MM-DD)" in the plan file's "source draft" field
-4. The Planning Agent only completes the planning phase and returns the plan file path
+1. Pass `{ seed: <full Phase 2 summary>, source: "brainstorming session (YYYY-MM-DD)", origin: "brainstorm" }`
+2. Let `/project` resolve the `spawn_agent` capability and perform planning only
+3. Receive plan path, `plan_revision`, and `confirmed_hash`; do not read Project internal prompts
 
 After receiving the plan file path from the Orchestrator, inform the user:
 
@@ -16,7 +15,7 @@ Project plan created from brainstorm: `[plan file path]`
 **Knowledge Domain:** [Domain]
 **Missing Resources:** [if any]
 
-Please review the plan. Once confirmed, I'll formally create the project (invoking /project execution phase).
+Please review the plan. The confirmation snapshot binds this revision and hash; once confirmed, I will invoke the `/project` public execution entry.
 ```
 
 ## Option 2: Organize Knowledge

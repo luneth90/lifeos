@@ -11,6 +11,7 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+  capabilities: [spawn_agent, ask_user, execute_command]
   agents: []
 ---
 
@@ -44,6 +45,8 @@ Do not pass unresolved scopes, and never expand an empty scope list into a full-
 > - `{schema subdirectory}` → subdirectories.system.schema
 
 You are LifeOS's brainstorming partner, skilled at using questions to spark thinking and challenges to strengthen ideas. Your style is curious, supportive, and constructively challenging. During the conversation, stay exploratory — don't rush to conclusions or create files. Let ideas fully develop before entering the action phase.
+
+Before the action phase, read `_shared/client-capabilities.md`; call the `/project` public entry with structured input and never read or assemble Project internal prompts.
 
 # Workflow Overview
 

@@ -8,7 +8,7 @@ parent_skill: project
 
 > Path logical names (e.g., `{projects directory}`, `{drafts directory}`) are resolved by the Orchestrator from `lifeos.yaml` and injected into context. See the main skill file `project/SKILL.md` for the mapping.
 
-> This file is read by the `project/SKILL.md` Orchestrator after the user confirms the plan, and used as the complete prompt for the Task tool.
+> This file is run by the `project/SKILL.md` Orchestrator through `spawn_agent` after confirmation validation.
 > Replace `{{PROJECT_INPUT}}` with the confirmed project input and obtain the actual plan path from it.
 
 ---
@@ -48,16 +48,9 @@ Path rule: use the confirmed final Vault-relative main project path from the pla
    `^[a-z0-9][a-z0-9._-]*$`. Never regenerate it because of a rename, move, or version change.
 3. For a new project, the planned `project_id` must match `^[a-z0-9]+(?:-[a-z0-9]+)*$`, must not
    contain a double-brace placeholder or `placeholder`, and must not equal `Project_Template` or `project-template`.
-4. If an ID conflict appeared during plan approval or the final path changed, recompute with this
-   algorithm and update the plan's ID and final path before creating the file:
-   - Try the project title and then the main filename without its extension. Apply NFKD
-     normalization, remove combining marks, lowercase it, replace runs of non-ASCII alphanumerics
-     with `-`, and trim leading or trailing `-`. Continue to the next source for an unusable candidate.
-   - Use a unique base slug directly. Otherwise, NFC-normalize the complete Vault-relative path,
-     including `.md`, convert separators to `/`, and compute SHA-256 over its UTF-8 bytes.
-   - With no slug use `project-<first-10-hex>`; on a slug conflict use
-     `<slug>-<first-10-hex>`. Extend the digest by two characters until unique, then append `-2`,
-     `-3`, and so on only if a full digest still conflicts.
+4. If an ID conflict appears during plan approval or the final path changes, call
+   `_shared/scripts/project_identity.mjs` and validate the result. Do not update and continue: return
+   the change so the Orchestrator increments `plan_revision`, updates `confirmed_hash`, and re-confirms.
 5. When rendering the template, replace every required placeholder. Write the final `project_id` as a
    quoted ID and write the project category from the plan. Never omit the ID, retain a template
    placeholder, or emit a non-string ID.
@@ -156,7 +149,9 @@ successful project creation.
 ## Step 5: Return for Orchestrator Acceptance
 
 - Return the main project path, final ID, source draft path, plan path, and the self-check result
-- Do not change the source draft status, mark the plan `done`, or write project-scoped memory
+- Do not change source draft status, plan status, or project-scoped memory
+- Return a manifest conforming to `Execution_Manifest_Schema.json` with `contract_version`, `run_id`, `phase`,
+  `plan_revision`, `confirmed_hash`, `inputs`, `artifacts`, `status_mutations`, `validation`, and `errors`
 - The Orchestrator independently accepts the result and confirms scope resolution before updating
   statuses and delivering the project
 

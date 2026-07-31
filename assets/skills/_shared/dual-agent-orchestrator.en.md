@@ -1,39 +1,27 @@
-# Dual-Agent Orchestration Protocol
+# Dual-Agent Execution Orchestration Protocol
 
-This protocol defines the standard orchestration pattern for LifeOS workflows using a "Planning Agent + Execution Agent" two-phase approach.
+This protocol is the sole commit semantics for Project and Research. Read `client-capabilities.md` first and use the semantic `spawn_agent` capability for an independent context; when unavailable, the Orchestrator performs the same prompt, input, and acceptance criteria sequentially.
 
-## Phase 0: Memory Pre-check (Required)
+## Phase 0: Memory and Input Check
 
-Before launching the Planning Agent, query minimal memory context via MCP tools:
+Call minimal `memory_query(contract_version=2, ...)` checks for same-topic output, source drafts with `status: pending`, and recent decisions. Read the plan, templates, schema, and source files; a newly created plan must use `status: pending`.
 
-1. Check whether output on the same topic already exists (avoid duplicates)
-2. Check whether related drafts exist and their status
-3. Check recent related decisions (avoid conflicting with existing direction)
+## Phase 1: Planning and Confirmation Snapshot
 
-Standard query pattern:
-```
-memory_query(contract_version=2, query="<topic keywords>", filters={"type": "<entity type>"}, limit=5)
-memory_query(contract_version=2, query="<topic keywords>", limit=10)
-```
+1. Run the Planning Agent through `spawn_agent`; it returns the plan path, `plan_revision` (starting at `1`), and a SHA-256 `confirmed_hash` of the plan content.
+2. Reread the plan and produce a snapshot with its path, revision, hash, source draft, and expected artifacts, then ask the user to confirm.
+3. On user cancellation, write `status: cancelled` to the plan, leave source drafts unconsumed, and stop.
 
-If a file under {drafts directory}/ is found, read its frontmatter to confirm whether it is still status: pending.
+## Phase 2: Confirmation Check and Execution
 
-## Phase 1: Launch Planning Agent
+Use this exact order: `plan(status: pending) → snapshot → user-confirm → hash-check → plan(status: active) → execute → manifest → independent-validate → notify-each-file → mutate-sources → plan(status: done) → report`.
 
-1. Read the full contents of `references/planning-agent-prompt.md`
-2. Replace user input into the prompt's placeholders
-3. Launch the Planning Agent using the Task tool
-4. Planning Agent creates the plan file and returns its path
+Immediately before execution, reread the plan and recalculate SHA-256. Any change to `plan_revision` or `confirmed_hash` invalidates the confirmation snapshot: retain or restore `status: pending`, show the new snapshot, and re-confirm; never execute it. Only after the check may the plan become `status: active` and the Execution Agent start.
 
-## Phase 2: User Review
+The Execution Agent may write only expected artifacts and must not update the plan, source drafts, or persistent memory. It returns a manifest conforming to `assets/schema/Execution_Manifest_Schema.json`, including actual artifacts, validations, proposed status mutations, and `errors`. On failure, set manifest phase to `failed`, plan status to `failed`, and preserve source drafts.
 
-1. Notify the user of the plan file path
-2. [Skill-specific: clarification questions may be inserted here]
-3. Wait for user confirmation
+## Phase 3: Independent Validation and Commit
 
-## Phase 3: Launch Execution Agent (After User Confirmation)
+The Orchestrator independently rereads every artifact in the manifest and checks plan scope, templates, schema, links, source ledger, and completeness; an Execution Agent self-report is not acceptance. If any artifact is missing, partial, or fails a required validation, preserve source drafts, set plan status to `failed`, report the gap, and do not commit source states.
 
-1. Read the full contents of `references/execution-agent-prompt.md`
-2. Replace the plan file path into the prompt's placeholders
-3. Launch the Execution Agent via the Task tool (clean context, reads only the plan file)
-4. Report execution results
+After every validation passes, call `memory_notify(contract_version=2, file_path="<Vault-relative path>")` for each artifact, then update eligible source drafts and other source states. Finally set `status: done` on the plan and notify the user. The report must list artifacts, validation results, status mutations, and errors, including an empty errors list.
