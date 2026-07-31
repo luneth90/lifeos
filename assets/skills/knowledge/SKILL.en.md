@@ -269,7 +269,8 @@ safety_protocol: operation-safety-v1
 operation: knowledge
 run_id: stable(knowledge, source-hash, project-or-standalone, topic)
 target_paths:
-  knowledge-note: "{knowledge directory}/{notes subdirectory}/<Domain>/<SourceName>/<ChapterName>/<ChapterName>.md"
+  book-knowledge-note: "{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md"
+  paper-knowledge-note: "{knowledge directory}/{notes subdirectory}/<Domain>/<PaperName>.md"
   wiki: "{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md"
 decision: [create, merge, resume, skip, replace]
 status_mutations:

@@ -267,7 +267,8 @@ safety_protocol: operation-safety-v1
 operation: knowledge
 run_id: stable(knowledge, source-hash, project-or-standalone, topic)
 target_paths:
-  knowledge-note: "{知识目录}/{笔记子目录}/<Domain>/<SourceName>/<ChapterName>/<ChapterName>.md"
+  book-knowledge-note: "{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md"
+  paper-knowledge-note: "{知识目录}/{笔记子目录}/<Domain>/<PaperName>.md"
   wiki: "{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md"
 decision: [create, merge, resume, skip, replace]
 status_mutations:

@@ -50,6 +50,11 @@ const ARCHIVE_TARGET_KEYS = ['project-file', 'project-directory', 'draft', 'plan
 const TEMPLATE_LOCALIZED_FRONTMATTER_FIELDS = {
 	'Revise_Template.md': new Set(['note']),
 };
+const RESOURCE_SUBDIRECTORY_CONFIG_KEYS = new Set([
+	'subdirectories.resources.books',
+	'subdirectories.resources.literature',
+	'subdirectories.resources.translations',
+]);
 
 function normalizePath(path) {
 	return path.split(sep).join('/');
@@ -313,6 +318,25 @@ function declaredPathPlaceholders(body) {
 	);
 }
 
+function configStringAtPath(config, path) {
+	let current = config;
+	for (const segment of path.split('.')) {
+		if (!isRecord(current) || !Object.hasOwn(current, segment)) return null;
+		current = current[segment];
+	}
+	return typeof current === 'string' ? current : null;
+}
+
+function resourceChildPlaceholders(content, locale) {
+	const parent = locale === 'zh' ? '{资源目录}' : '{resources directory}';
+	const escaped = parent.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+	return new Set(
+		[...content.matchAll(new RegExp(`${escaped}/(\\{[^{}\\n/]+\\})`, 'g'))].map(
+			(match) => match[1],
+		),
+	);
+}
+
 function isNormalizableTarget(target) {
 	if (typeof target !== 'string' || !target || target !== target.normalize('NFC')) return false;
 	if (
@@ -346,6 +370,88 @@ function uniqueOutputPath(body, locale) {
 	if (start < 0) return null;
 	const match = body.slice(start + heading.length).match(/^\s*```(?:text)?\n([^\n]+)\n```/);
 	return match?.[1]?.trim() ?? null;
+}
+
+function expectedTranslateContract(locale) {
+	if (locale === 'zh') {
+		return {
+			resource_placeholder: '{资源目录}',
+			translations_placeholder: '{翻译子目录}',
+			target_path: '{资源目录}/{翻译子目录}/<书名>/<章节名>.md',
+		};
+	}
+	return {
+		resource_placeholder: '{resources directory}',
+		translations_placeholder: '{translations subdirectory}',
+		target_path: '{resources directory}/{translations subdirectory}/<book-name>/<chapter-name>.md',
+	};
+}
+
+function expectedArchiveContract(locale) {
+	const zh = locale === 'zh';
+	const system = zh ? '{系统目录}' : '{system directory}';
+	const placeholders = {
+		projects: zh ? '{归档项目子目录}' : '{archived projects subdirectory}',
+		drafts: zh ? '{归档草稿子目录}' : '{archived drafts subdirectory}',
+		plans: zh ? '{归档计划子目录}' : '{archived plans subdirectory}',
+		diary: zh ? '{归档日记子目录}' : '{archived diary subdirectory}',
+	};
+	return {
+		system,
+		placeholders,
+		mapping_keys: {
+			projects: 'subdirectories.system.archive.projects',
+			drafts: 'subdirectories.system.archive.drafts',
+			plans: 'subdirectories.system.archive.plans',
+			diary: 'subdirectories.system.archive.diary',
+		},
+		target_paths: {
+			'project-file': `${system}/${placeholders.projects}/YYYY/<project-name>.md`,
+			'project-directory': `${system}/${placeholders.projects}/YYYY/<project-name>/`,
+			draft: `${system}/${placeholders.drafts}/YYYY/MM/<filename>.md`,
+			plan: `${system}/${placeholders.plans}/<filename>.md`,
+			diary: `${system}/${placeholders.diary}/YYYY/MM/YYYY-MM-DD.md`,
+		},
+		documented_paths: {
+			'project-file': `${system}/${placeholders.projects}/YYYY/ProjectName.md`,
+			'project-directory': `${system}/${placeholders.projects}/YYYY/ProjectName/`,
+			draft: `${system}/${placeholders.drafts}/YYYY/MM/filename.md`,
+			plan: `${system}/${placeholders.plans}/Plan_YYYY-MM-DD_Type_Name.md`,
+			diary: `${system}/${placeholders.diary}/YYYY/MM/YYYY-MM-DD.md`,
+		},
+		target_mapping_groups: {
+			'project-file': 'projects',
+			'project-directory': 'projects',
+			draft: 'drafts',
+			plan: 'plans',
+			diary: 'diary',
+		},
+	};
+}
+
+function expectedKnowledgeTargets(locale) {
+	if (locale === 'zh') {
+		return {
+			'book-knowledge-note':
+				'{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md',
+			'paper-knowledge-note': '{知识目录}/{笔记子目录}/<Domain>/<PaperName>.md',
+			wiki: '{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md',
+		};
+	}
+	return {
+		'book-knowledge-note':
+			'{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md',
+		'paper-knowledge-note': '{knowledge directory}/{notes subdirectory}/<Domain>/<PaperName>.md',
+		wiki: '{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md',
+	};
+}
+
+function normalizedLocalizedTemplateField(name, key, value, locale) {
+	if (name !== 'Revise_Template.md' || key !== 'note' || typeof value !== 'string') return null;
+	const match = /^\[\[([^\[\]|#]+)\]\]$/.exec(value.trim());
+	if (!match) return null;
+	const expected = locale === 'zh' ? '知识笔记路径' : 'Knowledge note path';
+	return match[1].trim() === expected ? 'knowledge-note-path' : null;
 }
 
 function isValidExtendedWriteContract(contract) {
@@ -436,10 +542,14 @@ export function validateSkillContracts(root) {
 	};
 	const configPath = join(assets, 'lifeos.yaml');
 	let zhConfig = { directories: {} };
+	let authoritativePathConfig = null;
 	if (existsSync(configPath)) {
 		try {
 			const parsed = parseYaml(read(configPath));
-			if (isRecord(parsed)) zhConfig = parsed;
+			if (isRecord(parsed)) {
+				zhConfig = parsed;
+				authoritativePathConfig = parsed;
+			}
 		} catch {
 			add('invalid_lifeos_yaml', assetPath(configPath), 'lifeos.yaml 无法解析');
 		}
@@ -561,9 +671,22 @@ export function validateSkillContracts(root) {
 		const en = markdown(enPath);
 		if (!zh.frontmatter || !en.frontmatter) continue;
 		const localized = TEMPLATE_LOCALIZED_FRONTMATTER_FIELDS[name] ?? new Set();
-		for (const key of [...new Set([...Object.keys(zh.frontmatter), ...Object.keys(en.frontmatter)])]
-			.filter((candidate) => !localized.has(candidate))
-			.sort()) {
+		for (const key of [
+			...new Set([...Object.keys(zh.frontmatter), ...Object.keys(en.frontmatter)]),
+		].sort()) {
+			if (localized.has(key)) {
+				const zhNormalized = normalizedLocalizedTemplateField(name, key, zh.frontmatter[key], 'zh');
+				const enNormalized = normalizedLocalizedTemplateField(name, key, en.frontmatter[key], 'en');
+				if (!zhNormalized || zhNormalized !== enNormalized) {
+					add(
+						'invalid_localized_template_frontmatter',
+						assetPath(enPath),
+						`中英文模板 Frontmatter 本地化字段结构或占位语义不一致：${key}`,
+						assetPath(zhPath),
+					);
+				}
+				continue;
+			}
 			if (!sameValue(zh.frontmatter[key], en.frontmatter[key])) {
 				add(
 					'template_frontmatter_mismatch',
@@ -727,6 +850,63 @@ export function validateSkillContracts(root) {
 		}
 	}
 
+	if (authoritativePathConfig) {
+		for (const entry of readdirSync(skillRoot, { withFileTypes: true })) {
+			if (!entry.isDirectory() || entry.name === '_shared') continue;
+			const skillDirectory = join(skillRoot, entry.name);
+			for (const locale of ['zh', 'en']) {
+				const skillPath = join(skillDirectory, `SKILL.${locale}.md`);
+				if (!existsSync(skillPath)) continue;
+				const { body, frontmatter_state: state } = markdown(skillPath);
+				if (state === 'invalid_yaml') continue;
+				const mappings = declaredPathPlaceholders(body);
+				const invalidMappings = new Set();
+				for (const [placeholder, configKey] of mappings) {
+					if (configStringAtPath(authoritativePathConfig, configKey) !== null) continue;
+					invalidMappings.add(placeholder);
+					add(
+						'invalid_path_mapping',
+						assetPath(skillPath),
+						`逻辑路径映射未解析到 lifeos.yaml 权威配置键：${placeholder}`,
+					);
+				}
+				const resourceParent = locale === 'zh' ? '{资源目录}' : '{resources directory}';
+				for (const path of walkFiles(skillDirectory).filter((candidate) =>
+					candidate.endsWith(`.${locale}.md`),
+				)) {
+					const children = resourceChildPlaceholders(read(path), locale);
+					if (!children.size) continue;
+					if (mappings.get(resourceParent) !== 'directories.resources') {
+						add(
+							'invalid_resource_path_mapping',
+							assetPath(path),
+							`逻辑资源父目录必须映射到 directories.resources：${resourceParent}`,
+						);
+					}
+					for (const child of children) {
+						const configKey = mappings.get(child);
+						if (!configKey) {
+							add(
+								'invalid_resource_path_mapping',
+								assetPath(path),
+								`逻辑资源子目录占位符未声明：${child}`,
+							);
+							continue;
+						}
+						if (invalidMappings.has(child)) continue;
+						if (!RESOURCE_SUBDIRECTORY_CONFIG_KEYS.has(configKey)) {
+							add(
+								'invalid_resource_path_mapping',
+								assetPath(path),
+								`逻辑资源子目录必须映射到 books、literature 或 translations：${child}`,
+							);
+						}
+					}
+				}
+			}
+		}
+	}
+
 	for (const path of walkFiles(assets)) {
 		if (!/\.(md|py|mjs)$/.test(path)) continue;
 		if (path.endsWith('lifeos.yaml') || path.includes('lifeos-rules')) continue;
@@ -782,7 +962,8 @@ export function validateSkillContracts(root) {
 		for (const locale of ['zh', 'en']) {
 			const path = join(skillRoot, skill, `SKILL.${locale}.md`);
 			if (!existsSync(path)) continue;
-			const { frontmatter, body } = markdown(path);
+			const { frontmatter, body, frontmatter_state: state } = markdown(path);
+			if (state === 'invalid_yaml') continue;
 			const protocols = frontmatter?.dependencies?.protocols ?? [];
 			if (!protocols.length)
 				add(
@@ -828,6 +1009,24 @@ export function validateSkillContracts(root) {
 					);
 					continue;
 				}
+				const expected = expectedArchiveContract(locale);
+				const mappings = declaredPathPlaceholders(body);
+				const documentedBody = body.split('<!-- operation-safety-v1 -->')[0];
+				for (const key of ARCHIVE_TARGET_KEYS) {
+					const group = expected.target_mapping_groups[key];
+					if (
+						operation.target_paths[key] !== expected.target_paths[key] ||
+						!documentedBody.includes(`\`${expected.documented_paths[key]}\``) ||
+						mappings.get(expected.system) !== 'directories.system' ||
+						mappings.get(expected.placeholders[group]) !== expected.mapping_keys[group]
+					) {
+						add(
+							'operation_target_mismatch',
+							assetPath(path),
+							`Archive 机器目标或正文规则与权威归档路径不一致：${key}`,
+						);
+					}
+				}
 			}
 			if (EXTENDED_WRITE_SKILLS.has(skill) && !isValidExtendedWriteContract(operation)) {
 				add(
@@ -857,6 +1056,36 @@ export function validateSkillContracts(root) {
 				const documented = uniqueOutputPath(body, locale);
 				if (typeof operation.target_path !== 'string' || operation.target_path !== documented) {
 					add('operation_target_mismatch', assetPath(path), '机器目标与正文唯一产出路径不一致');
+				} else {
+					const expected = expectedTranslateContract(locale);
+					if (
+						documented !== expected.target_path ||
+						declared.get(expected.resource_placeholder) !== 'directories.resources' ||
+						declared.get(expected.translations_placeholder) !==
+							'subdirectories.resources.translations'
+					) {
+						add(
+							'invalid_translate_target_contract',
+							assetPath(path),
+							'Translate 路径映射、正文与机器目标必须绑定资源翻译子目录',
+						);
+					}
+				}
+			}
+			if (skill === 'knowledge') {
+				const expected = expectedKnowledgeTargets(locale);
+				const documentedBody = body.split('<!-- operation-safety-v1 -->')[0];
+				for (const [key, target] of Object.entries(expected)) {
+					if (
+						operation.target_paths?.[key] !== target ||
+						!documentedBody.includes(`\`${target}\``)
+					) {
+						add(
+							'operation_target_mismatch',
+							assetPath(path),
+							`Knowledge 机器目标与正文路径不一致：${key}`,
+						);
+					}
 				}
 			}
 		}

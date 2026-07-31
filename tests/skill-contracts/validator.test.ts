@@ -79,6 +79,24 @@ describe('技能契约校验器', () => {
 		}
 	}
 
+	async function expectMutatedAssetsOk(
+		mutate: (write: (relativePath: string, transform: (content: string) => string) => void) => void,
+	): Promise<void> {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-contract-control-'));
+		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
+		try {
+			const write = (relativePath: string, transform: (content: string) => string) => {
+				const path = join(root, relativePath);
+				writeFileSync(path, transform(readFileSync(path, 'utf8')));
+			};
+			mutate(write);
+			const { validateSkillContracts } = await loadValidator();
+			expect(validateSkillContracts(root)).toEqual({ ok: true, diagnostics: [] });
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	}
+
 	it.each([
 		[
 			'中文物理路径',
@@ -208,6 +226,105 @@ describe('技能契约校验器', () => {
 		);
 	});
 
+	it('拒绝 Translate 双语路径映射、正文与机器目标共同漂到书籍子目录', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) => {
+				write('assets/skills/translate/SKILL.en.md', (content) =>
+					content
+						.replaceAll('{translations subdirectory}', '{books subdirectory}')
+						.replace('subdirectories.resources.translations', 'subdirectories.resources.books'),
+				);
+				write('assets/skills/translate/SKILL.zh.md', (content) =>
+					content
+						.replaceAll('{翻译子目录}', '{书籍子目录}')
+						.replace('subdirectories.resources.translations', 'subdirectories.resources.books'),
+				);
+			},
+			[
+				{
+					code: 'invalid_translate_target_contract',
+					path: 'assets/skills/translate/SKILL.en.md',
+					message: 'Translate 路径映射、正文与机器目标必须绑定资源翻译子目录',
+				},
+				{
+					code: 'invalid_translate_target_contract',
+					path: 'assets/skills/translate/SKILL.zh.md',
+					message: 'Translate 路径映射、正文与机器目标必须绑定资源翻译子目录',
+				},
+			],
+		);
+	});
+
+	it('拒绝 Archive 的 plan 机器目标漂到合法的草稿归档目录', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) => {
+				write('assets/skills/archive/SKILL.en.md', (content) =>
+					content.replace(
+						'  plan: "{system directory}/{archived plans subdirectory}/<filename>.md"',
+						'  plan: "{system directory}/{archived drafts subdirectory}/YYYY/MM/<filename>.md"',
+					),
+				);
+				write('assets/skills/archive/SKILL.zh.md', (content) =>
+					content.replace(
+						'  plan: "{系统目录}/{归档计划子目录}/<filename>.md"',
+						'  plan: "{系统目录}/{归档草稿子目录}/YYYY/MM/<filename>.md"',
+					),
+				);
+			},
+			[
+				{
+					code: 'operation_target_mismatch',
+					path: 'assets/skills/archive/SKILL.en.md',
+					message: 'Archive 机器目标或正文规则与权威归档路径不一致：plan',
+				},
+				{
+					code: 'operation_target_mismatch',
+					path: 'assets/skills/archive/SKILL.zh.md',
+					message: 'Archive 机器目标或正文规则与权威归档路径不一致：plan',
+				},
+			],
+		);
+	});
+
+	it('拒绝 Read PDF 双语共同声明不存在的 courses 资源配置键', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) => {
+				write('assets/skills/read-pdf/SKILL.en.md', (content) =>
+					content
+						.replaceAll('{books subdirectory}', '{courses subdirectory}')
+						.replace('subdirectories.resources.books', 'subdirectories.resources.courses'),
+				);
+				write('assets/skills/read-pdf/SKILL.zh.md', (content) =>
+					content
+						.replaceAll('{书籍子目录}', '{课程子目录}')
+						.replace('subdirectories.resources.books', 'subdirectories.resources.courses'),
+				);
+			},
+			[
+				{
+					code: 'invalid_path_mapping',
+					path: 'assets/skills/read-pdf/SKILL.en.md',
+					message: '逻辑路径映射未解析到 lifeos.yaml 权威配置键：{courses subdirectory}',
+				},
+				{
+					code: 'invalid_path_mapping',
+					path: 'assets/skills/read-pdf/SKILL.zh.md',
+					message: '逻辑路径映射未解析到 lifeos.yaml 权威配置键：{课程子目录}',
+				},
+			],
+		);
+	});
+
+	it('允许已声明资源子目录后的动态文件名', async () => {
+		await expectMutatedAssetsOk((write) =>
+			write(
+				'assets/skills/read-pdf/SKILL.en.md',
+				(content) =>
+					`${content}\n{resources directory}/{books subdirectory}/<runtime-file-name>.pdf\n`,
+			),
+		);
+	});
+
 	it.each([
 		[
 			'机器目标使用未声明逻辑占位符',
@@ -290,6 +407,37 @@ describe('技能契约校验器', () => {
 					path: 'assets/skills/archive/SKILL.en.md',
 					message:
 						'Archive 必须完整声明 project-file、project-directory、draft、plan、diary 目标映射',
+				},
+			],
+		);
+	});
+
+	it('拒绝 Knowledge 的论文机器目标复用书籍章节目录结构', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) => {
+				write('assets/skills/knowledge/SKILL.en.md', (content) =>
+					content.replace(
+						'  paper-knowledge-note: "{knowledge directory}/{notes subdirectory}/<Domain>/<PaperName>.md"',
+						'  paper-knowledge-note: "{knowledge directory}/{notes subdirectory}/<Domain>/<PaperName>/<ChapterName>/<ChapterName>.md"',
+					),
+				);
+				write('assets/skills/knowledge/SKILL.zh.md', (content) =>
+					content.replace(
+						'  paper-knowledge-note: "{知识目录}/{笔记子目录}/<Domain>/<PaperName>.md"',
+						'  paper-knowledge-note: "{知识目录}/{笔记子目录}/<Domain>/<PaperName>/<ChapterName>/<ChapterName>.md"',
+					),
+				);
+			},
+			[
+				{
+					code: 'operation_target_mismatch',
+					path: 'assets/skills/knowledge/SKILL.en.md',
+					message: 'Knowledge 机器目标与正文路径不一致：paper-knowledge-note',
+				},
+				{
+					code: 'operation_target_mismatch',
+					path: 'assets/skills/knowledge/SKILL.zh.md',
+					message: 'Knowledge 机器目标与正文路径不一致：paper-knowledge-note',
 				},
 			],
 		);
@@ -412,6 +560,66 @@ describe('技能契约校验器', () => {
 				},
 			],
 		);
+	});
+
+	it.each([
+		['数组', 'note: []'],
+		['对象', 'note: { path: "Knowledge note path" }'],
+		['空值', 'note:'],
+		['固定真实路径', 'note: "[[Math/Groups]]"'],
+		['非 wikilink', 'note: "Knowledge note path"'],
+	])('拒绝英文 Revise 模板 note 本地化字段变成%s', async (_name, replacement) => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/templates/en/Revise_Template.md', (content) =>
+					content.replace('note: "[[Knowledge note path]]"', replacement),
+				),
+			[
+				{
+					code: 'invalid_localized_template_frontmatter',
+					path: 'assets/templates/en/Revise_Template.md',
+					related_path: 'assets/templates/zh/Revise_Template.md',
+					message: '中英文模板 Frontmatter 本地化字段结构或占位语义不一致：note',
+				},
+			],
+		);
+	});
+
+	it.each(['project', 'knowledge'])('非法 %s 技能 Frontmatter 仅返回 YAML 根因', async (skill) => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write(`assets/skills/${skill}/SKILL.en.md`, (content) =>
+					content.replace('dependencies:', 'dependencies: ['),
+				),
+			[
+				{
+					code: 'invalid_markdown_frontmatter_yaml',
+					path: `assets/skills/${skill}/SKILL.en.md`,
+					message: 'Markdown Frontmatter YAML 无法解析',
+				},
+			],
+		);
+	});
+
+	it.each(['project', 'knowledge'])('CLI 对非法 %s 技能 Frontmatter 仅输出 YAML 根因', (skill) => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-contract-skill-yaml-cli-'));
+		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
+		try {
+			const path = join(root, `assets/skills/${skill}/SKILL.en.md`);
+			writeFileSync(path, readFileSync(path, 'utf8').replace('dependencies:', 'dependencies: ['));
+			const result = spawnSync(process.execPath, [scriptPath, root], { encoding: 'utf8' });
+			expect(result.status).toBe(1);
+			expect(result.stdout).toBe('');
+			expect(result.stderr.trim().split('\n').map(JSON.parse)).toEqual([
+				{
+					code: 'invalid_markdown_frontmatter_yaml',
+					path: `assets/skills/${skill}/SKILL.en.md`,
+					message: 'Markdown Frontmatter YAML 无法解析',
+				},
+			]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	it.each([

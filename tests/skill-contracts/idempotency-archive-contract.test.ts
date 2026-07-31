@@ -237,13 +237,16 @@ describe('阶段五幂等与归档契约', () => {
 				skill: 'knowledge',
 				runId: 'stable(knowledge, source-hash, project-or-standalone, topic)',
 				zhTargets: {
-					'knowledge-note':
-						'{知识目录}/{笔记子目录}/<Domain>/<SourceName>/<ChapterName>/<ChapterName>.md',
+					'book-knowledge-note':
+						'{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md',
+					'paper-knowledge-note': '{知识目录}/{笔记子目录}/<Domain>/<PaperName>.md',
 					wiki: '{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md',
 				},
 				enTargets: {
-					'knowledge-note':
-						'{knowledge directory}/{notes subdirectory}/<Domain>/<SourceName>/<ChapterName>/<ChapterName>.md',
+					'book-knowledge-note':
+						'{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md',
+					'paper-knowledge-note':
+						'{knowledge directory}/{notes subdirectory}/<Domain>/<PaperName>.md',
 					wiki: '{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md',
 				},
 				statusMutations: [
