@@ -67,7 +67,7 @@ memory_context(
 1. **确定主题**：询问用户想追踪的领域和子方向
 2. **了解偏好**：学术 vs 行业、必读来源、关注重点
 3. **生成配置**：根据主题推荐信息源，生成完整配置笔记
-4. **用户确认**：写入 `{系统目录}/{信息子目录}/<TopicName>.md`，提示用户在 Obsidian 中检查和裁剪
+4. **用户确认**：写入 `{系统目录}/{信息子目录}/<TopicName>.md`，写入后立即调用 `memory_notify(contract_version=2, file_path="{系统目录}/{信息子目录}/<TopicName>.md")`，再提示用户在 Obsidian 中检查和裁剪
 
 配置笔记使用 Markdown 表格 + checkbox 开关，用户在 Obsidian 中可直接编辑：
 

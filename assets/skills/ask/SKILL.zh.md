@@ -54,13 +54,59 @@ memory_bootstrap()
 
 ## 步骤零：问题分类与路由
 
+<!-- routing-contract-v1 -->
+```yaml
+contract_version: 1
+order:
+  - explicit_skill
+  - daily_planning
+  - pdf_reading
+  - translation
+  - digest
+  - research
+  - project
+  - knowledge
+  - brainstorm
+  - direct_answer
+routes:
+  - id: daily_planning
+    target: today
+    examples: ["询问今日安排"]
+  - id: pdf_reading
+    target: read-pdf
+    examples: ["读取这个 PDF 章节"]
+  - id: translation
+    target: translate
+    examples: ["翻译这个 PDF 章节"]
+  - id: digest
+    target: digest
+    examples: ["生成信息周报"]
+  - id: research
+    target: research
+    examples: ["系统调研这个主题"]
+  - id: project
+    target: project
+    examples: ["把这个想法做成项目"]
+  - id: knowledge
+    target: knowledge
+    examples: ["整理这个知识点"]
+  - id: brainstorm
+    target: brainstorm
+    examples: ["一起发散这个想法"]
+```
+
+严格按契约 `order` 首个匹配项路由：显式技能优先；“今天/今日安排”进入 `/today`；PDF 的读取先于翻译；明确要求将英文 PDF 章节译为中文时进入 `/translate`；周报进入 `/digest`。没有专项匹配时返回 `direct_answer`。
+
 收到问题后，先快速判断类型并决定处理方式：
 
 | 类型 | 判断标准 | 处理方式 |
 |------|---------|---------|
 | **简单问答** | 概念解释、语法查询、事实性问题 | → 步骤一，直接回答 |
 | **Vault 相关** | 涉及用户笔记、项目、学习进度 | → 步骤一，启用记忆/Vault 检索 |
-| **PDF 阅读** | 明确指向 PDF 特定页面或章节 | → 调用 `/read-pdf` 后回答 |
+| **每日规划** | “今天安排什么”、“今日计划” | → 调用 `/today` |
+| **PDF 阅读** | 明确指向 PDF 特定页面或章节，且未要求翻译 | → 调用 `/read-pdf` 后回答 |
+| **PDF 翻译** | 明确要求翻译英文 PDF 的章节或页码 | → 调用 `/translate` |
+| **信息周报** | “周报”、“信息汇总”、“digest” | → 调用 `/digest` |
 | **发散探讨** | 开放性问题、多角度思考、"怎么看"、"有什么可能" | → 建议 `/brainstorm`，简述原因 |
 | **系统调研** | 需要文献综述、多源对比、产出报告 | → 建议 `/research`，简述原因 |
 | **复习测试** | "考考我"、"测试一下"、"复习" | → 建议 `/revise` |
@@ -76,19 +122,15 @@ memory_bootstrap()
 
 ## 步骤一：记忆前置判断（仅限三类问题）
 
-只有在下列三类问题中，才先查记忆，再决定是否继续查 Vault：
+规则、偏好、历史决策和学习状态由路由后的 `memory_context` 提供；它们不是 Vault 原文，禁止用 `memory_query` 获取。若路由后识别出项目、资源、工具或文件，再增量调用 `memory_context` 载入新增 scope。
+
+只有在需要笔记原文、候选笔记或来源内容时才调用 `memory_query`；它只检索 Vault 原文。对于下列三类问题，先从已加载的 `memory_context` 判断，再按需查询相关原文：
 
 1. **偏好判断**：如“我更适合先看全局还是先做例题？”
 2. **历史决策**：如“之前为什么决定先做 Phase 0？”
 3. **学习状态**：如“第 4 章我复习到什么程度了？”
 
-推荐调用顺序：
-
-```
-memory_query(contract_version=2, query="<问题关键词>", limit=5)
-```
-
-不属于这三类时，**不要默认先查记忆**，直接进入来源检查。
+不属于上述三类时，**不要默认查询 Vault**，直接进入来源检查。
 
 ## 步骤二：来源检查（按需判断，非强制）
 
@@ -138,6 +180,11 @@ memory_query(contract_version=2, query="<问题关键词>", limit=5)
 - `source: ask` 标记来源技能，便于追溯
 - 主题关键词从问题中提取，保持简短（2-4 个字）
 - 保存后通知用户草稿路径，并提示后续可用的技能
+- 草稿写入后立即调用：
+
+```text
+memory_notify(contract_version=2, file_path="{草稿目录}/Ask_YYYY-MM-DD_<主题关键词>.md")
+```
 
 # 回复格式
 

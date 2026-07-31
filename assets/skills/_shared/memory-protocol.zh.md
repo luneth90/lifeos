@@ -169,4 +169,4 @@ memory_log(
 
 ## 噪声防护
 
-闲聊、一次性技术问答和与 Vault 无关的讨论不触发文件检索或局部上下文；但用户明确提出持久规则时，仍应按上述作用域协议写入。
+闲聊、一次性技术问答和与 Vault 无关的讨论：完成路由后仍按启动硬规则加载已路由的 `skill` scope 的 `memory_context`，但不得查询 Vault，也不得添加无关的 project/file scope。规则、偏好和决策只来自 Layer 0 或 `memory_context`；只有需要 Vault 原文、候选笔记或来源内容时才调用 `memory_query`。用户明确提出持久规则时，仍应按上述作用域协议写入。

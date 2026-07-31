@@ -64,22 +64,26 @@ Project 内部提示词。
 
 在开始对话前，**静默**执行以下操作（不要对用户报告检索过程）：
 
-1. 先查最小记忆上下文，确认是否已有相关偏好或约束：
+1. 先使用已加载的 `memory_context` 获取规则、偏好和已确认决策；它们不是 Vault 原文，禁止用 `memory_query` 获取。话题明确后如新增项目、文件或工具作用域，先增量调用 `memory_context`。
 
-   推荐命令：
+2. 只有需要候选笔记和来源原文时才查询 Vault：
 
 ```
 memory_query(contract_version=2, query="<话题关键词>", limit=5)
 ```
 
-2. 根据用户提供的话题关键词，快速搜索：
+3. 根据用户提供的话题关键词，快速搜索：
    - `{项目目录}/`：是否有相关进行中项目
    - `{研究目录}/`：是否有相关研究报告
    - `{知识目录}/{百科子目录}/`：是否有相关 百科概念
 
-3. 若找到相关笔记，在开场白中**自然提及一句**（例："你之前在 [[ProjectX]] 里研究过相关方向，可以作为起点。"）
+4. 若找到相关笔记，在开场白中**自然提及一句**（例："你之前在 [[ProjectX]] 里研究过相关方向，可以作为起点。"）
 
-4. **Phase 1 全程不再中断查 Vault**，保持对话流畅性。
+5. 阶段一保持对话流畅；只有新增 scope 或原文准确性确有需要时才补载 `memory_context` 或查询 Vault，不能沿用不完整的早期 scope。
+
+## 正文 checkpoint（压缩恢复）
+
+使用同一份头脑风暴草稿正文保存 checkpoint：发散开始后写 `## Checkpoint：发散`，总结确认后写 `## Checkpoint：收敛`，交接前写 `## Checkpoint：交接`。每个 checkpoint 写入主题、已确认结论、未决问题和下一步；写入后立即调用 `memory_notify(contract_version=2, file_path="{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md")`。上下文压缩后从最近 checkpoint 恢复，不重新开始。
 
 # 阶段1：头脑风暴模式
 
@@ -185,6 +189,19 @@ memory_query(contract_version=2, query="<话题关键词>", limit=5)
 3. **保存草稿** — 在 {草稿目录}/ 创建草稿笔记，供后续 /research 或 /knowledge 深化
 
 > 各选项的详细执行步骤见 `references/action-options.md`。
+
+创建项目时只通过公开入口发送以下结构化交接，不读取或拼接 Project 内部提示词：
+
+```yaml
+handoff:
+  target: project
+  source: brainstorm
+  source_path: "00_草稿/2026-07-31_图检索构想.md"
+  intent: "把已确认的图检索构想转为开发项目"
+  constraints: []
+```
+
+其中 `source_path`、`intent` 替换为当前已写入 checkpoint 的真实草稿路径与已确认意图；其余字段和结构不变。
 
 如果本轮对话中用户确认了需要持久遵守的偏好或规则，收尾前通过 `memory_log` 写入行为约束。
 

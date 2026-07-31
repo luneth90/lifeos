@@ -54,13 +54,59 @@ memory_bootstrap()
 
 ## Step 0: Question Classification & Routing
 
+<!-- routing-contract-v1 -->
+```yaml
+contract_version: 1
+order:
+  - explicit_skill
+  - daily_planning
+  - pdf_reading
+  - translation
+  - digest
+  - research
+  - project
+  - knowledge
+  - brainstorm
+  - direct_answer
+routes:
+  - id: daily_planning
+    target: today
+    examples: ["询问今日安排"]
+  - id: pdf_reading
+    target: read-pdf
+    examples: ["读取这个 PDF 章节"]
+  - id: translation
+    target: translate
+    examples: ["翻译这个 PDF 章节"]
+  - id: digest
+    target: digest
+    examples: ["生成信息周报"]
+  - id: research
+    target: research
+    examples: ["系统调研这个主题"]
+  - id: project
+    target: project
+    examples: ["把这个想法做成项目"]
+  - id: knowledge
+    target: knowledge
+    examples: ["整理这个知识点"]
+  - id: brainstorm
+    target: brainstorm
+    examples: ["一起发散这个想法"]
+```
+
+Route by the first matching item in the contract `order`: an explicit skill wins; “today” requests go to `/today`; PDF reading precedes translation; an explicit request to translate an English PDF chapter goes to `/translate`; weekly updates go to `/digest`. Return `direct_answer` when no specialized route matches.
+
 Upon receiving a question, quickly classify its type and decide the handling approach:
 
 | Type | Criteria | Action |
 |------|----------|--------|
 | **Simple Q&A** | Concept explanation, syntax query, factual question | → Step 1, answer directly |
 | **Vault-related** | Involves user notes, projects, learning progress | → Step 1, enable memory/Vault search |
-| **PDF reading** | Explicitly points to a specific PDF page or chapter | → Invoke `/read-pdf` then answer |
+| **Daily planning** | “What should I do today?”, “today’s plan” | → Invoke `/today` |
+| **PDF reading** | Explicitly points to a specific PDF page or chapter without requesting translation | → Invoke `/read-pdf` then answer |
+| **PDF translation** | Explicitly requests translation of an English PDF chapter or pages | → Invoke `/translate` |
+| **Weekly digest** | “weekly digest”, “weekly update”, “digest” | → Invoke `/digest` |
 | **Divergent exploration** | Open-ended question, multi-angle thinking, "what do you think", "what if" | → Suggest `/brainstorm`, briefly explain why |
 | **Systematic research** | Needs literature review, multi-source comparison, report output | → Suggest `/research`, briefly explain why |
 | **Review/testing** | "Quiz me", "test me", "review" | → Suggest `/revise` |
@@ -76,19 +122,15 @@ If the user declines, still do your best to answer within ask.
 
 ## Step 1: Memory Pre-check (Only for Three Types of Questions)
 
-Only query memory first for the following three types of questions before deciding whether to search the Vault:
+Rules, preferences, historical decisions, and learning state come from routing-scoped `memory_context`; they are not Vault originals, so never retrieve them through `memory_query`. If routing identifies a project, resource, tool, or file, incrementally call `memory_context` for that newly resolved scope.
+
+Call `memory_query` only for Vault originals, candidate notes, or source content. For the following three question types, first consult the loaded `memory_context`, then query the relevant original notes only when needed:
 
 1. **Preference judgment**: e.g., "Am I better off seeing the big picture first or doing exercises first?"
 2. **Historical decisions**: e.g., "Why did we decide to do Phase 0 first?"
 3. **Learning status**: e.g., "How far have I reviewed Chapter 4?"
 
-Recommended call order:
-
-```
-memory_query(contract_version=2, query="<question keywords>", limit=5)
-```
-
-If the question does not fall into these three types, **do not query memory by default** — proceed directly to the source check.
+If the question does not fall into these three types, **do not query the Vault by default** — proceed directly to the source check.
 
 ## Step 2: Source Check (On-demand, Not Mandatory)
 
@@ -138,6 +180,11 @@ body and append `source: ask`. Do not hand-write another inline frontmatter or r
 - `source: ask` marks the originating skill for traceability
 - Topic keywords are extracted from the question and kept short (2-4 words)
 - After saving, notify the user of the draft path and suggest available follow-up skills
+- Immediately after writing the draft, call:
+
+```text
+memory_notify(contract_version=2, file_path="{drafts directory}/Ask_YYYY-MM-DD_<TopicKeywords>.md")
+```
 
 # Response Format
 

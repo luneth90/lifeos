@@ -175,8 +175,8 @@ After scanning, process every eligible item in the execution list by default:
 
 5. **Cleanup Scope Memory:**
    - For archived projects, call `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="Project archival cleanup")` to batch archive all active memory entries under that scope
-   - For archived drafts/plans that had `file` scope memory attached, call `memory_forget(contract_version=2, scope={type: "file", key: "<entity_id or file path>"}, reason="Draft/plan archival cleanup")` to batch archive
-   - Then call `memory_notify` to notify the file move (`previous_file_path` pointing to the original path)
+   - Drafts and plans are prohibited from having persistent `file` scope memory, so never call or clean `memory_forget` for them; interim information remains in their Markdown body.
+   - Immediately call `memory_notify` for each valid move (`previous_file_path` points to the original path); after a project move, then perform its permitted project-scope cleanup.
 
 6. **Cleanup check:**
    - Check if there are orphaned associated resources in `{resources directory}/`

@@ -63,22 +63,26 @@ This is a **conversational, iterative skill** divided into four phases:
 
 Before starting the conversation, **silently** perform the following (do not report the retrieval process to the user):
 
-1. Check minimal memory context to see if any relevant preferences or constraints already exist:
+1. Use the already loaded `memory_context` for rules, preferences, and confirmed decisions; these are not Vault originals and must never be retrieved through `memory_query`. When the topic resolves a new project, file, or tool scope, incrementally call `memory_context` first.
 
-   Recommended commands:
+2. Query the Vault only for candidate notes and source originals:
 
 ```
 memory_query(contract_version=2, query="<topic keywords>", limit=5)
 ```
 
-2. Based on the topic keywords provided by the user, perform a quick search:
+3. Based on the topic keywords provided by the user, perform a quick search:
    - `{projects directory}/`: any related active projects
    - `{research directory}/`: any related research reports
    - `{knowledge directory}/{wiki subdirectory}/`: any related wiki concepts
 
-3. If related notes are found, **mention them naturally in the opening** (e.g., "You previously explored a related direction in [[ProjectX]], which could serve as a starting point.")
+4. If related notes are found, **mention them naturally in the opening** (e.g., "You previously explored a related direction in [[ProjectX]], which could serve as a starting point.")
 
-4. **Do not interrupt to query the Vault during Phase 1** — maintain conversational flow.
+5. Keep Phase 1 conversational; load `memory_context` or query the Vault only when a new scope or source accuracy genuinely needs it, never by reusing an incomplete early scope.
+
+## Body Checkpoints (Compaction Recovery)
+
+Use one brainstorm draft body for checkpoints: after divergence begins write `## Checkpoint: Divergence`, after summary confirmation write `## Checkpoint: Convergence`, and before handoff write `## Checkpoint: Handoff`. Each checkpoint records the topic, confirmed conclusions, open questions, and next step; immediately call `memory_notify(contract_version=2, file_path="{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md")` after the write. Resume from the latest checkpoint after compaction instead of restarting.
 
 # Phase 1: Brainstorm Mode
 
@@ -184,6 +188,19 @@ After the summary is confirmed, offer three options:
 3. **Save as draft** — create a draft note in `{drafts directory}/` for later deepening with `/research` or `/knowledge`
 
 > Detailed execution steps for each option are in `references/action-options.md`.
+
+For a project, send only this structured handoff through the public entry; never read or assemble Project internal prompts:
+
+```yaml
+handoff:
+  target: project
+  source: brainstorm
+  source_path: "00_草稿/2026-07-31_图检索构想.md"
+  intent: "把已确认的图检索构想转为开发项目"
+  constraints: []
+```
+
+Replace `source_path` and `intent` with the real checkpoint draft path and confirmed intent while preserving all other fields and structure.
 
 If the user confirmed any persistent preferences or rules during this conversation, log them as behavior rules via `memory_log` before wrapping up.
 

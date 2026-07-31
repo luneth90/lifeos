@@ -2,7 +2,7 @@
 
 Invoke the `/project` public planning entry with structured input as the project seed:
 
-1. Pass `{ seed: <full Phase 2 summary>, source: "brainstorming session (YYYY-MM-DD)", origin: "brainstorm" }`
+1. Pass the public `handoff`: `{ target: "project", source: "brainstorm", source_path: "<checkpoint draft path>", intent: "<confirmed intent>", constraints: [] }`
 2. Let `/project` resolve the `spawn_agent` capability and perform planning only
 3. Receive plan path, `plan_revision`, and `confirmed_hash`; do not read Project internal prompts
 
@@ -38,6 +38,7 @@ Please review the plan. The confirmation snapshot binds this revision and hash; 
    - Record what was learned in today's diary
 
 5. **Report** the created file paths and summaries
+6. **Index notification**: immediately call the matching `memory_notify(contract_version=2, file_path="<relative path>")` after writing each Wiki and today's diary
 
 ## Option 3: Save as Draft
 
@@ -50,6 +51,7 @@ Please review the plan. The confirmation snapshot binds this revision and hash; 
    - Full Phase 2 brainstorm summary
    - Core ideas from the conversation (bulleted)
    - Frontmatter with `status: pending` (ensures it can be recognized and processed by `/archive`)
+   - Immediately call `memory_notify(contract_version=2, file_path="{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md")` after the write
 
 3. Suggest to the user what they can do next:
    - `/research` → deepen into a research report (`{research directory}/`)

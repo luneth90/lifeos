@@ -13,9 +13,16 @@ id: "{{ID}}"
 
 ## Tasks
 
+<!-- BEGIN AUTO:tasks -->
 - [ ]
 - [ ]
 - [ ]
+<!-- END AUTO:tasks -->
+
+## Related Projects
+
+<!-- BEGIN AUTO:related-projects -->
+<!-- END AUTO:related-projects -->
 
 ## Notes
 

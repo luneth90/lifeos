@@ -2,6 +2,31 @@
 
 This document describes the overall workflow of the LifeOS skill system and the relationships between skills.
 
+<!-- learning-lifecycle-contract-v1 -->
+```yaml
+contract_version: 1
+nodes:
+  - today
+  - digest
+  - draft
+  - research
+  - project
+  - read-pdf
+  - extraction
+  - translate
+  - knowledge
+  - revise
+edges:
+  - {from: digest, to: draft}
+  - {from: draft, to: research}
+  - {from: draft, to: project}
+  - {from: draft, to: knowledge}
+  - {from: read-pdf, to: extraction}
+  - {from: extraction, to: translate}
+  - {from: translate, to: knowledge}
+  - {from: knowledge, to: revise}
+```
+
 ## Core Flow
 
 ```
@@ -17,8 +42,9 @@ today (daily entry point)
 
 ```
 brainstorm → project | knowledge | draft (exploratory conversation, output optional)
-ask → read-pdf | knowledge | brainstorm | research (quick Q&A, escalate as needed)
-read-pdf → JSON intermediate output (PDF extractor consumed by knowledge/ask/revise)
+ask → today | read-pdf | translate | digest | knowledge | brainstorm | research (quick Q&A, route as needed)
+digest → draft → research | project | knowledge (a digest is a publicly consumable draft handoff)
+read-pdf → extraction → translate → knowledge → revise (the public PDF-to-learning handoff)
 ```
 
 ## Typical Learning Path
@@ -36,12 +62,13 @@ Knowledge status advances only through `draft → review → revised → mastere
 | Source Skill | Callable/Suggested Targets | Invocation Method |
 |-------------|---------------------------|-------------------|
 | /today | /revise, /research, /project, /brainstorm, /archive | Text suggestion |
-| /brainstorm | /project | Read project planning-agent-prompt to launch sub-agent |
+| /brainstorm | /project | Pass a handoff through the `/project` public entry; never read internal prompts |
 | /brainstorm | /knowledge | Directly create encyclopedia notes |
 | /brainstorm | draft | Directly create draft files |
 | /ask | /read-pdf | Direct invocation |
 | /ask | /knowledge, /brainstorm, /research | End-of-conversation hook suggestion |
-| /knowledge | /project (prerequisite) | Stop and prompt if no project file exists |
+| /knowledge | standalone Wiki | Without a project, use the generic Wiki template and write directly under `{knowledge directory}/{wiki subdirectory}` |
+| /knowledge | project-bound knowledge note | With a project and source, create a chapter/paper note and update the project mastery table |
 | /revise | /brainstorm, /ask | Suggestion (for weak concepts) |
 | /research | draft (input) | Read drafts as research source |
 | /project | draft (input) | Read drafts as project seed |

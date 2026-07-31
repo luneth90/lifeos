@@ -2,7 +2,7 @@
 
 调用 `/project` 公共规划入口，将结构化输入作为项目种子：
 
-1. 传入 `{ seed: <Phase 2 总结全文>, source: "头脑风暴会话（YYYY-MM-DD）", origin: "brainstorm" }`
+1. 传入公开 `handoff`：`{ target: "project", source: "brainstorm", source_path: "<checkpoint 草稿路径>", intent: "<已确认意图>", constraints: [] }`
 2. `/project` 自行解析 `spawn_agent` 能力并只完成规划阶段
 3. 接收计划文件路径、`plan_revision` 与 `confirmed_hash`；不读取 Project 内部提示词
 
@@ -37,6 +37,7 @@ Orchestrator 收到计划文件路径后，告知用户：
    - 在今日日记中记录所学
 
 5. **用中文汇报**创建的文件路径和摘要
+6. **索引通知**：每个 Wiki 和今日笔记写入后立即调用对应 `memory_notify(contract_version=2, file_path="<相对路径>")`
 
 ## 选项3：保存草稿
 
@@ -49,6 +50,7 @@ Orchestrator 收到计划文件路径后，告知用户：
    - Phase 2 头脑风暴总结全文
    - 对话中出现的核心想法（条目式）
    - Frontmatter 中 `status: pending`（确保可被 `/archive` 识别流转）
+   - 写入后立即调用 `memory_notify(contract_version=2, file_path="{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md")`
 
 3. 提示用户后续可用：
    - `/research` → 深化为研究报告（`{研究目录}/`）

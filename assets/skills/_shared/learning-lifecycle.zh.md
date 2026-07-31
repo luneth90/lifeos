@@ -2,6 +2,31 @@
 
 本文档描述 LifeOS 技能系统的整体工作流和技能间关系。
 
+<!-- learning-lifecycle-contract-v1 -->
+```yaml
+contract_version: 1
+nodes:
+  - today
+  - digest
+  - draft
+  - research
+  - project
+  - read-pdf
+  - extraction
+  - translate
+  - knowledge
+  - revise
+edges:
+  - {from: digest, to: draft}
+  - {from: draft, to: research}
+  - {from: draft, to: project}
+  - {from: draft, to: knowledge}
+  - {from: read-pdf, to: extraction}
+  - {from: extraction, to: translate}
+  - {from: translate, to: knowledge}
+  - {from: knowledge, to: revise}
+```
+
 ## 核心流程
 
 ```
@@ -17,8 +42,9 @@ today (每日入口)
 
 ```
 brainstorm → project | knowledge | draft（探索性对话，产出可选）
-ask → read-pdf | knowledge | brainstorm | research（快速问答，按需升级）
-read-pdf → JSON 中间输出（供 knowledge/ask/revise 消费的 PDF 提取器）
+ask → today | read-pdf | translate | digest | knowledge | brainstorm | research（快速问答，按路由升级）
+digest → draft → research | project | knowledge（信息周报作为可消费草稿公开交接）
+read-pdf → extraction → translate → knowledge → revise（PDF 提取、翻译和学习的公开交接）
 ```
 
 ## 典型学习路径
@@ -36,12 +62,13 @@ read-pdf → JSON 中间输出（供 knowledge/ask/revise 消费的 PDF 提取�
 | 源技能 | 可调用/建议的目标 | 调用方式 |
 |--------|------------------|----------|
 | /today | /revise, /research, /project, /brainstorm, /archive | 文本建议 |
-| /brainstorm | /project | 读取 project planning-agent-prompt 启动 sub-agent |
+| /brainstorm | /project | 通过 `/project` 公共入口传入 handoff，不读取内部提示词 |
 | /brainstorm | /knowledge | 直接创建百科笔记 |
 | /brainstorm | 草稿 | 直接创建草稿文件 |
 | /ask | /read-pdf | 直接调用 |
 | /ask | /knowledge, /brainstorm, /research | 结尾钩子建议 |
-| /knowledge | /project (前置依赖) | 若无项目文件则停止并提示 |
+| /knowledge | 独立 Wiki | 无项目时使用通用 Wiki 模板，直接写入 `{知识目录}/{百科子目录}` |
+| /knowledge | 项目绑定知识笔记 | 有项目和原文时创建章节/论文笔记，并回填项目掌握度表 |
 | /revise | /brainstorm, /ask | 建议（针对薄弱概念） |
 | /research | 草稿 (输入) | 读取草稿作为研究来源 |
 | /project | 草稿 (输入) | 读取草稿作为项目种子 |

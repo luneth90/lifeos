@@ -13,9 +13,16 @@ id: "{{ID}}"
 
 ## 待办
 
+<!-- BEGIN AUTO:tasks -->
 - [ ]
 - [ ]
 - [ ]
+<!-- END AUTO:tasks -->
+
+## 相关项目
+
+<!-- BEGIN AUTO:related-projects -->
+<!-- END AUTO:related-projects -->
 
 ## 备注
 

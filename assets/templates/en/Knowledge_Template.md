@@ -84,3 +84,9 @@ id: "{{ID}}"
 ## Personal Notes (manual)
 
 > <!-- Leave blank for future manual additions -->
+
+## Draft Consumption Audit
+
+| Draft section | Destination | Explicit retention reason if unconsumed |
+| --- | --- | --- |
+| | | |

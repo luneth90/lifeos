@@ -67,7 +67,7 @@ Follow `references/setup-guide.md` for the conversation flow:
 1. **Define the topic**: ask what domain and subareas the user wants to track
 2. **Understand preferences**: academic vs industry, must-read sources, and focus areas
 3. **Generate config**: recommend sources and produce a full config note
-4. **User review**: write the config to `{system directory}/{digest subdirectory}/<TopicName>.md` and ask the user to review it in Obsidian
+4. **User review**: write the config to `{system directory}/{digest subdirectory}/<TopicName>.md`, immediately call `memory_notify(contract_version=2, file_path="{system directory}/{digest subdirectory}/<TopicName>.md")`, then ask the user to review it in Obsidian
 
 The config note uses Markdown tables plus checkbox switches so the user can edit it directly in Obsidian:
 

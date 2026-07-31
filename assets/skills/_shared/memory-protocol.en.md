@@ -169,4 +169,4 @@ Profile content should include the fact, evidence, and decision impact. Use glob
 
 ## Noise Protection
 
-Casual chat, one-off technical Q&A, and conversations unrelated to the Vault do not trigger file search or local context. Explicit persistent rules still follow the scoped write protocol above.
+For casual chat, one-off technical Q&A, and conversations unrelated to the Vault: after routing, still load the routed `skill` scope with `memory_context` under the startup rule, but do not query the Vault or add unrelated project/file scopes. Rules, preferences, and decisions come only from Layer 0 or `memory_context`; call `memory_query` only for Vault originals, candidate notes, or source content. Explicit persistent rules still follow the scoped write protocol above.

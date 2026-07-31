@@ -54,8 +54,9 @@ Help the user start a new day: review yesterday's progress, create today's diary
 1. **Get today's date**
    - Determine the current date (YYYY-MM-DD format)
 
-2. **Read yesterday's diary**
-   - If it exists, read `{diary directory}/[yesterday's date].md`
+2. **Read the most recent existing diary**
+   - Starting from yesterday, check `{diary directory}/YYYY-MM-DD.md` in reverse chronological order for the previous 7 days and read the first existing diary
+   - If none exists in that window, skip carryover; never assume yesterday's diary exists
    - Extract incomplete tasks (unchecked `- [ ]` items)
    - Note yesterday's work content
 
@@ -87,12 +88,13 @@ Help the user start a new day: review yesterday's progress, create today's diary
 
 6. **Query the drafts pool** (via VaultIndex)
    ```
-   memory_query(contract_version=2, query="", filters={"status":"pending"}, limit=20)
+   memory_query(contract_version=2, query="", filters={"type":"draft","status":"pending"}, limit=20)
    ```
    - Filter results where `file_path` starts with `{drafts directory}/`
    - Count pending items
 
 7. **Analyze and prioritize**
+   - Use the fixed ordering: nearest deadline → yesterday's carryover → user-selected active projects → other candidates
    - Identify time-sensitive items (deadlines, appointments)
    - Prefer the "Current Focus" and "Active Projects" aggregated in TaskBoard
    - Find stalled projects with no updates for 3+ days (via modified_at field)
@@ -112,7 +114,8 @@ Use the AskUserQuestion tool to ask only one thing:
 
 **Question:** "What will you work on today?"
 
-- Candidates are based on yesterday's carryover, active-project next steps, incomplete review answers, and notes pending review, with an "Other" option
+- Sort candidates as nearest deadline → yesterday's carryover → user-selected active projects → other candidates, with an "Other" option
+- Write only the projects and tasks explicitly selected by the user, within the chosen item limit; never auto-add unselected candidates to today's diary
 
 ## Step 3: Create Today's Diary
 
@@ -121,12 +124,17 @@ Use the AskUserQuestion tool to ask only one thing:
    - If not: create from template `{system directory}/{templates subdirectory}/Daily_Template.md`
 
 2. **Populate diary content:**
-   - **To-do items**: Fill in by priority (order: yesterday's carryover → incomplete review answers → user-selected items for today → project next steps → notes pending review)
+   - **To-do items**: Write the `<!-- BEGIN AUTO:tasks -->` to `<!-- END AUTO:tasks -->` managed block; use nearest deadline → yesterday's carryover → user-selected active projects → other candidates, and include only user-selected items
      - If there are review files with `status: pending` (user received questions but hasn't answered), prioritize the reminder: `📝 Complete review answers: [[Review_YYYY-MM-DD]] ([[chapter note name]])`
      - If there are notes pending review (only `status: review`), list each as `/revise [[note name]]` in to-dos
    - **Log**: Leave empty for the user
    - **Notes**: Fill in suggestions (time-sensitive items, stalled project reminders, pending draft count)
-   - **Related projects**: List active projects with current status
+   - **Related projects**: Write the `<!-- BEGIN AUTO:related-projects -->` to `<!-- END AUTO:related-projects -->` managed block; list only user-selected active projects with their current status
+   - Immediately after writing or updating the diary, call:
+
+```text
+memory_notify(contract_version=2, file_path="{diary directory}/YYYY-MM-DD.md")
+```
 
 ## Step 3-B: Event-Driven Profile Check (Silent Execution)
 
@@ -200,11 +208,11 @@ Ready to go! Quick actions:
 
 # Important Rules
 
-- **Always read yesterday's diary** — do not assume it is empty
+- **Read the most recent existing diary** — look back only seven days by default; skip when none exists and never assume yesterday exists
 - **Be specific with priorities** — "Create wireframes for [[Project]]" instead of "work on project"
 - **Time-sensitive items first** — deadlines and appointments go to the top
 - **Flag stalled projects** — remind about projects with no updates for 3+ days
-- **Carry over incomplete tasks** — unchecked items from yesterday must be brought into today
+- **Preserve user selection** — candidates support selection; only selected items may enter today's managed blocks
 - **Do not overwrite existing content** — if today's diary already exists, update carefully without overwriting
 - **Use the template format** — keep diary structure consistent
 - **Add wikilinks everywhere** — use double-bracket links for projects and concepts

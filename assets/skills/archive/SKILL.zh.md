@@ -175,8 +175,8 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 5. **清理关联 Scope 记忆：**
    - 对已归档的项目，调用 `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="项目归档清理")` 批量清理该作用域下所有活跃记忆条目
-   - 对已归档的草稿/计划，若曾挂载 `file` 作用域记忆，调用 `memory_forget(contract_version=2, scope={type: "file", key: "<entity_id 或文件路径>"}, reason="草稿/计划归档清理")` 批量清理
-   - 再调用 `memory_notify` 通知文件移动（`previous_file_path` 指向原路径）
+   - 草稿和计划禁止拥有 `file` 作用域持久记忆，因此不得为它们调用或清理 `memory_forget`；阶段性信息保留在 Markdown 正文。
+   - 对每次合法移动立即调用 `memory_notify` 通知索引（`previous_file_path` 指向原路径）；项目移动后再执行其合法的 project scope 清理。
 
 6. **清理检查：**
    - 检查 `{资源目录}/` 中是否有关联的孤立资源
