@@ -266,4 +266,6 @@ operation: ask
 run_id: stable(ask, normalized-topic, YYYY-MM-DD)
 target_path: "{drafts directory}/<draft-id>.md"
 decision: [create, merge, resume, skip, replace]
+on_existing: merge
+preserve: [sources]
 ```

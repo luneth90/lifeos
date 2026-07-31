@@ -136,4 +136,6 @@ operation: research
 run_id: stable(research, normalized-input, plan_revision, confirmed_hash)
 target_path: "{研究目录}/<research-id>.md"
 decision: [create, merge, resume, skip, replace]
+on_draft: resume
+replace_requires: explicit_user_request
 ```

@@ -142,6 +142,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
      obsidian move path="源路径/项目文件夹" to="目标目录/2026/"
      ```
    - 每次操作前先确保目标父目录已存在（`mkdir -p`）
+   - 为源和目标建立路径 guard，并在实际移动紧邻的前后复核；变化时中止、写 manifest 与恢复动作
    - **降级：** 若 `obsidian` CLI 不可用，先停止并呈现链接更新不可用的影响；只有用户明确接受降级后，才可使用受记录的移动方案。不得静默回退到裸 `mv`。
    - **严禁**通过"写入新文件，再删除原文件"的方式模拟移动
    - 文件夹项目必须整体移动目录，不要逐文件复制重建
@@ -164,18 +165,21 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
    - 保持原文件名不变，按年/月组织
    - 只处理超出最近 7 天的日记
 
-3. **移动完成后，再在目标文件上原地更新 frontmatter：**
+3. **每次移动后立即执行唯一权威的索引与 Scope 清理事务：**
+   1. 移动成功后，先把该文件写入 manifest 的 `moves`。
+   2. 立即调用 `memory_notify(contract_version=2, file_path="<新 Vault 相对路径>", previous_file_path="<旧 Vault 相对路径>")`，成功后写入 manifest 的 `notified`；通知失败写入 `errors` 并停止当前事务。
+   3. 明确查询并确认新路径已经进入索引；未确认时写入 `errors` 并停止，不得调用 `memory_forget`。
+   4. 仅对已确认索引成功的项目调用 `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="项目归档清理")`。
+   5. 草稿和计划禁止拥有 `file` 作用域持久记忆，因此不得为它们调用或清理 `memory_forget`；阶段性信息保留在 Markdown 正文。
+
+4. **事务成功后，在目标文件上原地更新 frontmatter：**
    - 新增 `archived: "YYYY-MM-DD"`
    - 保留原有业务终态（草稿、项目、计划均保持 `status: done`）
    - 其他字段保持不变
+   - 写入前后复核路径 guard；写入后再次调用 `memory_notify(contract_version=2, file_path="<新 Vault 相对路径>")`
 
-4. **更新今日日记：**
-   - 在 `{日记目录}/YYYY-MM-DD.md` 的备注区追加归档记录（若文件存在）
-
-5. **清理关联 Scope 记忆：**
-   - 对已归档的项目，调用 `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="项目归档清理")` 批量清理该作用域下所有活跃记忆条目
-   - 草稿和计划禁止拥有 `file` 作用域持久记忆，因此不得为它们调用或清理 `memory_forget`；阶段性信息保留在 Markdown 正文。
-   - 对每次合法移动立即调用 `memory_notify` 通知索引（`previous_file_path` 指向原路径）；项目移动后再执行其合法的 project scope 清理。
+5. **更新今日日记：**
+   - 在 `{日记目录}/YYYY-MM-DD.md` 的备注区追加归档记录（若文件存在），写入前后复核路径 guard，并在写入后通知索引
 
 6. **清理检查：**
    - 检查 `{资源目录}/` 中是否有关联的孤立资源
@@ -322,7 +326,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 ## 归档事务契约
 
-先读取 `_shared/operation-safety.md` 并完成 preflight：枚举目录内全部候选、解析安全源/目标路径、在任何移动前检查 collision。创建逐文件 move manifest：`{ run_id, moves, collisions, notified, errors }`。优先使用 `move_with_link_update`；能力不可用时仅在用户明确接受降级后执行降级，绝不静默裸 `mv`。每个移动后立即 `memory_notify(previous_file_path=...)`；只有新路径索引确认后才 `memory_forget` 旧 project scope。失败必须保留 manifest、已完成 move 和可执行恢复动作；以相同 `run_id` resume。
+先读取 `_shared/operation-safety.md` 并完成 preflight：枚举目录内全部候选、解析安全源/目标路径、在任何移动前检查 collision。创建逐文件 move manifest：`{ run_id, moves, collisions, notified, errors }`。优先使用 `move_with_link_update`；能力不可用时仅在用户明确接受降级后执行降级，绝不静默执行裸移动。唯一顺序是 move → 完整 `memory_notify` → confirm_index → `memory_forget`；任何失败都停止后续步骤并保留恢复动作，以相同 `run_id` resume。
 
 <!-- operation-safety-v1 -->
 ```yaml
@@ -331,4 +335,19 @@ operation: archive
 run_id: stable(archive, candidate-paths, archive-date)
 target_path: "{系统目录}/{归档子目录}/..."
 decision: [create, merge, resume, skip, replace]
+transaction_steps: [move, memory_notify, confirm_index, memory_forget]
+notify:
+  contract_version: 2
+  file_path: <new-vault-relative-path>
+  previous_file_path: <old-vault-relative-path>
+forget:
+  scope_type: project
+  allowed_after: confirm_index
+  forbidden_when: [move_failed, notify_failed, index_unconfirmed]
+manifest_updates:
+  move: moves
+  collision: collisions
+  memory_notify: notified
+  failure: errors
+bare_mv: forbidden
 ```

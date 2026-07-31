@@ -214,4 +214,9 @@ operation: digest
 run_id: stable(digest, config-hash, time-window)
 target_path: "{drafts directory}/<topic>-<window>.md"
 decision: [create, merge, resume, skip, replace]
+on_existing: merge
+input_transport: [stdin, input_file]
+source_ledger_fields: [published_at, fetched_at, health, errors]
+fail_closed: [unknown_module, missing_required_config, all_sources_failed]
+partial_failure_status: partial
 ```

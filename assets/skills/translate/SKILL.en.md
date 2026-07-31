@@ -201,4 +201,6 @@ operation: translate
 run_id: stable(translate, source-pdf, chapter-range, extraction-hash)
 target_path: "{knowledge directory}/<chapter>/Translation_<chapter>.md"
 decision: [create, merge, resume, skip, replace]
+on_draft: resume
+replace_requires: explicit_user_request
 ```

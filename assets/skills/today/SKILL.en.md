@@ -247,4 +247,7 @@ operation: today
 run_id: stable(today, YYYY-MM-DD, selected-items)
 target_path: "{diary directory}/YYYY-MM-DD.md"
 decision: [create, merge, resume, skip, replace]
+on_existing: merge
+stable_item_key: task_id
+managed_regions: [tasks, related-projects]
 ```

@@ -278,4 +278,9 @@ operation: revise
 run_id: stable(revise, knowledge-note-id, mode, note-hash)
 target_path: "{knowledge directory}/<chapter>/Review_<run-id>.md"
 decision: [create, merge, resume, skip, replace]
+on_pending: resume
+question_fields: [knowledge_point_id, source_refs, rubric]
+note_hash_mismatch: regenerate
+pass_threshold: 0.8
+blindspot_state_advance: false
 ```

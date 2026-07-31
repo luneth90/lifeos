@@ -142,6 +142,7 @@ After scanning, process every eligible item in the execution list by default:
      obsidian move path="source-path/project-folder" to="target-directory/2026/"
      ```
    - Ensure the destination parent directory exists before each operation (`mkdir -p`)
+   - Create path guards for source and destination and revalidate immediately before and after the actual move; on change, abort and record manifest and recovery actions
    - **Degradation:** If `obsidian` CLI is unavailable, stop and present the impact of missing link updates. Use a recorded move only after explicit user acceptance of degradation; never silently fall back to bare `mv`.
    - **Never** simulate a move by writing a new file and then deleting the original file
    - Folder projects must be moved as whole directories, not rebuilt file-by-file
@@ -164,18 +165,21 @@ After scanning, process every eligible item in the execution list by default:
    - Keep the original filename unchanged and organize by year/month
    - Only archive diary entries older than the most recent 7 days
 
-3. **After the move, update frontmatter in place at the destination:**
+3. **Immediately after each move, execute the single authoritative index and Scope cleanup transaction:**
+   1. After a successful move, record the file in manifest `moves`.
+   2. Immediately call `memory_notify(contract_version=2, file_path="<new Vault-relative path>", previous_file_path="<old Vault-relative path>")`, then record success in manifest `notified`; on notification failure, record `errors` and stop the current transaction.
+   3. Explicitly query and confirm that the new path is indexed. If unconfirmed, record `errors`, stop, and never call `memory_forget`.
+   4. Only for a project whose new index entry is confirmed, call `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="Project archival cleanup")`.
+   5. Drafts and plans cannot have persistent `file` scope memory, so never call or clean `memory_forget` for them; retain interim information in their Markdown body.
+
+4. **After the transaction succeeds, update frontmatter in place at the destination:**
    - Add `archived: "YYYY-MM-DD"`
    - Preserve the business terminal state (`status: done` for drafts, projects, and plans)
    - Keep other fields unchanged
+   - Revalidate the path guard before and after the write, then call `memory_notify(contract_version=2, file_path="<new Vault-relative path>")` again
 
-4. **Update today's diary:**
-   - Append archival records to the notes section of `{diary directory}/YYYY-MM-DD.md` (if the file exists)
-
-5. **Cleanup Scope Memory:**
-   - For archived projects, call `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="Project archival cleanup")` to batch archive all active memory entries under that scope
-   - Drafts and plans are prohibited from having persistent `file` scope memory, so never call or clean `memory_forget` for them; interim information remains in their Markdown body.
-   - Immediately call `memory_notify` for each valid move (`previous_file_path` points to the original path); after a project move, then perform its permitted project-scope cleanup.
+5. **Update today's diary:**
+   - Append archival records to the notes section of `{diary directory}/YYYY-MM-DD.md` if present; revalidate the path guard before and after the write and notify the index afterward
 
 6. **Cleanup check:**
    - Check if there are orphaned associated resources in `{resources directory}/`
@@ -322,7 +326,7 @@ After archival is complete, suggestions:
 
 ## Archive Transaction Contract
 
-Read `_shared/operation-safety.md` and complete preflight: enumerate every candidate in a directory, resolve safe source/destination paths, and check collision before any move. Create a per-file move manifest: `{ run_id, moves, collisions, notified, errors }`. Prefer `move_with_link_update`; when unavailable, use an explicit degrade only after explicit user acceptance, never silent bare `mv`. Call `memory_notify(previous_file_path=...)` after each move; call `memory_forget` for the old project scope only after the new path index is confirmed. On failure retain the manifest, completed moves, and executable recovery action; use the same `run_id` to resume.
+Read `_shared/operation-safety.md` and complete preflight: enumerate every candidate in a directory, resolve safe source/destination paths, and check collision before any move. Create a per-file move manifest: `{ run_id, moves, collisions, notified, errors }`. Prefer `move_with_link_update`; when unavailable, use an explicit degradation only after explicit user acceptance, never a silent bare move. The only sequence is move → complete `memory_notify` → confirm_index → `memory_forget`; every failure stops subsequent steps and preserves a recovery action for the same `run_id` to resume.
 
 <!-- operation-safety-v1 -->
 ```yaml
@@ -331,4 +335,19 @@ operation: archive
 run_id: stable(archive, candidate-paths, archive-date)
 target_path: "{system directory}/{archive subdirectory}/..."
 decision: [create, merge, resume, skip, replace]
+transaction_steps: [move, memory_notify, confirm_index, memory_forget]
+notify:
+  contract_version: 2
+  file_path: <new-vault-relative-path>
+  previous_file_path: <old-vault-relative-path>
+forget:
+  scope_type: project
+  allowed_after: confirm_index
+  forbidden_when: [move_failed, notify_failed, index_unconfirmed]
+manifest_updates:
+  move: moves
+  collision: collisions
+  memory_notify: notified
+  failure: errors
+bare_mv: forbidden
 ```

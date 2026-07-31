@@ -144,13 +144,13 @@
 
 ---
 
-# 第五阶段幂等性与归档绿色行为复测
+# 第五阶段静态规格审阅（非 GREEN 行为证据）
 
-> context=green
+> context=static-spec-review
 >
 > 观察日期：2026-07-31
 >
-> 范围：只读审阅 `_shared/operation-safety.zh.md`、`today`、`digest`、`research`、`translate`、`revise`、`archive` 的中文技能文件，以及 `digest` 的 `run-pipeline`、`config-parser` 与 `revise` 的 `grading-protocol`。本节不执行实际文件移动、抓取或覆盖。
+> 范围：只读审阅 `_shared/operation-safety.zh.md`、`today`、`digest`、`research`、`translate`、`revise`、`archive` 的中文技能文件，以及 `digest` 的 `run-pipeline`、`config-parser` 与 `revise` 的 `grading-protocol`。本节不执行实际文件移动、抓取或覆盖，因此只说明规格意图，不作为 GREEN 行为证据。
 
 ## 共同输入与判断基准
 
@@ -242,4 +242,93 @@
 
 ## 总体结论
 
-绿色规则已把六类重复运行收敛为稳定 `run_id` 下的 `merge` 或 `resume`，把覆盖限定为用户明确 `replace`，并用托管区块、来源／步骤 manifest 和真实变更后的索引通知保护用户内容与恢复能力。Digest 的单源失败被表达为可追踪的部分结果，Archive 的同名冲突和链接更新能力缺失都在实际移动之前被拦截。基线中的重复产物、部分结果被误报完成、静默裸移动和碰撞覆盖风险，均已有明确的可执行约束。
+静态阅读显示，新规格意图是把六类重复运行收敛为稳定 `run_id` 下的 `merge` 或 `resume`，把覆盖限定为用户明确 `replace`，并用托管区块、来源／步骤 manifest 和索引通知保护用户内容。是否实际收敛由下方受控 fixture 的可执行协议场景验证；本节本身不作行为通过结论。
+
+---
+
+# 第五阶段可执行协议场景证据
+
+> context=protocol-adapter-fixture
+>
+> 边界：此适配器实际创建、读取和重复写入受控 fixture Vault，验证技能操作协议及路径 guard；不执行真实客户端 Agent、网络抓取或 MCP 索引，因此不等同于端到端客户端验收。
+
+## 可复现命令
+
+```text
+node tests/assets/helpers/operation-scenarios.mjs
+npx vitest run tests/assets/operation-scenarios.test.ts
+```
+
+上下文标识、输入、两次运行的 `run_id`、目标、decision、状态、manifest 和最终文件树均由首条命令输出；第二条命令对这些真实文件副作用做自动断言。
+
+## 输入
+
+- Today：日期 `2026-07-31`，选择 `project-demo`。
+- Digest：配置 hash `cfg-ai-v1`，时间窗 `2026-07-25--2026-07-31`，一条健康 RSS 与一条超时论文来源。
+- Research：主题 `agent-memory`、revision `1`、确认 hash `plan-001`。
+- Translate：`book.pdf` 第 1 章、提取 hash `extract-001`。
+- Revise：笔记 `book-chapter-1`、模式 `quiz`、笔记 hash `note-001`。
+- Archive：源 `20_Projects/Demo.md`，目标 `90_System/Archive/Projects/2026/Demo.md` 已预置同名文件。
+
+## 关键原始 JSON 输出
+
+```json
+{
+  "context": "protocol-adapter-fixture",
+  "boundary": "验证技能操作协议，不执行真实客户端或网络抓取",
+  "runs": {
+    "today": [
+      {"run_id":"today-921dbf4746f7","target_path":"10_Diary/2026-07-31.md","decision":"create","status":"active"},
+      {"run_id":"today-921dbf4746f7","target_path":"10_Diary/2026-07-31.md","decision":"merge","status":"active"}
+    ],
+    "digest": [
+      {"run_id":"digest-0c30dd120e9d","target_path":"00_Drafts/AI-2026-07-25--2026-07-31.md","decision":"create","status":"partial"},
+      {"run_id":"digest-0c30dd120e9d","target_path":"00_Drafts/AI-2026-07-25--2026-07-31.md","decision":"merge","status":"partial"}
+    ],
+    "research": [
+      {"run_id":"research-7abd9b4ffe9e","target_path":"30_Research/agent-memory.md","decision":"create","status":"draft"},
+      {"run_id":"research-7abd9b4ffe9e","target_path":"30_Research/agent-memory.md","decision":"resume","status":"draft"}
+    ],
+    "translate": [
+      {"run_id":"translate-5b4d2d7a0566","target_path":"70_Resources/Translations/Book/Chapter-1.md","decision":"create","status":"draft"},
+      {"run_id":"translate-5b4d2d7a0566","target_path":"70_Resources/Translations/Book/Chapter-1.md","decision":"resume","status":"draft"}
+    ],
+    "revise": [
+      {"run_id":"revise-1b7838db2dda","target_path":"40_Knowledge/Notes/Book/Chapter-1/revise.md","decision":"create","status":"pending"},
+      {"run_id":"revise-1b7838db2dda","target_path":"40_Knowledge/Notes/Book/Chapter-1/revise.md","decision":"resume","status":"pending"}
+    ],
+    "archive": [
+      {"run_id":"archive-9c3d805e8c73","target_path":"90_System/Archive/Projects/2026/Demo.md","decision":"skip","status":"failed"},
+      {"run_id":"archive-9c3d805e8c73","target_path":"90_System/Archive/Projects/2026/Demo.md","decision":"skip","status":"failed"}
+    ]
+  },
+  "digest_sources": [
+    {"id":"rss-main","published_at":"2026-07-30","fetched_at":"2026-07-31T08:00:00Z","health":"healthy","errors":[]},
+    {"id":"paper-backup","published_at":null,"fetched_at":"2026-07-31T08:00:00Z","health":"failed","errors":["source_timeout"]}
+  ],
+  "archive_manifest": {
+    "run_id":"archive-9c3d805e8c73",
+    "moves":[],
+    "collisions":[{"source":"20_Projects/Demo.md","target":"90_System/Archive/Projects/2026/Demo.md"}],
+    "notified":[],
+    "errors":["collision_preflight"],
+    "recovery":["resolve_collision_then_resume_same_run_id"]
+  },
+  "file_tree": [
+    "00_Drafts/AI-2026-07-25--2026-07-31.md",
+    "10_Diary/2026-07-31.md",
+    "20_Projects/Demo.md",
+    "30_Research/agent-memory.md",
+    "40_Knowledge/Notes/Book/Chapter-1/revise.md",
+    "70_Resources/Translations/Book/Chapter-1.md",
+    "90_System/Archive/Projects/2026/Demo.md"
+  ]
+}
+```
+
+## 执行结论
+
+- 六个适配场景均实际运行两次；每组两次 `run_id` 与目标一致，第二次按契约进入 `merge`、`resume` 或冲突 `skip`。
+- Digest 的失败来源保留完整台账，两个尝试都保持 `partial`，没有提前写成完成。
+- Archive 在 preflight 发现 collision，两个尝试的 `moves` 始终为空；源与既有目标均原样保留，并输出同一 `run_id` 的恢复动作。
+- 每次 fixture 写入均在实际系统调用前后执行路径 guard 复核；自动测试另行覆盖父目录被替换为 Vault 外符号链接和同路径新 inode 时的失败行为。

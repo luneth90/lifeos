@@ -1,37 +1,75 @@
-import { existsSync, realpathSync } from 'node:fs';
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path';
 
 const RESERVED_NAMES = new Set([
-	'CON', 'PRN', 'AUX', 'NUL',
-	'COM1', 'COM2', 'COM3', 'COM4', 'COM5', 'COM6', 'COM7', 'COM8', 'COM9',
-	'LPT1', 'LPT2', 'LPT3', 'LPT4', 'LPT5', 'LPT6', 'LPT7', 'LPT8', 'LPT9',
+	'CON',
+	'PRN',
+	'AUX',
+	'NUL',
+	'COM1',
+	'COM2',
+	'COM3',
+	'COM4',
+	'COM5',
+	'COM6',
+	'COM7',
+	'COM8',
+	'COM9',
+	'LPT1',
+	'LPT2',
+	'LPT3',
+	'LPT4',
+	'LPT5',
+	'LPT6',
+	'LPT7',
+	'LPT8',
+	'LPT9',
 ]);
 
-function unsafeComponent(message = 'unsafe_path_component') {
-	const error = new Error(message);
-	error.code = 'unsafe_path_component';
+function codedError(code) {
+	const error = new Error(code);
+	error.code = code;
 	return error;
 }
 
+function unsafeComponent() {
+	return codedError('unsafe_path_component');
+}
+
 function vaultEscape() {
-	const error = new Error('vault_escape');
-	error.code = 'vault_escape';
-	return error;
+	return codedError('vault_escape');
+}
+
+function guardChanged() {
+	return codedError('path_guard_changed');
+}
+
+function hasControlCharacters(value) {
+	return [...value].some((character) => {
+		const code = character.codePointAt(0);
+		return code <= 0x1f || code === 0x7f;
+	});
 }
 
 export function normalizeFilenameComponent(value) {
 	if (typeof value !== 'string') throw unsafeComponent();
 	const normalized = value.normalize('NFC').trim().replace(/\s+/gu, ' ');
 	if (!normalized || normalized === '.' || normalized === '..') throw unsafeComponent();
-	if (/[\\/\u0000-\u001f\u007f]/u.test(normalized)) throw unsafeComponent();
-	const basename = normalized.split('.')[0].toUpperCase();
+	if (/[\\/:]/u.test(normalized) || hasControlCharacters(normalized) || normalized.endsWith('.')) {
+		throw unsafeComponent();
+	}
+	const basename = normalized
+		.split('.')[0]
+		.replace(/[ .]+$/u, '')
+		.toUpperCase();
 	if (RESERVED_NAMES.has(basename)) throw unsafeComponent();
 	return normalized;
 }
 
 function assertInside(root, candidate) {
 	const relation = relative(root, candidate);
-	if (relation === '..' || relation.startsWith(`..${sep}`) || isAbsolute(relation)) throw vaultEscape();
+	if (relation === '..' || relation.startsWith(`..${sep}`) || isAbsolute(relation))
+		throw vaultEscape();
 }
 
 function existingAncestor(candidate) {
@@ -44,26 +82,131 @@ function existingAncestor(candidate) {
 	return current;
 }
 
-export function resolveVaultPath(vaultRoot, relativePath) {
+function hasAbsoluteOrDeviceSyntax(value) {
+	return (
+		isAbsolute(value) ||
+		win32.isAbsolute(value) ||
+		/^[a-z]:/iu.test(value) ||
+		/^\\\\[?.]\\/u.test(value) ||
+		/^\\\\/u.test(value)
+	);
+}
+
+function normalizedPath(vaultRoot, relativePath) {
 	if (typeof vaultRoot !== 'string' || !vaultRoot) throw vaultEscape();
-	if (typeof relativePath !== 'string' || !relativePath || isAbsolute(relativePath)) throw vaultEscape();
+	if (
+		typeof relativePath !== 'string' ||
+		!relativePath ||
+		hasAbsoluteOrDeviceSyntax(relativePath)
+	) {
+		throw vaultEscape();
+	}
 	const components = relativePath.split(/[\\/]/u);
-	if (components.some((component) => component === '' || component === '.' || component === '..' || /[\u0000-\u001f\u007f]/u.test(component))) {
+	if (
+		components.some(
+			(component) =>
+				component === '' ||
+				component === '.' ||
+				component === '..' ||
+				hasControlCharacters(component),
+		)
+	) {
 		throw vaultEscape();
 	}
 	const root = realpathSync(vaultRoot);
-	const candidate = resolve(root, ...components.map(normalizeFilenameComponent));
+	const normalizedComponents = components.map(normalizeFilenameComponent);
+	const candidate = resolve(root, ...normalizedComponents);
 	assertInside(root, candidate);
+	return { root, components: normalizedComponents, candidate };
+}
+
+export function resolveVaultPath(vaultRoot, relativePath) {
+	const { root, candidate } = normalizedPath(vaultRoot, relativePath);
 	const actualAncestor = realpathSync(existingAncestor(candidate));
 	assertInside(root, actualAncestor);
 	return candidate;
+}
+
+function identity(path) {
+	const info = statSync(path);
+	return { dev: String(info.dev), ino: String(info.ino), realpath: realpathSync(path) };
+}
+
+function captureParentAncestors(root, components, errorFactory) {
+	const snapshots = [{ relative_path: '.', ...identity(root) }];
+	let current = root;
+	for (const component of components.slice(0, -1)) {
+		current = join(current, component);
+		if (!existsSync(current)) throw errorFactory();
+		if (lstatSync(current).isSymbolicLink()) throw errorFactory();
+		const snapshot = identity(current);
+		assertInside(root, snapshot.realpath);
+		if (!statSync(current).isDirectory()) throw errorFactory();
+		snapshots.push({ relative_path: relative(root, current).split(sep).join('/'), ...snapshot });
+	}
+	return snapshots;
+}
+
+export function createVaultPathGuard(vaultRoot, relativePath) {
+	const { root, components, candidate } = normalizedPath(vaultRoot, relativePath);
+	if (lstatSync(root).isSymbolicLink()) throw vaultEscape();
+	return {
+		contract_version: 1,
+		vault_realpath: root,
+		relative_path: components.join('/'),
+		components,
+		candidate_path: candidate,
+		ancestors: captureParentAncestors(root, components, vaultEscape),
+	};
+}
+
+export function revalidateVaultPathGuard(guard) {
+	if (
+		!guard ||
+		guard.contract_version !== 1 ||
+		!Array.isArray(guard.components) ||
+		!Array.isArray(guard.ancestors)
+	) {
+		throw guardChanged();
+	}
+	let current;
+	try {
+		const root = realpathSync(guard.vault_realpath);
+		if (root !== guard.vault_realpath || lstatSync(root).isSymbolicLink()) throw guardChanged();
+		if (guard.components.some((component) => normalizeFilenameComponent(component) !== component))
+			throw guardChanged();
+		const candidate = resolve(root, ...guard.components);
+		if (guard.relative_path !== guard.components.join('/') || guard.candidate_path !== candidate)
+			throw guardChanged();
+		assertInside(root, candidate);
+		current = captureParentAncestors(root, guard.components, guardChanged);
+		if (current.length !== guard.ancestors.length) throw guardChanged();
+		for (let index = 0; index < current.length; index += 1) {
+			const before = guard.ancestors[index];
+			const after = current[index];
+			if (
+				before.relative_path !== after.relative_path ||
+				before.dev !== after.dev ||
+				before.ino !== after.ino ||
+				before.realpath !== after.realpath
+			) {
+				throw guardChanged();
+			}
+		}
+		return candidate;
+	} catch (error) {
+		if (error?.code === 'path_guard_changed') throw error;
+		throw guardChanged();
+	}
 }
 
 function readStdin() {
 	return new Promise((resolveInput, reject) => {
 		let input = '';
 		process.stdin.setEncoding('utf8');
-		process.stdin.on('data', (chunk) => { input += chunk; });
+		process.stdin.on('data', (chunk) => {
+			input += chunk;
+		});
 		process.stdin.on('end', () => resolveInput(input));
 		process.stdin.on('error', reject);
 	});
@@ -72,12 +215,17 @@ function readStdin() {
 if (import.meta.url === `file://${process.argv[1]}`) {
 	try {
 		const input = JSON.parse(await readStdin());
-		const result = input.mode === 'normalize'
-			? { value: normalizeFilenameComponent(input.value) }
-			: { path: resolveVaultPath(input.vault_root, input.relative_path) };
+		let result;
+		if (input.mode === 'normalize') result = { value: normalizeFilenameComponent(input.value) };
+		else if (input.mode === 'guard')
+			result = { guard: createVaultPathGuard(input.vault_root, input.relative_path) };
+		else if (input.mode === 'revalidate') result = { path: revalidateVaultPathGuard(input.guard) };
+		else result = { path: resolveVaultPath(input.vault_root, input.relative_path) };
 		process.stdout.write(`${JSON.stringify(result)}\n`);
 	} catch (error) {
-		process.stderr.write(`${JSON.stringify({ error: error.code ?? 'invalid_input', message: error.message })}\n`);
+		process.stderr.write(
+			`${JSON.stringify({ error: error.code ?? 'invalid_input', message: error.message })}\n`,
+		);
 		process.exitCode = 1;
 	}
 }
