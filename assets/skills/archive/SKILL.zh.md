@@ -6,6 +6,8 @@ dependencies:
   templates: []
   prompts: []
   schemas: []
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [move_with_link_update]
   agents: []
 ---
@@ -332,6 +334,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: archive
 run_id: stable(archive, candidate-paths, archive-date)
 target_path: "{系统目录}/{归档子目录}/..."

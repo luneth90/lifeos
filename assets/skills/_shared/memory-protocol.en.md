@@ -129,7 +129,7 @@ memory_log(
   content="Do not use unsafe append operations for LaTeX in review Q&A",
   scope={type: "skill", key: "revise"},
   item_kind="rule",
-  related_files=["40_Knowledge/Notes/related-chapter.md"]
+  related_files=["{knowledge directory}/{notes subdirectory}/related-chapter.md"]
 )
 ```
 

@@ -12,12 +12,16 @@ dependencies:
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
     - path: "{system directory}/{schema subdirectory}/Execution_Manifest_Schema.json"
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [spawn_agent, ask_user, web_search, web_fetch, inspect_image, execute_command]
   agents:
     - path: references/planning-agent-prompt.md
       role: planning
+      placeholders: ["{{RESEARCH_INPUT}}"]
     - path: references/execution-agent-prompt.md
       role: execution
+      placeholders: ["{{RESEARCH_INPUT}}"]
 ---
 
 
@@ -128,6 +132,7 @@ Read `_shared/operation-safety.md`. Build a stable `run_id` from normalized rese
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: research
 run_id: stable(research, normalized-input, plan_revision, confirmed_hash)
 target_path: "{research directory}/<research-id>.md"

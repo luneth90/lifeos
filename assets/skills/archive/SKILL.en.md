@@ -6,6 +6,8 @@ dependencies:
   templates: []
   prompts: []
   schemas: []
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [move_with_link_update]
   agents: []
 ---
@@ -332,6 +334,7 @@ Read `_shared/operation-safety.md` and complete preflight: enumerate every candi
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: archive
 run_id: stable(archive, candidate-paths, archive-date)
 target_path: "{system directory}/{archive subdirectory}/..."

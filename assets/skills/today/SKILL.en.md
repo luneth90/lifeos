@@ -8,6 +8,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   agents: []
 ---
 
@@ -243,6 +245,7 @@ Read `_shared/operation-safety.md`. The same day reuses the same `run_id` and di
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: today
 run_id: stable(today, YYYY-MM-DD, selected-items)
 target_path: "{diary directory}/YYYY-MM-DD.md"

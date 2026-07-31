@@ -12,12 +12,16 @@ dependencies:
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
     - path: "{系统目录}/{规范子目录}/Execution_Manifest_Schema.json"
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [spawn_agent, ask_user, web_search, web_fetch, inspect_image, execute_command]
   agents:
     - path: references/planning-agent-prompt.md
       role: planning
+      placeholders: ["{{RESEARCH_INPUT}}"]
     - path: references/execution-agent-prompt.md
       role: execution
+      placeholders: ["{{RESEARCH_INPUT}}"]
 ---
 
 
@@ -132,6 +136,7 @@ Planning Agent 返回后，在**对话中直接**通知用户：
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: research
 run_id: stable(research, normalized-input, plan_revision, confirmed_hash)
 target_path: "{研究目录}/<research-id>.md"

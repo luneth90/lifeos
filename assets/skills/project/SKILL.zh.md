@@ -13,8 +13,10 @@ dependencies:
   agents:
     - path: references/planning-agent-prompt.md
       role: planning
+      placeholders: ["{{PROJECT_INPUT}}"]
     - path: references/execution-agent-prompt.md
       role: execution
+      placeholders: ["{{PROJECT_INPUT}}"]
 ---
 
 

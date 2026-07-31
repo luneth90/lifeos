@@ -8,6 +8,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   agents: []
 ---
 
@@ -274,6 +276,7 @@ Read `_shared/operation-safety.md`. For equal knowledge note and mode, prefer `r
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: revise
 run_id: stable(revise, knowledge-note-id, mode, note-hash)
 target_path: "{knowledge directory}/<chapter>/Review_<run-id>.md"

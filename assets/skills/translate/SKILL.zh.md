@@ -8,6 +8,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [execute_command, inspect_image]
   agents: []
 ---
@@ -206,6 +208,7 @@ memory_notify(contract_version=2, file_path="<项目文件相对路径>")
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: translate
 run_id: stable(translate, source-pdf, chapter-range, extraction-hash)
 target_path: "{知识目录}/<chapter>/翻译_<chapter>.md"

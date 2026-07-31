@@ -5,6 +5,11 @@
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+preflight: required
+validation: required
+notification: memory_notify
+collision: preflight_required
+recovery: resume_same_run_id
 run_id: stable(<skill>, <canonical-input>, <time-window-or-mode>)
 target_path: resolved-vault-relative-path
 decision: [create, merge, resume, skip, replace] # create|merge|resume|skip|replace

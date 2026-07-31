@@ -4,18 +4,35 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 
 const repositoryRoot = fileURLToPath(new URL('..', import.meta.url));
-const DEFAULT_LOGICAL_DIRECTORIES = [
-	'00_草稿',
-	'10_日记',
-	'20_项目',
-	'30_研究',
-	'40_知识',
-	'50_成果',
-	'60_计划',
-	'70_资源',
-	'80_复盘',
-	'90_系统',
-];
+const EN_DEFAULT_DIRECTORIES = {
+	drafts: '00_Drafts',
+	diary: '10_Diary',
+	projects: '20_Projects',
+	research: '30_Research',
+	knowledge: '40_Knowledge',
+	outputs: '50_Outputs',
+	plans: '60_Plans',
+	resources: '70_Resources',
+	reflection: '80_Reflection',
+	system: '90_System',
+};
+const EN_DEFAULT_SUBDIRECTORIES = {
+	knowledge: { notes: 'Notes', wiki: 'Wiki' },
+	resources: { books: 'Books', literature: 'Literature', translations: 'Translations' },
+	system: {
+		templates: 'Templates',
+		schema: 'Schema',
+		memory: 'Memory',
+		digest: 'Digest',
+		prompts: 'Prompts',
+		archive: {
+			projects: 'Archive/Projects',
+			drafts: 'Archive/Drafts',
+			plans: 'Archive/Plans',
+			diary: 'Archive/Diary',
+		},
+	},
+};
 const MODIFIABLE_SKILLS = ['ask', 'today', 'digest', 'research', 'translate', 'revise', 'archive'];
 
 function normalizePath(path) {
@@ -25,7 +42,7 @@ function normalizePath(path) {
 function locateAssets(root) {
 	if (existsSync(join(root, 'assets'))) return join(root, 'assets');
 	if (existsSync(join(root, 'schema'))) return root;
-	throw new Error(`找不到 assets 目录：${root}`);
+	return null;
 }
 
 function walkFiles(directory) {
@@ -71,24 +88,42 @@ function extractPlaceholders(content) {
 	].sort();
 }
 
-function sameShape(left, right) {
-	if (Array.isArray(left) || Array.isArray(right)) {
+function sameCapabilityContract(left, right, path = '') {
+	if (path.endsWith('.purpose') || path.endsWith('.fallback'))
+		return typeof left === 'string' && typeof right === 'string';
+	if (Array.isArray(left) || Array.isArray(right))
 		return (
 			Array.isArray(left) &&
 			Array.isArray(right) &&
 			left.length === right.length &&
-			left.every((item, index) => sameShape(item, right[index]))
+			left.every((item, index) => sameCapabilityContract(item, right[index], `${path}[${index}]`))
 		);
-	}
 	if (left && right && typeof left === 'object' && typeof right === 'object') {
 		const leftKeys = Object.keys(left).sort();
 		const rightKeys = Object.keys(right).sort();
 		return (
 			leftKeys.length === rightKeys.length &&
-			leftKeys.every((key, index) => key === rightKeys[index] && sameShape(left[key], right[key]))
+			leftKeys.every(
+				(key, index) =>
+					key === rightKeys[index] &&
+					sameCapabilityContract(left[key], right[key], path ? `${path}.${key}` : key),
+			)
 		);
 	}
-	return typeof left === typeof right;
+	return left === right;
+}
+
+function collectSubdirectoryPaths(directory, value) {
+	if (typeof value === 'string') return [`${directory}/${value}`];
+	if (!value || typeof value !== 'object') return [];
+	return Object.values(value).flatMap((child) => collectSubdirectoryPaths(directory, child));
+}
+
+export function englishDefaultPathConfig() {
+	return structuredClone({
+		directories: EN_DEFAULT_DIRECTORIES,
+		subdirectories: EN_DEFAULT_SUBDIRECTORIES,
+	});
 }
 
 function yamlFences(content) {
@@ -111,6 +146,14 @@ function yamlFences(content) {
 export function validateSkillContracts(root) {
 	const absoluteRoot = join(root);
 	const assets = locateAssets(absoluteRoot);
+	if (!assets) {
+		return {
+			ok: false,
+			diagnostics: [
+				{ code: 'missing_assets_root', path: '.', message: `找不到 assets 目录：${absoluteRoot}` },
+			],
+		};
+	}
 	const diagnostics = [];
 	const add = (code, path, message, relatedPath) => {
 		const diagnostic = { code, path, message };
@@ -120,6 +163,37 @@ export function validateSkillContracts(root) {
 	const assetPath = (path) => relativeAssetPath(absoluteRoot, path);
 	const skillRoot = join(assets, 'skills');
 	const templateRoot = join(assets, 'templates');
+	const zhConfig = existsSync(join(assets, 'lifeos.yaml'))
+		? parseYaml(read(join(assets, 'lifeos.yaml')))
+		: { directories: {} };
+	const zhDirectories = Object.values(zhConfig?.directories ?? {}).length
+		? Object.values(zhConfig.directories)
+		: [
+				'00_草稿',
+				'10_日记',
+				'20_项目',
+				'30_研究',
+				'40_知识',
+				'50_成果',
+				'60_计划',
+				'70_资源',
+				'80_复盘',
+				'90_系统',
+			];
+	const zhSubdirectories = Object.entries(zhConfig?.subdirectories ?? {}).flatMap(([key, value]) =>
+		typeof zhConfig?.directories?.[key] === 'string'
+			? collectSubdirectoryPaths(zhConfig.directories[key], value)
+			: [],
+	);
+	const enSubdirectories = Object.entries(EN_DEFAULT_SUBDIRECTORIES).flatMap(([key, value]) =>
+		collectSubdirectoryPaths(EN_DEFAULT_DIRECTORIES[key], value),
+	);
+	const defaultPhysicalPaths = new Set([
+		...zhDirectories,
+		...zhSubdirectories,
+		...Object.values(EN_DEFAULT_DIRECTORIES),
+		...enSubdirectories,
+	]);
 	const markdownFiles = walkFiles(assets).filter((path) => path.endsWith('.md'));
 	const jsonFiles = walkFiles(assets).filter((path) => path.endsWith('.json'));
 
@@ -165,15 +239,14 @@ export function validateSkillContracts(root) {
 		? readMarkedYaml(schemaPath, 'frontmatter-contract-v1')
 		: null;
 	const types = schema?.types && typeof schema.types === 'object' ? schema.types : {};
-	const knownTypes = new Set([...Object.keys(types), 'project-doc', 'wiki', 'note', 'system']);
 
 	for (const path of walkFiles(templateRoot).filter((candidate) => candidate.endsWith('.md'))) {
 		const { frontmatter } = readMarkdown(path);
 		if (!frontmatter) continue;
 		const type = frontmatter.type;
-		if (typeof type !== 'string' || !knownTypes.has(type)) {
+		if (typeof type !== 'string' || !Object.hasOwn(types, type)) {
 			add('unknown_generated_type', assetPath(path), `模板 type 未定义于 Schema：${String(type)}`);
-		} else if (types[type]?.template && types[type].template !== basename(path)) {
+		} else if (types[type]?.template !== basename(path)) {
 			add('unknown_generated_type', assetPath(path), `模板与 Schema 映射不一致：${type}`);
 		}
 		if (frontmatter.id !== '{{ID}}')
@@ -212,7 +285,11 @@ export function validateSkillContracts(root) {
 	const capabilitiesEn = existsSync(capabilitiesEnPath)
 		? readMarkedYaml(capabilitiesEnPath, 'client-capabilities-v1')
 		: null;
-	if (!capabilitiesZh || !capabilitiesEn || !sameShape(capabilitiesZh, capabilitiesEn)) {
+	if (
+		!capabilitiesZh ||
+		!capabilitiesEn ||
+		!sameCapabilityContract(capabilitiesZh, capabilitiesEn)
+	) {
 		add(
 			'capability_contract_mismatch',
 			assetPath(capabilitiesZhPath),
@@ -253,18 +330,56 @@ export function validateSkillContracts(root) {
 			}
 		}
 		const skillDirectory = join(path, '..');
-		for (const group of ['templates', 'schemas', 'agents', 'references']) {
+		for (const group of ['templates', 'schemas', 'agents', 'references', 'prompts', 'protocols']) {
 			for (const dependency of dependencies[group] ?? []) {
 				const requested = typeof dependency === 'string' ? dependency : dependency?.path;
 				if (typeof requested !== 'string') continue;
+				if (
+					requested.startsWith('/') ||
+					requested.includes('\\') ||
+					(group !== 'protocols' && requested.split('/').includes('..'))
+				) {
+					add('invalid_dependency_path', assetPath(path), `依赖路径非法：${requested}`);
+				}
 				let candidates = [];
 				if (group === 'templates') {
+					if (!/\{[^}]*(?:模板子目录|templates? subdirectory)[^}]*\}\//i.test(requested))
+						add(
+							'invalid_dependency_path',
+							assetPath(path),
+							`模板依赖必须使用模板逻辑目录：${requested}`,
+						);
 					candidates = ['zh', 'en'].map((locale) =>
 						join(templateRoot, locale, basename(requested)),
 					);
 				} else if (group === 'schemas') {
+					if (!/(规范子目录|schema subdirectory)/i.test(requested))
+						add(
+							'invalid_dependency_path',
+							assetPath(path),
+							`Schema 依赖必须使用规范逻辑目录：${requested}`,
+						);
 					candidates = [join(assets, 'schema', basename(requested))];
+				} else if (group === 'protocols') {
+					if (requested !== '../_shared/operation-safety.md')
+						add('invalid_dependency_path', assetPath(path), `协议依赖路径非法：${requested}`);
+					candidates = [
+						join(
+							skillDirectory,
+							`../_shared/operation-safety.${path.endsWith('.zh.md') ? 'zh' : 'en'}.md`,
+						),
+					];
+				} else if (group === 'prompts' && dependency?.scan === true) {
+					if (!/(\{[^}]+\}\/)?(?:提示词|prompts)\//i.test(requested))
+						add(
+							'invalid_dependency_path',
+							assetPath(path),
+							`提示词扫描必须使用提示词逻辑目录：${requested}`,
+						);
+					candidates = [join(assets, 'prompts')];
 				} else if (requested.startsWith('references/')) {
+					if (requested.includes('..') || requested.startsWith('/'))
+						add('invalid_dependency_path', assetPath(path), `本地引用路径非法：${requested}`);
 					candidates = ['zh', 'en'].map((locale) =>
 						join(skillDirectory, requested.replace(/\.md$/, `.${locale}.md`)),
 					);
@@ -283,9 +398,14 @@ export function validateSkillContracts(root) {
 				if (group === 'agents' && requested.startsWith('references/')) {
 					const existing = candidates.filter(existsSync);
 					for (const agentPath of existing) {
-						const expected = extractPlaceholders(body);
+						const expected = Array.isArray(dependency?.placeholders)
+							? [...dependency.placeholders].sort()
+							: [];
 						const actual = extractPlaceholders(read(agentPath));
-						if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+						if (
+							JSON.stringify(expected) !== JSON.stringify(actual) ||
+							expected.some((placeholder) => !body.includes(placeholder))
+						) {
 							add(
 								'placeholder_mismatch',
 								assetPath(path),
@@ -312,40 +432,81 @@ export function validateSkillContracts(root) {
 		}
 	}
 
-	for (const path of walkFiles(skillRoot)) {
+	for (const path of walkFiles(assets)) {
 		if (!/\.(md|py|mjs)$/.test(path)) continue;
+		if (path.endsWith('lifeos.yaml') || path.includes('lifeos-rules')) continue;
 		const content = read(path);
-		for (const directory of DEFAULT_LOGICAL_DIRECTORIES) {
+		for (const directory of defaultPhysicalPaths) {
 			if (content.includes(directory))
 				add('hardcoded_logical_path', assetPath(path), `不得写死默认逻辑目录：${directory}`);
 		}
 	}
 
+	const requiredSafetyFields = [
+		'contract_version',
+		'preflight',
+		'validation',
+		'notification',
+		'collision',
+		'recovery',
+		'run_id',
+		'target_path',
+		'decision',
+		'path_guard',
+		'manifest',
+	];
+	const safetyContracts = [];
+	for (const locale of ['zh', 'en']) {
+		const path = join(skillRoot, '_shared', `operation-safety.${locale}.md`);
+		const contract = existsSync(path) ? readMarkedYaml(path, 'operation-safety-v1') : null;
+		if (
+			!contract ||
+			requiredSafetyFields.some((field) => !(field in contract)) ||
+			JSON.stringify(contract.decision) !==
+				JSON.stringify(['create', 'merge', 'resume', 'skip', 'replace'])
+		) {
+			add(
+				'invalid_operation_safety_contract',
+				assetPath(path),
+				'操作安全机器契约缺少必填字段或 decision 枚举非法',
+			);
+		}
+		safetyContracts.push(contract);
+	}
+	if (
+		safetyContracts[0] &&
+		safetyContracts[1] &&
+		JSON.stringify(safetyContracts[0]) !== JSON.stringify(safetyContracts[1])
+	)
+		add(
+			'invalid_operation_safety_contract',
+			assetPath(join(skillRoot, '_shared', 'operation-safety.zh.md')),
+			'中英文操作安全机器契约不一致',
+			assetPath(join(skillRoot, '_shared', 'operation-safety.en.md')),
+		);
+
 	for (const skill of MODIFIABLE_SKILLS) {
 		for (const locale of ['zh', 'en']) {
 			const path = join(skillRoot, skill, `SKILL.${locale}.md`);
-			if (existsSync(path) && !read(path).includes('operation-safety')) {
-				add(
-					'missing_operation_safety',
-					assetPath(path),
-					'修改型流程必须声明 operation-safety 协议',
-				);
-			}
-		}
-	}
-	for (const locale of ['zh', 'en']) {
-		const path = join(skillRoot, '_shared', `operation-safety.${locale}.md`);
-		const content = existsSync(path) ? read(path) : '';
-		const terms =
-			locale === 'zh'
-				? ['preflight', '校验', 'memory_notify', 'collision', '恢复']
-				: ['preflight', 'validation', 'memory_notify', 'collision', 'recovery'];
-		if (!terms.every((term) => content.includes(term))) {
-			add(
-				'missing_operation_safety',
-				assetPath(path),
-				'操作安全协议必须包含预检、校验、通知、冲突与恢复语义',
+			if (!existsSync(path)) continue;
+			const { frontmatter } = readMarkdown(path);
+			const protocols = frontmatter?.dependencies?.protocols ?? [];
+			const protocolPath = protocols.find(
+				(entry) => entry?.path === '../_shared/operation-safety.md',
 			);
+			if (!protocolPath)
+				add(
+					'missing_operation_safety_reference',
+					assetPath(path),
+					'修改型技能必须在 Frontmatter protocols 声明 operation-safety',
+				);
+			const operation = readMarkedYaml(path, 'operation-safety-v1');
+			if (!operation || operation.safety_protocol !== 'operation-safety-v1')
+				add(
+					'missing_operation_safety_reference',
+					assetPath(path),
+					'修改型技能必须结构化引用 operation-safety-v1',
+				);
 		}
 	}
 

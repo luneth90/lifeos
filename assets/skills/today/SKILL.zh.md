@@ -8,6 +8,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   agents: []
 ---
 
@@ -243,6 +245,7 @@ memory_notify(contract_version=2, file_path="{日记目录}/YYYY-MM-DD.md")
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: today
 run_id: stable(today, YYYY-MM-DD, selected-items)
 target_path: "{日记目录}/YYYY-MM-DD.md"

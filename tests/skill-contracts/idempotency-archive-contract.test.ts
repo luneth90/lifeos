@@ -17,6 +17,11 @@ function contract(path: string): Record<string, unknown> {
 
 const sharedContract = {
 	contract_version: 1,
+	preflight: 'required',
+	validation: 'required',
+	notification: 'memory_notify',
+	collision: 'preflight_required',
+	recovery: 'resume_same_run_id',
 	run_id: 'stable(<skill>, <canonical-input>, <time-window-or-mode>)',
 	target_path: 'resolved-vault-relative-path',
 	decision: decisions,
@@ -112,6 +117,7 @@ describe('阶段五幂等与归档契约', () => {
 	it.each(operations)('$name 中英文契约具有精确字段和值', ({ name, runId, zh, en, extra }) => {
 		const base = {
 			contract_version: 1,
+			safety_protocol: 'operation-safety-v1',
 			operation: name,
 			run_id: runId,
 			decision: decisions,
@@ -153,6 +159,7 @@ describe('阶段五幂等与归档契约', () => {
 		] as const) {
 			expect(contract(`assets/skills/archive/SKILL.${lang}.md`)).toEqual({
 				contract_version: 1,
+				safety_protocol: 'operation-safety-v1',
 				operation: 'archive',
 				run_id: 'stable(archive, candidate-paths, archive-date)',
 				target_path: target,

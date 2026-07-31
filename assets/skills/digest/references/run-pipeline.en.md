@@ -219,8 +219,8 @@ When `/digest` is called without arguments and multiple config files exist:
 
 ```text
 All weekly digests generated:
-- LLM-Agent: 00_Drafts/LLM-Agent-0324-0330.md (RSS 12 + arXiv 45 + Web 8)
-- SpatialAI: 00_Drafts/SpatialAI-0324-0330.md (RSS 8 + arXiv 67 + Web 5)
+- LLM-Agent: {drafts directory}/LLM-Agent-0324-0330.md (RSS 12 + arXiv 45 + Web 8)
+- SpatialAI: {drafts directory}/SpatialAI-0324-0330.md (RSS 8 + arXiv 67 + Web 5)
 ```
 
 ## Error Handling

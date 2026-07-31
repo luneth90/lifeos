@@ -7,6 +7,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   agents: []
 ---
 
@@ -210,6 +212,7 @@ Read `_shared/operation-safety.md`. `run_id = stable(digest, config-hash, time-w
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: digest
 run_id: stable(digest, config-hash, time-window)
 target_path: "{drafts directory}/<topic>-<window>.md"

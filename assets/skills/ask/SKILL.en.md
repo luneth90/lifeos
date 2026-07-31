@@ -8,6 +8,8 @@ dependencies:
       when: "user requests saving Q&A records as a draft"
   prompts: []
   schemas: []
+  protocols:
+    - path: ../_shared/operation-safety.md
   agents: []
 ---
 
@@ -262,6 +264,7 @@ Read `_shared/operation-safety.md` and preflight the same-day normalized topic a
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: ask
 run_id: stable(ask, normalized-topic, YYYY-MM-DD)
 target_path: "{drafts directory}/<draft-id>.md"

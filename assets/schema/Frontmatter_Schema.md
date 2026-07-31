@@ -22,6 +22,9 @@ types:
   draft:
     statuses: [pending, done]
     template: Draft_Template.md
+  note:
+    statuses: []
+    template: Daily_Template.md
   project:
     statuses: [active, frozen, done]
     template: Project_Template.md
@@ -37,6 +40,9 @@ types:
   knowledge:
     statuses: [draft, review, revised, mastered]
     template: Knowledge_Template.md
+  wiki:
+    statuses: []
+    template: Wiki_Template.md
   revise-record:
     statuses: [pending, graded]
     template: Revise_Template.md

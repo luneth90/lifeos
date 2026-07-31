@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import {
 	type Dirent,
 	existsSync,
@@ -39,7 +40,30 @@ function extractFrontmatter(content: string): string {
 describe('assetsDir', () => {
 	test('发布资产通过双语技能契约校验', async () => {
 		const { validateSkillContracts: validate } = await validateSkillContracts();
-		expect(validate(process.cwd())).toEqual({ ok: true, diagnostics: [] });
+		expect(validate(assetsDir())).toEqual({ ok: true, diagnostics: [] });
+	});
+
+	test('npm 包解包后的 assets 仍通过源码契约校验', async () => {
+		const directory = join(tmpdir(), `lifeos-pack-${Date.now()}`);
+		mkdirSync(directory, { recursive: true });
+		try {
+			const packed = spawnSync('npm', ['pack', '--json', '--pack-destination', directory], {
+				cwd: process.cwd(),
+				encoding: 'utf8',
+				env: { ...process.env, NPM_CONFIG_CACHE: join(directory, 'npm-cache') },
+			});
+			expect(packed.status, packed.stderr).toBe(0);
+			const [{ filename }] = JSON.parse(packed.stdout) as Array<{ filename: string }>;
+			const unpacked = join(directory, 'package');
+			const extracted = spawnSync('tar', ['-xzf', join(directory, filename), '-C', directory], {
+				encoding: 'utf8',
+			});
+			expect(extracted.status, extracted.stderr).toBe(0);
+			const { validateSkillContracts: validate } = await validateSkillContracts();
+			expect(validate(unpacked)).toEqual({ ok: true, diagnostics: [] });
+		} finally {
+			rmSync(directory, { recursive: true, force: true });
+		}
 	});
 
 	test('points to existing assets/ directory', () => {
@@ -64,10 +88,7 @@ describe('assetsDir', () => {
 			join(dir, 'skills', 'project', 'references', 'planning-agent-prompt.zh.md'),
 			'utf-8',
 		);
-		const projectSkillZh = readFileSync(
-			join(dir, 'skills', 'project', 'SKILL.zh.md'),
-			'utf-8',
-		);
+		const projectSkillZh = readFileSync(join(dir, 'skills', 'project', 'SKILL.zh.md'), 'utf-8');
 		const projectExecZh = readFileSync(
 			join(dir, 'skills', 'project', 'references', 'execution-agent-prompt.zh.md'),
 			'utf-8',
@@ -86,9 +107,13 @@ describe('assetsDir', () => {
 		expect(schema).toContain('- `pending` / `active` / `done` / `failed` / `cancelled`');
 
 		expect(lifecycleZh).toContain('## 计划生命周期');
-		expect(lifecycleZh).toContain('pending ──确认后──→ active ──执行完成──→ done ──/archive──→ 保留 done');
+		expect(lifecycleZh).toContain(
+			'pending ──确认后──→ active ──执行完成──→ done ──/archive──→ 保留 done',
+		);
 		expect(lifecycleEn).toContain('## Plan Lifecycle');
-		expect(lifecycleEn).toContain('pending ──confirmation──→ active ──execution completes──→ done ──/archive──→ keep done');
+		expect(lifecycleEn).toContain(
+			'pending ──confirmation──→ active ──execution completes──→ done ──/archive──→ keep done',
+		);
 
 		expect(projectPlanZh).toContain('type: plan');
 		expect(projectPlanZh).toContain('status: pending');

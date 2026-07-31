@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { parse as parseYaml } from 'yaml';
 import { describe, expect, it } from 'vitest';
+import { parse as parseYaml } from 'yaml';
 
 const requiredManifestFields = [
 	'contract_version',
@@ -15,7 +15,15 @@ const requiredManifestFields = [
 	'validation',
 	'errors',
 ];
-const phases = ['planned', 'confirmed', 'executing', 'validated', 'committed', 'failed', 'cancelled'];
+const phases = [
+	'planned',
+	'confirmed',
+	'executing',
+	'validated',
+	'committed',
+	'failed',
+	'cancelled',
+];
 const capabilities = [
 	'spawn_agent',
 	'ask_user',
@@ -34,7 +42,7 @@ function readYamlContract(relativePath: string, marker: string): unknown {
 	const content = read(relativePath);
 	const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 	const match = content.match(
-		new RegExp('<!--\\s*' + escaped + '\\s*-->\\s*\\n```yaml\\n([\\s\\S]*?)\\n```', 'm'),
+		new RegExp(`<!--\\s*${escaped}\\s*-->\\s*\\n\`\`\`yaml\\n([\\s\\S]*?)\\n\`\`\``, 'm'),
 	);
 	if (!match) throw new Error(`缺少 YAML 契约块 ${marker}：${relativePath}`);
 	return parseYaml(match[1]);
@@ -50,22 +58,34 @@ function expectInOrder(content: string, path: string, patterns: RegExp[]): void 
 }
 
 function expectSameMachineShape(zh: unknown, en: unknown, path: string): void {
+	if (path.endsWith('.purpose') || path.endsWith('.fallback')) {
+		expect(typeof en, `${path} 说明字段类型不一致`).toBe('string');
+		expect(typeof zh, `${path} 说明字段类型不一致`).toBe('string');
+		return;
+	}
 	if (Array.isArray(zh) || Array.isArray(en)) {
 		expect(Array.isArray(en), `${path} 数组类型不一致`).toBe(Array.isArray(zh));
 		expect((en as unknown[]).length, `${path} 数组长度不一致`).toBe((zh as unknown[]).length);
 		for (let index = 0; index < (zh as unknown[]).length; index += 1) {
-			expectSameMachineShape((zh as unknown[])[index], (en as unknown[])[index], `${path}[${index}]`);
+			expectSameMachineShape(
+				(zh as unknown[])[index],
+				(en as unknown[])[index],
+				`${path}[${index}]`,
+			);
 		}
 		return;
 	}
 	if (zh && en && typeof zh === 'object' && typeof en === 'object') {
 		const zhRecord = zh as Record<string, unknown>;
 		const enRecord = en as Record<string, unknown>;
-		expect(Object.keys(enRecord).sort(), `${path} 字段集合不一致`).toEqual(Object.keys(zhRecord).sort());
-		for (const key of Object.keys(zhRecord)) expectSameMachineShape(zhRecord[key], enRecord[key], `${path}.${key}`);
+		expect(Object.keys(enRecord).sort(), `${path} 字段集合不一致`).toEqual(
+			Object.keys(zhRecord).sort(),
+		);
+		for (const key of Object.keys(zhRecord))
+			expectSameMachineShape(zhRecord[key], enRecord[key], `${path}.${key}`);
 		return;
 	}
-	expect(typeof en, `${path} 字段类型不一致`).toBe(typeof zh);
+	expect(en, `${path} 机器字段值不一致`).toEqual(zh);
 }
 
 describe('阶段二执行契约', () => {
@@ -79,8 +99,14 @@ describe('阶段二执行契约', () => {
 	});
 
 	it('中英文能力协议共享同一语义能力契约', () => {
-		const zh = readYamlContract('assets/skills/_shared/client-capabilities.zh.md', 'client-capabilities-v1');
-		const en = readYamlContract('assets/skills/_shared/client-capabilities.en.md', 'client-capabilities-v1');
+		const zh = readYamlContract(
+			'assets/skills/_shared/client-capabilities.zh.md',
+			'client-capabilities-v1',
+		);
+		const en = readYamlContract(
+			'assets/skills/_shared/client-capabilities.en.md',
+			'client-capabilities-v1',
+		);
 		for (const contract of [zh, en]) {
 			expect(contract).toMatchObject({ contract_version: 1, capabilities: expect.any(Object) });
 			const entries = (contract as { capabilities: Record<string, Record<string, unknown>> })
@@ -120,10 +146,7 @@ describe('阶段二执行契约', () => {
 	});
 
 	it('项目、研究和头脑风暴通过公共语义契约协作', () => {
-		for (const path of [
-			'assets/skills/project/SKILL.zh.md',
-			'assets/skills/project/SKILL.en.md',
-		]) {
+		for (const path of ['assets/skills/project/SKILL.zh.md', 'assets/skills/project/SKILL.en.md']) {
 			const content = read(path);
 			expect(content, path).toContain('client-capabilities');
 			expect(content, path).toContain('Execution_Manifest_Schema.json');
@@ -131,7 +154,10 @@ describe('阶段二执行契约', () => {
 			expect(content, path).toMatch(/plan_revision/);
 			expect(content, path).toMatch(/confirmed_hash/);
 		}
-		for (const path of ['assets/skills/research/SKILL.zh.md', 'assets/skills/research/SKILL.en.md']) {
+		for (const path of [
+			'assets/skills/research/SKILL.zh.md',
+			'assets/skills/research/SKILL.en.md',
+		]) {
 			const content = read(path);
 			expect(content, path).toContain('client-capabilities');
 			expect(content, path).toContain('Execution_Manifest_Schema.json');

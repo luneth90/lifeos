@@ -8,6 +8,8 @@ dependencies:
       when: "用户要求保存问答记录为草稿时"
   prompts: []
   schemas: []
+  protocols:
+    - path: ../_shared/operation-safety.md
   agents: []
 ---
 
@@ -262,6 +264,7 @@ memory_log(contract_version=2,
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: ask
 run_id: stable(ask, normalized-topic, YYYY-MM-DD)
 target_path: "{草稿目录}/<draft-id>.md"

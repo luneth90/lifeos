@@ -8,6 +8,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   agents: []
 ---
 
@@ -274,6 +276,7 @@ memory_query(contract_version=2, query="<章节主题或原书约定关键词> �
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: revise
 run_id: stable(revise, knowledge-note-id, mode, note-hash)
 target_path: "{知识目录}/<chapter>/复习_<run-id>.md"

@@ -8,6 +8,8 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+  protocols:
+    - path: ../_shared/operation-safety.md
   capabilities: [execute_command, inspect_image]
   agents: []
 ---
@@ -197,6 +199,7 @@ Read `_shared/operation-safety.md`. Build a stable `run_id` from source PDF, cha
 <!-- operation-safety-v1 -->
 ```yaml
 contract_version: 1
+safety_protocol: operation-safety-v1
 operation: translate
 run_id: stable(translate, source-pdf, chapter-range, extraction-hash)
 target_path: "{knowledge directory}/<chapter>/Translation_<chapter>.md"
