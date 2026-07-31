@@ -378,6 +378,34 @@ describe('技能契约校验器', () => {
 		);
 	});
 
+	it.each([
+		[
+			'Vault 身份字段',
+			'identity_fields: [realpath, root_dev, root_ino]',
+			'identity_fields: [realpath]',
+		],
+		['未受信失败持久化', 'persist_manifest: forbidden', 'persist_manifest: allowed'],
+		[
+			'最终同步复核后继续 await',
+			'await_after_final_revalidation: forbidden',
+			'await_after_final_revalidation: allowed',
+		],
+	])('拒绝 Archive 安全边界漂移：%s', async (_name, original, replacement) => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/skills/archive/SKILL.en.md', (content) =>
+					content.replace(original, replacement),
+				),
+			[
+				{
+					code: 'invalid_archive_transaction_contract',
+					path: 'assets/skills/archive/SKILL.en.md',
+					message: 'Archive 发布事务、manifest 或 resume 机器字段非法',
+				},
+			],
+		);
+	});
+
 	it('拒绝 Read PDF 双语共同声明不存在的 courses 资源配置键', async () => {
 		await expectExactMutatedAssetsDiagnostics(
 			(write) => {
@@ -858,6 +886,33 @@ describe('技能契约校验器', () => {
 			(write) =>
 				write('assets/skills/_shared/operation-safety.en.md', (content) =>
 					content.replace('recovery: resume_same_run_id', 'recovery: retry'),
+				),
+		],
+		[
+			'Vault 身份字段漂移',
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace(
+						'identity_fields: [realpath, root_dev, root_ino]',
+						'identity_fields: [realpath]',
+					),
+				),
+		],
+		[
+			'未受信恢复允许持久化',
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace('persist_manifest: forbidden', 'persist_manifest: allowed'),
+				),
+		],
+		[
+			'最终复核后允许 await',
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace(
+						'await_after_final_revalidation: forbidden',
+						'await_after_final_revalidation: allowed',
+					),
 				),
 		],
 	])('独立拒绝操作安全契约：%s', async (_name, mutate) => {

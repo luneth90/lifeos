@@ -54,6 +54,23 @@ const sharedContract = {
 		strategy: 'guard_revalidate_single_level_mkdir_advance_revalidate',
 		recursive_mkdir: false,
 	},
+	vault_binding: {
+		identity_fields: ['realpath', 'root_dev', 'root_ino'],
+		required_for_resumable_operations: true,
+		resume_exact_match_before_receipt_verification: true,
+		changed_root: 'fail_closed_manual_recovery',
+	},
+	untrusted_resume: {
+		trust_checks: ['schema', 'vault_identity', 'receipt'],
+		persist_manifest: 'forbidden',
+		side_effect_callbacks: 'forbidden',
+		result: 'local_failed_unverified_null_receipt',
+	},
+	terminal_revalidation: {
+		after_external_await: 'advanced_target_guards_and_inventory',
+		before_complete_return: 'synchronous',
+		await_after_final_revalidation: 'forbidden',
+	},
 	manifest: { run_id: 'string', moves: [], collisions: [], notified: [], errors: [] },
 };
 
@@ -195,6 +212,33 @@ describe('阶段五幂等与归档契约', () => {
 				receipt_required_for_resume: true,
 				unauthenticated_resume: 'fail_closed_manual_recovery',
 				schema: 'recursive_exact_keys_and_derived_ids',
+			},
+			vault_binding: {
+				identity_fields: ['realpath', 'root_dev', 'root_ino'],
+				manifest: 'required',
+				candidate_move_intent: 'explicit',
+				derived_keys: ['candidate_key', 'move_id', 'idempotency_key'],
+				persistence_payloads: 'explicit',
+				resume: 'exact_match_before_receipt_verification',
+				changed_root: 'fail_closed_manual_recovery',
+			},
+			untrusted_resume: {
+				trust_checks: ['schema', 'vault_identity', 'receipt'],
+				persist_manifest: 'forbidden',
+				side_effect_callbacks: 'forbidden',
+				result: 'local_failed_unverified_null_receipt',
+			},
+			terminal_revalidation: {
+				after_callbacks: [
+					'move_with_link_update',
+					'memory_notify',
+					'confirm_index',
+					'memory_forget',
+				],
+				after_receipt_persist: 'advanced_target_guards_and_inventory',
+				after_complete_persist: 'advanced_target_guards_and_inventory',
+				before_complete_return: 'synchronous',
+				await_after_final_revalidation: 'forbidden',
 			},
 			effects: {
 				intent_before_side_effect: 'persisted',

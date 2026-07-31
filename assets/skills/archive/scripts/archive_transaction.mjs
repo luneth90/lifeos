@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { lstatSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import {
 	advanceVaultPathGuard,
@@ -25,7 +25,21 @@ const MANIFEST_KEYS = [
 	'contract_version',
 	'operation',
 	'run_id',
+	'vault_identity',
 	'status',
+	'candidates',
+	'inventories',
+	'candidate_states',
+	'moves',
+	'collisions',
+	'intents',
+	'move_receipts',
+	'notified',
+	'confirmed',
+	'forgotten',
+	'errors',
+];
+const MANIFEST_ARRAY_KEYS = [
 	'candidates',
 	'inventories',
 	'candidate_states',
@@ -139,8 +153,40 @@ function hash(value) {
 	return createHash('sha256').update(value).digest('hex');
 }
 
-function stableKey(runId, step, ...parts) {
-	return `${runId}:${step}:${hash(JSON.stringify(parts)).slice(0, 20)}`;
+function captureVaultIdentity(vaultRoot) {
+	const realpath = realpathSync(vaultRoot);
+	const info = statSync(realpath, { bigint: true });
+	if (!info.isDirectory()) throw codedError('invalid_vault_root');
+	return {
+		realpath,
+		root_dev: info.dev.toString(10),
+		root_ino: info.ino.toString(10),
+	};
+}
+
+function validateVaultIdentitySchema(identity) {
+	if (
+		!hasExactKeys(identity, ['realpath', 'root_dev', 'root_ino']) ||
+		typeof identity.realpath !== 'string' ||
+		!isAbsolute(identity.realpath) ||
+		typeof identity.root_dev !== 'string' ||
+		!/^\d+$/u.test(identity.root_dev) ||
+		typeof identity.root_ino !== 'string' ||
+		!/^\d+$/u.test(identity.root_ino)
+	) {
+		throw codedError('invalid_manifest');
+	}
+}
+
+function assertVaultIdentity(current, expected) {
+	validateVaultIdentitySchema(expected);
+	if (!sameValue(current, expected)) throw codedError('vault_identity_mismatch');
+}
+
+function stableKey(vaultIdentity, runId, step, ...parts) {
+	return `${runId}:${step}:${hash(
+		JSON.stringify({ vault_identity: vaultIdentity, run_id: runId, step, parts }),
+	).slice(0, 20)}`;
 }
 
 function pathExists(path) {
@@ -161,7 +207,7 @@ function safeEntryType(path) {
 	throw codedError('unsupported_archive_entry');
 }
 
-function normalizeCandidate(vaultRoot, candidate) {
+function normalizeCandidate(vaultRoot, vaultIdentity, runId, candidate) {
 	if (!isPlainObject(candidate)) throw codedError('invalid_candidate');
 	if (!ENTITY_TYPES.has(candidate.entity_type)) throw codedError('invalid_entity_type');
 	const expectedKeys =
@@ -187,7 +233,8 @@ function normalizeCandidate(vaultRoot, candidate) {
 	if (normalized.source_path === normalized.target_path) throw codedError('source_equals_target');
 	return {
 		...normalized,
-		candidate_key: stableKey('archive-candidate', 'pair', normalized),
+		vault_identity: vaultIdentity,
+		candidate_key: stableKey(vaultIdentity, runId, 'candidate', normalized),
 		source_absolute: sourceAbsolute,
 		target_absolute: targetAbsolute,
 	};
@@ -303,6 +350,7 @@ function validateBusinessShape(candidate, inventory) {
 function publicCandidate(candidate) {
 	return {
 		candidate_key: candidate.candidate_key,
+		vault_identity: candidate.vault_identity,
 		source_path: candidate.source_path,
 		target_path: candidate.target_path,
 		entity_type: candidate.entity_type,
@@ -310,11 +358,12 @@ function publicCandidate(candidate) {
 	};
 }
 
-function createManifest(runId, candidates) {
+function createManifest(runId, candidates, vaultIdentity) {
 	return {
 		contract_version: 2,
 		operation: 'archive',
 		run_id: runId,
+		vault_identity: vaultIdentity,
 		status: 'in_progress',
 		candidates: candidates.map(publicCandidate),
 		inventories: [],
@@ -344,29 +393,30 @@ function manifestInventory(manifest, candidateKey) {
 	return manifest.inventories.find((item) => item.candidate_key === candidateKey) ?? null;
 }
 
-function moveRecords(runId, inventory) {
+function moveRecords(vaultIdentity, runId, inventory) {
 	return inventory.files.map((file) => ({
 		candidate_key: inventory.candidate_key,
+		vault_identity: vaultIdentity,
 		source_path: file.source_path,
 		target_path: file.target_path,
-		move_id: stableKey(runId, 'file', file.source_path, file.target_path),
+		move_id: stableKey(vaultIdentity, runId, 'file', file.source_path, file.target_path),
 	}));
 }
 
-function moveIdempotencyKey(runId, candidateKey) {
-	return stableKey(runId, 'move', candidateKey);
+function moveIdempotencyKey(vaultIdentity, runId, candidateKey) {
+	return stableKey(vaultIdentity, runId, 'move', candidateKey);
 }
 
-function notifyIdempotencyKey(runId, moveId) {
-	return stableKey(runId, 'memory_notify', moveId);
+function notifyIdempotencyKey(vaultIdentity, runId, moveId) {
+	return stableKey(vaultIdentity, runId, 'memory_notify', moveId);
 }
 
-function confirmIdempotencyKey(runId, moveId) {
-	return stableKey(runId, 'confirm_index', moveId);
+function confirmIdempotencyKey(vaultIdentity, runId, moveId) {
+	return stableKey(vaultIdentity, runId, 'confirm_index', moveId);
 }
 
-function forgetIdempotencyKey(runId, projectId) {
-	return stableKey(runId, 'memory_forget', projectId);
+function forgetIdempotencyKey(vaultIdentity, runId, projectId) {
+	return stableKey(vaultIdentity, runId, 'memory_forget', projectId);
 }
 
 function assertString(value) {
@@ -442,39 +492,44 @@ function validateInventorySchema(vaultRoot, inventory, candidate) {
 	validateBusinessShape(candidate, inventory);
 }
 
-function expectedIntent(runId, effectType, reference) {
+function expectedIntent(vaultIdentity, runId, effectType, reference) {
 	if (effectType === 'move') {
 		return {
 			effect_type: 'move',
 			effect_key: reference.candidate_key,
-			idempotency_key: moveIdempotencyKey(runId, reference.candidate_key),
+			vault_identity: vaultIdentity,
+			idempotency_key: moveIdempotencyKey(vaultIdentity, runId, reference.candidate_key),
 		};
 	}
 	if (effectType === 'memory_notify') {
 		return {
 			effect_type: 'memory_notify',
 			effect_key: reference.move_id,
-			idempotency_key: notifyIdempotencyKey(runId, reference.move_id),
+			vault_identity: vaultIdentity,
+			idempotency_key: notifyIdempotencyKey(vaultIdentity, runId, reference.move_id),
 		};
 	}
 	if (effectType === 'confirm_index') {
 		return {
 			effect_type: 'confirm_index',
 			effect_key: reference.move_id,
-			idempotency_key: confirmIdempotencyKey(runId, reference.move_id),
+			vault_identity: vaultIdentity,
+			idempotency_key: confirmIdempotencyKey(vaultIdentity, runId, reference.move_id),
 		};
 	}
 	return {
 		effect_type: 'memory_forget',
 		effect_key: reference.project_id,
-		idempotency_key: forgetIdempotencyKey(runId, reference.project_id),
+		vault_identity: vaultIdentity,
+		idempotency_key: forgetIdempotencyKey(vaultIdentity, runId, reference.project_id),
 	};
 }
 
-function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
+function validateResumeManifest(manifest, runId, candidates, vaultRoot, vaultIdentity) {
 	assertPlainJson(manifest);
 	if (!hasExactKeys(manifest, MANIFEST_KEYS)) throw codedError('invalid_manifest');
 	if (manifest.run_id !== runId) throw codedError('run_id_mismatch');
+	assertVaultIdentity(vaultIdentity, manifest.vault_identity);
 	if (
 		manifest.contract_version !== 2 ||
 		manifest.operation !== 'archive' ||
@@ -482,7 +537,7 @@ function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
 	) {
 		throw codedError('invalid_manifest');
 	}
-	for (const key of MANIFEST_KEYS.slice(4)) {
+	for (const key of MANIFEST_ARRAY_KEYS) {
 		if (!Array.isArray(manifest[key])) throw codedError('invalid_manifest');
 	}
 	const expectedCandidates = candidates.map(publicCandidate);
@@ -519,12 +574,21 @@ function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
 		const state = manifestState(manifest, candidate.candidate_key);
 		const inventory = manifestInventory(manifest, candidate.candidate_key);
 		if (state.move_started && !inventory) throw codedError('invalid_manifest');
-		if (state.moved) expectedMoves.push(...moveRecords(runId, inventory));
+		if (state.moved) expectedMoves.push(...moveRecords(vaultIdentity, runId, inventory));
 	}
 	if (!sameValue(manifest.moves, expectedMoves)) throw codedError('invalid_manifest');
 	if (!uniqueBy(manifest.moves, (move) => move.move_id)) throw codedError('invalid_manifest');
 	for (const move of manifest.moves) {
-		if (!hasExactKeys(move, ['candidate_key', 'source_path', 'target_path', 'move_id'])) {
+		if (
+			!hasExactKeys(move, [
+				'candidate_key',
+				'vault_identity',
+				'source_path',
+				'target_path',
+				'move_id',
+			]) ||
+			!sameValue(move.vault_identity, vaultIdentity)
+		) {
 			throw codedError('invalid_manifest');
 		}
 	}
@@ -545,7 +609,10 @@ function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
 		throw codedError('invalid_manifest');
 	}
 	for (const intent of manifest.intents) {
-		if (!hasExactKeys(intent, ['effect_type', 'effect_key', 'idempotency_key'])) {
+		if (
+			!hasExactKeys(intent, ['effect_type', 'effect_key', 'vault_identity', 'idempotency_key']) ||
+			!sameValue(intent.vault_identity, vaultIdentity)
+		) {
 			throw codedError('invalid_manifest');
 		}
 		let reference;
@@ -566,7 +633,10 @@ function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
 		} else {
 			throw codedError('invalid_manifest');
 		}
-		if (!reference || !sameValue(intent, expectedIntent(runId, intent.effect_type, reference))) {
+		if (
+			!reference ||
+			!sameValue(intent, expectedIntent(vaultIdentity, runId, intent.effect_type, reference))
+		) {
 			throw codedError('invalid_manifest');
 		}
 	}
@@ -580,11 +650,11 @@ function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
 		const candidate = candidates.find((value) => value.candidate_key === item.candidate_key);
 		if (
 			!candidate ||
-			item.idempotency_key !== moveIdempotencyKey(runId, candidate.candidate_key) ||
+			item.idempotency_key !== moveIdempotencyKey(vaultIdentity, runId, candidate.candidate_key) ||
 			typeof item.receipt !== 'string' ||
 			!item.receipt ||
 			!manifest.intents.some((intent) =>
-				sameValue(intent, expectedIntent(runId, 'move', candidate)),
+				sameValue(intent, expectedIntent(vaultIdentity, runId, 'move', candidate)),
 			)
 		) {
 			throw codedError('invalid_manifest');
@@ -604,7 +674,7 @@ function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
 	for (const state of manifest.candidate_states) {
 		const candidate = candidates.find((item) => item.candidate_key === state.candidate_key);
 		const hasMoveIntent = manifest.intents.some((intent) =>
-			sameValue(intent, expectedIntent(runId, 'move', candidate)),
+			sameValue(intent, expectedIntent(vaultIdentity, runId, 'move', candidate)),
 		);
 		if (hasMoveIntent !== state.move_started) throw codedError('invalid_manifest');
 	}
@@ -620,11 +690,11 @@ function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
 			const move = manifest.moves.find((value) => value.move_id === item.move_id);
 			if (
 				!move ||
-				item.idempotency_key !== receiptKey(runId, item.move_id) ||
+				item.idempotency_key !== receiptKey(vaultIdentity, runId, item.move_id) ||
 				typeof item.receipt !== 'string' ||
 				!item.receipt ||
 				!manifest.intents.some((intent) =>
-					sameValue(intent, expectedIntent(runId, effectType, move)),
+					sameValue(intent, expectedIntent(vaultIdentity, runId, effectType, move)),
 				)
 			) {
 				throw codedError('invalid_manifest');
@@ -641,7 +711,7 @@ function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
 		if (!hasExactKeys(item, ['project_id', 'idempotency_key', 'receipt'])) {
 			throw codedError('invalid_manifest');
 		}
-		const expected = expectedIntent(runId, 'memory_forget', item);
+		const expected = expectedIntent(vaultIdentity, runId, 'memory_forget', item);
 		if (
 			item.idempotency_key !== expected.idempotency_key ||
 			typeof item.receipt !== 'string' ||
@@ -694,7 +764,7 @@ function validateResumeManifest(manifest, runId, candidates, vaultRoot) {
 	if (manifest.status === 'failed' && !manifest.errors.length) throw codedError('invalid_manifest');
 }
 
-function validateResumeEnvelope(envelope, runId, candidates, vaultRoot) {
+function validateResumeEnvelope(envelope, runId, candidates, vaultRoot, vaultIdentity) {
 	assertPlainJson(envelope);
 	if (
 		!hasExactKeys(envelope, ['manifest', 'persistence_receipt', 'persistence_state']) ||
@@ -704,7 +774,7 @@ function validateResumeEnvelope(envelope, runId, candidates, vaultRoot) {
 	) {
 		throw codedError('invalid_manifest_envelope');
 	}
-	validateResumeManifest(envelope.manifest, runId, candidates, vaultRoot);
+	validateResumeManifest(envelope.manifest, runId, candidates, vaultRoot, vaultIdentity);
 }
 
 function requireAdapters(adapters) {
@@ -751,9 +821,11 @@ function envelope(manifest, receipt, state) {
 async function tryPersist(manifest, adapters) {
 	try {
 		const snapshot = serializableClone(manifest);
-		const expected = JSON.stringify(snapshot);
-		const result = await adapters.persist_manifest({ manifest: snapshot });
-		if (JSON.stringify(snapshot) !== expected) return { ok: false, code: 'adapter_result_invalid' };
+		const vaultIdentity = serializableClone(manifest.vault_identity);
+		const payload = { manifest: snapshot, vault_identity: vaultIdentity };
+		const expected = JSON.stringify(payload);
+		const result = await adapters.persist_manifest(payload);
+		if (JSON.stringify(payload) !== expected) return { ok: false, code: 'adapter_result_invalid' };
 		if (!validReceiptResult(result)) return { ok: false, code: 'adapter_result_invalid' };
 		return { ok: true, receipt: result.receipt };
 	} catch (error) {
@@ -819,23 +891,34 @@ function targetStable(vaultRoot, item) {
 	assertInventoryMatch(observed, item.inventory);
 }
 
-function addMoveRecords(manifest, runId, inventory) {
-	for (const move of moveRecords(runId, inventory)) {
+function advancedTargetsStable(vaultRoot, prepared) {
+	for (const item of prepared) {
+		if (item.target_guard) targetStable(vaultRoot, item);
+	}
+}
+
+function addMoveRecords(manifest, vaultIdentity, runId, inventory) {
+	for (const move of moveRecords(vaultIdentity, runId, inventory)) {
 		if (!manifest.moves.some((existing) => existing.move_id === move.move_id)) {
 			manifest.moves.push(move);
 		}
 	}
 }
 
-async function verificationFailure(runId, candidates, adapters, code) {
-	const manifest = createManifest(runId, candidates);
-	return fail(manifest, adapters, {
-		step: 'verify_manifest_receipt',
-		path: runId,
-		code,
-		recovery_action: 'manual_recovery_required',
-		side_effect_state: 'resume_not_started',
-	});
+function untrustedResumeFailure(runId, candidates, vaultIdentity, code, step) {
+	const manifest = createManifest(runId, candidates, vaultIdentity);
+	manifest.status = 'failed';
+	appendError(
+		manifest,
+		errorRecord({
+			step,
+			path: runId,
+			code,
+			recovery_action: 'manual_recovery_required',
+			side_effect_state: 'resume_not_started',
+		}),
+	);
+	return envelope(manifest, null, 'unverified');
 }
 
 /**
@@ -854,37 +937,75 @@ export async function runArchiveTransaction({
 		throw codedError('invalid_candidates');
 	}
 	requireAdapters(adapters);
-	const vaultRoot = realpathSync(vault_root);
+	const vaultIdentity = captureVaultIdentity(vault_root);
+	const vaultRoot = vaultIdentity.realpath;
 	const candidates = requestedCandidates.map((candidate) =>
-		normalizeCandidate(vaultRoot, candidate),
+		normalizeCandidate(vaultRoot, vaultIdentity, run_id, candidate),
 	);
 	validateCandidateSet(candidates);
 	let manifest;
 	if (resumeEnvelope !== undefined) {
-		validateResumeEnvelope(resumeEnvelope, run_id, candidates, vaultRoot);
+		try {
+			validateResumeEnvelope(resumeEnvelope, run_id, candidates, vaultRoot, vaultIdentity);
+		} catch (error) {
+			return untrustedResumeFailure(
+				run_id,
+				candidates,
+				vaultIdentity,
+				codeOf(error, 'invalid_manifest'),
+				'resume_validation',
+			);
+		}
 		let verification;
 		try {
 			const verificationManifest = serializableClone(resumeEnvelope.manifest);
-			const expectedVerificationManifest = JSON.stringify(verificationManifest);
-			verification = await adapters.verify_manifest_receipt({
+			const verificationPayload = {
 				manifest: verificationManifest,
-				receipt: resumeEnvelope.persistence_receipt,
-			});
-			if (JSON.stringify(verificationManifest) !== expectedVerificationManifest) {
-				return verificationFailure(run_id, candidates, adapters, 'adapter_result_invalid');
+				persistence_receipt: resumeEnvelope.persistence_receipt,
+				vault_identity: serializableClone(vaultIdentity),
+			};
+			const expectedVerificationPayload = JSON.stringify(verificationPayload);
+			verification = await adapters.verify_manifest_receipt(verificationPayload);
+			assertVaultIdentity(captureVaultIdentity(vault_root), vaultIdentity);
+			if (JSON.stringify(verificationPayload) !== expectedVerificationPayload) {
+				return untrustedResumeFailure(
+					run_id,
+					candidates,
+					vaultIdentity,
+					'adapter_result_invalid',
+					'verify_manifest_receipt',
+				);
 			}
 		} catch (error) {
-			return verificationFailure(run_id, candidates, adapters, codeOf(error, 'verify_failed'));
+			return untrustedResumeFailure(
+				run_id,
+				candidates,
+				vaultIdentity,
+				codeOf(error, 'verify_failed'),
+				'verify_manifest_receipt',
+			);
 		}
 		if (!validVerifyResult(verification)) {
-			return verificationFailure(run_id, candidates, adapters, 'adapter_result_invalid');
+			return untrustedResumeFailure(
+				run_id,
+				candidates,
+				vaultIdentity,
+				'adapter_result_invalid',
+				'verify_manifest_receipt',
+			);
 		}
 		if (!verification.verified) {
-			return verificationFailure(run_id, candidates, adapters, 'manifest_receipt_invalid');
+			return untrustedResumeFailure(
+				run_id,
+				candidates,
+				vaultIdentity,
+				'manifest_receipt_invalid',
+				'verify_manifest_receipt',
+			);
 		}
 		manifest = serializableClone(resumeEnvelope.manifest);
 	} else {
-		manifest = createManifest(run_id, candidates);
+		manifest = createManifest(run_id, candidates, vaultIdentity);
 	}
 	manifest.status = 'in_progress';
 	manifest.collisions = [];
@@ -994,15 +1115,27 @@ export async function runArchiveTransaction({
 	}
 	let persisted = await persistOrFail(manifest, adapters);
 	if (!persisted.ok) return persisted.result;
+	advancedTargetsStable(vaultRoot, prepared);
 
 	for (const item of prepared) {
 		const { candidate, inventory, state } = item;
 		if (item.mode === 'move') {
-			const moveIntent = expectedIntent(run_id, 'move', candidate);
+			const moveIntent = expectedIntent(vaultIdentity, run_id, 'move', candidate);
 			ensureIntent(manifest, moveIntent);
 			state.move_started = true;
 			persisted = await persistOrFail(manifest, adapters);
 			if (!persisted.ok) return persisted.result;
+			try {
+				advancedTargetsStable(vaultRoot, prepared);
+			} catch (error) {
+				return fail(manifest, adapters, {
+					step: 'move',
+					path: candidate.target_path,
+					code: codeOf(error, 'target_changed'),
+					recovery_action: 'manual_recovery_required',
+					side_effect_state: 'prior_move_target_changed',
+				});
+			}
 			let sourceGuard;
 			let targetGuard;
 			try {
@@ -1029,6 +1162,7 @@ export async function runArchiveTransaction({
 				revalidateVaultPathGuard(targetGuard);
 				movePromise = adapters.move_with_link_update({
 					vault_root: vaultRoot,
+					vault_identity: serializableClone(vaultIdentity),
 					source_path: candidate.source_path,
 					target_path: candidate.target_path,
 					entry_type: inventory.entry_type,
@@ -1047,12 +1181,34 @@ export async function runArchiveTransaction({
 			try {
 				moveResult = await movePromise;
 			} catch (error) {
+				try {
+					advancedTargetsStable(vaultRoot, prepared);
+				} catch (revalidationError) {
+					return fail(manifest, adapters, {
+						step: 'move',
+						path: candidate.target_path,
+						code: codeOf(revalidationError, 'target_changed'),
+						recovery_action: 'manual_recovery_required',
+						side_effect_state: 'move_may_have_started_prior_target_changed',
+					});
+				}
 				return fail(manifest, adapters, {
 					step: 'move',
 					path: candidate.target_path,
 					code: codeOf(error, 'move_failed'),
 					recovery_action: 'manual_recovery_required',
 					side_effect_state: 'move_may_have_started',
+				});
+			}
+			try {
+				advancedTargetsStable(vaultRoot, prepared);
+			} catch (error) {
+				return fail(manifest, adapters, {
+					step: 'move',
+					path: candidate.target_path,
+					code: codeOf(error, 'target_changed'),
+					recovery_action: 'manual_recovery_required',
+					side_effect_state: 'move_may_have_started_prior_target_changed',
 				});
 			}
 			if (!validReceiptResult(moveResult)) {
@@ -1094,7 +1250,7 @@ export async function runArchiveTransaction({
 			item.source_guard = advancedSource;
 			item.target_guard = advancedTarget;
 			state.moved = true;
-			addMoveRecords(manifest, run_id, inventory);
+			addMoveRecords(manifest, vaultIdentity, run_id, inventory);
 			manifest.move_receipts.push({
 				candidate_key: candidate.candidate_key,
 				idempotency_key: moveIntent.idempotency_key,
@@ -1102,6 +1258,17 @@ export async function runArchiveTransaction({
 			});
 			persisted = await persistOrFail(manifest, adapters, 'move_applied_manifest_untrusted');
 			if (!persisted.ok) return persisted.result;
+			try {
+				advancedTargetsStable(vaultRoot, prepared);
+			} catch (error) {
+				return fail(manifest, adapters, {
+					step: 'move',
+					path: candidate.target_path,
+					code: codeOf(error, 'target_changed'),
+					recovery_action: 'manual_recovery_required',
+					side_effect_state: 'move_applied_target_changed',
+				});
+			}
 		} else {
 			try {
 				const observed = captureGuardedInventory(vaultRoot, candidate, 'target');
@@ -1122,12 +1289,12 @@ export async function runArchiveTransaction({
 			(record) => record.candidate_key === candidate.candidate_key,
 		)) {
 			if (!manifest.notified.some((record) => record.move_id === move.move_id)) {
-				const intent = expectedIntent(run_id, 'memory_notify', move);
+				const intent = expectedIntent(vaultIdentity, run_id, 'memory_notify', move);
 				ensureIntent(manifest, intent);
 				persisted = await persistOrFail(manifest, adapters, 'move_applied_notify_pending');
 				if (!persisted.ok) return persisted.result;
 				try {
-					targetStable(vaultRoot, item);
+					advancedTargetsStable(vaultRoot, prepared);
 				} catch (error) {
 					return fail(manifest, adapters, {
 						step: 'memory_notify',
@@ -1141,17 +1308,40 @@ export async function runArchiveTransaction({
 				try {
 					result = await adapters.memory_notify({
 						contract_version: 2,
+						vault_identity: serializableClone(vaultIdentity),
 						file_path: move.target_path,
 						previous_file_path: move.source_path,
 						idempotency_key: intent.idempotency_key,
 					});
 				} catch (error) {
+					try {
+						advancedTargetsStable(vaultRoot, prepared);
+					} catch (revalidationError) {
+						return fail(manifest, adapters, {
+							step: 'memory_notify',
+							path: move.target_path,
+							code: codeOf(revalidationError, 'target_changed'),
+							recovery_action: 'manual_recovery_required',
+							side_effect_state: 'notify_may_have_started_target_changed',
+						});
+					}
 					return fail(manifest, adapters, {
 						step: 'memory_notify',
 						path: move.target_path,
 						code: codeOf(error, 'memory_notify_failed'),
 						recovery_action: 'resume_same_run_id_with_idempotency_key',
 						side_effect_state: 'notify_may_have_started',
+					});
+				}
+				try {
+					advancedTargetsStable(vaultRoot, prepared);
+				} catch (error) {
+					return fail(manifest, adapters, {
+						step: 'memory_notify',
+						path: move.target_path,
+						code: codeOf(error, 'target_changed'),
+						recovery_action: 'manual_recovery_required',
+						side_effect_state: 'notify_applied_target_changed',
 					});
 				}
 				if (!validReceiptResult(result)) {
@@ -1170,14 +1360,25 @@ export async function runArchiveTransaction({
 				});
 				persisted = await persistOrFail(manifest, adapters, 'notify_applied_manifest_untrusted');
 				if (!persisted.ok) return persisted.result;
+				try {
+					advancedTargetsStable(vaultRoot, prepared);
+				} catch (error) {
+					return fail(manifest, adapters, {
+						step: 'memory_notify',
+						path: move.target_path,
+						code: codeOf(error, 'target_changed'),
+						recovery_action: 'manual_recovery_required',
+						side_effect_state: 'notify_applied_target_changed',
+					});
+				}
 			}
 			if (!manifest.confirmed.some((record) => record.move_id === move.move_id)) {
-				const intent = expectedIntent(run_id, 'confirm_index', move);
+				const intent = expectedIntent(vaultIdentity, run_id, 'confirm_index', move);
 				ensureIntent(manifest, intent);
 				persisted = await persistOrFail(manifest, adapters, 'notify_applied_confirm_pending');
 				if (!persisted.ok) return persisted.result;
 				try {
-					targetStable(vaultRoot, item);
+					advancedTargetsStable(vaultRoot, prepared);
 				} catch (error) {
 					return fail(manifest, adapters, {
 						step: 'confirm_index',
@@ -1190,17 +1391,40 @@ export async function runArchiveTransaction({
 				let result;
 				try {
 					result = await adapters.confirm_index({
+						vault_identity: serializableClone(vaultIdentity),
 						file_path: move.target_path,
 						previous_file_path: move.source_path,
 						idempotency_key: intent.idempotency_key,
 					});
 				} catch (error) {
+					try {
+						advancedTargetsStable(vaultRoot, prepared);
+					} catch (revalidationError) {
+						return fail(manifest, adapters, {
+							step: 'confirm_index',
+							path: move.target_path,
+							code: codeOf(revalidationError, 'target_changed'),
+							recovery_action: 'manual_recovery_required',
+							side_effect_state: 'confirm_may_have_started_target_changed',
+						});
+					}
 					return fail(manifest, adapters, {
 						step: 'confirm_index',
 						path: move.target_path,
 						code: codeOf(error, 'confirm_index_failed'),
 						recovery_action: 'resume_same_run_id_with_idempotency_key',
 						side_effect_state: 'confirm_may_have_started',
+					});
+				}
+				try {
+					advancedTargetsStable(vaultRoot, prepared);
+				} catch (error) {
+					return fail(manifest, adapters, {
+						step: 'confirm_index',
+						path: move.target_path,
+						code: codeOf(error, 'target_changed'),
+						recovery_action: 'manual_recovery_required',
+						side_effect_state: 'confirm_applied_target_changed',
 					});
 				}
 				if (!validConfirmResult(result)) {
@@ -1228,6 +1452,17 @@ export async function runArchiveTransaction({
 				});
 				persisted = await persistOrFail(manifest, adapters, 'confirm_applied_manifest_untrusted');
 				if (!persisted.ok) return persisted.result;
+				try {
+					advancedTargetsStable(vaultRoot, prepared);
+				} catch (error) {
+					return fail(manifest, adapters, {
+						step: 'confirm_index',
+						path: move.target_path,
+						code: codeOf(error, 'target_changed'),
+						recovery_action: 'manual_recovery_required',
+						side_effect_state: 'confirm_applied_target_changed',
+					});
+				}
 			}
 		}
 	}
@@ -1258,12 +1493,14 @@ export async function runArchiveTransaction({
 			});
 		}
 		if (manifest.forgotten.some((record) => record.project_id === projectId)) continue;
-		const intent = expectedIntent(run_id, 'memory_forget', { project_id: projectId });
+		const intent = expectedIntent(vaultIdentity, run_id, 'memory_forget', {
+			project_id: projectId,
+		});
 		ensureIntent(manifest, intent);
 		persisted = await persistOrFail(manifest, adapters, 'project_confirmed_forget_pending');
 		if (!persisted.ok) return persisted.result;
 		try {
-			for (const item of projectItems) targetStable(vaultRoot, item);
+			advancedTargetsStable(vaultRoot, prepared);
 		} catch (error) {
 			return fail(manifest, adapters, {
 				step: 'memory_forget',
@@ -1277,17 +1514,40 @@ export async function runArchiveTransaction({
 		try {
 			result = await adapters.memory_forget({
 				contract_version: 2,
+				vault_identity: serializableClone(vaultIdentity),
 				scope: { type: 'project', key: projectId },
 				reason: '项目归档清理',
 				idempotency_key: intent.idempotency_key,
 			});
 		} catch (error) {
+			try {
+				advancedTargetsStable(vaultRoot, prepared);
+			} catch (revalidationError) {
+				return fail(manifest, adapters, {
+					step: 'memory_forget',
+					path: projectId,
+					code: codeOf(revalidationError, 'target_changed'),
+					recovery_action: 'manual_recovery_required',
+					side_effect_state: 'forget_may_have_started_target_changed',
+				});
+			}
 			return fail(manifest, adapters, {
 				step: 'memory_forget',
 				path: projectId,
 				code: codeOf(error, 'memory_forget_failed'),
 				recovery_action: 'resume_same_run_id_with_idempotency_key',
 				side_effect_state: 'forget_may_have_started',
+			});
+		}
+		try {
+			advancedTargetsStable(vaultRoot, prepared);
+		} catch (error) {
+			return fail(manifest, adapters, {
+				step: 'memory_forget',
+				path: projectId,
+				code: codeOf(error, 'target_changed'),
+				recovery_action: 'manual_recovery_required',
+				side_effect_state: 'forget_applied_target_changed',
 			});
 		}
 		if (!validReceiptResult(result)) {
@@ -1306,10 +1566,33 @@ export async function runArchiveTransaction({
 		});
 		persisted = await persistOrFail(manifest, adapters, 'forget_applied_manifest_untrusted');
 		if (!persisted.ok) return persisted.result;
+		try {
+			advancedTargetsStable(vaultRoot, prepared);
+		} catch (error) {
+			return fail(manifest, adapters, {
+				step: 'memory_forget',
+				path: projectId,
+				code: codeOf(error, 'target_changed'),
+				recovery_action: 'manual_recovery_required',
+				side_effect_state: 'forget_applied_target_changed',
+			});
+		}
 	}
 
 	manifest.status = 'complete';
 	persisted = await persistOrFail(manifest, adapters, 'all_effects_applied');
 	if (!persisted.ok) return persisted.result;
+	try {
+		advancedTargetsStable(vaultRoot, prepared);
+	} catch (error) {
+		return fail(manifest, adapters, {
+			step: 'finalize',
+			path: manifest.run_id,
+			code: codeOf(error, 'target_changed'),
+			recovery_action: 'manual_recovery_required',
+			side_effect_state: 'all_effects_applied_target_changed',
+		});
+	}
+	advancedTargetsStable(vaultRoot, prepared);
 	return envelope(manifest, persisted.receipt, 'verified');
 }

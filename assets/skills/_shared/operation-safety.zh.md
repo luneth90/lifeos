@@ -33,6 +33,20 @@ directory_creation:
   ensure: ensureVaultDirectory
   strategy: guard_revalidate_single_level_mkdir_advance_revalidate
   recursive_mkdir: false
+vault_binding:
+  identity_fields: [realpath, root_dev, root_ino]
+  required_for_resumable_operations: true
+  resume_exact_match_before_receipt_verification: true
+  changed_root: fail_closed_manual_recovery
+untrusted_resume:
+  trust_checks: [schema, vault_identity, receipt]
+  persist_manifest: forbidden
+  side_effect_callbacks: forbidden
+  result: local_failed_unverified_null_receipt
+terminal_revalidation:
+  after_external_await: advanced_target_guards_and_inventory
+  before_complete_return: synchronous
+  await_after_final_revalidation: forbidden
 manifest: { run_id: string, moves: [], collisions: [], notified: [], errors: [] }
 ```
 
@@ -44,6 +58,8 @@ manifest: { run_id: string, moves: [], collisions: [], notified: [], errors: [] 
 4. **路径 guard 与通知**：`resolveVaultPath` 只用于 preflight，返回值不是可长期持有的安全能力。为最终目标创建 `createVaultPathGuard`：它既捕获祖先身份，也以 `lstat` 捕获叶节点；已有叶节点必须不是符号链接，并记录 type、dev、ino、realpath，不存在的叶节点记录为 `missing`。在每次实际 write/move 紧邻之前调用 `revalidateVaultPathGuard`；默认复核要求祖先和叶节点状态、身份完全不变。原地更新后再次调用 `revalidateVaultPathGuard`。若操作合法改变了叶节点状态，紧邻操作后改用 `advanceVaultPathGuard(guard, { before, after })`，并以返回的新 guard 替换旧 guard；仅允许新建/更新目标 `missing → existing`、移动源 `existing → missing` 和移动目标 `missing → existing`。推进到 `existing` 时仍拒绝符号链接，并确认 realpath 在 Vault 内。任何状态、type、dev、ino、realpath 或父级身份变化都立即中止，并把错误与恢复动作写入 manifest。不得在 guard 复核后长期复用裸路径。每次真实文件变更后调用 `memory_notify`；通知失败记录在 manifest，不得伪称完成。
 5. **目录创建**：禁止以递归创建直接跨过 guard。先调用 `createVaultDirectoryGuard` 冻结从已存在 Vault root 到目标目录的逐级状态，再调用 `ensureVaultDirectory`。每个缺失目录都执行 create guard → 紧邻复核 → 单级 `mkdir` → `missing → existing` 推进 → 再复核；每个已有目录也必须验证非符号链接、目录类型、身份和祖先身份。任一变化失败关闭。
 6. **恢复**：失败时将错误、已完成步骤和人工恢复动作写入 manifest；恢复时使用相同 `run_id` 进入 `resume`。没有实现自动撤销的操作不得声称已撤销。
+7. **Vault 绑定与未受信恢复**：可恢复操作必须把 Vault root 的 `realpath`、`dev` 与 `ino` 作为不可缺省的当前身份；恢复时先精确匹配该身份，再认证 receipt。Vault 被移动、替换或重建时禁止自动恢复。Schema、Vault 身份或 receipt 尚未通过时，失败结果只能保留在本地，禁止调用持久化或任何副作用回调，以免覆盖最后一个合法恢复点。
+8. **终态复核**：外部等待返回后立即同步复核所有已推进目标的 guard 与 inventory；返回 complete 前执行最后一次同步复核，之后不得再等待或调用外部能力。复核失败时停止后续业务回调，明确已发生的副作用并要求人工恢复。
 
 ## 原子竞态边界
 

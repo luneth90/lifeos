@@ -173,12 +173,12 @@ After scanning, process every eligible item in the execution list by default:
 
 3. **Use the published transaction adapter for moves, indexing, and Scope cleanup:**
    - Call `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })` from `scripts/archive_transaction.mjs`. `adapters` must provide `persist_manifest`, `verify_manifest_receipt`, `move_with_link_update`, `memory_notify`, `confirm_index`, and `memory_forget`. Every callback accepts only a strict success shape and returns a trusted receipt for a side effect.
-   1. `persist_manifest` must write the complete manifest to a trusted store the caller cannot forge and return a persistence receipt. Resume accepts only an exact envelope whose complete manifest and receipt pass `verify_manifest_receipt`; otherwise fail closed and require manual recovery.
+   1. `persist_manifest` must write the complete manifest and current Vault identity to a trusted store the caller cannot forge and return a persistence receipt. Vault identity comprises the root `realpath`, `dev`, and `ino`, and is explicit in the manifest, candidates, moves, intents, derived IDs/idempotency keys, and persistence/authentication payloads. Resume captures and exactly compares the current identity before `verify_manifest_receipt` authenticates the complete manifest, identity, and receipt. Moving, replacing, or recreating the Vault forbids automatic resume.
    2. Persist an intent before every side effect. After persisting a move intent, recompute the frozen inventory and create fresh source and target guards. Nothing asynchronous, no persistence, and no other callback may occur between the last guard revalidation and invoking `move_with_link_update`. Retain the new guards returned by `advanceVaultPathGuard`, then persist per-file `moves` and the move receipt.
-   3. After every persistence call or external wait, revalidate the target guard and current target inventory before `memory_notify`, `confirm_index`, or `memory_forget`. A step may be skipped only when its successful trusted receipt was persisted; otherwise replay safely with the same `idempotency_key` or fail closed.
+   3. Immediately after every persistence call or external wait returns, revalidate every advanced target guard and current target inventory. This includes `memory_notify`, `confirm_index`, `memory_forget`, every successful receipt persistence, and final complete persistence. A step may be skipped only when its successful trusted receipt was persisted; otherwise replay safely with the same `idempotency_key` or fail closed. Perform one final synchronous revalidation immediately before returning complete, with no later wait or external call.
    4. Call `memory_forget` once only after every file from every candidate for the same project has a confirmation receipt. An empty project cannot pass vacuously. Never call `memory_forget` for drafts, plans, or diaries.
    5. Draft, plan, and diary candidates must be regular files. A project can be a regular file or a non-empty directory containing at least one confirmable regular file. Every raw directory entry must already be NFC and must reject controls, Windows-invalid characters, reserved names, symlinks, and non-regular files.
-   6. Any failure stops the entire run; do not process another candidate. Resume only with the same `run_id`, original candidates, and the same authenticated envelope. Reject automatic resume when a source reappears or when the candidate graph, path, derived ID, inventory, or receipt differs.
+   6. Any failure stops the entire run; do not process another candidate. Resume only with the same `run_id`, original candidates, and the same authenticated envelope. Reject automatic resume when a source reappears or when the candidate graph, path, derived ID, inventory, or receipt differs. Schema, Vault identity, and receipt validation are untrusted stages: failure returns only a local `failed`, `unverified`, null-receipt result with manual-recovery guidance, calls neither persistence nor business side effects, and never overwrites the trusted store's last valid recovery point. If target drift is found after `confirm_index` or `memory_forget` has occurred, explicitly record the corresponding applied effect and never return complete.
 
 4. **Preserve the transaction endpoint:**
    - This Archive run must not directly rewrite archived-target frontmatter or today’s diary after the transaction completes. Such writes are absent from the original manifest, inventory, intents, and receipts and would invalidate the confirmed transaction boundary
@@ -373,6 +373,25 @@ persistence:
   receipt_required_for_resume: true
   unauthenticated_resume: fail_closed_manual_recovery
   schema: recursive_exact_keys_and_derived_ids
+vault_binding:
+  identity_fields: [realpath, root_dev, root_ino]
+  manifest: required
+  candidate_move_intent: explicit
+  derived_keys: [candidate_key, move_id, idempotency_key]
+  persistence_payloads: explicit
+  resume: exact_match_before_receipt_verification
+  changed_root: fail_closed_manual_recovery
+untrusted_resume:
+  trust_checks: [schema, vault_identity, receipt]
+  persist_manifest: forbidden
+  side_effect_callbacks: forbidden
+  result: local_failed_unverified_null_receipt
+terminal_revalidation:
+  after_callbacks: [move_with_link_update, memory_notify, confirm_index, memory_forget]
+  after_receipt_persist: advanced_target_guards_and_inventory
+  after_complete_persist: advanced_target_guards_and_inventory
+  before_complete_return: synchronous
+  await_after_final_revalidation: forbidden
 effects:
   intent_before_side_effect: persisted
   receipt_after_side_effect: persisted

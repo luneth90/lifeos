@@ -29,20 +29,22 @@ function stableRunId(skill, input) {
 function createTrustedManifestStore() {
 	const secret = randomBytes(32);
 	const stored = new Set();
-	const digest = (manifest) =>
-		createHmac('sha256', secret).update(JSON.stringify(manifest)).digest('hex');
+	const digest = (vaultIdentity, manifest) =>
+		createHmac('sha256', secret)
+			.update(JSON.stringify({ vault_identity: vaultIdentity, manifest }))
+			.digest('hex');
 	return {
-		async persist_manifest({ manifest }) {
-			const receipt = `hmac-sha256:${digest(manifest)}`;
-			stored.add(`${receipt}\n${JSON.stringify(manifest)}`);
+		async persist_manifest({ manifest, vault_identity }) {
+			const receipt = `hmac-sha256:${digest(vault_identity, manifest)}`;
+			stored.add(`${receipt}\n${JSON.stringify({ vault_identity, manifest })}`);
 			return { ok: true, receipt };
 		},
-		async verify_manifest_receipt({ manifest, receipt }) {
+		async verify_manifest_receipt({ manifest, persistence_receipt, vault_identity }) {
 			return {
 				ok: true,
 				verified:
-					receipt === `hmac-sha256:${digest(manifest)}` &&
-					stored.has(`${receipt}\n${JSON.stringify(manifest)}`),
+					persistence_receipt === `hmac-sha256:${digest(vault_identity, manifest)}` &&
+					stored.has(`${persistence_receipt}\n${JSON.stringify({ vault_identity, manifest })}`),
 			};
 		},
 	};

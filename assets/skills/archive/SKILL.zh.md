@@ -173,12 +173,12 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 3. **通过发布事务适配器执行移动、索引与 Scope 清理：**
    - 调用 `scripts/archive_transaction.mjs` 的 `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })`。`adapters` 必须提供 `persist_manifest`、`verify_manifest_receipt`、`move_with_link_update`、`memory_notify`、`confirm_index` 与 `memory_forget`；每个回调只接受严格成功结构，并为副作用返回受信回执。
-   1. `persist_manifest` 必须把完整 manifest 写入调用者不可伪造的受信存储并返回 persistence receipt；恢复输入必须是精确 envelope，且 `verify_manifest_receipt` 必须验证当前完整 manifest 与 receipt。缺少有效回执时失败关闭并要求人工恢复。
+   1. `persist_manifest` 必须把完整 manifest 与当前 Vault 身份写入调用者不可伪造的受信存储并返回 persistence receipt。Vault 身份由 root 的 `realpath`、`dev` 与 `ino` 组成，并显式进入 manifest、candidate、move、intent、派生 ID/idempotency key 及持久化/认证 payload。恢复时先捕获当前身份并与 envelope 精确匹配，再调用 `verify_manifest_receipt` 验证完整 manifest、身份与 receipt；Vault 被移动、替换或重建时禁止自动恢复。
    2. 每个副作用都先把 intent 持久化。move intent 持久化后重新计算冻结 inventory，再创建全新的 source/target guards；最后一次 guard 复核与 `move_with_link_update` 调用之间不得插入持久化、等待或其他回调。移动后保留 `advanceVaultPathGuard` 返回的新 guards，并持久化逐文件 `moves` 与 move receipt。
-   3. 每次持久化或外部等待后、调用 `memory_notify`、`confirm_index` 或 `memory_forget` 前，重新验证目标 guard 和当前 target inventory。回调成功回执持久化后才能跳过；否则只能使用同一 `idempotency_key` 安全重放或失败关闭。
+   3. 每次持久化或外部等待返回后，立即重新验证所有已推进目标的 guard 和当前 target inventory；`memory_notify`、`confirm_index`、`memory_forget`、每次成功回执持久化及最终 complete 持久化都适用。回调成功回执持久化后才能跳过；否则只能使用同一 `idempotency_key` 安全重放或失败关闭。返回 complete 前再执行一次同步复核，此后不得继续等待或调用外部能力。
    4. 只有同一项目全部候选的全部文件都持有确认回执后，才调用一次 `memory_forget`。空项目不能借由空集合自动通过；草稿、计划和日记不得调用 `memory_forget`。
    5. 草稿、计划与日记候选只能是普通文件；项目可以是普通文件，或包含至少一个可确认普通文件的非空目录。目录子项必须保持原始 NFC，并拒绝控制字符、Windows 非法字符、保留名、符号链接与非普通文件。
-   6. 任一步骤失败都停止整个 run，不再处理其他候选。恢复必须使用相同 `run_id`、原候选和同一份已认证 envelope；source 被恢复、候选图交叉、路径、派生 ID、inventory 或 receipt 不一致时拒绝自动恢复。
+   6. 任一步骤失败都停止整个 run，不再处理其他候选。恢复必须使用相同 `run_id`、原候选和同一份已认证 envelope；source 被恢复、候选图交叉、路径、派生 ID、inventory 或 receipt 不一致时拒绝自动恢复。Schema、Vault 身份与 receipt 校验属于未受信阶段：失败时只返回本地 `failed`、`unverified`、空 receipt 和人工恢复指引，禁止调用持久化或任何业务副作用，且不得覆盖受信存储的最后一个合法恢复点。若 `confirm_index` 或 `memory_forget` 已发生后发现目标漂移，必须明确记录对应副作用并禁止返回 complete。
 
 4. **保持事务终点不变：**
    - 本次 Archive run 禁止在事务完成后直接改写归档目标 frontmatter 或今日日记；这类未进入原 manifest、inventory、intent 和 receipt 的写入会破坏已经确认的事务边界
@@ -373,6 +373,25 @@ persistence:
   receipt_required_for_resume: true
   unauthenticated_resume: fail_closed_manual_recovery
   schema: recursive_exact_keys_and_derived_ids
+vault_binding:
+  identity_fields: [realpath, root_dev, root_ino]
+  manifest: required
+  candidate_move_intent: explicit
+  derived_keys: [candidate_key, move_id, idempotency_key]
+  persistence_payloads: explicit
+  resume: exact_match_before_receipt_verification
+  changed_root: fail_closed_manual_recovery
+untrusted_resume:
+  trust_checks: [schema, vault_identity, receipt]
+  persist_manifest: forbidden
+  side_effect_callbacks: forbidden
+  result: local_failed_unverified_null_receipt
+terminal_revalidation:
+  after_callbacks: [move_with_link_update, memory_notify, confirm_index, memory_forget]
+  after_receipt_persist: advanced_target_guards_and_inventory
+  after_complete_persist: advanced_target_guards_and_inventory
+  before_complete_return: synchronous
+  await_after_final_revalidation: forbidden
 effects:
   intent_before_side_effect: persisted
   receipt_after_side_effect: persisted

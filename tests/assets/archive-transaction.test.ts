@@ -5,6 +5,7 @@ import {
 	mkdtempSync,
 	readFileSync,
 	readdirSync,
+	realpathSync,
 	renameSync,
 	statSync,
 	symlinkSync,
@@ -78,6 +79,7 @@ function callbacks(overrides: Record<string, unknown> = {}) {
 }
 
 interface TestManifest extends Record<string, unknown> {
+	vault_identity: { realpath: string; root_dev: string; root_ino: string };
 	status: string;
 	errors: Array<Record<string, unknown>>;
 	candidates: Array<Record<string, unknown>>;
@@ -108,29 +110,45 @@ function payloadManifest(payload: Record<string, unknown>): TestManifest {
 function createTrustedManifestStore() {
 	const secret = randomBytes(32);
 	const stored = new Set<string>();
-	const digest = (manifest: unknown) =>
-		createHmac('sha256', secret).update(JSON.stringify(manifest)).digest('hex');
-	const seal = (manifest: unknown) => {
-		const receipt = `hmac-sha256:${digest(manifest)}`;
-		stored.add(`${receipt}\n${JSON.stringify(manifest)}`);
+	let latest: { receipt: string; payload: string } | null = null;
+	let persistCount = 0;
+	const serializedPayload = (manifest: unknown, vaultIdentity?: unknown) =>
+		JSON.stringify({
+			vault_identity:
+				vaultIdentity ?? (manifest as { vault_identity?: unknown } | null)?.vault_identity,
+			manifest,
+		});
+	const digest = (payload: string) => createHmac('sha256', secret).update(payload).digest('hex');
+	const seal = (manifest: unknown, vaultIdentity?: unknown) => {
+		const payload = serializedPayload(manifest, vaultIdentity);
+		const receipt = `hmac-sha256:${digest(payload)}`;
+		stored.add(`${receipt}\n${payload}`);
+		latest = { receipt, payload };
 		return { ok: true as const, receipt };
 	};
 	return {
 		seal,
+		latest: () => structuredClone(latest),
+		persist_count: () => persistCount,
 		async persist_manifest(payload: Record<string, unknown>) {
-			return seal(payload.manifest ?? payload);
+			persistCount += 1;
+			return seal(payload.manifest ?? payload, payload.vault_identity);
 		},
 		async verify_manifest_receipt({
 			manifest,
-			receipt,
+			persistence_receipt,
+			vault_identity,
 		}: {
 			manifest: unknown;
-			receipt: string;
+			persistence_receipt: string;
+			vault_identity?: unknown;
 		}) {
-			const expected = `hmac-sha256:${digest(manifest)}`;
+			const payload = serializedPayload(manifest, vault_identity);
+			const expected = `hmac-sha256:${digest(payload)}`;
 			return {
 				ok: true as const,
-				verified: receipt === expected && stored.has(`${receipt}\n${JSON.stringify(manifest)}`),
+				verified:
+					persistence_receipt === expected && stored.has(`${persistence_receipt}\n${payload}`),
 			};
 		},
 	};
@@ -515,16 +533,32 @@ describe('Archive 发布事务适配器', () => {
 		const interrupted = await runArchiveTransaction(base);
 		interrupt = false;
 
-		await expect(
-			runArchiveTransaction({ ...base, run_id: 'archive-other', manifest: interrupted }),
-		).rejects.toThrow('run_id_mismatch');
-		await expect(
-			runArchiveTransaction({
-				...base,
-				candidates: [candidate('20_Projects/Demo', '90_System/Archive/Projects/2027/Demo')],
-				manifest: interrupted,
-			}),
-		).rejects.toThrow('candidate_set_mismatch');
+		const wrongRun = await runArchiveTransaction({
+			...base,
+			run_id: 'archive-other',
+			manifest: interrupted,
+		});
+		expect(wrongRun).toMatchObject({
+			persistence_receipt: null,
+			persistence_state: 'unverified',
+			manifest: {
+				status: 'failed',
+				errors: [expect.objectContaining({ code: 'run_id_mismatch' })],
+			},
+		});
+		const wrongCandidates = await runArchiveTransaction({
+			...base,
+			candidates: [candidate('20_Projects/Demo', '90_System/Archive/Projects/2027/Demo')],
+			manifest: interrupted,
+		});
+		expect(wrongCandidates).toMatchObject({
+			persistence_receipt: null,
+			persistence_state: 'unverified',
+			manifest: {
+				status: 'failed',
+				errors: [expect.objectContaining({ code: 'candidate_set_mismatch' })],
+			},
+		});
 
 		writeFileSync(join(root, '90_System/Archive/Projects/2026/Demo/B.md'), 'changed', 'utf8');
 		const drifted = await runArchiveTransaction({ ...base, manifest: interrupted });
@@ -751,7 +785,10 @@ describe('Archive 安全边界复审', () => {
 		const manifest = manifestFrom(result as Record<string, unknown>);
 
 		expect(manifest.status).toBe('failed');
-		expect(manifest.errors.at(-1)).toMatchObject({ step: 'memory_notify' });
+		expect(manifest.errors.at(-1)).toMatchObject({
+			step: 'move',
+			side_effect_state: 'move_applied_target_changed',
+		});
 		expect(notifyCount).toBe(0);
 	});
 
@@ -833,18 +870,23 @@ describe('Archive 安全边界复审', () => {
 			const manifest = structuredClone(interrupted.manifest);
 			mutate(manifest);
 			const receipt = store.seal(manifest).receipt;
-			await expect(
-				runArchiveTransaction({
-					...request,
-					manifest: { manifest, persistence_receipt: receipt, persistence_state: 'verified' },
-				}),
-			).rejects.toThrow(/invalid_manifest|candidate_set_mismatch|vault_escape/);
+			const rejected = await runArchiveTransaction({
+				...request,
+				manifest: { manifest, persistence_receipt: receipt, persistence_state: 'verified' },
+			});
+			expect(rejected).toMatchObject({
+				persistence_receipt: null,
+				persistence_state: 'unverified',
+				manifest: { status: 'failed' },
+			});
 		}
 		const polluted = structuredClone(interrupted);
 		Object.setPrototypeOf(polluted.manifest, { injected: true });
-		await expect(runArchiveTransaction({ ...request, manifest: polluted })).rejects.toThrow(
-			'invalid_manifest',
-		);
+		await expect(runArchiveTransaction({ ...request, manifest: polluted })).resolves.toMatchObject({
+			persistence_receipt: null,
+			persistence_state: 'unverified',
+			manifest: { status: 'failed' },
+		});
 
 		const accessorEnvelope = structuredClone(interrupted);
 		const firstMove = accessorEnvelope.manifest.moves[0];
@@ -854,9 +896,13 @@ describe('Archive 安全边界复审', () => {
 			get: () => firstMove,
 		});
 		accessorEnvelope.persistence_receipt = store.seal(accessorEnvelope.manifest).receipt;
-		await expect(runArchiveTransaction({ ...request, manifest: accessorEnvelope })).rejects.toThrow(
-			'invalid_manifest',
-		);
+		await expect(
+			runArchiveTransaction({ ...request, manifest: accessorEnvelope }),
+		).resolves.toMatchObject({
+			persistence_receipt: null,
+			persistence_state: 'unverified',
+			manifest: { status: 'failed' },
+		});
 	});
 
 	it('恢复时 source 被恢复出来必须失败关闭，不得自动跳过副作用', async () => {
@@ -1112,7 +1158,7 @@ describe('Archive 安全边界复审', () => {
 	);
 
 	it.each([false, null, { isError: true }, { ok: true }])(
-		'verify_manifest_receipt 返回非法结果 %j 时失败关闭并持久化人工恢复状态',
+		'verify_manifest_receipt 返回非法结果 %j 时失败关闭且不持久化未受信状态',
 		async (invalidResult) => {
 			const { runArchiveTransaction } = await loadModule();
 			const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-'));
@@ -1156,7 +1202,10 @@ describe('Archive 安全边界复审', () => {
 				code: 'adapter_result_invalid',
 				recovery_action: 'manual_recovery_required',
 			});
-			expect(result).toMatchObject({ persistence_state: 'verified' });
+			expect(result).toMatchObject({
+				persistence_receipt: null,
+				persistence_state: 'unverified',
+			});
 		},
 	);
 
@@ -1318,5 +1367,482 @@ describe('Archive 安全边界复审', () => {
 		});
 		expect(result).toMatchObject({ persistence_receipt: null, persistence_state: 'unverified' });
 		expect(moveCount).toBe(0);
+	});
+});
+
+describe('Archive Vault 绑定与未受信恢复边界', () => {
+	it('manifest、candidate、move、intent 及持久化/认证 payload 都携带当前 Vault 身份', async () => {
+		const { runArchiveTransaction } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-vault-'));
+		write(root, '20_Projects/Demo.md', 'project');
+		const store = createTrustedManifestStore();
+		const persistPayloads: Array<Record<string, unknown>> = [];
+		let verifyPayload: Record<string, unknown> | null = null;
+		let interrupt = true;
+		const adapters = secureCallbacks(
+			{
+				async persist_manifest(payload: Record<string, unknown>) {
+					persistPayloads.push(structuredClone(payload));
+					return store.persist_manifest(payload);
+				},
+				async verify_manifest_receipt(payload: Record<string, unknown>) {
+					verifyPayload = structuredClone(payload);
+					return store.verify_manifest_receipt(
+						payload as Parameters<typeof store.verify_manifest_receipt>[0],
+					);
+				},
+				async memory_notify({ idempotency_key }: { idempotency_key: string }) {
+					if (interrupt) throw Object.assign(new Error('offline'), { code: 'notify_offline' });
+					return { ok: true, receipt: `notify:${idempotency_key}` };
+				},
+			},
+			store,
+		);
+		const request = {
+			vault_root: root,
+			run_id: 'archive-vault-payload',
+			candidates: [candidate('20_Projects/Demo.md', 'Archive/Demo.md')],
+			adapters,
+		};
+		const interrupted = (await runArchiveTransaction(request)) as TestEnvelope;
+		interrupt = false;
+		const resumed = (await runArchiveTransaction({
+			...request,
+			manifest: interrupted,
+		})) as TestEnvelope;
+
+		const identity = resumed.manifest.vault_identity;
+		expect(identity).toEqual({
+			realpath: realpathSync(root),
+			root_dev: expect.stringMatching(/^\d+$/u),
+			root_ino: expect.stringMatching(/^\d+$/u),
+		});
+		const hasIdentity = (item: Record<string, unknown>) =>
+			JSON.stringify(item.vault_identity) === JSON.stringify(identity);
+		expect(resumed.manifest.candidates.every(hasIdentity)).toBe(true);
+		expect(resumed.manifest.moves.every(hasIdentity)).toBe(true);
+		expect(resumed.manifest.intents.every(hasIdentity)).toBe(true);
+		expect(
+			persistPayloads.every(
+				(payload) =>
+					Object.keys(payload).sort().join(',') === 'manifest,vault_identity' &&
+					JSON.stringify(payload.vault_identity) === JSON.stringify(identity),
+			),
+		).toBe(true);
+		expect(verifyPayload).toMatchObject({ vault_identity: identity });
+		expect(Object.keys(verifyPayload ?? {}).sort()).toEqual([
+			'manifest',
+			'persistence_receipt',
+			'vault_identity',
+		]);
+	});
+
+	it('A Vault 的合法 envelope 即使内容、run_id 与 HMAC store 相同也不能在 B Vault 恢复', async () => {
+		const { runArchiveTransaction } = await loadModule();
+		const rootA = mkdtempSync(join(tmpdir(), 'lifeos-archive-vault-a-'));
+		const rootB = mkdtempSync(join(tmpdir(), 'lifeos-archive-vault-b-'));
+		write(rootA, '20_Projects/Demo.md', 'project');
+		const target = '90_System/Archive/Projects/2026/Demo.md';
+		const store = createTrustedManifestStore();
+		const candidates = [candidate('20_Projects/Demo.md', target)];
+		const envelopeA = (await runArchiveTransaction({
+			vault_root: rootA,
+			run_id: 'archive-cross-vault',
+			candidates,
+			adapters: secureCallbacks(
+				{
+					async memory_notify() {
+						throw Object.assign(new Error('offline'), { code: 'notify_offline' });
+					},
+				},
+				store,
+			),
+		})) as TestEnvelope;
+		write(rootB, target, 'project');
+		const calls = {
+			persist_manifest: 0,
+			verify_manifest_receipt: 0,
+			move_with_link_update: 0,
+			memory_notify: 0,
+			confirm_index: 0,
+			memory_forget: 0,
+		};
+		const result = await runArchiveTransaction({
+			vault_root: rootB,
+			run_id: 'archive-cross-vault',
+			candidates,
+			manifest: envelopeA,
+			adapters: secureCallbacks(
+				{
+					async persist_manifest(payload: Record<string, unknown>) {
+						calls.persist_manifest += 1;
+						return store.persist_manifest(payload);
+					},
+					async verify_manifest_receipt(payload: Record<string, unknown>) {
+						calls.verify_manifest_receipt += 1;
+						return store.verify_manifest_receipt(
+							payload as Parameters<typeof store.verify_manifest_receipt>[0],
+						);
+					},
+					move_with_link_update() {
+						calls.move_with_link_update += 1;
+						return { ok: true, receipt: 'move:unexpected' };
+					},
+					async memory_notify() {
+						calls.memory_notify += 1;
+						return { ok: true, receipt: 'notify:unexpected' };
+					},
+					async confirm_index() {
+						calls.confirm_index += 1;
+						return { ok: true, confirmed: true, receipt: 'confirm:unexpected' };
+					},
+					async memory_forget() {
+						calls.memory_forget += 1;
+						return { ok: true, receipt: 'forget:unexpected' };
+					},
+				},
+				store,
+			),
+		});
+
+		const manifest = manifestFrom(result as Record<string, unknown>);
+		expect(manifest.status).toBe('failed');
+		expect(manifest.errors.at(-1)).toMatchObject({
+			code: 'vault_identity_mismatch',
+			recovery_action: 'manual_recovery_required',
+		});
+		expect(result).toMatchObject({ persistence_receipt: null, persistence_state: 'unverified' });
+		expect(calls).toEqual({
+			persist_manifest: 0,
+			verify_manifest_receipt: 0,
+			move_with_link_update: 0,
+			memory_notify: 0,
+			confirm_index: 0,
+			memory_forget: 0,
+		});
+	});
+
+	it.each(['moved', 'recreated'] as const)(
+		'Vault root 被 %s 后禁止自动恢复并保持受信存储不变',
+		async (change) => {
+			const { runArchiveTransaction } = await loadModule();
+			const root = mkdtempSync(join(tmpdir(), `lifeos-archive-vault-${change}-`));
+			const source = '20_Projects/Demo.md';
+			const target = 'Archive/Demo.md';
+			write(root, source, 'project');
+			const store = createTrustedManifestStore();
+			const candidates = [candidate(source, target)];
+			const trusted = (await runArchiveTransaction({
+				vault_root: root,
+				run_id: `archive-vault-${change}`,
+				candidates,
+				adapters: secureCallbacks(
+					{
+						async memory_notify() {
+							throw Object.assign(new Error('offline'), { code: 'notify_offline' });
+						},
+					},
+					store,
+				),
+			})) as TestEnvelope;
+			const trustedLatest = store.latest();
+			let currentRoot = root;
+			if (change === 'moved') {
+				currentRoot = `${root}-moved`;
+				renameSync(root, currentRoot);
+			} else {
+				renameSync(root, `${root}-retired`);
+				mkdirSync(root);
+				write(root, target, 'project');
+			}
+			const calls = { persist: 0, verify: 0, sideEffect: 0 };
+			const result = await runArchiveTransaction({
+				vault_root: currentRoot,
+				run_id: `archive-vault-${change}`,
+				candidates,
+				manifest: trusted,
+				adapters: secureCallbacks({
+					async persist_manifest() {
+						calls.persist += 1;
+						return { ok: true, receipt: 'persist:unexpected' };
+					},
+					async verify_manifest_receipt() {
+						calls.verify += 1;
+						return { ok: true, verified: true };
+					},
+					move_with_link_update() {
+						calls.sideEffect += 1;
+						return { ok: true, receipt: 'move:unexpected' };
+					},
+				}),
+			});
+
+			expect(result).toMatchObject({
+				persistence_receipt: null,
+				persistence_state: 'unverified',
+				manifest: {
+					status: 'failed',
+					errors: [
+						expect.objectContaining({
+							code: 'vault_identity_mismatch',
+							recovery_action: 'manual_recovery_required',
+						}),
+					],
+				},
+			});
+			expect(calls).toEqual({ persist: 0, verify: 0, sideEffect: 0 });
+			expect(store.latest()).toEqual(trustedLatest);
+		},
+	);
+
+	it('未受信 Schema 与 receipt 失败不覆盖 latest 合法恢复点', async () => {
+		const { runArchiveTransaction } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-latest-'));
+		write(root, '20_Projects/Demo.md', 'project');
+		const store = createTrustedManifestStore();
+		const candidates = [candidate('20_Projects/Demo.md', 'Archive/Demo.md')];
+		const valid = (await runArchiveTransaction({
+			vault_root: root,
+			run_id: 'archive-latest-only',
+			candidates,
+			adapters: secureCallbacks(
+				{
+					async memory_notify() {
+						throw Object.assign(new Error('offline'), { code: 'notify_offline' });
+					},
+				},
+				store,
+			),
+		})) as TestEnvelope;
+		const trustedLatest = store.latest();
+
+		const schemaCalls = { persist: 0, verify: 0, side_effect: 0 };
+		const malformed = structuredClone(valid);
+		Object.assign(malformed.manifest, { extra: true });
+		const malformedResult = await runArchiveTransaction({
+			vault_root: root,
+			run_id: 'archive-latest-only',
+			candidates,
+			manifest: malformed,
+			adapters: secureCallbacks({
+				async persist_manifest() {
+					schemaCalls.persist += 1;
+					return { ok: true, receipt: 'persist:unexpected' };
+				},
+				async verify_manifest_receipt() {
+					schemaCalls.verify += 1;
+					return { ok: true, verified: true };
+				},
+				async memory_notify() {
+					schemaCalls.side_effect += 1;
+					return { ok: true, receipt: 'notify:unexpected' };
+				},
+			}),
+		});
+		expect(malformedResult).toMatchObject({
+			persistence_receipt: null,
+			persistence_state: 'unverified',
+			manifest: { status: 'failed' },
+		});
+		expect(schemaCalls).toEqual({ persist: 0, verify: 0, side_effect: 0 });
+		expect(store.latest()).toEqual(trustedLatest);
+
+		const receiptCalls = { persist: 0, verify: 0, side_effect: 0 };
+		const forgedReceipt = { ...structuredClone(valid), persistence_receipt: 'forged' };
+		const receiptResult = await runArchiveTransaction({
+			vault_root: root,
+			run_id: 'archive-latest-only',
+			candidates,
+			manifest: forgedReceipt,
+			adapters: secureCallbacks(
+				{
+					async persist_manifest() {
+						receiptCalls.persist += 1;
+						return { ok: true, receipt: 'persist:unexpected' };
+					},
+					async verify_manifest_receipt(payload: Record<string, unknown>) {
+						receiptCalls.verify += 1;
+						return store.verify_manifest_receipt(
+							payload as Parameters<typeof store.verify_manifest_receipt>[0],
+						);
+					},
+					async memory_notify() {
+						receiptCalls.side_effect += 1;
+						return { ok: true, receipt: 'notify:unexpected' };
+					},
+				},
+				store,
+			),
+		});
+		expect(receiptResult).toMatchObject({
+			persistence_receipt: null,
+			persistence_state: 'unverified',
+			manifest: { status: 'failed' },
+		});
+		expect(receiptCalls).toEqual({ persist: 0, verify: 1, side_effect: 0 });
+		expect(store.latest()).toEqual(trustedLatest);
+	});
+
+	it('candidate、move 与 intent/idempotency key 在跨 run 和跨 Vault 时均不复用', async () => {
+		const { runArchiveTransaction } = await loadModule();
+		const rootA = mkdtempSync(join(tmpdir(), 'lifeos-archive-key-a-'));
+		const rootB = mkdtempSync(join(tmpdir(), 'lifeos-archive-key-b-'));
+		const source = '20_Projects/Demo.md';
+		const target = 'Archive/Demo.md';
+		const candidates = [candidate(source, target)];
+		write(rootA, source, 'project');
+		const first = (await runArchiveTransaction({
+			vault_root: rootA,
+			run_id: 'archive-key-run-1',
+			candidates,
+			adapters: secureCallbacks(),
+		})) as TestEnvelope;
+		renameSync(join(rootA, target), join(rootA, source));
+		const second = (await runArchiveTransaction({
+			vault_root: rootA,
+			run_id: 'archive-key-run-2',
+			candidates,
+			adapters: secureCallbacks(),
+		})) as TestEnvelope;
+		write(rootB, source, 'project');
+		const third = (await runArchiveTransaction({
+			vault_root: rootB,
+			run_id: 'archive-key-run-1',
+			candidates,
+			adapters: secureCallbacks(),
+		})) as TestEnvelope;
+
+		const keyMaterial = (envelope: TestEnvelope) => [
+			envelope.manifest.candidates[0].candidate_key,
+			envelope.manifest.moves[0].move_id,
+			...envelope.manifest.intents.map((intent) => intent.idempotency_key),
+		];
+		const firstKeys = keyMaterial(first);
+		const secondKeys = keyMaterial(second);
+		const thirdKeys = keyMaterial(third);
+		expect(first.manifest.vault_identity).toEqual(second.manifest.vault_identity);
+		expect(first.manifest.vault_identity).not.toEqual(third.manifest.vault_identity);
+		expect(firstKeys.some((key) => secondKeys.includes(key))).toBe(false);
+		expect(firstKeys.some((key) => thirdKeys.includes(key))).toBe(false);
+	});
+});
+
+describe('Archive 终态后验复核', () => {
+	it('confirm_index 回调篡改目标后立即失败，不持久化确认回执且不执行 forget', async () => {
+		const { runArchiveTransaction } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-confirm-tamper-'));
+		const target = 'Archive/Demo.md';
+		write(root, '20_Projects/Demo.md', 'project');
+		const store = createTrustedManifestStore();
+		let confirmReceiptPersisted = false;
+		let forgetCount = 0;
+		const result = await runArchiveTransaction({
+			vault_root: root,
+			run_id: 'archive-confirm-tamper',
+			candidates: [candidate('20_Projects/Demo.md', target)],
+			adapters: secureCallbacks(
+				{
+					async persist_manifest(payload: Record<string, unknown>) {
+						const manifest = payloadManifest(payload);
+						if (manifest.confirmed.length > 0) confirmReceiptPersisted = true;
+						return store.persist_manifest(payload);
+					},
+					async confirm_index({ idempotency_key }: { idempotency_key: string }) {
+						writeFileSync(join(root, target), 'tampered-by-confirm', 'utf8');
+						return { ok: true, confirmed: true, receipt: `confirm:${idempotency_key}` };
+					},
+					async memory_forget({ idempotency_key }: { idempotency_key: string }) {
+						forgetCount += 1;
+						return { ok: true, receipt: `forget:${idempotency_key}` };
+					},
+				},
+				store,
+			),
+		});
+
+		const manifest = manifestFrom(result as Record<string, unknown>);
+		expect(manifest.status).toBe('failed');
+		expect(manifest.errors.at(-1)).toMatchObject({
+			step: 'confirm_index',
+			code: 'inventory_mismatch',
+			recovery_action: 'manual_recovery_required',
+			side_effect_state: 'confirm_applied_target_changed',
+		});
+		expect(confirmReceiptPersisted).toBe(false);
+		expect(forgetCount).toBe(0);
+	});
+
+	it('memory_forget 回调篡改目标后返回 failed，并明确 forget 已发生且需要人工恢复', async () => {
+		const { runArchiveTransaction } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-forget-tamper-'));
+		const target = 'Archive/Demo.md';
+		write(root, '20_Projects/Demo.md', 'project');
+		let forgetCount = 0;
+		const result = await runArchiveTransaction({
+			vault_root: root,
+			run_id: 'archive-forget-tamper',
+			candidates: [candidate('20_Projects/Demo.md', target)],
+			adapters: secureCallbacks({
+				async memory_forget({ idempotency_key }: { idempotency_key: string }) {
+					forgetCount += 1;
+					writeFileSync(join(root, target), 'tampered-by-forget', 'utf8');
+					return { ok: true, receipt: `forget:${idempotency_key}` };
+				},
+			}),
+		});
+
+		const manifest = manifestFrom(result as Record<string, unknown>);
+		expect(manifest.status).toBe('failed');
+		expect(manifest.errors.at(-1)).toMatchObject({
+			step: 'memory_forget',
+			code: 'inventory_mismatch',
+			recovery_action: 'manual_recovery_required',
+			side_effect_state: 'forget_applied_target_changed',
+		});
+		expect(manifest.forgotten).toEqual([]);
+		expect(forgetCount).toBe(1);
+		expect(result).toMatchObject({ persistence_state: 'verified' });
+	});
+
+	it('最终 complete 持久化回调篡改目标后不得返回 complete，latest 收敛到 failed', async () => {
+		const { runArchiveTransaction } = await loadModule();
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-final-tamper-'));
+		const target = 'Archive/Demo.md';
+		write(root, '20_Projects/Demo.md', 'project');
+		const store = createTrustedManifestStore();
+		let tampered = false;
+		const result = await runArchiveTransaction({
+			vault_root: root,
+			run_id: 'archive-final-persist-tamper',
+			candidates: [candidate('20_Projects/Demo.md', target)],
+			adapters: secureCallbacks(
+				{
+					async persist_manifest(payload: Record<string, unknown>) {
+						const persisted = await store.persist_manifest(payload);
+						const manifest = payloadManifest(payload);
+						if (!tampered && manifest.status === 'complete') {
+							tampered = true;
+							writeFileSync(join(root, target), 'tampered-by-final-persist', 'utf8');
+						}
+						return persisted;
+					},
+				},
+				store,
+			),
+		});
+
+		const manifest = manifestFrom(result as Record<string, unknown>);
+		expect(manifest.status).toBe('failed');
+		expect(manifest.errors.at(-1)).toMatchObject({
+			step: 'finalize',
+			code: 'inventory_mismatch',
+			recovery_action: 'manual_recovery_required',
+			side_effect_state: 'all_effects_applied_target_changed',
+		});
+		const latestPayload = JSON.parse(store.latest()?.payload ?? '{}') as {
+			manifest?: TestManifest;
+		};
+		expect(latestPayload.manifest?.status).toBe('failed');
+		expect(result).toMatchObject({ persistence_state: 'verified' });
 	});
 });

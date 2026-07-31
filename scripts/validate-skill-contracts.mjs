@@ -196,6 +196,23 @@ function isValidOperationSafetyContract(contract) {
 		strategy: 'guard_revalidate_single_level_mkdir_advance_revalidate',
 		recursive_mkdir: false,
 	};
+	const vaultBinding = {
+		identity_fields: ['realpath', 'root_dev', 'root_ino'],
+		required_for_resumable_operations: true,
+		resume_exact_match_before_receipt_verification: true,
+		changed_root: 'fail_closed_manual_recovery',
+	};
+	const untrustedResume = {
+		trust_checks: ['schema', 'vault_identity', 'receipt'],
+		persist_manifest: 'forbidden',
+		side_effect_callbacks: 'forbidden',
+		result: 'local_failed_unverified_null_receipt',
+	};
+	const terminalRevalidation = {
+		after_external_await: 'advanced_target_guards_and_inventory',
+		before_complete_return: 'synchronous',
+		await_after_final_revalidation: 'forbidden',
+	};
 	const contractKeys = [
 		'contract_version',
 		'preflight',
@@ -208,6 +225,9 @@ function isValidOperationSafetyContract(contract) {
 		'decision',
 		'path_guard',
 		'directory_creation',
+		'vault_binding',
+		'untrusted_resume',
+		'terminal_revalidation',
 		'manifest',
 	];
 	if (!hasExactKeys(contract, contractKeys)) return false;
@@ -222,6 +242,9 @@ function isValidOperationSafetyContract(contract) {
 		contract.target_path !== 'resolved-vault-relative-path' ||
 		!sameValue(contract.decision, decisions) ||
 		!sameValue(contract.directory_creation, directoryCreation) ||
+		!sameValue(contract.vault_binding, vaultBinding) ||
+		!sameValue(contract.untrusted_resume, untrustedResume) ||
+		!sameValue(contract.terminal_revalidation, terminalRevalidation) ||
 		!sameValue(contract.manifest, manifest)
 	)
 		return false;
@@ -317,6 +340,28 @@ function isValidArchiveTransactionContract(contract) {
 			receipt_required_for_resume: true,
 			unauthenticated_resume: 'fail_closed_manual_recovery',
 			schema: 'recursive_exact_keys_and_derived_ids',
+		}) &&
+		sameValue(contract.vault_binding, {
+			identity_fields: ['realpath', 'root_dev', 'root_ino'],
+			manifest: 'required',
+			candidate_move_intent: 'explicit',
+			derived_keys: ['candidate_key', 'move_id', 'idempotency_key'],
+			persistence_payloads: 'explicit',
+			resume: 'exact_match_before_receipt_verification',
+			changed_root: 'fail_closed_manual_recovery',
+		}) &&
+		sameValue(contract.untrusted_resume, {
+			trust_checks: ['schema', 'vault_identity', 'receipt'],
+			persist_manifest: 'forbidden',
+			side_effect_callbacks: 'forbidden',
+			result: 'local_failed_unverified_null_receipt',
+		}) &&
+		sameValue(contract.terminal_revalidation, {
+			after_callbacks: ['move_with_link_update', 'memory_notify', 'confirm_index', 'memory_forget'],
+			after_receipt_persist: 'advanced_target_guards_and_inventory',
+			after_complete_persist: 'advanced_target_guards_and_inventory',
+			before_complete_return: 'synchronous',
+			await_after_final_revalidation: 'forbidden',
 		}) &&
 		sameValue(contract.effects, {
 			intent_before_side_effect: 'persisted',
