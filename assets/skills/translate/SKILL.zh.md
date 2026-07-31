@@ -8,7 +8,7 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
-  capabilities: [execute_command]
+  capabilities: [execute_command, inspect_image]
   agents: []
 ---
 
@@ -89,8 +89,10 @@ memory_context(
 通过 `execute_command` 解析解释器：优先使用初始化阶段已记录的 Python 3，其次尝试 `python3`，Windows
 再尝试 `py -3`。只有 Python 2 或无法解析时明确失败；不得把 `python` 当作唯一命令。
 
-- 获取 `full_text` 字段中的逐页文字
-- 记录页码范围，用于翻译笔记的元数据
+- 读取版本化提取包的 `pages`、`blocks`、`status`、`coverage` 与 `errors`；不得读取已废弃的 `full_text`
+- 同时记录 `pdf_page_index`（物理 PDF 页序）与 `printed_page_label`（书本印刷页码）；后者为 `null` 时写“未知”，不得猜测
+- 对 `needs_ocr`、`partial`、`failed` 页，或含 `image` block 的页面调用 `inspect_image`；将结果按 `block.order` 合并，并重新计算页级 coverage 和状态
+- 任一请求页仍为 `needs_ocr`、`partial` 或 `failed` 时，翻译笔记必须保持 `status: draft`，写入实际 completeness 和缺页；只有全部页 `complete` 才能更新为 `complete`
 
 ## 步骤三：翻译为中文 Markdown
 
@@ -108,7 +110,7 @@ memory_context(
    - 数学术语首次出现时标注英文：「子群（subgroup）」
    - 后续直接使用中文术语
    - 原书特有的符号约定必须保留，不做转换
-4. **公式保留**：LaTeX 公式原样保留，不翻译
+4. **公式保留**：数学原文与中文翻译分别放在“数学原文”和“译注”区块；LaTeX 与原书符号约定原样保留，译注不得改写定义或符号约定
 5. **图片引用**：遇到原文引用图片处，插入提示行：`> 📖 见原书 p.XX 图 X.X`
 6. **习题翻译**：章末练习题同样翻译，保留题号结构，便于用户对照原书做题
 
@@ -128,7 +130,9 @@ memory_context(
 ## 步骤四：完整性校验与文件变更通知
 
 落盘后回读文件，确认请求页范围全部覆盖、全部必填占位符已替换、Frontmatter 完整且项目回填（如适用）
-已完成。未通过时保持 `status: draft` 并记录缺口；通过后才更新为 `status: complete`。
+已完成。Frontmatter `completeness` 必须等于请求页的实际总 coverage；“完整性记录”列出每个非完整页的
+`pdf_page_index`、`printed_page_label`（未知则明确写未知）与错误码。任何缺口都保持 `status: draft`；只有全部页
+`complete` 时才更新为 `status: complete`。
 
 ```
 memory_notify(contract_version=2, file_path="<翻译文件相对路径>")
@@ -165,7 +169,7 @@ memory_notify(contract_version=2, file_path="<项目文件相对路径>")
 ```markdown
 ## 📖 翻译完成
 
-**来源:** [[PDF文件名]] p.XX — p.XX
+**来源:** [[PDF文件名]] PDF 物理页 XX — XX（印刷页码：已知值或未知）
 **产出:** [[{翻译子目录}/{书名}/{章节名}]]
 **小节数:** N 个小节
 **项目回填:** ✅ 已更新 [[项目名]] 掌握度总览（若有关联项目）/ ⏭️ 无关联项目，跳过回填
@@ -183,6 +187,8 @@ memory_notify(contract_version=2, file_path="<项目文件相对路径>")
 | 章节名匹配失败 | 输出 TOC 供用户选择 |
 | 已有翻译文件 | 提示用户是否覆盖 |
 | 无关联学习项目 | 跳过步骤五，仅产出翻译文件 |
+| 印刷页码未知 | 在页码映射与完整性记录写“未知”，不从 PDF 物理页推断 |
+| 文字层/视觉补充不完整 | 列出缺页与错误码，按实际 coverage 保持 `draft` |
 | 章节过长（>50页） | 建议分批处理，每批 20-30 页 |
 | 掌握度总览无翻译列 | 自动新增翻译列，已有行填 `—` |
 | 非学习类项目 | 跳过掌握度回填 |

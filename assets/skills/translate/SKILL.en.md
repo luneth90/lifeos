@@ -8,7 +8,7 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
-  capabilities: [execute_command]
+  capabilities: [execute_command, inspect_image]
   agents: []
 ---
 
@@ -88,8 +88,10 @@ Invoke `/read-pdf` to extract the specified chapter's text:
 
 Resolve the interpreter through `execute_command`: use Python 3 recorded during initialization first, then try `python3`, and on Windows try `py -3`. Explicitly fail when only Python 2 exists or no interpreter resolves; never treat `python` as the only command.
 
-- Obtain per-page text from the `full_text` field
-- Record the page range for translation note metadata
+- Read `pages`, `blocks`, `status`, `coverage`, and `errors` from the versioned extraction package; do not read the retired `full_text` field
+- Record both `pdf_page_index` (physical PDF sequence) and `printed_page_label` (book page label); write “unknown” for a `null` label and never guess it
+- Call `inspect_image` for `needs_ocr`, `partial`, or `failed` pages, or pages with an `image` block; merge results by `block.order` and recompute page coverage and status
+- If any requested page remains `needs_ocr`, `partial`, or `failed`, keep the note at `status: draft`, record actual completeness and missing pages, and update to `complete` only when every page is `complete`
 
 ## Step 3: Translate to Chinese Markdown
 
@@ -107,7 +109,7 @@ When no project exists, write an empty `project` value; do not retain any templa
    - Annotate English on first occurrence: "子群（subgroup）"
    - Use Chinese terms thereafter
    - Preserve the book's specific symbol conventions without conversion
-4. **Formulas**: Keep LaTeX formulas as-is, do not translate
+4. **Formulas**: Put mathematical source and Chinese explanation in separate “Mathematical source” and “Translator notes” sections; keep LaTeX and source notation unchanged, and never rewrite definitions or notation in notes
 5. **Figure references**: Where the text references figures, insert: `> 📖 See original p.XX Figure X.X`
 6. **Translate exercises**: Translate end-of-chapter exercises as well, preserving problem numbering structure for side-by-side reference
 
@@ -128,8 +130,10 @@ Example: `70_资源/翻译/VGT/第9章_Sylow定理.md`
 ## Step 4: Completeness Validation and File Change Notification
 
 After writing, reread the note and confirm the requested page range is fully covered, every required placeholder
-is replaced, the frontmatter is complete, and the project update (when applicable) is complete. On failure, keep
-`status: draft` and record the gap; update to `status: complete` only after validation passes.
+is replaced, the frontmatter is complete, and the project update (when applicable) is complete. Frontmatter
+`completeness` must equal aggregate actual coverage. The completeness record lists every incomplete page's
+`pdf_page_index`, `printed_page_label` (explicitly “unknown” when absent), and error code. Keep `status: draft`
+for any gap; update to `status: complete` only when every page is `complete`.
 
 ```
 memory_notify(contract_version=2, file_path="<translation file relative path>")
@@ -156,7 +160,7 @@ After completion, output a concise summary:
 ```markdown
 ## 📖 Translation Complete
 
-**Source:** [[PDF filename]] p.XX — p.XX
+**Source:** [[PDF filename]] physical PDF pages XX — XX (printed labels: known values or unknown)
 **Output:** [[{translations subdirectory}/{book name}/{chapter name}]]
 **Sections:** N sections
 **Project update:** ✅ Updated [[project name]] mastery overview / ⏭️ No associated project, skipped
@@ -174,6 +178,8 @@ Usage: Open the original chapter in PDF++, open the translation note on the righ
 | Chapter name mismatch | Output TOC for user selection |
 | Translation already exists | Ask user whether to overwrite |
 | No associated learning project | Skip Step 5, only produce translation |
+| Printed page label unknown | Write “unknown” in page mapping and completeness record; do not infer it from the PDF sequence |
+| Text layer or visual enrichment incomplete | List missing pages and error codes, keep `draft` at actual coverage |
 | Chapter too long (>50 pages) | Suggest batch processing, 20-30 pages per batch |
 | Mastery overview has no translation column | Auto-add column, fill existing rows with `—` |
 | Non-learning project | Skip mastery overview update |

@@ -1,0 +1,80 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://lifeos.dev/schema/pdf-extraction-v1.json",
+	"title": "LifeOS PDF Extraction Package",
+	"type": "object",
+	"required": ["schema_version", "source", "extractor", "requested_range", "pages", "summary"],
+	"properties": {
+		"schema_version": { "const": 1 },
+		"source": {
+			"type": "object",
+			"required": ["path", "sha256", "mtime", "page_count"],
+			"properties": {
+				"path": { "type": "string", "minLength": 1 },
+				"sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+				"mtime": { "type": "string", "format": "date-time" },
+				"page_count": { "type": "integer", "minimum": 1 }
+			},
+			"additionalProperties": false
+		},
+		"extractor": {
+			"type": "object",
+			"required": ["name", "version"],
+			"properties": {
+				"name": { "const": "lifeos-read-pdf" },
+				"version": { "const": "1" }
+			},
+			"additionalProperties": false
+		},
+		"requested_range": {
+			"type": "object",
+			"required": ["start", "end"],
+			"properties": {
+				"start": { "type": "integer", "minimum": 1 },
+				"end": { "type": "integer", "minimum": 1 }
+			},
+			"additionalProperties": false
+		},
+		"pages": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["pdf_page_index", "printed_page_label", "status", "coverage", "confidence", "errors", "blocks"],
+				"properties": {
+					"pdf_page_index": { "type": "integer", "minimum": 1 },
+					"printed_page_label": { "type": ["string", "null"] },
+					"status": { "enum": ["complete", "needs_ocr", "partial", "failed"] },
+					"coverage": { "type": "number", "minimum": 0, "maximum": 1 },
+					"confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+					"errors": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+					"blocks": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"required": ["kind", "order", "content"],
+							"properties": {
+								"kind": { "enum": ["text", "image"] },
+								"order": { "type": "integer", "minimum": 1 },
+								"content": { "type": "string" }
+							},
+							"additionalProperties": false
+						}
+					}
+				},
+				"additionalProperties": false
+			}
+		},
+		"summary": {
+			"type": "object",
+			"required": ["complete_pages", "needs_ocr_pages", "failed_pages"],
+			"properties": {
+				"complete_pages": { "type": "integer", "minimum": 0 },
+				"needs_ocr_pages": { "type": "integer", "minimum": 0 },
+				"failed_pages": { "type": "integer", "minimum": 0 }
+			},
+			"additionalProperties": false
+		},
+		"rendered_images": { "type": "array", "items": { "type": "object" } }
+	},
+	"additionalProperties": false
+}

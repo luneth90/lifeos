@@ -4,13 +4,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import shutil
 import sys
 import tempfile
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -29,7 +31,11 @@ class ChapterMatch:
 
 
 class ReadPdfError(Exception):
-    """用于向 CLI 返回可读错误信息。"""
+    """用于向 CLI 返回机器可读的错误。"""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def parse_args() -> argparse.Namespace:
@@ -91,9 +97,9 @@ def resolve_pdf_path(raw_path: str, cwd: Path) -> Path:
     if not candidate.is_absolute():
         candidate = (cwd / candidate).resolve()
     if not candidate.exists():
-        raise ReadPdfError(f"找不到 PDF 文件：{raw_path}")
+        raise ReadPdfError("PDF_NOT_FOUND", f"找不到 PDF 文件：{raw_path}")
     if candidate.suffix.lower() != ".pdf":
-        raise ReadPdfError(f"目标文件不是 PDF：{candidate}")
+        raise ReadPdfError("INVALID_PDF_PATH", f"目标文件不是 PDF：{candidate}")
     return candidate
 
 
@@ -117,14 +123,14 @@ def parse_page_token(token: str, page_count: int) -> List[int]:
     if "-" in token:
         start_str, end_str = token.split("-", 1)
         if not start_str.isdigit() or not end_str.isdigit():
-            raise ReadPdfError(f"非法页码范围：{token}")
+            raise ReadPdfError("INVALID_PAGE_RANGE", f"非法页码范围：{token}")
         start = int(start_str)
         end = int(end_str)
         if start > end:
-            raise ReadPdfError(f"页码范围起点大于终点：{token}")
+            raise ReadPdfError("INVALID_PAGE_RANGE", f"页码范围起点大于终点：{token}")
         return validate_pages(list(range(start, end + 1)), page_count)
     if not token.isdigit():
-        raise ReadPdfError(f"非法页码：{token}")
+        raise ReadPdfError("INVALID_PAGE_RANGE", f"非法页码：{token}")
     return validate_pages([int(token)], page_count)
 
 
@@ -132,6 +138,7 @@ def validate_pages(pages: Sequence[int], page_count: int) -> List[int]:
     invalid_pages = [page for page in pages if page < 1 or page > page_count]
     if invalid_pages:
         raise ReadPdfError(
+            "PAGE_OUT_OF_RANGE",
             f"页码超出范围：{invalid_pages}。PDF 总页数为 {page_count}。"
         )
     return list(pages)
@@ -150,7 +157,7 @@ def parse_page_spec(spec: str, page_count: int) -> Optional[List[int]]:
 def resolve_chapter(doc: fitz.Document, query: str) -> ChapterMatch:
     toc_entries = get_toc_entries(doc)
     if not toc_entries:
-        raise ReadPdfError("PDF 没有目录信息，无法按章节匹配。可改用页码范围。")
+        raise ReadPdfError("TOC_MISSING", "PDF 没有目录信息，无法按章节匹配。可改用页码范围。")
 
     normalized_query = normalize_text(query)
     exact_matches: List[Tuple[int, str, int, int]] = []
@@ -178,6 +185,7 @@ def resolve_chapter(doc: fitz.Document, query: str) -> ChapterMatch:
             for level, title, page in toc_entries[:20]
         ]
         raise ReadPdfError(
+            "CHAPTER_NOT_FOUND",
             "未找到匹配章节。你可以先用 --list-toc 查看目录，或参考这些条目：\n"
             + json.dumps(preview, ensure_ascii=False, indent=2)
         )
@@ -187,6 +195,7 @@ def resolve_chapter(doc: fitz.Document, query: str) -> ChapterMatch:
             for level, title, start_page, end_page in matches[:10]
         ]
         raise ReadPdfError(
+            "CHAPTER_AMBIGUOUS",
             "匹配到多个章节，请改用更精确的章节名：\n"
             + json.dumps(candidates, ensure_ascii=False, indent=2)
         )
@@ -217,64 +226,121 @@ def render_pages(
     return target_dir, images
 
 
-def extract_text(doc: fitz.Document, pages: Sequence[int]) -> Tuple[Dict[str, str], List[int]]:
-    full_text: Dict[str, str] = {}
-    missing_text_pages: List[int] = []
-    for page_number in pages:
-        text = doc[page_number - 1].get_text("text")
-        full_text[str(page_number)] = text
-        if not text.strip():
-            missing_text_pages.append(page_number)
-    return full_text, missing_text_pages
+def source_metadata(resolved_pdf_path: Path, page_count: int) -> Dict[str, Any]:
+    stat = resolved_pdf_path.stat()
+    return {
+        "path": str(resolved_pdf_path),
+        "sha256": hashlib.sha256(resolved_pdf_path.read_bytes()).hexdigest(),
+        "mtime": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
+        "page_count": page_count,
+    }
 
 
-def build_output_path(raw_output: Optional[str]) -> Path:
+def build_output_path(raw_output: Optional[str], source_hash: str) -> Path:
     if raw_output:
         output_path = Path(raw_output)
         if not output_path.is_absolute():
             output_path = (Path.cwd() / output_path).resolve()
     else:
-        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        output_path = Path(f"/tmp/read-pdf-{timestamp}.json")
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+        output_path = Path(f"/tmp/read-pdf-{timestamp}-{source_hash[:8]}.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     return output_path
 
 
-def build_result(
-    pdf_input: str,
-    resolved_pdf_path: Path,
-    pages: Sequence[int],
-    full_text: Dict[str, str],
-    images: Sequence[Dict[str, Any]],
-    missing_text_pages: Sequence[int],
-    target: str,
-    doc: fitz.Document,
-    chapter_match: Optional[ChapterMatch],
-) -> Dict[str, Any]:
-    result: Dict[str, Any] = {
-        "source": pdf_input,
-        "resolved_path": str(resolved_pdf_path),
-        "target": target,
-        "page_count": doc.page_count,
-        "pages": list(pages),
-        "full_text": full_text,
-        "images": list(images),
-        "charts": [],
-        "formulas": [],
-        "tables": [],
-        "text_layer_missing_pages": list(missing_text_pages),
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-    }
-    if chapter_match:
-        result["mode"] = "chapter"
-        result["chapter"] = {
-            "level": chapter_match.level,
-            "title": chapter_match.title,
-            "start_page": chapter_match.start_page,
-            "end_page": chapter_match.end_page,
+def extract_blocks(page: fitz.Page) -> List[Dict[str, Any]]:
+    """按页面阅读顺序公开文字与待视觉分析的图像区域。"""
+    raw_blocks = page.get_text("dict").get("blocks", [])
+    sortable: List[Tuple[float, float, str, str]] = []
+    for raw in raw_blocks:
+        bbox = raw.get("bbox", (0, 0, 0, 0))
+        kind = raw.get("type")
+        if kind == 0:
+            content = "".join(
+                span.get("text", "")
+                for line in raw.get("lines", [])
+                for span in line.get("spans", [])
+            ).strip()
+            if content:
+                sortable.append((float(bbox[1]), float(bbox[0]), "text", content))
+        elif kind == 1:
+            sortable.append((float(bbox[1]), float(bbox[0]), "image", ""))
+    sortable.sort(key=lambda item: (item[0], item[1]))
+    return [
+        {"kind": kind, "order": index, "content": content}
+        for index, (_top, _left, kind, content) in enumerate(sortable, start=1)
+    ]
+
+
+def extract_printed_page_label(page: fitz.Page) -> Optional[str]:
+    """只接受页脚中孤立且无歧义的页码文字，其他情况保持未知。"""
+    candidates: List[str] = []
+    footer_top = page.rect.height * 0.75
+    for raw in page.get_text("dict").get("blocks", []):
+        if raw.get("type") != 0 or raw.get("bbox", (0, 0, 0, 0))[1] < footer_top:
+            continue
+        content = "".join(
+            span.get("text", "")
+            for line in raw.get("lines", [])
+            for span in line.get("spans", [])
+        ).strip()
+        if re.fullmatch(r"(?:\d+|[IVXLCDM]+)", content):
+            candidates.append(content)
+    unique = list(dict.fromkeys(candidates))
+    return unique[0] if len(unique) == 1 else None
+
+
+def extract_page(page: fitz.Page, pdf_page_index: int) -> Dict[str, Any]:
+    try:
+        blocks = extract_blocks(page)
+        printed_page_label = extract_printed_page_label(page)
+        has_text = any(block["kind"] == "text" for block in blocks)
+        has_visual = any(block["kind"] == "image" for block in blocks)
+        if not has_text:
+            status, coverage, confidence, errors = "needs_ocr", 0, 0, ["TEXT_LAYER_MISSING"]
+        elif has_visual:
+            status, coverage, confidence, errors = "partial", 0.5, 0.8, ["VISUAL_CONTENT_PENDING"]
+        else:
+            status, coverage, confidence, errors = "complete", 1, 1, []
+        return {
+            "pdf_page_index": pdf_page_index,
+            "printed_page_label": printed_page_label,
+            "status": status,
+            "coverage": coverage,
+            "confidence": confidence,
+            "errors": errors,
+            "blocks": blocks,
         }
-    else:
-        result["mode"] = "pages"
+    except Exception as exc:  # pragma: no cover - defensive per-page isolation
+        return {
+            "pdf_page_index": pdf_page_index,
+            "printed_page_label": None,
+            "status": "failed",
+            "coverage": 0,
+            "confidence": 0,
+            "errors": ["EXTRACTION_FAILED", type(exc).__name__],
+            "blocks": [],
+        }
+
+
+def build_result(
+    source: Dict[str, Any], pages: Sequence[int], extracted_pages: Sequence[Dict[str, Any]], images: Sequence[Dict[str, Any]]
+) -> Dict[str, Any]:
+    summary = {
+        "complete_pages": sum(page["status"] == "complete" for page in extracted_pages),
+        "needs_ocr_pages": sum(page["status"] == "needs_ocr" for page in extracted_pages),
+        "failed_pages": sum(page["status"] == "failed" for page in extracted_pages),
+    }
+    result: Dict[str, Any] = {
+        "schema_version": 1,
+        "source": source,
+        "extractor": {"name": "lifeos-read-pdf", "version": "1"},
+        "requested_range": {"start": min(pages), "end": max(pages)},
+        "pages": list(extracted_pages),
+        "summary": summary,
+    }
+    if images:
+        result["rendered_images"] = list(images)
     return result
 
 
@@ -282,6 +348,7 @@ def ensure_page_limit(pages: Sequence[int], max_pages: int, force_large_range: b
     if len(pages) <= max_pages or force_large_range:
         return
     raise ReadPdfError(
+        "PAGE_LIMIT_EXCEEDED",
         f"本次命中 {len(pages)} 页，超过限制 {max_pages} 页。"
         "建议拆分批次，或显式传入 --force-large-range。"
     )
@@ -290,9 +357,11 @@ def ensure_page_limit(pages: Sequence[int], max_pages: int, force_large_range: b
 def main() -> int:
     args = parse_args()
     if not args.target and not args.list_toc:
-        print("错误：缺少 target。请提供页码范围、单页、逗号列表，或章节名。", file=sys.stderr)
+        print(json.dumps({"error": {"code": "TARGET_REQUIRED", "message": "缺少 target"}}, ensure_ascii=False), file=sys.stderr)
         return 2
 
+    generated_images_dir: Optional[Path] = None
+    package_written = False
     try:
         resolved_pdf_path = resolve_pdf_path(args.pdf_path, Path.cwd())
         with fitz.open(str(resolved_pdf_path)) as doc:
@@ -309,44 +378,45 @@ def main() -> int:
                 pages = page_spec
 
             ensure_page_limit(pages, args.max_pages, args.force_large_range)
-            full_text, missing_text_pages = extract_text(doc, pages)
+            source = source_metadata(resolved_pdf_path, doc.page_count)
+            output_path = build_output_path(args.output, source["sha256"])
+            extracted_pages = [extract_page(doc[page_number - 1], page_number) for page_number in pages]
 
             images: List[Dict[str, Any]] = []
             if not args.skip_render:
-                images_dir = Path(args.images_dir).resolve() if args.images_dir else None
+                images_dir = (
+                    Path(args.images_dir).resolve()
+                    if args.images_dir
+                    else output_path.with_name(f"{output_path.stem}-images")
+                )
+                generated_images_dir = images_dir
                 _, images = render_pages(doc, pages, args.dpi, images_dir)
 
-            result = build_result(
-                pdf_input=args.pdf_path,
-                resolved_pdf_path=resolved_pdf_path,
-                pages=pages,
-                full_text=full_text,
-                images=images,
-                missing_text_pages=missing_text_pages,
-                target=args.target,
-                doc=doc,
-                chapter_match=chapter_match,
+            result = build_result(source, pages, extracted_pages, images)
+            output_path.write_text(
+                json.dumps(result, ensure_ascii=False, indent=2),
+                encoding="utf-8",
             )
-
-        output_path = build_output_path(args.output)
-        output_path.write_text(
-            json.dumps(result, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+            package_written = True
 
         print(f"已输出 JSON：{output_path}")
         print(
             "摘要："
             f"共处理 {len(result['pages'])} 页，"
-            f"渲染 {len(result['images'])} 张图片，"
-            f"缺少文字层页数 {len(result['text_layer_missing_pages'])}。"
+            f"完整 {result['summary']['complete_pages']} 页，"
+            f"待 OCR {result['summary']['needs_ocr_pages']} 页，"
+            f"失败 {result['summary']['failed_pages']} 页。"
         )
         return 0
     except ReadPdfError as exc:
-        print(f"错误：{exc}", file=sys.stderr)
+        if generated_images_dir and not args.images_dir and not package_written:
+            shutil.rmtree(generated_images_dir, ignore_errors=True)
+        print(json.dumps({"error": {"code": exc.code, "message": str(exc)}}, ensure_ascii=False), file=sys.stderr)
         return 2
     except Exception as exc:  # pragma: no cover
-        print(f"未预期错误：{exc}", file=sys.stderr)
+        if generated_images_dir and not args.images_dir and not package_written:
+            shutil.rmtree(generated_images_dir, ignore_errors=True)
+        print(json.dumps({"error": {"code": "UNEXPECTED_ERROR", "message": str(exc)}}, ensure_ascii=False), file=sys.stderr)
         return 1
 
 

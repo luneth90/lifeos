@@ -5,7 +5,8 @@ version: 2.1.2
 dependencies:
   templates: []
   prompts: []
-  schemas: []
+  schemas:
+    - path: "{系统目录}/{规范子目录}/PDF_Extraction_Schema.json"
   capabilities: [execute_command, inspect_image]
   agents: []
 ---
@@ -30,6 +31,8 @@ memory_context(
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
 > 路径映射：
 > - `{资源目录}` → directories.resources
+> - `{系统目录}` → directories.system
+> - `{规范子目录}` → subdirectories.system.schema
 
 你是 LifeOS 的 PDF 解析工具，将 PDF 页面转化为结构化的 JSON 中间数据。你通过文字提取和 Vision 图像分析相结合，确保图表、公式和表格都被准确捕获，供下游技能消费。
 
@@ -69,8 +72,25 @@ pip install PyMuPDF Pillow
 脚本职责：
 
 - 只处理命中的页，不加载整本 PDF 到下游上下文
-- 输出 JSON 中间结果，包含 `full_text`、`images`、`text_layer_missing_pages`
-- 图表、公式、表格的视觉分析由下游技能基于这些命中页继续完成
+- 输出符合 `PDF_Extraction_Schema.json` 的版本化提取包；不得消费已废弃的
+  `full_text`、`text_layer_missing_pages` 等扁平字段
+- 默认输出名含微秒和源文件 SHA-256 前八位；只保留由输出包引用的渲染目录，失败时清理未保留临时图像
+- 图表、公式、表格的视觉分析必须基于 `blocks` 与 `rendered_images` 回填，而不是猜测文字层缺失内容
+
+## 版本化提取包（必须）
+
+读取 JSON 后，以 `pages[*].pdf_page_index` 作为从 1 开始的物理 PDF 页序；
+`printed_page_label` 为 `null` 时表示未知，禁止从物理页序推断书本印刷页码。
+
+每页必须检查：
+
+- `status`：`complete`、`needs_ocr`、`partial` 或 `failed`
+- `coverage`、`confidence` 与机器可读的 `errors`
+- 按 `order` 排序的 `blocks`；`image` block 表示尚需视觉补充的区域
+
+仅对 `needs_ocr`、`partial` 页面，或含 `image` block 的页面调用 `inspect_image`。把 OCR、公式、表格或图表
+结果追加为对应位置的 block，按 `order` 合并，并重新计算 `coverage`、`confidence`、`status` 与 `errors`。
+视觉补充没有完成前，页面不得宣称 `complete`。
 
 # 输入协议
 
@@ -105,39 +125,28 @@ digraph read_pdf {
 }
 ```
 
-## 步骤一：提取完整文字
+## 步骤一：读取提取包
 
 ```python
-import fitz  # PyMuPDF
-
-doc = fitz.open(pdf_path)
-pages_text = {}
-for page_num in range(start - 1, end):  # 0-indexed
-    page = doc[page_num]
-    pages_text[page_num + 1] = page.get_text()
+package = json.load(open(output_path, encoding="utf-8"))
+for page in package["pages"]:
+    print(page["pdf_page_index"], page["printed_page_label"], page["status"])
 ```
 
-- 保留原始分页结构，每页独立存储
+- 保留物理页序与印刷页码的双字段；印刷页码未知时保持 `null`
 - 对于 300+ 页大 PDF，**只处理指定范围**，不加载全文
 
-## 步骤二：渲染指定页为 300DPI PNG
+## 步骤二：按需视觉补充
 
 ```python
-import os, tempfile
-
-output_dir = tempfile.mkdtemp(prefix="read-pdf-")
-png_paths = []
-for page_num in range(start - 1, end):
-    page = doc[page_num]
-    pix = page.get_pixmap(dpi=300)
-    png_path = os.path.join(output_dir, f"page_{page_num + 1}.png")
-    pix.save(png_path)
-    png_paths.append(png_path)
+for page in package["pages"]:
+    if page["status"] in {"needs_ocr", "partial"} or any(block["kind"] == "image" for block in page["blocks"]):
+        inspect_image(page)
 ```
 
-## 步骤三：Claude Vision 分析每页图片
+## 步骤三：合并视觉结果
 
-对每张 PNG 使用 Read 工具读取图片，然后分析提取：
+对命中的 PNG 使用 `inspect_image`，然后按 block 顺序合并：
 
 1. **图表（charts）**：识别图表类型、描述数据趋势和关键发现
 2. **公式（formulas）**：转写为 LaTeX 格式，保留原书符号约定
@@ -145,39 +154,15 @@ for page_num in range(start - 1, end):
 
 **关键**：公式必须忠实于原书符号，不用外部约定替换。
 
-## 步骤四：组装 JSON 输出
+## 步骤四：组装与复核 JSON 输出
 
 将所有提取结果合并为结构化 JSON，写入临时文件：
 
 ```jsonc
 {
-  "source": "{资源目录}/Books/VGT/vgt.pdf",
-  "pages": [245, 246, 247],
-  "full_text": {
-    "245": "第245页的完整文字...",
-    "246": "第246页的完整文字..."
-  },
-  "charts": [
-    {
-      "page": 245,
-      "description": "柱状图：各群的阶数分布",
-      "data_summary": "D4 阶数8，S3 阶数6，V4 阶数4"
-    }
-  ],
-  "formulas": [
-    {
-      "page": 246,
-      "latex": "$|G| = |H| \\cdot [G:H]$",
-      "context": "拉格朗日定理的表述"
-    }
-  ],
-  "tables": [
-    {
-      "page": 247,
-      "markdown": "| 群 | 阶 | 类型 |\n|---|---|---|\n| $D_4$ | 8 | 二面体群 |",
-      "caption": "常见有限群分类"
-    }
-  ]
+  "schema_version": 1,
+  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "blocks": []}],
+  "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "failed_pages": 0}
 }
 ```
 
@@ -186,8 +171,8 @@ for page_num in range(start - 1, end):
 # 输出规范
 
 - JSON 文件路径告知用户，供下游技能读取
-- 同时在对话中给出**摘要**：共提取 N 页文字、M 个图表、K 个公式、J 个表格
-- 若某页无图表/公式/表格，对应数组留空，不伪造内容
+- 同时在对话中给出**摘要**：完整、待 OCR、部分和失败页数
+- 若视觉补充尚未完成，保留对应页的 `partial` 或 `needs_ocr`，不伪造公式、图表或表格
 - **不做知识整理**——这是中间产物，整理交给 `/knowledge`, `/ask`,`/revise`等技能
 
 # 常见问题
@@ -195,7 +180,7 @@ for page_num in range(start - 1, end):
 | 问题 | 处理 |
 |------|------|
 | PDF 加密/受保护 | 提示用户先解密 |
-| 扫描版 PDF（无文字层） | `extract_text()` 返回空时，完全依赖 Vision 分析 PNG |
+| 扫描版 PDF（无文字层） | 输出 `needs_ocr` 与 `TEXT_LAYER_MISSING`，再对该页调用 `inspect_image` |
 | 页码超出范围 | 提示 PDF 总页数，让用户修正 |
 | 章节名匹配失败 | 输出 TOC 供选择 |
 | 单次范围过大（>50页） | 建议分批处理，每批 20-30 页 |

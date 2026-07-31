@@ -5,7 +5,8 @@ version: 2.1.2
 dependencies:
   templates: []
   prompts: []
-  schemas: []
+  schemas:
+    - path: "{system directory}/{schema subdirectory}/PDF_Extraction_Schema.json"
   capabilities: [execute_command, inspect_image]
   agents: []
 ---
@@ -30,6 +31,8 @@ Do not pass unresolved scopes, and never expand an empty scope list into a full-
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
 > Path mappings:
 > - `{resources directory}` → directories.resources
+> - `{system directory}` → directories.system
+> - `{schema subdirectory}` → subdirectories.system.schema
 
 You are LifeOS's PDF parsing tool, transforming PDF pages into structured JSON intermediate data. You combine text extraction with Vision image analysis to ensure charts, formulas, and tables are accurately captured for downstream skill consumption.
 
@@ -67,8 +70,22 @@ Examples:
 Script responsibilities:
 
 - Only process matched pages; do not load the entire PDF into downstream context
-- Output JSON intermediate results containing `full_text`, `images`, `text_layer_missing_pages`
-- Visual analysis of charts, formulas, and tables is handled by downstream skills based on the matched pages
+- Output a versioned package conforming to `PDF_Extraction_Schema.json`; do not consume retired flat fields such as `full_text` or `text_layer_missing_pages`
+- Default output names include microseconds and the first eight source SHA-256 characters; only retain rendered directories referenced by the output package, and clean unretained temporary images on failure
+- Visual analysis of charts, formulas, and tables must enrich `blocks` and `rendered_images`, not guess missing text-layer content
+
+## Versioned Extraction Package (Required)
+
+Read `pages[*].pdf_page_index` as the one-based physical PDF sequence. A `null`
+`printed_page_label` means unknown; never infer a printed book page from the physical sequence.
+
+For every page, inspect:
+
+- `status`: `complete`, `needs_ocr`, `partial`, or `failed`
+- `coverage`, `confidence`, and machine-readable `errors`
+- `blocks` sorted by `order`; an `image` block marks a region requiring visual enrichment
+
+Call `inspect_image` only for `needs_ocr` or `partial` pages, or pages containing an `image` block. Append OCR, formula, table, or chart results at the relevant position, merge by `order`, and recompute `coverage`, `confidence`, `status`, and `errors`. A page is never `complete` before visual enrichment is complete.
 
 # Input Protocol
 
@@ -103,39 +120,28 @@ digraph read_pdf {
 }
 ```
 
-## Step 1: Extract Full Text
+## Step 1: Read the Extraction Package
 
 ```python
-import fitz  # PyMuPDF
-
-doc = fitz.open(pdf_path)
-pages_text = {}
-for page_num in range(start - 1, end):  # 0-indexed
-    page = doc[page_num]
-    pages_text[page_num + 1] = page.get_text()
+package = json.load(open(output_path, encoding="utf-8"))
+for page in package["pages"]:
+    print(page["pdf_page_index"], page["printed_page_label"], page["status"])
 ```
 
-- Preserve original pagination structure; store each page independently
+- Preserve both physical sequence and printed-page fields; keep an unknown printed label as `null`
 - For large PDFs (300+ pages), **only process the specified range** — do not load the full text
 
-## Step 2: Render Specified Pages as 300DPI PNG
+## Step 2: Enrich Visual Content Only When Needed
 
 ```python
-import os, tempfile
-
-output_dir = tempfile.mkdtemp(prefix="read-pdf-")
-png_paths = []
-for page_num in range(start - 1, end):
-    page = doc[page_num]
-    pix = page.get_pixmap(dpi=300)
-    png_path = os.path.join(output_dir, f"page_{page_num + 1}.png")
-    pix.save(png_path)
-    png_paths.append(png_path)
+for page in package["pages"]:
+    if page["status"] in {"needs_ocr", "partial"} or any(block["kind"] == "image" for block in page["blocks"]):
+        inspect_image(page)
 ```
 
-## Step 3: Claude Vision Analyzes Each Page Image
+## Step 3: Merge Visual Results
 
-Read each PNG using the Read tool, then analyze and extract:
+Use `inspect_image` for each qualifying PNG, then merge results by block order:
 
 1. **Charts**: Identify chart type, describe data trends and key findings
 2. **Formulas**: Transcribe into LaTeX format, preserving the original book's symbol conventions
@@ -143,39 +149,15 @@ Read each PNG using the Read tool, then analyze and extract:
 
 **Key**: Formulas must faithfully follow the original book's symbols; do not substitute with external conventions.
 
-## Step 4: Assemble JSON Output
+## Step 4: Assemble and Verify JSON Output
 
 Merge all extracted results into structured JSON and write to a temporary file:
 
 ```jsonc
 {
-  "source": "{resources directory}/Books/VGT/vgt.pdf",
-  "pages": [245, 246, 247],
-  "full_text": {
-    "245": "Full text of page 245...",
-    "246": "Full text of page 246..."
-  },
-  "charts": [
-    {
-      "page": 245,
-      "description": "Bar chart: order distribution of various groups",
-      "data_summary": "D4 order 8, S3 order 6, V4 order 4"
-    }
-  ],
-  "formulas": [
-    {
-      "page": 246,
-      "latex": "$|G| = |H| \\cdot [G:H]$",
-      "context": "Statement of Lagrange's theorem"
-    }
-  ],
-  "tables": [
-    {
-      "page": 247,
-      "markdown": "| Group | Order | Type |\n|---|---|---|\n| $D_4$ | 8 | Dihedral group |",
-      "caption": "Classification of common finite groups"
-    }
-  ]
+  "schema_version": 1,
+  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "blocks": []}],
+  "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "failed_pages": 0}
 }
 ```
 
@@ -184,8 +166,8 @@ Output path: `/tmp/read-pdf-<timestamp>.json`
 # Output Specifications
 
 - Provide the JSON file path to the user for downstream skills to read
-- Also give a **summary** in the conversation: extracted N pages of text, M charts, K formulas, J tables
-- If a page has no charts/formulas/tables, leave the corresponding arrays empty — do not fabricate content
+- Also give a **summary** in the conversation: complete, needs-OCR, partial, and failed page counts
+- If visual enrichment remains incomplete, retain `partial` or `needs_ocr`; do not fabricate formulas, charts, or tables
 - **Do not perform knowledge organization** — this is an intermediate product; organization is handled by `/knowledge`, `/ask`, `/revise`, and other skills
 
 # Common Issues
@@ -193,7 +175,7 @@ Output path: `/tmp/read-pdf-<timestamp>.json`
 | Issue | Handling |
 |-------|----------|
 | Encrypted/protected PDF | Prompt the user to decrypt first |
-| Scanned PDF (no text layer) | When `extract_text()` returns empty, rely entirely on Vision analysis of PNGs |
+| Scanned PDF (no text layer) | Emit `needs_ocr` and `TEXT_LAYER_MISSING`, then call `inspect_image` for that page |
 | Page number out of range | Show total PDF page count, ask user to correct |
 | Chapter name match failure | Output TOC for selection |
 | Single range too large (>50 pages) | Suggest batch processing, 20-30 pages per batch |
