@@ -1075,10 +1075,22 @@ export function validateSkillContracts(root) {
 			if (skill === 'knowledge') {
 				const expected = expectedKnowledgeTargets(locale);
 				const documentedBody = body.split('<!-- operation-safety-v1 -->')[0];
+				const documentedPaths = [...documentedBody.matchAll(/`([^`\n]+\.md)`/g)].map(
+					(match) => match[1],
+				);
+				const outputSuffixes = {
+					'book-knowledge-note': '/<BookName>/<ChapterName>/<ChapterName>.md',
+					'paper-knowledge-note': '/<PaperName>.md',
+					wiki: '/<ConceptName>.md',
+				};
 				for (const [key, target] of Object.entries(expected)) {
+					const matchingDocumentedPaths = documentedPaths.filter((path) =>
+						path.endsWith(outputSuffixes[key]),
+					);
 					if (
 						operation.target_paths?.[key] !== target ||
-						!documentedBody.includes(`\`${target}\``)
+						matchingDocumentedPaths.length !== 1 ||
+						matchingDocumentedPaths[0] !== target
 					) {
 						add(
 							'operation_target_mismatch',

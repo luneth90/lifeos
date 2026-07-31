@@ -443,6 +443,44 @@ describe('技能契约校验器', () => {
 		);
 	});
 
+	it.each([
+		{
+			locale: '英文',
+			path: 'assets/skills/knowledge/SKILL.en.md',
+			original: '- Path: `{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md`.',
+			reference:
+				'- Output path: follow the single Wiki output rule in Step 4, "Extract Wiki Concepts".',
+			wrong: '- Path: `{knowledge directory}/{notes subdirectory}/<Domain>/<ConceptName>.md`.',
+		},
+		{
+			locale: '中文',
+			path: 'assets/skills/knowledge/SKILL.zh.md',
+			original: '- 路径：`{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md`。',
+			reference: '- 产出路径：遵循步骤四“提取百科概念”的唯一 Wiki 输出规则。',
+			wrong: '- 路径：`{知识目录}/{笔记子目录}/<Domain>/<ConceptName>.md`。',
+		},
+	])('拒绝 Knowledge $locale 路径 A 单独漂到 notes 子目录', async (testCase) => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write(testCase.path, (content) => {
+					if (content.includes(testCase.original)) {
+						return content.replace(testCase.original, testCase.wrong);
+					}
+					if (content.includes(testCase.reference)) {
+						return content.replace(testCase.reference, `${testCase.reference}\n${testCase.wrong}`);
+					}
+					throw new Error(`找不到 Knowledge 路径 A：${testCase.path}`);
+				}),
+			[
+				{
+					code: 'operation_target_mismatch',
+					path: testCase.path,
+					message: 'Knowledge 机器目标与正文路径不一致：wiki',
+				},
+			],
+		);
+	});
+
 	it.each(['project', 'knowledge', 'brainstorm'])('拒绝 %s 缺少操作安全协议依赖', async (skill) => {
 		await expectExactMutatedAssetsDiagnostics(
 			(write) =>

@@ -82,7 +82,7 @@ Before distillation, have the user select one explicit path; never bind a standa
 
 - Use when the user wants an independent concept Wiki without a project.
 - Required input: concept name plus verifiable original text, a link, or a user-provided definition; no project file is required.
-- Path: `{knowledge directory}/{wiki subdirectory}/<Domain>/<ConceptName>.md`.
+- Output path: follow the single Wiki output rule in Step 4, "Extract Wiki Concepts".
 - Template: `{system directory}/{templates subdirectory}/Wiki_Template.md`; unknown domains use this generic template and must not be described as having no template.
 - Immediately after writing, call `memory_notify(contract_version=2, file_path="<Wiki relative path>")`.
 

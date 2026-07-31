@@ -82,7 +82,7 @@ memory_query(contract_version=2, query="<章节关键词>", filters={"type": "kn
 
 - 适用：用户要创建独立概念 Wiki，且没有项目背景。
 - 必需输入：概念名和可核查的原文、链接或用户提供的定义；项目文件不是前置条件。
-- 路径：`{知识目录}/{百科子目录}/<Domain>/<ConceptName>.md`。
+- 产出路径：遵循步骤四“提取百科概念”的唯一 Wiki 输出规则。
 - 模板：`{系统目录}/{模板子目录}/Wiki_Template.md`；未知 domain 使用该通用模板，不得同时说“无模板”。
 - 写入后立即调用 `memory_notify(contract_version=2, file_path="<Wiki 相对路径>")`。
 
