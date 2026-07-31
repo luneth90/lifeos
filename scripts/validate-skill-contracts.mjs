@@ -88,6 +88,129 @@ function extractPlaceholders(content) {
 	].sort();
 }
 
+function isRecord(value) {
+	return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasExactKeys(value, keys) {
+	return isRecord(value) && sameValue(Object.keys(value).sort(), [...keys].sort());
+}
+
+function sameValue(left, right) {
+	return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function isSafeFileName(value) {
+	return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value);
+}
+
+function parseDependencyPath(group, requested, locale) {
+	const patterns = {
+		templates:
+			locale === 'zh'
+				? /^\{系统目录\}\/\{模板子目录\}\/([A-Za-z0-9][A-Za-z0-9_.-]*)$/
+				: /^\{system directory\}\/\{templates subdirectory\}\/([A-Za-z0-9][A-Za-z0-9_.-]*)$/,
+		schemas:
+			locale === 'zh'
+				? /^\{系统目录\}\/\{规范子目录\}\/([A-Za-z0-9][A-Za-z0-9_.-]*)$/
+				: /^\{system directory\}\/\{schema subdirectory\}\/([A-Za-z0-9][A-Za-z0-9_.-]*)$/,
+		prompts:
+			locale === 'zh'
+				? /^\{系统目录\}\/\{提示词子目录\}\/$/
+				: /^\{system directory\}\/\{prompts subdirectory\}\/$/,
+	};
+	if (group === 'protocols') return requested === '../_shared/operation-safety.md' ? {} : null;
+	if (group === 'agents' || group === 'references') {
+		const match = requested.match(/^references\/([A-Za-z0-9][A-Za-z0-9_.-]*)\.md$/);
+		return match && isSafeFileName(match[1]) ? { fileName: match[1] } : null;
+	}
+	const match = patterns[group]?.exec(requested);
+	if (!match) return null;
+	return match[1] ? { fileName: match[1] } : {};
+}
+
+function isValidOperationSafetyContract(contract) {
+	const decisions = ['create', 'merge', 'resume', 'skip', 'replace'];
+	const captures = [
+		'ancestors',
+		'leaf_state',
+		'leaf_type',
+		'leaf_dev',
+		'leaf_ino',
+		'leaf_realpath',
+	];
+	const requiredAt = ['before_operation', 'after_operation'];
+	const transitions = {
+		create_or_update_target: { before: 'missing', after: 'existing' },
+		move_source: { before: 'existing', after: 'missing' },
+		move_target: { before: 'missing', after: 'existing' },
+	};
+	const manifest = { run_id: 'string', moves: [], collisions: [], notified: [], errors: [] };
+	const contractKeys = [
+		'contract_version',
+		'preflight',
+		'validation',
+		'notification',
+		'collision',
+		'recovery',
+		'run_id',
+		'target_path',
+		'decision',
+		'path_guard',
+		'manifest',
+	];
+	if (!hasExactKeys(contract, contractKeys)) return false;
+	if (
+		contract.contract_version !== 1 ||
+		contract.preflight !== 'required' ||
+		contract.validation !== 'required' ||
+		contract.notification !== 'memory_notify' ||
+		contract.collision !== 'preflight_required' ||
+		contract.recovery !== 'resume_same_run_id' ||
+		typeof contract.run_id !== 'string' ||
+		!contract.run_id.startsWith('stable(') ||
+		typeof contract.target_path !== 'string' ||
+		contract.target_path.length === 0 ||
+		!sameValue(contract.decision, decisions) ||
+		!sameValue(contract.manifest, manifest)
+	)
+		return false;
+	const guard = contract.path_guard;
+	if (
+		!hasExactKeys(guard, [
+			'resolve_scope',
+			'create',
+			'revalidate',
+			'advance',
+			'captures',
+			'default_leaf_expectation',
+			'transitions',
+			'required_at',
+			'on_change',
+			'atomic_race_guarantee',
+			'untrusted_concurrency',
+		]) ||
+		!hasExactKeys(guard.transitions, Object.keys(transitions)) ||
+		!Object.values(guard.transitions).every((transition) =>
+			hasExactKeys(transition, ['before', 'after']),
+		)
+	)
+		return false;
+	return (
+		guard.resolve_scope === 'preflight_only' &&
+		guard.create === 'createVaultPathGuard' &&
+		guard.revalidate === 'revalidateVaultPathGuard' &&
+		guard.advance === 'advanceVaultPathGuard' &&
+		sameValue(guard.captures, captures) &&
+		guard.default_leaf_expectation === 'unchanged' &&
+		sameValue(guard.transitions, transitions) &&
+		sameValue(guard.required_at, requiredAt) &&
+		guard.on_change === 'abort_and_record' &&
+		guard.atomic_race_guarantee === false &&
+		guard.untrusted_concurrency === 'require_atomic_client_capability'
+	);
+}
+
 function sameCapabilityContract(left, right, path = '') {
 	if (path.endsWith('.purpose') || path.endsWith('.fallback'))
 		return typeof left === 'string' && typeof right === 'string';
@@ -330,62 +453,27 @@ export function validateSkillContracts(root) {
 			}
 		}
 		const skillDirectory = join(path, '..');
+		const locale = path.endsWith('.zh.md') ? 'zh' : 'en';
 		for (const group of ['templates', 'schemas', 'agents', 'references', 'prompts', 'protocols']) {
 			for (const dependency of dependencies[group] ?? []) {
 				const requested = typeof dependency === 'string' ? dependency : dependency?.path;
 				if (typeof requested !== 'string') continue;
-				if (
-					requested.startsWith('/') ||
-					requested.includes('\\') ||
-					(group !== 'protocols' && requested.split('/').includes('..'))
-				) {
-					add('invalid_dependency_path', assetPath(path), `依赖路径非法：${requested}`);
+				const parsed = parseDependencyPath(group, requested, locale);
+				if (!parsed || (group === 'prompts' && dependency?.scan !== true)) {
+					add(
+						'invalid_dependency_path',
+						assetPath(path),
+						`依赖路径不符合 ${group} 语法：${requested}`,
+					);
+					continue;
 				}
 				let candidates = [];
-				if (group === 'templates') {
-					if (!/\{[^}]*(?:模板子目录|templates? subdirectory)[^}]*\}\//i.test(requested))
-						add(
-							'invalid_dependency_path',
-							assetPath(path),
-							`模板依赖必须使用模板逻辑目录：${requested}`,
-						);
-					candidates = ['zh', 'en'].map((locale) =>
-						join(templateRoot, locale, basename(requested)),
-					);
-				} else if (group === 'schemas') {
-					if (!/(规范子目录|schema subdirectory)/i.test(requested))
-						add(
-							'invalid_dependency_path',
-							assetPath(path),
-							`Schema 依赖必须使用规范逻辑目录：${requested}`,
-						);
-					candidates = [join(assets, 'schema', basename(requested))];
-				} else if (group === 'protocols') {
-					if (requested !== '../_shared/operation-safety.md')
-						add('invalid_dependency_path', assetPath(path), `协议依赖路径非法：${requested}`);
-					candidates = [
-						join(
-							skillDirectory,
-							`../_shared/operation-safety.${path.endsWith('.zh.md') ? 'zh' : 'en'}.md`,
-						),
-					];
-				} else if (group === 'prompts' && dependency?.scan === true) {
-					if (!/(\{[^}]+\}\/)?(?:提示词|prompts)\//i.test(requested))
-						add(
-							'invalid_dependency_path',
-							assetPath(path),
-							`提示词扫描必须使用提示词逻辑目录：${requested}`,
-						);
-					candidates = [join(assets, 'prompts')];
-				} else if (requested.startsWith('references/')) {
-					if (requested.includes('..') || requested.startsWith('/'))
-						add('invalid_dependency_path', assetPath(path), `本地引用路径非法：${requested}`);
-					candidates = ['zh', 'en'].map((locale) =>
-						join(skillDirectory, requested.replace(/\.md$/, `.${locale}.md`)),
-					);
-				} else {
-					candidates = [join(skillDirectory, requested)];
-				}
+				if (group === 'templates') candidates = [join(templateRoot, locale, parsed.fileName)];
+				else if (group === 'schemas') candidates = [join(assets, 'schema', parsed.fileName)];
+				else if (group === 'protocols')
+					candidates = [join(skillDirectory, `../_shared/operation-safety.${locale}.md`)];
+				else if (group === 'prompts') candidates = [join(assets, 'prompts')];
+				else candidates = [join(skillDirectory, 'references', `${parsed.fileName}.${locale}.md`)];
 				for (const candidate of candidates) {
 					if (!existsSync(candidate))
 						add(
@@ -395,21 +483,25 @@ export function validateSkillContracts(root) {
 							assetPath(candidate),
 						);
 				}
-				if (group === 'agents' && requested.startsWith('references/')) {
+				if (group === 'agents') {
 					const existing = candidates.filter(existsSync);
 					for (const agentPath of existing) {
 						const expected = Array.isArray(dependency?.placeholders)
 							? [...dependency.placeholders].sort()
 							: [];
 						const actual = extractPlaceholders(read(agentPath));
+						const invocation =
+							typeof dependency?.invocation === 'string'
+								? extractPlaceholders(dependency.invocation)
+								: [];
 						if (
 							JSON.stringify(expected) !== JSON.stringify(actual) ||
-							expected.some((placeholder) => !body.includes(placeholder))
+							JSON.stringify(expected) !== JSON.stringify(invocation)
 						) {
 							add(
 								'placeholder_mismatch',
 								assetPath(path),
-								`调用方与提示词占位符不一致：${requested}`,
+								`Agent 调用声明与提示词占位符不一致：${requested}`,
 								assetPath(agentPath),
 							);
 						}
@@ -442,38 +534,21 @@ export function validateSkillContracts(root) {
 		}
 	}
 
-	const requiredSafetyFields = [
-		'contract_version',
-		'preflight',
-		'validation',
-		'notification',
-		'collision',
-		'recovery',
-		'run_id',
-		'target_path',
-		'decision',
-		'path_guard',
-		'manifest',
-	];
 	const safetyContracts = [];
+	const safetyValid = [];
 	for (const locale of ['zh', 'en']) {
 		const path = join(skillRoot, '_shared', `operation-safety.${locale}.md`);
 		const contract = existsSync(path) ? readMarkedYaml(path, 'operation-safety-v1') : null;
-		if (
-			!contract ||
-			requiredSafetyFields.some((field) => !(field in contract)) ||
-			JSON.stringify(contract.decision) !==
-				JSON.stringify(['create', 'merge', 'resume', 'skip', 'replace'])
-		) {
-			add(
-				'invalid_operation_safety_contract',
-				assetPath(path),
-				'操作安全机器契约缺少必填字段或 decision 枚举非法',
-			);
+		const valid = isValidOperationSafetyContract(contract);
+		if (!valid) {
+			add('invalid_operation_safety_contract', assetPath(path), '操作安全机器契约字段或值非法');
 		}
 		safetyContracts.push(contract);
+		safetyValid.push(valid);
 	}
 	if (
+		safetyValid[0] &&
+		safetyValid[1] &&
 		safetyContracts[0] &&
 		safetyContracts[1] &&
 		JSON.stringify(safetyContracts[0]) !== JSON.stringify(safetyContracts[1])
@@ -491,10 +566,7 @@ export function validateSkillContracts(root) {
 			if (!existsSync(path)) continue;
 			const { frontmatter } = readMarkdown(path);
 			const protocols = frontmatter?.dependencies?.protocols ?? [];
-			const protocolPath = protocols.find(
-				(entry) => entry?.path === '../_shared/operation-safety.md',
-			);
-			if (!protocolPath)
+			if (!protocols.length)
 				add(
 					'missing_operation_safety_reference',
 					assetPath(path),

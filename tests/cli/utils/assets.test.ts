@@ -1,15 +1,19 @@
 import { spawnSync } from 'node:child_process';
 import {
+	cpSync,
 	type Dirent,
 	existsSync,
 	mkdirSync,
 	readFileSync,
 	readdirSync,
+	realpathSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { assetsDir, copyDir, ensureDir } from '../../../src/cli/utils/assets.js';
 import { parseArgs } from '../../../src/cli/utils/ui.js';
@@ -45,12 +49,26 @@ describe('assetsDir', () => {
 
 	test('npm 包解包后的 assets 仍通过源码契约校验', async () => {
 		const directory = join(tmpdir(), `lifeos-pack-${Date.now()}`);
+		const packageSource = join(directory, 'source');
 		mkdirSync(directory, { recursive: true });
 		try {
-			const packed = spawnSync('npm', ['pack', '--json', '--pack-destination', directory], {
-				cwd: process.cwd(),
+			cpSync(process.cwd(), packageSource, {
+				recursive: true,
+				filter: (source) =>
+					!['.git', 'dist', 'node_modules'].includes(source.split('/').at(-1) ?? ''),
+			});
+			symlinkSync(join(process.cwd(), 'node_modules'), join(packageSource, 'node_modules'), 'dir');
+			const environment = { ...process.env, NPM_CONFIG_CACHE: join(directory, 'npm-cache') };
+			const built = spawnSync('npm', ['run', 'build'], {
+				cwd: packageSource,
 				encoding: 'utf8',
-				env: { ...process.env, NPM_CONFIG_CACHE: join(directory, 'npm-cache') },
+				env: environment,
+			});
+			expect(built.status, built.stderr).toBe(0);
+			const packed = spawnSync('npm', ['pack', '--json', '--pack-destination', directory], {
+				cwd: packageSource,
+				encoding: 'utf8',
+				env: environment,
 			});
 			expect(packed.status, packed.stderr).toBe(0);
 			const [{ filename }] = JSON.parse(packed.stdout) as Array<{ filename: string }>;
@@ -60,7 +78,11 @@ describe('assetsDir', () => {
 			});
 			expect(extracted.status, extracted.stderr).toBe(0);
 			const { validateSkillContracts: validate } = await validateSkillContracts();
-			expect(validate(unpacked)).toEqual({ ok: true, diagnostics: [] });
+			const runtimeAssets = await import(
+				pathToFileURL(join(unpacked, 'dist', 'cli', 'utils', 'assets.js')).href
+			);
+			expect(realpathSync(runtimeAssets.assetsDir())).toBe(realpathSync(join(unpacked, 'assets')));
+			expect(validate(runtimeAssets.assetsDir())).toEqual({ ok: true, diagnostics: [] });
 		} finally {
 			rmSync(directory, { recursive: true, force: true });
 		}

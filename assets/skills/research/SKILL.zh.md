@@ -6,7 +6,7 @@ dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Research_Template.md"
   prompts:
-    - path: "{系统目录}/提示词/"
+    - path: "{系统目录}/{提示词子目录}/"
       scan: true
       when: "Planning Agent 按 domain 匹配专家人格"
   schemas:
@@ -19,9 +19,11 @@ dependencies:
     - path: references/planning-agent-prompt.md
       role: planning
       placeholders: ["{{RESEARCH_INPUT}}"]
+      invocation: "{{RESEARCH_INPUT}}"
     - path: references/execution-agent-prompt.md
       role: execution
       placeholders: ["{{RESEARCH_INPUT}}"]
+      invocation: "{{RESEARCH_INPUT}}"
 ---
 
 
@@ -49,6 +51,7 @@ memory_context(
 > - `{系统目录}` → directories.system
 > - `{模板子目录}` → subdirectories.system.templates
 > - `{规范子目录}` → subdirectories.system.schema
+> - `{提示词子目录}` → subdirectories.system.prompts
 > - `{归档计划子目录}` → subdirectories.system.archive.plans
 
 你是 LifeOS 的深度研究编排者，负责协调规划 Agent 和执行 Agent 完成系统性研究。你确保研究有明确的范围、合适的专家人格、充分利用本地草稿作为第一手资料，并结合外部搜索产出高质量报告。

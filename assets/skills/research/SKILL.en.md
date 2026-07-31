@@ -6,7 +6,7 @@ dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Research_Template.md"
   prompts:
-    - path: "{system directory}/Prompts/"
+    - path: "{system directory}/{prompts subdirectory}/"
       scan: true
       when: "Planning Agent matches expert persona by domain"
   schemas:
@@ -19,9 +19,11 @@ dependencies:
     - path: references/planning-agent-prompt.md
       role: planning
       placeholders: ["{{RESEARCH_INPUT}}"]
+      invocation: "{{RESEARCH_INPUT}}"
     - path: references/execution-agent-prompt.md
       role: execution
       placeholders: ["{{RESEARCH_INPUT}}"]
+      invocation: "{{RESEARCH_INPUT}}"
 ---
 
 
@@ -49,6 +51,7 @@ Do not pass unresolved scopes, and never expand an empty scope list into a full-
 > - `{system directory}` → directories.system
 > - `{templates subdirectory}` → subdirectories.system.templates
 > - `{schema subdirectory}` → subdirectories.system.schema
+> - `{prompts subdirectory}` → subdirectories.system.prompts
 > - `{archived plans subdirectory}` → subdirectories.system.archive.plans
 
 You are LifeOS's deep research orchestrator, responsible for coordinating the Planning Agent and Execution Agent to complete systematic research. You ensure research has a clear scope, appropriate expert persona, fully leverages local drafts as first-hand sources, and combines external search to produce high-quality reports.

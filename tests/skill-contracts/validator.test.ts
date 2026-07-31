@@ -7,7 +7,6 @@ import { EN_PRESET } from '../../src/config.js';
 
 const repositoryRoot = process.cwd();
 const scriptPath = join(repositoryRoot, 'scripts', 'validate-skill-contracts.mjs');
-const fixtureRoot = join(repositoryRoot, 'tests', 'fixtures', 'skill-contracts', 'broken');
 
 async function loadValidator(): Promise<
 	typeof import('../../scripts/validate-skill-contracts.mjs')
@@ -170,40 +169,166 @@ describe('技能契约校验器', () => {
 		await expectMutatedAssetsDiagnostic(mutate, expected);
 	});
 
-	it('报告每类最小错误资产的稳定诊断', async () => {
-		const { validateSkillContracts } = await loadValidator();
-		const result = validateSkillContracts(fixtureRoot);
-		const codes = result.diagnostics.map((diagnostic) => diagnostic.code);
-
-		expect(result.ok).toBe(false);
-		for (const code of [
-			'missing_locale_pair',
-			'missing_dependency',
-			'placeholder_mismatch',
-			'unknown_generated_type',
-			'invalid_template_id',
-			'hardcoded_logical_path',
-			'undeclared_capability',
-			'invalid_lifecycle_transition',
-			'capability_contract_mismatch',
-			'invalid_schema_json',
-		]) {
-			expect(codes, `缺少 ${code}`).toContain(code);
-		}
-		for (const diagnostic of result.diagnostics) {
-			expect(diagnostic).toMatchObject({
-				code: expect.any(String),
-				path: expect.any(String),
-				message: expect.any(String),
-			});
-		}
-		expect(result.diagnostics).toEqual(
-			[...result.diagnostics].sort((left, right) =>
-				`${left.path}\u0000${left.code}\u0000${left.related_path ?? ''}`.localeCompare(
-					`${right.path}\u0000${right.code}\u0000${right.related_path ?? ''}`,
+	it.each([
+		[
+			'path_guard 标量',
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace(/path_guard:\n(?: {2}.*\n)+?manifest:/, 'path_guard: invalid\nmanifest:'),
 				),
-			),
-		);
+		],
+		[
+			'path_guard 缺少 revalidate',
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace('  revalidate: revalidateVaultPathGuard\n', ''),
+				),
+		],
+		[
+			'manifest 为字符串',
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace(
+						'manifest: { run_id: string, moves: [], collisions: [], notified: [], errors: [] }',
+						'manifest: invalid',
+					),
+				),
+		],
+		[
+			'通知枚举漂移',
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace('notification: memory_notify', 'notification: notify'),
+				),
+		],
+		[
+			'恢复枚举漂移',
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace('recovery: resume_same_run_id', 'recovery: retry'),
+				),
+		],
+	])('独立拒绝操作安全契约：%s', async (_name, mutate) => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-safety-contract-'));
+		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
+		try {
+			mutate((relativePath, transform) => {
+				const path = join(root, relativePath);
+				writeFileSync(path, transform(readFileSync(path, 'utf8')));
+			});
+			const { validateSkillContracts } = await loadValidator();
+			expect(validateSkillContracts(root).diagnostics).toEqual([
+				{
+					code: 'invalid_operation_safety_contract',
+					path: 'assets/skills/_shared/operation-safety.en.md',
+					message: '操作安全机器契约字段或值非法',
+				},
+			]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it.each([
+		[
+			'templates',
+			(write) =>
+				write('assets/skills/research/SKILL.en.md', (content) =>
+					content.replace(
+						'{system directory}/{templates subdirectory}/Research_Template.md',
+						'{typo directory}/{templates subdirectory}/Research_Template.md',
+					),
+				),
+			'依赖路径不符合 templates 语法：{typo directory}/{templates subdirectory}/Research_Template.md',
+		],
+		[
+			'schemas',
+			(write) =>
+				write('assets/skills/research/SKILL.en.md', (content) =>
+					content.replace(
+						'{system directory}/{schema subdirectory}/Frontmatter_Schema.md',
+						'{typo directory}/{schema subdirectory}/Frontmatter_Schema.md',
+					),
+				),
+			'依赖路径不符合 schemas 语法：{typo directory}/{schema subdirectory}/Frontmatter_Schema.md',
+		],
+		[
+			'agents',
+			(write) =>
+				write('assets/skills/research/SKILL.en.md', (content) =>
+					content.replace(
+						'references/planning-agent-prompt.md',
+						'references/../planning-agent-prompt.md',
+					),
+				),
+			'依赖路径不符合 agents 语法：references/../planning-agent-prompt.md',
+		],
+		[
+			'references',
+			(write) =>
+				write('assets/skills/research/SKILL.en.md', (content) =>
+					content.replace(
+						'  protocols:',
+						'  references:\n    - path: references/../planning-agent-prompt.md\n  protocols:',
+					),
+				),
+			'依赖路径不符合 references 语法：references/../planning-agent-prompt.md',
+		],
+		[
+			'prompts',
+			(write) =>
+				write('assets/skills/research/SKILL.en.md', (content) =>
+					content.replace(
+						'{system directory}/{prompts subdirectory}/',
+						'{typo directory}/{prompts subdirectory}/',
+					),
+				),
+			'依赖路径不符合 prompts 语法：{typo directory}/{prompts subdirectory}/',
+		],
+		[
+			'protocols',
+			(write) =>
+				write('assets/skills/research/SKILL.en.md', (content) =>
+					content.replace('../_shared/operation-safety.md', '../_shared/other.md'),
+				),
+			'依赖路径不符合 protocols 语法：../_shared/other.md',
+		],
+		[
+			'未知 Agent 占位符',
+			(write) =>
+				write('assets/skills/research/SKILL.en.md', (content) =>
+					content.replace('invocation: "{{RESEARCH_INPUT}}"', 'invocation: "{{UNKNOWN}}"'),
+				),
+			'Agent 调用声明与提示词占位符不一致：references/planning-agent-prompt.md',
+		],
+	])('独立拒绝依赖：%s', async (_name, mutate, expectedMessage) => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-dependency-contract-'));
+		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
+		try {
+			mutate((relativePath, transform) => {
+				const path = join(root, relativePath);
+				writeFileSync(path, transform(readFileSync(path, 'utf8')));
+			});
+			const { validateSkillContracts } = await loadValidator();
+			const result = validateSkillContracts(root);
+			const expectedCode =
+				_name === '未知 Agent 占位符' ? 'placeholder_mismatch' : 'invalid_dependency_path';
+			expect(result.diagnostics).toEqual([
+				{
+					code: expectedCode,
+					path: 'assets/skills/research/SKILL.en.md',
+					message:
+						expectedCode === 'placeholder_mismatch'
+							? 'Agent 调用声明与提示词占位符不一致：references/planning-agent-prompt.md'
+							: expectedMessage,
+					...(expectedCode === 'placeholder_mismatch'
+						? { related_path: 'assets/skills/research/references/planning-agent-prompt.en.md' }
+						: {}),
+				},
+			]);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
 	});
 
 	it('真实 assets 通过所有跨资产检查', async () => {
@@ -211,10 +336,17 @@ describe('技能契约校验器', () => {
 		expect(validateSkillContracts(repositoryRoot)).toEqual({ ok: true, diagnostics: [] });
 	});
 
-	it('CLI 对失败资产返回 1，对真实 assets 返回 0', () => {
-		const failed = spawnSync(process.execPath, [scriptPath, fixtureRoot], { encoding: 'utf8' });
+	it('CLI 对缺失 assets 根返回单条 JSON 诊断，对真实 assets 返回 0', () => {
+		const missingRoot = join(tmpdir(), `lifeos-missing-assets-cli-${Date.now()}`);
+		const failed = spawnSync(process.execPath, [scriptPath, missingRoot], { encoding: 'utf8' });
 		expect(failed.status).toBe(1);
-		expect(failed.stderr).toContain('missing_locale_pair');
+		expect(failed.stderr.trim().split('\n').map(JSON.parse)).toEqual([
+			{
+				code: 'missing_assets_root',
+				path: '.',
+				message: `找不到 assets 目录：${missingRoot}`,
+			},
+		]);
 
 		const passed = spawnSync(process.execPath, [scriptPath, repositoryRoot], { encoding: 'utf8' });
 		expect(passed.status).toBe(0);
