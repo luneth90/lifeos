@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import {
 	existsSync,
 	mkdirSync,
@@ -24,6 +24,28 @@ function stableRunId(skill, input) {
 		.digest('hex')
 		.slice(0, 12);
 	return `${skill}-${hash}`;
+}
+
+function createTrustedManifestStore() {
+	const secret = randomBytes(32);
+	const stored = new Set();
+	const digest = (manifest) =>
+		createHmac('sha256', secret).update(JSON.stringify(manifest)).digest('hex');
+	return {
+		async persist_manifest({ manifest }) {
+			const receipt = `hmac-sha256:${digest(manifest)}`;
+			stored.add(`${receipt}\n${JSON.stringify(manifest)}`);
+			return { ok: true, receipt };
+		},
+		async verify_manifest_receipt({ manifest, receipt }) {
+			return {
+				ok: true,
+				verified:
+					receipt === `hmac-sha256:${digest(manifest)}` &&
+					stored.has(`${receipt}\n${JSON.stringify(manifest)}`),
+			};
+		},
+	};
 }
 
 function writeGuarded(root, targetPath, value) {
@@ -128,23 +150,33 @@ async function executeArchive(root) {
 	const notifyCalls = [];
 	const confirmCalls = [];
 	const forgetCalls = [];
+	const trustedStore = createTrustedManifestStore();
 	const adapters = {
+		persist_manifest: trustedStore.persist_manifest,
+		verify_manifest_receipt: trustedStore.verify_manifest_receipt,
 		move_with_link_update(payload) {
 			moveCalls.push(structuredClone(payload));
 			renameSync(
 				join(payload.vault_root, ...payload.source_path.split('/')),
 				join(payload.vault_root, ...payload.target_path.split('/')),
 			);
+			return { ok: true, receipt: `move:${payload.idempotency_key}` };
 		},
 		async memory_notify(payload) {
 			notifyCalls.push(structuredClone(payload));
+			return { ok: true, receipt: `notify:${payload.idempotency_key}` };
 		},
 		async confirm_index(payload) {
 			confirmCalls.push(structuredClone(payload));
-			return true;
+			return {
+				ok: true,
+				confirmed: true,
+				receipt: `confirm:${payload.idempotency_key}`,
+			};
 		},
 		async memory_forget(payload) {
 			forgetCalls.push(structuredClone(payload));
+			return { ok: true, receipt: `forget:${payload.idempotency_key}` };
 		},
 	};
 	const first = await runArchiveTransaction({
@@ -161,6 +193,8 @@ async function executeArchive(root) {
 		adapters,
 	});
 	writeManifest(root, 'archive', second);
+	const firstManifest = first.manifest;
+	const secondManifest = second.manifest;
 	return {
 		input,
 		runs: [
@@ -169,19 +203,22 @@ async function executeArchive(root) {
 				run_id: runId,
 				target_path: target,
 				decision: 'create',
-				status: first.status,
-				manifest: first,
+				status: firstManifest.status,
+				manifest: firstManifest,
+				envelope: first,
 			},
 			{
 				attempt: 2,
 				run_id: runId,
 				target_path: target,
 				decision: 'resume',
-				status: second.status,
-				manifest: second,
+				status: secondManifest.status,
+				manifest: secondManifest,
+				envelope: second,
 			},
 		],
-		manifest: second,
+		manifest: secondManifest,
+		envelope: second,
 		move_calls: moveCalls,
 		notify_calls: notifyCalls,
 		confirm_calls: confirmCalls,

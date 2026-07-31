@@ -45,6 +45,14 @@ describe('路径安全脚本', () => {
 		'LPT9...',
 		'foo.',
 		'report:name',
+		'bad<name',
+		'bad>name',
+		'bad"name',
+		'bad|name',
+		'bad?name',
+		'bad*name',
+		'bad\tname',
+		'bad\nname',
 	])('拒绝不安全的文件名组件 %j', async (value) => {
 		const { normalizeFilenameComponent: normalize } = await loadModule();
 		expect(() => normalize(value)).toThrow('unsafe_path_component');
@@ -86,6 +94,28 @@ describe('路径安全脚本', () => {
 		});
 		expect(result.status).not.toBe(0);
 		expect(JSON.parse(result.stderr)).toMatchObject({ error: 'unsafe_path_component' });
+	});
+
+	it.each(['unknown', '', 'resolve'])('CLI 拒绝显式未知 mode %j，不回退到路径解析', (mode) => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		const result = spawnSync('node', [scriptPath], {
+			encoding: 'utf8',
+			input: JSON.stringify({ mode, vault_root: root, relative_path: 'safe/report.md' }),
+		});
+		expect(result.status).not.toBe(0);
+		expect(JSON.parse(result.stderr)).toMatchObject({ error: 'invalid_mode' });
+	});
+
+	it('CLI 仅在缺少 mode 时兼容旧路径解析调用', () => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-vault-'));
+		const result = spawnSync('node', [scriptPath], {
+			encoding: 'utf8',
+			input: JSON.stringify({ vault_root: root, relative_path: 'safe/report.md' }),
+		});
+		expect(result.status).toBe(0);
+		expect(JSON.parse(result.stdout)).toEqual({
+			path: join(realpathSync(root), 'safe', 'report.md'),
+		});
 	});
 
 	it('guard 在父目录被替换为 Vault 外符号链接后复核失败', async () => {

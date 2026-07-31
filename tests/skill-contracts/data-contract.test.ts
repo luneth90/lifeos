@@ -88,16 +88,20 @@ describe('阶段一数据契约', () => {
 		expect(translation.frontmatter.status).toBe('draft');
 	});
 
-	it('归档保留业务终态，只写归档日期', () => {
+	it('归档保留业务终态，归档日期仅由独立受保护操作写入', () => {
 		for (const path of [
 			'assets/skills/_shared/lifecycle.zh.md',
 			'assets/skills/_shared/lifecycle.en.md',
-			'assets/skills/archive/SKILL.zh.md',
-			'assets/skills/archive/SKILL.en.md',
 		]) {
 			const content = read(path);
 			expect(content, path).not.toMatch(/status:\s*archived/);
 			expect(content, path).toContain('archived: "YYYY-MM-DD"');
+		}
+		for (const path of ['assets/skills/archive/SKILL.zh.md', 'assets/skills/archive/SKILL.en.md']) {
+			const content = read(path);
+			expect(content, path).not.toMatch(/status:\s*archived/);
+			expect(content, path).toContain('archived_frontmatter: separate_guarded_operation');
+			expect(content, path).toContain('current_run: forbidden');
 		}
 	});
 

@@ -312,7 +312,61 @@ describe('技能契约校验器', () => {
 		await expectExactMutatedAssetsDiagnostics(
 			(write) =>
 				write('assets/skills/archive/SKILL.en.md', (content) =>
-					content.replace('skip_confirmed_files: true', 'skip_confirmed_files: false'),
+					content.replace(
+						'skip_confirmed_files: trusted_receipt_only',
+						'skip_confirmed_files: false',
+					),
+				),
+			[
+				{
+					code: 'invalid_archive_transaction_contract',
+					path: 'assets/skills/archive/SKILL.en.md',
+					message: 'Archive 发布事务、manifest 或 resume 机器字段非法',
+				},
+			],
+		);
+	});
+
+	it('拒绝 Archive 可信持久化回执要求漂移', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/skills/archive/SKILL.zh.md', (content) =>
+					content.replace(
+						'receipt_required_for_resume: true',
+						'receipt_required_for_resume: false',
+					),
+				),
+			[
+				{
+					code: 'invalid_archive_transaction_contract',
+					path: 'assets/skills/archive/SKILL.zh.md',
+					message: 'Archive 发布事务、manifest 或 resume 机器字段非法',
+				},
+			],
+		);
+	});
+
+	it('拒绝 Archive 在失败后继续其他候选', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/skills/archive/SKILL.en.md', (content) =>
+					content.replace('continue_other_candidates: false', 'continue_other_candidates: true'),
+				),
+			[
+				{
+					code: 'invalid_archive_transaction_contract',
+					path: 'assets/skills/archive/SKILL.en.md',
+					message: 'Archive 发布事务、manifest 或 resume 机器字段非法',
+				},
+			],
+		);
+	});
+
+	it('拒绝 Archive 恢复事务完成后的未受保护写入', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/skills/archive/SKILL.en.md', (content) =>
+					content.replace('current_run: forbidden', 'current_run: allowed'),
 				),
 			[
 				{

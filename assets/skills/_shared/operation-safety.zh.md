@@ -43,7 +43,7 @@ manifest: { run_id: string, moves: [], collisions: [], notified: [], errors: [] 
 3. **托管区块**：仅可更新带 `BEGIN AUTO` / `END AUTO` 标记的 managed region，保留用户手写内容和来源列表。
 4. **路径 guard 与通知**：`resolveVaultPath` 只用于 preflight，返回值不是可长期持有的安全能力。为最终目标创建 `createVaultPathGuard`：它既捕获祖先身份，也以 `lstat` 捕获叶节点；已有叶节点必须不是符号链接，并记录 type、dev、ino、realpath，不存在的叶节点记录为 `missing`。在每次实际 write/move 紧邻之前调用 `revalidateVaultPathGuard`；默认复核要求祖先和叶节点状态、身份完全不变。原地更新后再次调用 `revalidateVaultPathGuard`。若操作合法改变了叶节点状态，紧邻操作后改用 `advanceVaultPathGuard(guard, { before, after })`，并以返回的新 guard 替换旧 guard；仅允许新建/更新目标 `missing → existing`、移动源 `existing → missing` 和移动目标 `missing → existing`。推进到 `existing` 时仍拒绝符号链接，并确认 realpath 在 Vault 内。任何状态、type、dev、ino、realpath 或父级身份变化都立即中止，并把错误与恢复动作写入 manifest。不得在 guard 复核后长期复用裸路径。每次真实文件变更后调用 `memory_notify`；通知失败记录在 manifest，不得伪称完成。
 5. **目录创建**：禁止以递归创建直接跨过 guard。先调用 `createVaultDirectoryGuard` 冻结从已存在 Vault root 到目标目录的逐级状态，再调用 `ensureVaultDirectory`。每个缺失目录都执行 create guard → 紧邻复核 → 单级 `mkdir` → `missing → existing` 推进 → 再复核；每个已有目录也必须验证非符号链接、目录类型、身份和祖先身份。任一变化失败关闭。
-6. **恢复**：失败时将错误和已完成步骤写入 manifest，提供由 manifest 反向执行的 rollback/恢复动作；恢复时使用相同 `run_id` 进入 `resume`。
+6. **恢复**：失败时将错误、已完成步骤和人工恢复动作写入 manifest；恢复时使用相同 `run_id` 进入 `resume`。没有实现自动撤销的操作不得声称已撤销。
 
 ## 原子竞态边界
 

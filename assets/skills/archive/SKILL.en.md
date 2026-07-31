@@ -135,7 +135,7 @@ After scanning, process every eligible item in the execution list by default:
 1. **Determine the source path and destination path first**
    - Compute every destination path from the archive rules and freeze each candidate as an explicit `source_path → target_path`, `entity_type`, and project `project_id`
    - Before any move, preflight collisions for every candidate and freeze the complete per-file inventory of every directory; never discover later collisions while moving earlier candidates
-   - **Do not** read the full document into context just to archive it; only read the destination file after the move if a frontmatter update is needed
+   - **Do not** read the full document into context just to archive it; the published transaction adapter handles only moves, index confirmation, and Scope cleanup, and does not rewrite file contents
 
 2. **Use Obsidian CLI to move files (auto-updates wikilinks):**
    - **Prefer `obsidian move`** — internally calls `app.fileManager.renameFile()`, auto-updating all wikilink references vault-wide
@@ -172,22 +172,18 @@ After scanning, process every eligible item in the execution list by default:
    - Only archive diary entries older than the most recent 7 days
 
 3. **Use the published transaction adapter for moves, indexing, and Scope cleanup:**
-   - Call `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })` from `scripts/archive_transaction.mjs`. `adapters` must provide `move_with_link_update`, `memory_notify`, `confirm_index`, and `memory_forget`, and must converge idempotently on the supplied `idempotency_key`.
-   1. Call `move_with_link_update` once to move a directory as a whole. After the move, write every old/new Vault-relative file path from the frozen inventory into manifest `moves`.
-   2. For every `moves` entry, call `memory_notify(contract_version=2, file_path="<new Vault-relative path>", previous_file_path="<old Vault-relative path>")`; record success in `notified`. On failure, record the step, path, error code, and recovery action in `errors`, then stop.
-   3. Call `confirm_index` for every new file. Stop and record `errors` when unconfirmed, and never call `memory_forget` in that state.
-   4. Call `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="Project archival cleanup")` once only after every related file for that project is confirmed.
-   5. Never call `memory_forget` for drafts, plans, or diaries. Drafts and plans also cannot have persistent `file` scope memory; keep interim information in their Markdown body.
-   6. After a notification interruption, resume with the same `run_id` and original manifest. When the source is absent, target exists, and the frozen inventory matches, skip the whole-directory move and every confirmed file, then continue only unfinished notifications, confirmations, and project cleanup. Reject resume when the `run_id`, candidate targets, or inventory differ.
+   - Call `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })` from `scripts/archive_transaction.mjs`. `adapters` must provide `persist_manifest`, `verify_manifest_receipt`, `move_with_link_update`, `memory_notify`, `confirm_index`, and `memory_forget`. Every callback accepts only a strict success shape and returns a trusted receipt for a side effect.
+   1. `persist_manifest` must write the complete manifest to a trusted store the caller cannot forge and return a persistence receipt. Resume accepts only an exact envelope whose complete manifest and receipt pass `verify_manifest_receipt`; otherwise fail closed and require manual recovery.
+   2. Persist an intent before every side effect. After persisting a move intent, recompute the frozen inventory and create fresh source and target guards. Nothing asynchronous, no persistence, and no other callback may occur between the last guard revalidation and invoking `move_with_link_update`. Retain the new guards returned by `advanceVaultPathGuard`, then persist per-file `moves` and the move receipt.
+   3. After every persistence call or external wait, revalidate the target guard and current target inventory before `memory_notify`, `confirm_index`, or `memory_forget`. A step may be skipped only when its successful trusted receipt was persisted; otherwise replay safely with the same `idempotency_key` or fail closed.
+   4. Call `memory_forget` once only after every file from every candidate for the same project has a confirmation receipt. An empty project cannot pass vacuously. Never call `memory_forget` for drafts, plans, or diaries.
+   5. Draft, plan, and diary candidates must be regular files. A project can be a regular file or a non-empty directory containing at least one confirmable regular file. Every raw directory entry must already be NFC and must reject controls, Windows-invalid characters, reserved names, symlinks, and non-regular files.
+   6. Any failure stops the entire run; do not process another candidate. Resume only with the same `run_id`, original candidates, and the same authenticated envelope. Reject automatic resume when a source reappears or when the candidate graph, path, derived ID, inventory, or receipt differs.
 
-4. **After the transaction succeeds, update frontmatter in place at the destination:**
-   - Add `archived: "YYYY-MM-DD"`
-   - Preserve the business terminal state (`status: done` for drafts, projects, and plans)
-   - Keep other fields unchanged
-   - Revalidate the path guard before and after the write, then call `memory_notify(contract_version=2, file_path="<new Vault-relative path>")` again
-
-5. **Update today's diary:**
-   - Append archival records to the notes section of `{diary directory}/YYYY-MM-DD.md` if present; revalidate the path guard before and after the write and notify the index afterward
+4. **Preserve the transaction endpoint:**
+   - This Archive run must not directly rewrite archived-target frontmatter or today’s diary after the transaction completes. Such writes are absent from the original manifest, inventory, intents, and receipts and would invalidate the confirmed transaction boundary
+   - If an `archived` date or diary record is required, use a new `run_id` and execute it as a separate operation protected by its own guard, manifest, intent, receipt, `memory_notify`, and `confirm_index`
+   - Until that separate operation succeeds and persists its receipt, do not claim that metadata or diary updates completed, and do not include it in the original Archive run's recovery flow
 
 6. **Cleanup check:**
    - Check if there are orphaned associated resources in `{resources directory}/`
@@ -207,8 +203,8 @@ After scanning, process every eligible item in the execution list by default:
 - Draft2.md → archived/drafts/2026/02/ (done)
 
 **Archived [N] plans to `{system directory}/{archived plans subdirectory}/`:**
-- Plan_2026-03-27_Project_LifeOS.md → archived/plans/ (keeps done; archival date written)
-- Plan_2026-03-27_Research_Agents.md → archived/plans/ (keeps done; archival date written)
+- Plan_2026-03-27_Project_LifeOS.md → archived/plans/ (keeps done)
+- Plan_2026-03-27_Research_Agents.md → archived/plans/ (keeps done)
 
 **Archived [N] diary entries to `{system directory}/{archived diary subdirectory}/YYYY/MM/`:**
 - 2026-03-18.md → archived/diary/2026/03/
@@ -239,8 +235,7 @@ After scanning, process every eligible item in the execution list by default:
 - **No simulated moves** — do not simulate a move with “write new file + delete old file”
 - **Organize by archive rule** — projects by completion year, drafts and diary entries by archival year and month, plans in `{archived plans subdirectory}`
 - **Archive all by default** — after scanning, automatically process every eligible candidate without requiring review, selection, confirmation, or a reply
-- **Update frontmatter** — write the `archived` date and preserve the business terminal state
-- **Log in diary** — append archival actions to today's diary
+- **No untracked post-transaction writes** — after this Archive run completes, do not directly rewrite archived targets or today's diary; use a separate fully protected operation when needed
 
 # Edge Cases
 
@@ -251,7 +246,7 @@ After scanning, process every eligible item in the execution list by default:
 - **Folder project with mixed statuses:** Skip the entire folder, do not archive individual child files, and explain the skip in the completion report
 - **Large project with resources:** Leave associated resources in `{resources directory}/`, list them in the completion report, and do not move or clean them automatically
 - **Recently completed project:** Archive it normally, then suggest an optional retrospective in the completion report
-- **File move failure:** Stop archiving the current item, inform the user of the specific failed file, continue processing remaining items, and report the failure list at the end
+- **File move or transaction-step failure:** Stop the entire run immediately, preserve the same manifest/envelope, and report the failed step and manual recovery action. Resume only with the same `run_id` and authenticated envelope after correcting the cause
 - **Obsidian CLI unavailable:** Stop and wait for explicit user acceptance of a degradation; move no files without it
 
 # Archive Structure
@@ -334,7 +329,7 @@ After archival is complete, suggestions:
 
 ## Archive Transaction Contract
 
-Read `_shared/operation-safety.md`, then use the published asset `scripts/archive_transaction.mjs`. The adapter preflights every collision and path guard, safely creates destination parents one level at a time, freezes each directory's per-file inventory, and then performs one whole-directory move followed by per-file manifest entries, notifications, and confirmations. Project memory cleanup is allowed only after every related project file is confirmed. The manifest records candidates, inventory, move state, notifications, confirmations, cleanup, error codes, and recovery actions; a same-`run_id` resume skips confirmed steps. External callbacks must consume stable idempotency keys. This adapter does not promise exactly-once behavior or cross-system atomicity across the filesystem, index, and memory system. The shared guard also cannot eliminate the cross-platform atomic race between the final revalidation and the system call.
+Read `_shared/operation-safety.md`, then use the published asset `scripts/archive_transaction.mjs`. The adapter preflights the whole candidate graph and every collision, safely creates destination parents one level at a time, and freezes and repeatedly verifies per-file inventories. It persists an intent before every side effect and a receipt after every successful side effect. Resume trusts only an exact envelope verified by `verify_manifest_receipt`; a persisted external receipt can skip its corresponding step, while a call without a receipt may only be replayed safely with the same `idempotency_key`. Any failure stops the entire run and resumes from the same manifest. The adapter promises neither exactly-once behavior nor cross-system atomicity across the filesystem, index, and memory system, and it cannot eliminate the race between final revalidation and the system call. Adapters and authentication receipts remain external trust boundaries.
 
 <!-- operation-safety-v1 -->
 ```yaml
@@ -350,20 +345,39 @@ target_paths:
   diary: "{system directory}/{archived diary subdirectory}/YYYY/MM/YYYY-MM-DD.md"
 decision: [create, merge, resume, skip, replace]
 adapter: scripts/archive_transaction.mjs
-external_callbacks: [move_with_link_update, memory_notify, confirm_index, memory_forget]
-transaction_steps: [preflight_all, create_target_parents, freeze_inventory, move_once, record_file_moves, memory_notify_each, confirm_index_each, memory_forget_project]
+external_callbacks: [persist_manifest, verify_manifest_receipt, move_with_link_update, memory_notify, confirm_index, memory_forget]
+transaction_steps: [preflight_all, create_target_parents, freeze_inventory, persist_manifest, persist_move_intent, revalidate_inventory, create_fresh_move_guards, move_once, advance_move_guards, record_file_moves, persist_move_receipt, memory_notify_each, confirm_index_each, memory_forget_project]
 directory_creation:
   create_guard: createVaultDirectoryGuard
   ensure: ensureVaultDirectory
   recursive_mkdir: forbidden
 inventory:
   freeze_before_move: all_candidate_files
+  revalidate_after_each_persist: true
+  subitem_names: nfc_exact_no_control_windows_safe
+  entity_shapes: project_file_or_nonempty_directory_others_file_only
   directory_move: once
   manifest_moves: per_file_source_target
 move_guards:
+  intent_persisted_before_revalidation: true
+  fresh_after_intent_persist: true
+  last_revalidate_adjacent_to_call: true
   source: { before: existing, after: missing }
   target: { before: missing, after: existing }
   advance: advanceVaultPathGuard
+persistence:
+  manifest_contract_version: 2
+  persist_callback: persist_manifest
+  verify_callback: verify_manifest_receipt
+  envelope_keys: [manifest, persistence_receipt, persistence_state]
+  receipt_required_for_resume: true
+  unauthenticated_resume: fail_closed_manual_recovery
+  schema: recursive_exact_keys_and_derived_ids
+effects:
+  intent_before_side_effect: persisted
+  receipt_after_side_effect: persisted
+  resume: trusted_receipt_or_same_idempotency_key_replay
+  malformed_result: stop_and_record
 notify:
   contract_version: 2
   file_path: <new-vault-relative-path>
@@ -379,18 +393,29 @@ manifest_updates:
   move_state: candidate_states
   move: moves
   collision: collisions
+  intent: intents
+  move_receipt: move_receipts
   memory_notify: notified
   confirm_index: confirmed
   memory_forget: forgotten
   failure: errors
 resume:
-  required_match: [run_id, candidates, inventories]
+  required_match: [run_id, candidates, inventories, derived_ids, receipt]
   moved_state: source_missing_target_existing
-  skip_confirmed_files: true
+  source_restored: reject
+  skip_confirmed_files: trusted_receipt_only
   external_idempotency_key: required
+stop_semantics:
+  any_failure: stop_entire_run
+  resume: same_run_id_same_authenticated_envelope
+  continue_other_candidates: false
 guarantees:
   exactly_once: false
   atomic_cross_system: false
   last_revalidate_to_syscall_atomic: false
+post_transaction_writes:
+  current_run: forbidden
+  archived_frontmatter: separate_guarded_operation
+  diary_log: separate_guarded_operation
 bare_mv: forbidden
 ```

@@ -135,7 +135,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 1. **先确定源路径与目标路径**
    - 根据归档规则计算全部目标路径，把候选冻结为显式的 `source_path → target_path`、`entity_type` 与项目 `project_id`
    - 在任何移动前，对所有候选完成 collision 预检，并冻结每个文件夹内的完整逐文件 inventory；不得边移动边发现后续冲突
-   - **不要**为了归档先把整篇文档内容读入上下文；只有在需要更新 frontmatter 时，才在移动后读取目标文件
+   - **不要**为了归档先把整篇文档内容读入上下文；发布事务适配器只处理移动、索引确认和 Scope 清理，不改写文件正文
 
 2. **使用 Obsidian CLI 移动文件（自动更新 wikilink）：**
    - **优先使用 `obsidian move`** — 内部调用 `app.fileManager.renameFile()`，自动更新全库 wikilink 引用
@@ -172,22 +172,18 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
    - 只处理超出最近 7 天的日记
 
 3. **通过发布事务适配器执行移动、索引与 Scope 清理：**
-   - 调用 `scripts/archive_transaction.mjs` 的 `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })`。`adapters` 必须提供 `move_with_link_update`、`memory_notify`、`confirm_index`、`memory_forget`，并按传入的 `idempotency_key` 实现幂等收敛。
-   1. 文件夹只调用一次 `move_with_link_update` 整体移动；移动后把冻结 inventory 中每个文件的旧/新 Vault 相对路径逐项写入 manifest `moves`。
-   2. 对每条 `moves` 逐项调用 `memory_notify(contract_version=2, file_path="<新 Vault 相对路径>", previous_file_path="<旧 Vault 相对路径>")`；成功后写入 `notified`，失败则把步骤、路径、错误码和恢复动作写入 `errors` 并停止。
-   3. 对每个新文件逐项调用 `confirm_index`；未确认时停止并写入 `errors`，不得调用 `memory_forget`。
-   4. 只有同一项目关联的全部文件都已确认后，才可调用一次 `memory_forget(contract_version=2, scope={type: "project", key: "<id>"}, reason="项目归档清理")`。
-   5. 草稿、计划和日记不得调用 `memory_forget`；草稿和计划也禁止拥有 `file` 作用域持久记忆，阶段性信息保留在 Markdown 正文。
-   6. 通知中断后，以相同 `run_id` 和原 manifest 恢复；当 source 已缺失、target 已存在且冻结 inventory 一致时，跳过目录整体移动及已确认文件，只续跑未完成的通知、确认与项目清理。`run_id`、候选目标或 inventory 不一致时拒绝恢复。
+   - 调用 `scripts/archive_transaction.mjs` 的 `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })`。`adapters` 必须提供 `persist_manifest`、`verify_manifest_receipt`、`move_with_link_update`、`memory_notify`、`confirm_index` 与 `memory_forget`；每个回调只接受严格成功结构，并为副作用返回受信回执。
+   1. `persist_manifest` 必须把完整 manifest 写入调用者不可伪造的受信存储并返回 persistence receipt；恢复输入必须是精确 envelope，且 `verify_manifest_receipt` 必须验证当前完整 manifest 与 receipt。缺少有效回执时失败关闭并要求人工恢复。
+   2. 每个副作用都先把 intent 持久化。move intent 持久化后重新计算冻结 inventory，再创建全新的 source/target guards；最后一次 guard 复核与 `move_with_link_update` 调用之间不得插入持久化、等待或其他回调。移动后保留 `advanceVaultPathGuard` 返回的新 guards，并持久化逐文件 `moves` 与 move receipt。
+   3. 每次持久化或外部等待后、调用 `memory_notify`、`confirm_index` 或 `memory_forget` 前，重新验证目标 guard 和当前 target inventory。回调成功回执持久化后才能跳过；否则只能使用同一 `idempotency_key` 安全重放或失败关闭。
+   4. 只有同一项目全部候选的全部文件都持有确认回执后，才调用一次 `memory_forget`。空项目不能借由空集合自动通过；草稿、计划和日记不得调用 `memory_forget`。
+   5. 草稿、计划与日记候选只能是普通文件；项目可以是普通文件，或包含至少一个可确认普通文件的非空目录。目录子项必须保持原始 NFC，并拒绝控制字符、Windows 非法字符、保留名、符号链接与非普通文件。
+   6. 任一步骤失败都停止整个 run，不再处理其他候选。恢复必须使用相同 `run_id`、原候选和同一份已认证 envelope；source 被恢复、候选图交叉、路径、派生 ID、inventory 或 receipt 不一致时拒绝自动恢复。
 
-4. **事务成功后，在目标文件上原地更新 frontmatter：**
-   - 新增 `archived: "YYYY-MM-DD"`
-   - 保留原有业务终态（草稿、项目、计划均保持 `status: done`）
-   - 其他字段保持不变
-   - 写入前后复核路径 guard；写入后再次调用 `memory_notify(contract_version=2, file_path="<新 Vault 相对路径>")`
-
-5. **更新今日日记：**
-   - 在 `{日记目录}/YYYY-MM-DD.md` 的备注区追加归档记录（若文件存在），写入前后复核路径 guard，并在写入后通知索引
+4. **保持事务终点不变：**
+   - 本次 Archive run 禁止在事务完成后直接改写归档目标 frontmatter 或今日日记；这类未进入原 manifest、inventory、intent 和 receipt 的写入会破坏已经确认的事务边界
+   - 如确需补写 `archived` 日期或日记记录，必须使用新的 `run_id`，作为独立的受 guard、manifest、intent、receipt、`memory_notify` 与 `confirm_index` 保护的 operation 执行
+   - 独立 operation 未成功并持久化回执时，不得声称元数据或日记更新完成，也不得把它并入原 Archive run 的恢复流程
 
 6. **清理检查：**
    - 检查 `{资源目录}/` 中是否有关联的孤立资源
@@ -207,8 +203,8 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 - 草稿2.md → 归档/草稿/2026/02/ (done)
 
 **已归档 [N] 个计划至 `{系统目录}/{归档计划子目录}/`:**
-- Plan_2026-03-27_Project_LifeOS.md → 归档/计划/（保留 done，已写归档日期）
-- Plan_2026-03-27_Research_Agents.md → 归档/计划/（保留 done，已写归档日期）
+- Plan_2026-03-27_Project_LifeOS.md → 归档/计划/（保留 done）
+- Plan_2026-03-27_Research_Agents.md → 归档/计划/（保留 done）
 
 **已归档 [N] 篇日记至 `{系统目录}/{归档日记子目录}/YYYY/MM/`:**
 - 2026-03-18.md → 归档/日记/2026/03/
@@ -239,8 +235,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 - **禁止模拟移动** — 禁止通过“写新文件 + 删除原文件”模拟移动
 - **按规则组织** — 项目按完成年，草稿和日记按归档年月，计划统一放入 `{归档计划子目录}`
 - **默认全部归档** — 扫描后自动执行全部合规候选，不要求用户审核、选择、确认或回复
-- **更新 frontmatter** — 写入 `archived` 日期，保留原有业务终态
-- **记录到日记** — 在今日日记追加归档动作
+- **禁止事务后裸写入** — 本次 Archive run 完成后不直接改写归档目标或今日日记；需要时另启受完整事务保护的 operation
 
 # 边界情况
 
@@ -251,7 +246,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 - **文件夹项目含混合状态：** 跳过整个文件夹，不单独归档其中的子文件，并在完成报告中说明
 - **大型项目含资源：** 关联资源保留在 `{资源目录}/`，在完成报告中列出，不自动移动或清理
 - **刚完成的项目：** 照常归档，并在完成报告中提示可另行补做项目复盘
-- **文件移动失败：** 停止当前条目归档，告知用户具体失败文件，继续处理其余条目，最后汇报失败列表
+- **文件移动或任一事务步骤失败：** 立即停止整个 run，保存同一份 manifest/envelope，告知用户失败步骤与人工恢复动作；修复原因后仅以相同 `run_id` 和已认证 envelope 恢复
 - **Obsidian CLI 不可用：** 停止等待用户明确同意降级；未同意时不移动任何文件
 
 # 归档结构
@@ -334,7 +329,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 ## 归档事务契约
 
-先读取 `_shared/operation-safety.md`，再使用发布资产 `scripts/archive_transaction.mjs`。适配器先预检全部 collision 和路径 guard，安全逐级创建目标父目录，冻结目录内逐文件 inventory，随后执行目录整体单次 move、逐文件 manifest、逐文件通知与确认；只有项目全部相关文件确认后才允许清理项目记忆。manifest 记录候选、inventory、移动状态、通知、确认、清理、错误码和恢复动作；同一 `run_id` resume 会跳过已确认步骤。外部回调必须消费稳定幂等键。该适配器不承诺 exactly-once，也不承诺文件系统、索引和记忆系统之间的跨系统原子性；共享 guard 同样无法消除最后一次复核到系统调用之间的跨平台原子竞态。
+先读取 `_shared/operation-safety.md`，再使用发布资产 `scripts/archive_transaction.mjs`。适配器预检整个候选图和全部 collision，逐级安全创建目标父目录，冻结并重复验证逐文件 inventory；每个副作用前持久化 intent，每个成功副作用后持久化回执。恢复只信任经 `verify_manifest_receipt` 验证的精确 envelope；已认证的外部回执可跳过对应步骤，未获回执的外部调用只能以同一 `idempotency_key` 安全重放。任一步骤失败立即停止整个 run，并以同一 manifest 恢复。该适配器不承诺 exactly-once，不承诺文件系统、索引和记忆系统之间的跨系统原子性，也不能消除最后一次复核到系统调用之间的竞态；adapter 与认证回执仍是外部信任边界。
 
 <!-- operation-safety-v1 -->
 ```yaml
@@ -350,20 +345,39 @@ target_paths:
   diary: "{系统目录}/{归档日记子目录}/YYYY/MM/YYYY-MM-DD.md"
 decision: [create, merge, resume, skip, replace]
 adapter: scripts/archive_transaction.mjs
-external_callbacks: [move_with_link_update, memory_notify, confirm_index, memory_forget]
-transaction_steps: [preflight_all, create_target_parents, freeze_inventory, move_once, record_file_moves, memory_notify_each, confirm_index_each, memory_forget_project]
+external_callbacks: [persist_manifest, verify_manifest_receipt, move_with_link_update, memory_notify, confirm_index, memory_forget]
+transaction_steps: [preflight_all, create_target_parents, freeze_inventory, persist_manifest, persist_move_intent, revalidate_inventory, create_fresh_move_guards, move_once, advance_move_guards, record_file_moves, persist_move_receipt, memory_notify_each, confirm_index_each, memory_forget_project]
 directory_creation:
   create_guard: createVaultDirectoryGuard
   ensure: ensureVaultDirectory
   recursive_mkdir: forbidden
 inventory:
   freeze_before_move: all_candidate_files
+  revalidate_after_each_persist: true
+  subitem_names: nfc_exact_no_control_windows_safe
+  entity_shapes: project_file_or_nonempty_directory_others_file_only
   directory_move: once
   manifest_moves: per_file_source_target
 move_guards:
+  intent_persisted_before_revalidation: true
+  fresh_after_intent_persist: true
+  last_revalidate_adjacent_to_call: true
   source: { before: existing, after: missing }
   target: { before: missing, after: existing }
   advance: advanceVaultPathGuard
+persistence:
+  manifest_contract_version: 2
+  persist_callback: persist_manifest
+  verify_callback: verify_manifest_receipt
+  envelope_keys: [manifest, persistence_receipt, persistence_state]
+  receipt_required_for_resume: true
+  unauthenticated_resume: fail_closed_manual_recovery
+  schema: recursive_exact_keys_and_derived_ids
+effects:
+  intent_before_side_effect: persisted
+  receipt_after_side_effect: persisted
+  resume: trusted_receipt_or_same_idempotency_key_replay
+  malformed_result: stop_and_record
 notify:
   contract_version: 2
   file_path: <new-vault-relative-path>
@@ -379,18 +393,29 @@ manifest_updates:
   move_state: candidate_states
   move: moves
   collision: collisions
+  intent: intents
+  move_receipt: move_receipts
   memory_notify: notified
   confirm_index: confirmed
   memory_forget: forgotten
   failure: errors
 resume:
-  required_match: [run_id, candidates, inventories]
+  required_match: [run_id, candidates, inventories, derived_ids, receipt]
   moved_state: source_missing_target_existing
-  skip_confirmed_files: true
+  source_restored: reject
+  skip_confirmed_files: trusted_receipt_only
   external_idempotency_key: required
+stop_semantics:
+  any_failure: stop_entire_run
+  resume: same_run_id_same_authenticated_envelope
+  continue_other_candidates: false
 guarantees:
   exactly_once: false
   atomic_cross_system: false
   last_revalidate_to_syscall_atomic: false
+post_transaction_writes:
+  current_run: forbidden
+  archived_frontmatter: separate_guarded_operation
+  diary_log: separate_guarded_operation
 bare_mv: forbidden
 ```

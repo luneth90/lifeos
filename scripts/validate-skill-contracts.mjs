@@ -265,6 +265,8 @@ function isValidArchiveTransactionContract(contract) {
 	return (
 		contract?.adapter === 'scripts/archive_transaction.mjs' &&
 		sameValue(contract.external_callbacks, [
+			'persist_manifest',
+			'verify_manifest_receipt',
 			'move_with_link_update',
 			'memory_notify',
 			'confirm_index',
@@ -274,8 +276,14 @@ function isValidArchiveTransactionContract(contract) {
 			'preflight_all',
 			'create_target_parents',
 			'freeze_inventory',
+			'persist_manifest',
+			'persist_move_intent',
+			'revalidate_inventory',
+			'create_fresh_move_guards',
 			'move_once',
+			'advance_move_guards',
 			'record_file_moves',
+			'persist_move_receipt',
 			'memory_notify_each',
 			'confirm_index_each',
 			'memory_forget_project',
@@ -287,13 +295,34 @@ function isValidArchiveTransactionContract(contract) {
 		}) &&
 		sameValue(contract.inventory, {
 			freeze_before_move: 'all_candidate_files',
+			revalidate_after_each_persist: true,
+			subitem_names: 'nfc_exact_no_control_windows_safe',
+			entity_shapes: 'project_file_or_nonempty_directory_others_file_only',
 			directory_move: 'once',
 			manifest_moves: 'per_file_source_target',
 		}) &&
 		sameValue(contract.move_guards, {
+			intent_persisted_before_revalidation: true,
+			fresh_after_intent_persist: true,
+			last_revalidate_adjacent_to_call: true,
 			source: { before: 'existing', after: 'missing' },
 			target: { before: 'missing', after: 'existing' },
 			advance: 'advanceVaultPathGuard',
+		}) &&
+		sameValue(contract.persistence, {
+			manifest_contract_version: 2,
+			persist_callback: 'persist_manifest',
+			verify_callback: 'verify_manifest_receipt',
+			envelope_keys: ['manifest', 'persistence_receipt', 'persistence_state'],
+			receipt_required_for_resume: true,
+			unauthenticated_resume: 'fail_closed_manual_recovery',
+			schema: 'recursive_exact_keys_and_derived_ids',
+		}) &&
+		sameValue(contract.effects, {
+			intent_before_side_effect: 'persisted',
+			receipt_after_side_effect: 'persisted',
+			resume: 'trusted_receipt_or_same_idempotency_key_replay',
+			malformed_result: 'stop_and_record',
 		}) &&
 		sameValue(contract.notify, {
 			contract_version: 2,
@@ -312,21 +341,34 @@ function isValidArchiveTransactionContract(contract) {
 			move_state: 'candidate_states',
 			move: 'moves',
 			collision: 'collisions',
+			intent: 'intents',
+			move_receipt: 'move_receipts',
 			memory_notify: 'notified',
 			confirm_index: 'confirmed',
 			memory_forget: 'forgotten',
 			failure: 'errors',
 		}) &&
 		sameValue(contract.resume, {
-			required_match: ['run_id', 'candidates', 'inventories'],
+			required_match: ['run_id', 'candidates', 'inventories', 'derived_ids', 'receipt'],
 			moved_state: 'source_missing_target_existing',
-			skip_confirmed_files: true,
+			source_restored: 'reject',
+			skip_confirmed_files: 'trusted_receipt_only',
 			external_idempotency_key: 'required',
+		}) &&
+		sameValue(contract.stop_semantics, {
+			any_failure: 'stop_entire_run',
+			resume: 'same_run_id_same_authenticated_envelope',
+			continue_other_candidates: false,
 		}) &&
 		sameValue(contract.guarantees, {
 			exactly_once: false,
 			atomic_cross_system: false,
 			last_revalidate_to_syscall_atomic: false,
+		}) &&
+		sameValue(contract.post_transaction_writes, {
+			current_run: 'forbidden',
+			archived_frontmatter: 'separate_guarded_operation',
+			diary_log: 'separate_guarded_operation',
 		}) &&
 		contract.bare_mv === 'forbidden'
 	);

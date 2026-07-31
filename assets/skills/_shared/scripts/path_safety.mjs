@@ -57,9 +57,10 @@ function hasControlCharacters(value) {
 
 export function normalizeFilenameComponent(value) {
 	if (typeof value !== 'string') throw unsafeComponent();
+	if (hasControlCharacters(value)) throw unsafeComponent();
 	const normalized = value.normalize('NFC').trim().replace(/\s+/gu, ' ');
 	if (!normalized || normalized === '.' || normalized === '..') throw unsafeComponent();
-	if (/[\\/:]/u.test(normalized) || hasControlCharacters(normalized) || normalized.endsWith('.')) {
+	if (/[\\/:<>"|?*]/u.test(normalized) || normalized.endsWith('.')) {
 		throw unsafeComponent();
 	}
 	const basename = normalized
@@ -68,6 +69,18 @@ export function normalizeFilenameComponent(value) {
 		.toUpperCase();
 	if (RESERVED_NAMES.has(basename)) throw unsafeComponent();
 	return normalized;
+}
+
+export function validateExistingFilenameComponent(value) {
+	if (
+		typeof value !== 'string' ||
+		hasControlCharacters(value) ||
+		value.normalize('NFC') !== value
+	) {
+		throw unsafeComponent();
+	}
+	if (normalizeFilenameComponent(value) !== value) throw unsafeComponent();
+	return value;
 }
 
 function assertInside(root, candidate) {
@@ -449,7 +462,11 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 			const directoryGuard = createVaultDirectoryGuard(input.vault_root, input.relative_path);
 			const ensured = ensureVaultDirectory(directoryGuard);
 			result = { path: ensured.path, created: ensured.created };
-		} else result = { path: resolveVaultPath(input.vault_root, input.relative_path) };
+		} else if (!Object.hasOwn(input, 'mode')) {
+			result = { path: resolveVaultPath(input.vault_root, input.relative_path) };
+		} else {
+			throw codedError('invalid_mode');
+		}
 		process.stdout.write(`${JSON.stringify(result)}\n`);
 	} catch (error) {
 		process.stderr.write(
