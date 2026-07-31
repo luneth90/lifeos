@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { readContractYaml, readMarkdownAsset } from './helpers.js';
@@ -22,8 +22,18 @@ type LearningContract = {
 };
 
 function route(input: string, contract: RoutingContract): string {
-	const matched = contract.routes.find((candidate) => candidate.examples.includes(input));
+	const byId = new Map(contract.routes.map((candidate) => [candidate.id, candidate]));
+	const matched = contract.order
+		.map((id) => byId.get(id))
+		.find((candidate) => candidate?.examples.includes(input));
 	return matched?.target ?? 'direct_answer';
+}
+
+function declaredSkills(): Set<string> {
+	const skillsRoot = join(process.cwd(), 'assets/skills');
+	return new Set(
+		readdirSync(skillsRoot).filter((name) => existsSync(join(skillsRoot, name, 'SKILL.zh.md'))),
+	);
 }
 
 function read(relativePath: string): string {
@@ -60,8 +70,20 @@ describe('阶段三路由与学习链路契约', () => {
 		expect(route('询问今日安排', contract)).toBe('today');
 		expect(route('生成信息周报', contract)).toBe('digest');
 		expect(route('翻译这个 PDF 章节', contract)).toBe('translate');
+		expect(
+			route('重叠意图', {
+				...contract,
+				order: ['translation', 'pdf_reading'],
+				routes: [
+					{ id: 'pdf_reading', target: 'read-pdf', examples: ['重叠意图'] },
+					{ id: 'translation', target: 'translate', examples: ['重叠意图'] },
+				],
+			}),
+		).toBe('translate');
+		expect(route('未匹配的普通提问', contract)).toBe('direct_answer');
+		const skills = declaredSkills();
 		for (const candidate of contract.routes) {
-			expect(candidate.target).toMatch(/^[a-z-]+$/);
+			expect(skills.has(candidate.target), `${candidate.target} 不是已声明技能`).toBe(true);
 		}
 	});
 
@@ -117,6 +139,44 @@ describe('阶段三路由与学习链路契约', () => {
 			expect(body, path).toContain('<!-- END AUTO:tasks -->');
 			expect(body, path).toContain('<!-- BEGIN AUTO:related-projects -->');
 			expect(body, path).toContain('<!-- END AUTO:related-projects -->');
+		}
+	});
+
+	it('Today 在 AskUserQuestion 无响应时不从候选池写入任务或相关项目', () => {
+		for (const path of ['assets/skills/today/SKILL.zh.md', 'assets/skills/today/SKILL.en.md']) {
+			const content = read(path);
+			expect(content, path).toMatch(/无响应|no response/i);
+			expect(content, path).toMatch(/保持.*托管区块为空|keep.*managed blocks empty/i);
+			expect(content, path).toMatch(/不得.*候选池.*推断|never.*candidate pool/i);
+		}
+	});
+
+	it('Brainstorm 为 checkpoint 提供模板化草稿，并只通过公开 Project 入口交接', () => {
+		for (const path of ['assets/skills/brainstorm/SKILL.zh.md', 'assets/skills/brainstorm/SKILL.en.md']) {
+			const content = read(path);
+			expect(content, path).toMatch(/首次.*checkpoint.*创建或复用.*Draft_Template|first.*checkpoint.*create or reuse.*Draft_Template/i);
+			expect(content, path).toMatch(/发散[\s\S]{0,400}memory_notify|Divergence[\s\S]{0,400}memory_notify/i);
+			expect(content, path).toMatch(/收敛[\s\S]{0,400}memory_notify|Convergence[\s\S]{0,400}memory_notify/i);
+			expect(content, path).toMatch(/交接[\s\S]{0,400}memory_notify|Handoff[\s\S]{0,400}memory_notify/i);
+			expect(content, path).toMatch(/\/project.*公共规划入口|\/project.*public planning entry/i);
+			expect(content, path).not.toMatch(/sub-agent Planning Agent|子-agent Planning Agent|子 Agent Planning Agent/i);
+		}
+	});
+
+	it('行为证据在已追踪文件中完整保存，且不依赖 SDD 临时目录', () => {
+		const evidence = read('development/skill-tests/2026-07-31-phase-3-routing-learning.md');
+		expect(evidence).not.toContain('.superpowers/sdd/');
+		for (const marker of [
+			'baseline-148e453-场景一-今日安排',
+			'baseline-148e453-场景二-PDF翻译',
+			'baseline-148e453-场景三-AI周报',
+			'baseline-148e453-场景四-独立百科',
+			'green-routing-fresh-context-20260731',
+			'memory_bootstrap()',
+			'memory_context(contract_version=2',
+			'memory_query(contract_version=2',
+		]) {
+			expect(evidence).toContain(marker);
 		}
 	});
 

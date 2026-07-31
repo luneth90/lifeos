@@ -82,7 +82,13 @@ memory_query(contract_version=2, query="<topic keywords>", limit=5)
 
 ## Body Checkpoints (Compaction Recovery)
 
-Use one brainstorm draft body for checkpoints: after divergence begins write `## Checkpoint: Divergence`, after summary confirmation write `## Checkpoint: Convergence`, and before handoff write `## Checkpoint: Handoff`. Each checkpoint records the topic, confirmed conclusions, open questions, and next step; immediately call `memory_notify(contract_version=2, file_path="{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md")` after the write. Resume from the latest checkpoint after compaction instead of restarting.
+When the first persistent checkpoint is needed, first find and reuse `{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md`; if it does not exist, create or reuse a `Draft_Template.md` instance, replace every required placeholder, and write the draft. This is the only exception to “do not create files early”: it happens at the first checkpoint boundary, never during ordinary divergent conversation.
+
+- **Divergence boundary**: after divergence begins write `## Checkpoint: Divergence` with the topic, confirmed conclusions, open questions, and next step; immediately adjacent to that write call `memory_notify(contract_version=2, file_path="{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md")`.
+- **Convergence boundary**: after the summary is confirmed write `## Checkpoint: Convergence` with the topic, confirmed conclusions, open questions, and next step; immediately adjacent to that write call `memory_notify(contract_version=2, file_path="{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md")`.
+- **Handoff boundary**: before handing off to `/project`, write `## Checkpoint: Handoff` with the topic, confirmed conclusions, open questions, and next step; immediately adjacent to that write call `memory_notify(contract_version=2, file_path="{drafts directory}/Brainstorm_YYYY-MM-DD_<Topic>.md")`.
+
+Resume from the latest checkpoint after compaction instead of restarting.
 
 # Phase 1: Brainstorm Mode
 
@@ -271,7 +277,7 @@ Do not write this from a single style preference; require repeated confirmation 
 
 **User**: `Create a project`
 
-**Assistant (Phase 3 Option 1)**: Invokes sub-agent Planning Agent, generates plan file, and waits for user confirmation
+**Assistant (Phase 3 Option 1)**: Sends the checkpoint draft `handoff` to the `/project` public planning entry, receives the plan path, `plan_revision`, and `confirmed_hash`, then presents them for user confirmation.
 
 # Memory System Integration
 

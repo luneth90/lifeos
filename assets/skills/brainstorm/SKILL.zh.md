@@ -83,7 +83,13 @@ memory_query(contract_version=2, query="<话题关键词>", limit=5)
 
 ## 正文 checkpoint（压缩恢复）
 
-使用同一份头脑风暴草稿正文保存 checkpoint：发散开始后写 `## Checkpoint：发散`，总结确认后写 `## Checkpoint：收敛`，交接前写 `## Checkpoint：交接`。每个 checkpoint 写入主题、已确认结论、未决问题和下一步；写入后立即调用 `memory_notify(contract_version=2, file_path="{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md")`。上下文压缩后从最近 checkpoint 恢复，不重新开始。
+首次需要持久 checkpoint 时，先按主题查找并复用 `{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md`；不存在时，创建或复用 `Draft_Template.md` 实例，替换全部必填占位符后写入该草稿。此步骤是“不要提前创建文件”的唯一例外，发生在首个 checkpoint 边界而非普通发散对话中。
+
+- **发散边界**：发散开始后写 `## Checkpoint：发散`，记录主题、已确认结论、未决问题和下一步；紧邻该写入立即调用 `memory_notify(contract_version=2, file_path="{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md")`。
+- **收敛边界**：总结获得确认后写 `## Checkpoint：收敛`，记录主题、已确认结论、未决问题和下一步；紧邻该写入立即调用 `memory_notify(contract_version=2, file_path="{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md")`。
+- **交接边界**：向 `/project` 交接前写 `## Checkpoint：交接`，记录主题、已确认结论、未决问题和下一步；紧邻该写入立即调用 `memory_notify(contract_version=2, file_path="{草稿目录}/Brainstorm_YYYY-MM-DD_<Topic>.md")`。
+
+上下文压缩后从最近 checkpoint 恢复，不重新开始。
 
 # 阶段1：头脑风暴模式
 
@@ -272,7 +278,7 @@ memory_log(contract_version=2,
 
 **用户**：`创建项目`
 
-**Assistant（Phase 3 Option 1）**：调用 sub-agent Planning Agent，生成计划文件后等待用户确认
+**Assistant（Phase 3 Option 1）**：向 `/project` 公共规划入口传递 checkpoint 草稿的 `handoff`，接收计划文件路径、`plan_revision` 与 `confirmed_hash` 后呈现给用户确认。
 
 # 记忆系统集成
 

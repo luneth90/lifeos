@@ -225,7 +225,7 @@ Ready to go! Quick actions:
 - **Weekend/Monday:** Note the gap, ask if a weekly retrospective is needed
 - **Today's diary already exists:** Read and merge priorities, avoid duplicates
 - **Empty drafts pool:** Focus on project execution
-- **AskUserQuestion no response:** After timeout, continue with a reasonable default (goal = clear backlog), note this in the summary
+- **AskUserQuestion no response:** Never infer, select, or write tasks or projects from the candidate pool; keep the task and related-project managed blocks empty, or write only content explicitly given by the user in this turn, then note that selection is pending in the summary
 - **File read failure:** Skip that step, note "[filename] read failed, skipped" in the summary notes
 
 # Template
