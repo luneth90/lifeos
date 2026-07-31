@@ -79,10 +79,6 @@ types:
 
 - `active` / `frozen` / `done`
 
-### project-doc
-
-- `active` / `archived`
-
 ### knowledge
 
 - `draft`（整理未完成）/ `review`（待复习）/ `revised`（已完成复习）/ `mastered`（已掌握），只升不降

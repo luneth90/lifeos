@@ -10,11 +10,11 @@ parent_skill: research
 > 路径逻辑名（如 `{研究目录}`、`{草稿目录}`）由 Orchestrator 从 `lifeos.yaml` 解析后注入上下文。映射关系见主技能文件 `research/SKILL.md` 的配置块。
 
 > 此文件由 `research/SKILL.md` 的 Orchestrator 读取，作为 Task 工具的完整 prompt 使用。
-> 使用时将 `[user's input]` 替换为用户实际输入内容。
+> 使用时将 `{{RESEARCH_INPUT}}` 替换为用户实际输入内容。
 
 ---
 
-为以下内容制定研究计划：[用户输入]
+为以下内容制定研究计划：{{RESEARCH_INPUT}}
 
 按以下步骤执行：
 
@@ -54,9 +54,11 @@ parent_skill: research
 
 **适用模式判断：**
 
-- `全量应用`：研究主题完全落在该 persona 的核心领域内——用专家 Output Format 完整替换默认章节结构
-- `参考应用`：该 persona 的分析框架相关但主题并非其核心聚焦——仅借用分析框架，保留默认章节
-- `不适用`：无匹配 persona——使用默认报告结构
+- `全量应用`：研究主题完全落在该 persona 的核心领域内——充分采用其分析重点、证据标准和表达风格
+- `参考应用`：该 persona 的分析框架相关但主题并非其核心聚焦——有限采用其分析重点和术语
+- `不适用`：无匹配 persona——使用通用研究内容侧重点
+
+无论适用模式如何，报告的 Frontmatter、章节和标题都只能来自 `Research_Template.md`；persona 不得替换、删除或重排模板结构。
 
 ## 步骤六：创建计划文件
 
@@ -114,7 +116,7 @@ aliases: []
 
 ## 输出结构（仅产出到 {研究目录}/）
 
-- 主笔记（研究报告）: {研究目录}/Domain/Topic/Topic.md
+- 主笔记（研究报告）: 从 `Research_Template.md` 实例化，路径由确认后的计划确定
 - 示例/资源（可选）: {研究目录}/Domain/Topic/examples/
 - 可视化（可选）: {研究目录}/Domain/Topic/Topic_Map.canvas
 ```

@@ -10,11 +10,11 @@
 
 ## GREEN：迁移后行为复核
 
-| 场景 | 预期选择的 `type / status / id / category` | 模板引用 | 验收 |
-| --- | --- | --- |
-| 创建非学习项目 | `project / active / 动态 ID / 选定 category` | `Project_Template.md` | 主技能、规划提示词与执行提示词均使用 `{{PROJECT_INPUT}}`；执行提示词要求直接使用计划中的最终路径并替换分类占位符。 |
-| 归档 done 草稿 | `draft / done / 原动态 ID / 无 category`，追加 `archived: "YYYY-MM-DD"` | 无 | 生命周期和归档技能均保留业务终态，测试禁止 `status: archived`。 |
-| 生成翻译笔记 | `translation / draft → complete / 动态 ID / 无 category` | `Translation_Template.md` | 只有覆盖请求范围、替换全部必填占位符并完成通知后，才允许进入 `complete`。 |
+| 场景 | 实际输入 | 实际选择与产物 | 可回查证据 |
+| --- | --- | --- | --- |
+| 创建非学习项目 | `{{PROJECT_INPUT}} = "开发一个命令行工具"` | 计划选择 `development`；主项目为 `project / active / 动态最终 project_id / development`，从 `Project_Template.md` 渲染。 | `Project_Template.md` 的 `category: "{{CATEGORY}}"` 和 `id: "{{ID}}"`；Project 规划/执行提示词要求直接使用确认后的最终路径与计划分类。 |
+| 归档 done 草稿 | 已有 `type: draft, status: done, id: draft-idea` 的草稿 | 移动后保持 `draft / done / draft-idea / 无 category`，追加 `archived: "YYYY-MM-DD"`，不使用模板。 | `archive/SKILL.zh.md` 的移动后更新规则；`lifecycle.zh.md` 的草稿归档规则；`Draft_Template.md` 的动态 ID。 |
+| 生成不完整翻译 | 请求页范围存在未完成页面 | 生成 `translation / draft / 动态 ID / 无 category`，从 `Translation_Template.md` 渲染；不会进入 `complete`。 | `Translation_Template.md` 的初始 `draft` 与完整性记录；`translate/SKILL.zh.md` 的完整性校验；`lifecycle.zh.md` 的 `draft → complete` 门槛。 |
 
 新上下文复核已逐项确认上述三项结果：非学习项目保留计划 category，归档草稿保留 `done` 并只追加日期，不完整翻译保持 `draft`，三类实体均使用动态 ID。
 

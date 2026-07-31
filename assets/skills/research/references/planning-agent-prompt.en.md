@@ -10,11 +10,11 @@ parent_skill: research
 > Path logical names (e.g., `{research directory}`, `{drafts directory}`) are resolved by the Orchestrator from `lifeos.yaml` and injected into context. See the main skill file `research/SKILL.md` for the mapping.
 
 > This file is read by the `research/SKILL.md` Orchestrator and used as the complete prompt for the Task tool.
-> Replace `[user's input]` with the user's actual input when using.
+> Replace `{{RESEARCH_INPUT}}` with the user's actual input when using.
 
 ---
 
-Create a research plan for the following: [user's input]
+Create a research plan for the following: {{RESEARCH_INPUT}}
 
 Execute the following steps:
 
@@ -54,9 +54,11 @@ Execute the following steps:
 
 **Applicability mode determination:**
 
-- `Full apply`: The research topic falls squarely within the persona's core domain — replace default chapter structure entirely with the persona's Output Format
-- `Reference apply`: The persona's analytical framework is relevant but the topic is not its core focus — borrow the analysis framework only, retain default chapters
-- `Not applicable`: No persona matches — use default report structure
+- `Full apply`: The research topic falls squarely within the persona's core domain — fully apply its analytical focus, evidence standards, and expression style
+- `Reference apply`: The persona's analytical framework is relevant but the topic is not its core focus — apply only its relevant analytical focus and terminology
+- `Not applicable`: No persona matches — use general research content emphasis
+
+For every applicability mode, the report frontmatter, chapters, and headings come only from `Research_Template.md`; a persona must not replace, remove, or reorder the template structure.
 
 ## Step 6: Create Plan File
 
@@ -114,7 +116,7 @@ aliases: []
 
 ## Output Structure (output only to {research directory}/)
 
-- Main note (research report): {research directory}/Domain/Topic/Topic.md
+- Main note (research report): instantiate `Research_Template.md`; the confirmed plan determines its path
 - Examples/resources (optional): {research directory}/Domain/Topic/examples/
 - Visualization (optional): {research directory}/Domain/Topic/Topic_Map.canvas
 ```
