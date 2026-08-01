@@ -537,7 +537,7 @@ git commit -m "feat: 强化翻译图表自动嵌入契约"
 
 **文件：**
 
-- 核对：`docs/superpowers/specs/2026-08-01-translate-pdf-visual-embedding-design.md`
+- 核对：`development/superpowers/specs/2026-08-01-translate-pdf-visual-embedding-design.md`
 - 核对：本计划列出的全部源码、测试、技能和模板。
 
 **接口：**
