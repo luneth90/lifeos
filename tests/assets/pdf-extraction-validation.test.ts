@@ -369,7 +369,7 @@ describe('PDF 提取包完整性校验 CLI', () => {
 
 	it('拒绝缺少或非正的页面尺寸', () => {
 		const missing = completePackage();
-		delete (missing.pages[0] as { page_size?: unknown }).page_size;
+		(missing.pages[0] as { page_size?: unknown }).page_size = undefined;
 		const missingResult = runValidator(missing);
 
 		expect(missingResult.status).toBe(1);
@@ -398,7 +398,7 @@ describe('PDF 提取包完整性校验 CLI', () => {
 	])('拒绝 block bbox：%s', (_name, bbox, code) => {
 		const value = completePackage();
 		if (bbox === undefined) {
-			delete (value.pages[0].blocks[0] as { bbox?: unknown }).bbox;
+			(value.pages[0].blocks[0] as { bbox?: unknown }).bbox = undefined;
 		} else {
 			value.pages[0].blocks[0].bbox = bbox;
 		}
@@ -699,6 +699,25 @@ describe('PDF 消费流程契约', () => {
 			expect(skill.slice(gateIndex, completeIndex), language).toContain(schemaPath);
 			expect(completeIndex, language).toBeGreaterThan(requireIndex);
 			expect(skill.slice(gateIndex, completeIndex), language).toMatch(/保持.*draft|keep.*draft/is);
+		}
+	});
+
+	it('translate 双语流程先完成视觉语义门禁，再裁剪嵌入或自动降级', () => {
+		for (const language of ['zh', 'en']) {
+			const skill = readFileSync(
+				join(process.cwd(), 'assets', 'skills', 'translate', `SKILL.${language}.md`),
+				'utf-8',
+			);
+			const inventoryIndex = skill.indexOf('initial_image_blocks');
+			const semanticGateIndex = skill.indexOf('--require-complete', inventoryIndex);
+			const cropIndex = skill.indexOf('crop_pdf_region.py', semanticGateIndex);
+
+			expect(inventoryIndex, language).toBeGreaterThanOrEqual(0);
+			expect(semanticGateIndex, language).toBeGreaterThan(inventoryIndex);
+			expect(cropIndex, language).toBeGreaterThan(semanticGateIndex);
+			expect(skill, language).toMatch(/semantic_failure[\s\S]{0,160}status: draft/);
+			expect(skill, language).toMatch(/crop_or_anchor_failure[\s\S]{0,160}reference/);
+			expect(skill, language).not.toMatch(/crop_or_anchor_failure[\s\S]{0,160}status: draft/);
 		}
 	});
 });

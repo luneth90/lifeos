@@ -632,6 +632,56 @@ function expectedTranslateContract(locale) {
 	};
 }
 
+function isValidTranslateVisualContract(contract) {
+	if (
+		!hasExactKeys(contract, [
+			'contract_version',
+			'candidate_source',
+			'geometry_fields',
+			'classifications',
+			'crop',
+			'assets',
+			'anchors',
+			'completion',
+			'cleanup',
+		]) ||
+		!hasExactKeys(contract.crop, ['script', 'padding_points', 'exhausted', 'full_page_fallback']) ||
+		!hasExactKeys(contract.assets, ['filename', 'link_style', 'width']) ||
+		!hasExactKeys(contract.completion, [
+			'semantic_failure',
+			'crop_or_anchor_failure',
+			'reference_counts_as_presented',
+			'manual_confirmation',
+		]) ||
+		!hasExactKeys(contract.cleanup, ['retain'])
+	)
+		return false;
+
+	return (
+		contract.contract_version === 1 &&
+		contract.candidate_source === 'initial_image_blocks' &&
+		sameValue(contract.geometry_fields, ['pdf_page_index', 'block.order', 'block.bbox']) &&
+		sameValue(contract.classifications, ['embed', 'markdown', 'latex', 'ignore', 'reference']) &&
+		contract.crop.script === 'read-pdf/scripts/crop_pdf_region.py' &&
+		sameValue(contract.crop.padding_points, [12, 36]) &&
+		contract.crop.exhausted === 'reference' &&
+		contract.crop.full_page_fallback === 'forbidden' &&
+		contract.assets.filename === '<source-sha12>-p<page>-b<order>.png' &&
+		contract.assets.link_style === 'vault_relative_obsidian_embed' &&
+		contract.assets.width === 720 &&
+		sameValue(contract.anchors, [
+			'explicit_figure_reference',
+			'previous_text_block',
+			'subsection_reference',
+		]) &&
+		contract.completion.semantic_failure === 'draft' &&
+		contract.completion.crop_or_anchor_failure === 'reference' &&
+		contract.completion.reference_counts_as_presented === true &&
+		contract.completion.manual_confirmation === 'forbidden' &&
+		contract.cleanup.retain === 'referenced_assets_only'
+	);
+}
+
 function expectedArchiveContract(locale) {
 	const zh = locale === 'zh';
 	const system = zh ? '{系统目录}' : '{system directory}';
@@ -1255,6 +1305,36 @@ export function validateSkillContracts(root) {
 			'中英文操作安全机器契约不一致',
 			assetPath(join(skillRoot, '_shared', 'operation-safety.en.md')),
 		);
+
+	const translateVisualContracts = [];
+	for (const locale of ['zh', 'en']) {
+		const path = join(skillRoot, 'translate', `SKILL.${locale}.md`);
+		const result = existsSync(path)
+			? readMarkedYaml(path, 'translate-visual-contract-v1', () =>
+					add('invalid_marked_yaml', assetPath(path), 'Translate 视觉机器契约无法解析'),
+				)
+			: { found: false, invalid: false, value: null };
+		translateVisualContracts.push(result.value);
+		if (!isValidTranslateVisualContract(result.value)) {
+			add(
+				'invalid_translate_visual_contract',
+				assetPath(path),
+				'Translate 视觉机器契约缺失、字段漂移或值非法',
+			);
+		}
+	}
+	if (
+		translateVisualContracts[0] &&
+		translateVisualContracts[1] &&
+		!sameValue(translateVisualContracts[0], translateVisualContracts[1])
+	) {
+		add(
+			'translate_visual_contract_mismatch',
+			assetPath(join(skillRoot, 'translate', 'SKILL.zh.md')),
+			'Translate 中英文视觉机器契约不一致',
+			assetPath(join(skillRoot, 'translate', 'SKILL.en.md')),
+		);
+	}
 
 	for (const skill of MODIFIABLE_SKILLS) {
 		for (const locale of ['zh', 'en']) {

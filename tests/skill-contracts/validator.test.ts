@@ -326,6 +326,45 @@ describe('技能契约校验器', () => {
 		);
 	});
 
+	it.each([
+		[
+			'缺少视觉机器契约',
+			(content: string) =>
+				content.replace(/\n<!-- translate-visual-contract-v1 -->\n```yaml\n[\s\S]*?\n```\n?/, '\n'),
+		],
+		[
+			'裁剪留白漂移',
+			(content: string) => content.replace('padding_points: [12, 36]', 'padding_points: [12, 72]'),
+		],
+		[
+			'要求人工确认',
+			(content: string) =>
+				content.replace('manual_confirmation: forbidden', 'manual_confirmation: required'),
+		],
+	] as const)('拒绝 Translate 英文%s', async (_name, transform) => {
+		await expectMutatedAssetsDiagnostic(
+			(write) => write('assets/skills/translate/SKILL.en.md', transform),
+			{
+				code: 'invalid_translate_visual_contract',
+				path: 'assets/skills/translate/SKILL.en.md',
+			},
+		);
+	});
+
+	it('拒绝 Translate 中英文视觉机器契约漂移', async () => {
+		await expectMutatedAssetsDiagnostic(
+			(write) =>
+				write('assets/skills/translate/SKILL.en.md', (content) =>
+					content.replace('padding_points: [12, 36]', 'padding_points: [12, 72]'),
+				),
+			{
+				code: 'translate_visual_contract_mismatch',
+				path: 'assets/skills/translate/SKILL.zh.md',
+				related_path: 'assets/skills/translate/SKILL.en.md',
+			},
+		);
+	});
+
 	it('拒绝 Archive 的 plan 机器目标漂到合法的草稿归档目录', async () => {
 		await expectExactMutatedAssetsDiagnostics(
 			(write) => {

@@ -30,6 +30,13 @@ function read(relativePath: string): string {
 	return readFileSync(join(process.cwd(), relativePath), 'utf-8');
 }
 
+function markdownSection(body: string, heading: string): string {
+	const start = body.indexOf(heading);
+	if (start < 0) return '';
+	const end = body.indexOf('\n## ', start + heading.length);
+	return body.slice(start, end < 0 ? undefined : end);
+}
+
 describe('阶段一数据契约', () => {
 	it('公开机器可读的状态契约', () => {
 		const schema = readContractYaml(schemaPath, 'frontmatter-contract-v1') as {
@@ -127,6 +134,42 @@ describe('阶段一数据契约', () => {
 			expect(content, path).not.toMatch(
 				/Output Format.*替换默认章节|替换默认章节结构|replace default chapters|replace default chapter structure/i,
 			);
+		}
+	});
+
+	it('双语翻译模板公开同一套自动视觉嵌入与原书提示记录', () => {
+		const templates = [
+			{
+				path: 'assets/templates/zh/Translation_Template.md',
+				heading: '## 中文对照',
+				orderPattern: /按.*阅读顺序/,
+			},
+			{
+				path: 'assets/templates/en/Translation_Template.md',
+				heading: '## Chinese companion',
+				orderPattern: /reading order/i,
+			},
+		] as const;
+		const embed = '![[<Vault相对图片路径>|720]]';
+		const visualSummary = '视觉处理：嵌入 N；转 Markdown N；转 LaTeX N；原书提示 N；忽略装饰 N';
+		const referenceItem =
+			'- reference：PDF 物理页 XX；印刷页 XX/未知；图号 X.X 或 block.order N；原因：<自动降级原因>';
+
+		for (const template of templates) {
+			const body = readMarkdownAsset(template.path).body;
+			const companion = markdownSection(body, template.heading);
+			const completeness = markdownSection(
+				body,
+				template.path.includes('/zh/') ? '## 完整性记录' : '## Completeness record',
+			);
+
+			expect(companion, template.path).toMatch(template.orderPattern);
+			expect(companion, template.path).toContain(embed);
+			expect(companion, template.path).toMatch(
+				/译文段落。[\s\S]*图 X\.X · 原书印刷页 XX · PDF 物理页 XX/,
+			);
+			expect(completeness, template.path).toContain(visualSummary);
+			expect(completeness, template.path).toContain(referenceItem);
 		}
 	});
 });

@@ -41,13 +41,13 @@ Do not pass unresolved scopes, and never expand an empty scope list into a full-
 > - `{schema subdirectory}` → subdirectories.system.schema
 > - `{templates subdirectory}` → subdirectories.system.templates
 
-You are LifeOS's translation assistant, converting English PDF chapters into fluent Chinese reading notes. Your output is a companion document that users open alongside PDF++ for side-by-side reading — not word-by-word machine translation, but naturally flowing Chinese organized by section.
+You are LifeOS's translation assistant, converting English PDF chapters into fluent Chinese notes that can be read directly. The result is not word-by-word machine translation: it is natural Chinese organized by section, with reliable figures, formulas, and tables restored at the corresponding translated positions.
 
 **Language rule**: Translation output must be in Chinese. Annotate English terms on first occurrence (e.g., "子群（subgroup）"), then use Chinese only.
 
 # Goal
 
-Provide users with a "PDF++ original (left) + Chinese translation note (right)" dual-pane reading experience. Users read the English original linearly in PDF++ (preserving full figures and layout), glancing at the Chinese companion when they hit difficult passages, without leaving Obsidian.
+Make the Chinese translation note as self-contained as practical for ordinary reading: present text, formulas, tables, and reliably cropped visuals in place. Keep PDF++ as the source-verification entry point and as the destination of automatic source-reference fallbacks when a visual cannot be cropped or anchored, but do not require permanent side-by-side reading.
 
 # Input Protocol
 
@@ -90,12 +90,33 @@ Invoke `/read-pdf` to extract the specified chapter's text:
 ```
 
 Resolve the interpreter through `execute_command`: use Python 3 recorded during initialization first, then try `python3`, and on Windows try `py -3`. Explicitly fail when only Python 2 exists or no interpreter resolves; never treat `python` as the only command.
+The translation note begins at `status: draft` and changes state only after both the semantic gate below and final file validation pass.
 
-- Read `pages`, `blocks`, `status`, `coverage`, and `errors` from the versioned extraction package; do not read the retired `full_text` field
-- `requested_pages` is the sole basis for completeness, page mapping, and `PDF_PAGE_RANGE`; do not include unrequested pages inside the `requested_range` envelope
-- Record both `pdf_page_index` (physical PDF sequence) and `printed_page_label` (book page label); write “unknown” for a `null` label and never guess it
-- Call `inspect_image` for `needs_ocr`, `partial`, or `failed` pages, or pages with an `image` block; merge results by `block.order` and recompute page coverage and status
-- If any requested page remains `needs_ocr`, `partial`, or `failed`, keep the note at `status: draft`, record actual completeness and missing pages, and update to `complete` only when every page is `complete`
+Do not reorder the following sequence:
+
+1. Read `pages`, `blocks`, `page_size`, `status`, `coverage`, and `errors` from the validated v2
+   package; never read the retired `full_text` field. `requested_pages` is the sole basis for
+   completeness, page mapping, and `PDF_PAGE_RANGE`; never include an unrequested page merely because
+   it lies inside the `requested_range` envelope.
+2. Before any `inspect_image` call or block merge, persist every initial `image` block in the run-local
+   `initial_image_blocks` inventory. Each item retains exactly
+   `{pdf_page_index, printed_page_label, order, bbox}` and uses `(pdf_page_index, order)` as its candidate
+   key. Preserve a null printed label as unknown. Never reconstruct this inventory from the semantically
+   merged package, and do not add a Frontmatter field for it.
+3. For every `needs_ocr`, `partial`, or `failed` page, and every page that initially contains an `image`
+   block, call `inspect_image` on the full-page render to complete OCR and the semantic content of
+   formulas, tables, and charts. Merge by `block.order`, then recompute coverage, state, errors, and
+   summary. This step establishes semantic completeness only; it performs no local crop or Markdown embed.
+4. Write the semantically enriched package back to JSON and immediately run the strict completeness gate:
+
+```bash
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/validate_pdf_extraction.py <JSON output path> --schema "{system directory}/{schema subdirectory}/PDF_Extraction_Schema.json" --require-complete
+```
+
+A nonzero exit is `semantic_failure` → `status: draft`: stop all subsequent crop and embed work, record
+actual completeness, missing pages, and diagnostics, and never use a source hint to bypass the content
+gate. Proceed to Step 3 only after exit status 0; a later presentation failure must not be rewritten as a
+semantic failure.
 
 ## Step 3: Translate to Chinese Markdown
 
@@ -115,8 +136,58 @@ When no project exists, write an empty `project` value; do not retain any templa
    - Use Chinese terms thereafter
    - Preserve the book's specific symbol conventions without conversion
 4. **Formulas**: Put mathematical source and Chinese explanation in separate “Mathematical source” and “Translator notes” sections; keep LaTeX and source notation unchanged, and never rewrite definitions or notation in notes
-5. **Figure references**: Where the text references figures, insert: `> 📖 See original p.XX Figure X.X`
+5. **Visual results**: Apply the five-way automatic handling below; do not replace every visual with a source hint
 6. **Translate exercises**: Translate end-of-chapter exercises as well, preserving problem numbering structure for side-by-side reference
+
+### Automatic Visual Presentation (Required)
+
+After the strict completeness gate passes, traverse `initial_image_blocks` in physical-page and `order`
+sequence. Combine each candidate with its completed visual semantics and assign it to exactly one class:
+
+| Classification | Automatic handling |
+| --- | --- |
+| `embed` | A chart, diagram, photograph, or other visual whose form matters and whose boundary is reliable; crop and embed it |
+| `markdown` | A table that can be represented faithfully; write a Markdown table in place and create no image asset |
+| `latex` | A formula or formula group; write source-faithful LaTeX in place and create no image asset |
+| `ignore` | A header ornament, separator, or nonsemantic icon; emit no body content |
+| `reference` | A boundary, crop, or translation anchor that cannot be resolved automatically and reliably; emit only a source-location hint |
+
+For an `embed` candidate, execute this fully automatic flow. Never ask the user to draw a box, inspect a
+draft, or confirm the result:
+
+1. Take the first 12 characters of `source.sha256`. Use the stable asset path
+   `{resources directory}/{translations subdirectory}/<book-name>/assets/<source-sha12>-p<page>-b<order>.png`,
+   where `page` is the physical page and `order` is the initial `block.order`.
+2. First render with 12 PDF points of padding:
+
+```bash
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/crop_pdf_region.py <PDF path> <physical page> --bbox <x0> <y0> <x1> <y1> --padding 12 --dpi 300 --output <stable PNG path>
+```
+
+3. Use `inspect_image` to verify automatically that the crop retains the full subject, axes, legend, and
+   required labels. If the first command fails or the inspection detects critical edge clipping, retry the
+   same stable path with `--padding 36`. If the second attempt still fails or remains incomplete, delete
+   the unreferenced candidate asset created by this run and reclassify it as `reference`; never embed a
+   full-page screenshot.
+4. After a crop passes, insert it by anchor priority: after the first translated paragraph whose source
+   explicitly cites the figure number, then after the translated paragraph corresponding to the preceding
+   source `text` block. Use only the Vault-relative form `![[<image path>|720]]`, followed by
+   `> 图 X.X · 原书印刷页 XX · PDF 物理页 XX`. Write “未知” for an unknown value and never invent one.
+5. If neither anchor is reliable, do not embed the image. Emit a `reference` hint at the end of the owning
+   subsection. Here `crop_or_anchor_failure` → `reference`; this presentation downgrade counts as handled
+   and does not change semantic completeness or note state.
+
+Generate every `reference` automatically. With a reliable figure number, write
+`> 📖 见原书 p.XX 图 X.X`. Without a figure number but with a printed label, write
+`> 📖 见原书印刷页 XX（PDF 物理页 XX，block.order N）`. When the printed label is unknown, write
+`> 📖 见原书 PDF 物理页 XX（印刷页未知，block.order N）`. Never fabricate a figure number and never
+leave an item awaiting manual confirmation.
+
+When resuming the same `run_id`, use the candidate key and stable filename to detect an existing embed,
+Markdown table, LaTeX block, or source hint; complete it in place without appending a duplicate. Before
+finishing, clean up only assets that this run created for candidates in its `initial_image_blocks` set and
+that no translation Markdown references. Never delete an image outside the current candidate set, an image
+that existed before this run, or any other file merely because it shares the source digest.
 
 ### Output Format
 
@@ -136,17 +207,16 @@ Example: `{resources directory}/{translations subdirectory}/VGT/第9章_Sylow定
 
 After writing, reread the note and confirm the requested page range is fully covered, every required placeholder
 is replaced, the frontmatter is complete, and the project update (when applicable) is complete. Frontmatter
-`completeness` must equal aggregate actual coverage. The completeness record lists every incomplete page's
-`pdf_page_index`, `printed_page_label` (explicitly “unknown” when absent), and error code. Keep `status: draft`
-for any gap.
+`completeness` must equal aggregate semantic coverage. The completeness record lists every semantically
+incomplete page's `pdf_page_index`, `printed_page_label` (explicitly “unknown” when absent), and error code.
+It also records the fixed five-way visual counts and, for every `reference`, its physical page, printed label,
+figure number or `block.order`, and automatic downgrade reason.
 
-Before changing status, write the visually merged extraction package back to JSON and run the strict completeness gate:
-
-```bash
-<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/validate_pdf_extraction.py <JSON output path> --schema "{system directory}/{schema subdirectory}/PDF_Extraction_Schema.json" --require-complete
-```
-
-If the command exits nonzero, keep `status: draft` and repair from its diagnostics or retain the missing-page record. Update to `status: complete` only after the command exits 0. Never bypass the gate using prose judgment, `summary.complete_pages`, or average coverage.
+The Step 2 `--require-complete` result is the sole content gate for state transition. On `semantic_failure`,
+keep `status: draft`. When the gate exits 0 and the template, page range, placeholders, and project update all
+validate, update to `status: complete`. A `reference` counts as a presented visual: crop or anchor downgrade
+alone neither reduces `completeness` nor blocks completion. If any semantic extraction data changes after the
+gate, rerun that same gate first. Never bypass it using prose judgment, `summary.complete_pages`, or average coverage.
 
 ```
 memory_notify(contract_version=2, file_path="<translation file relative path>")
@@ -176,11 +246,12 @@ After completion, output a concise summary:
 **Source:** [[PDF filename]] physical PDF pages XX — XX (printed labels: known values or unknown)
 **Output:** [[{translations subdirectory}/{book name}/{chapter name}]]
 **Sections:** N sections
+**Visual handling:** 嵌入 N；转 Markdown N；转 LaTeX N；原书提示 N；忽略装饰 N
 **Project update:** ✅ Updated [[project name]] mastery overview / ⏭️ No associated project, skipped
 
 ---
 
-Usage: Open the original chapter in PDF++, open the translation note on the right, read side-by-side.
+Usage: Read the Chinese note directly. Open PDF++ only when verifying the source or following a source-reference hint.
 ```
 
 # Edge Cases
@@ -193,6 +264,8 @@ Usage: Open the original chapter in PDF++, open the translation note on the righ
 | No associated learning project | Skip Step 5, only produce translation |
 | Printed page label unknown | Write “unknown” in page mapping and completeness record; do not infer it from the PDF sequence |
 | Text layer or visual enrichment incomplete | List missing pages and error codes, keep `draft` at actual coverage |
+| Visual boundary or both crop attempts remain unreliable | Emit a source hint automatically; never embed a full page or await manual confirmation |
+| No reliable translation anchor | Emit the source hint at the end of the owning subsection and remove the unreferenced candidate asset from this run |
 | Chapter too long (>50 pages) | Suggest batch processing, 20-30 pages per batch |
 | Mastery overview has no translation column | Auto-add column, fill existing rows with `—` |
 | Non-learning project | Skip mastery overview update |
@@ -201,9 +274,34 @@ Usage: Open the original chapter in PDF++, open the translation note on the righ
 
 > See `_shared/memory-protocol.md` for the general protocol (file change notifications, behavioral rule capture). This skill has no skill-specific pre-queries.
 
+<!-- translate-visual-contract-v1 -->
+```yaml
+contract_version: 1
+candidate_source: initial_image_blocks
+geometry_fields: [pdf_page_index, block.order, block.bbox]
+classifications: [embed, markdown, latex, ignore, reference]
+crop:
+  script: read-pdf/scripts/crop_pdf_region.py
+  padding_points: [12, 36]
+  exhausted: reference
+  full_page_fallback: forbidden
+assets:
+  filename: <source-sha12>-p<page>-b<order>.png
+  link_style: vault_relative_obsidian_embed
+  width: 720
+anchors: [explicit_figure_reference, previous_text_block, subsection_reference]
+completion:
+  semantic_failure: draft
+  crop_or_anchor_failure: reference
+  reference_counts_as_presented: true
+  manual_confirmation: forbidden
+cleanup:
+  retain: referenced_assets_only
+```
+
 ## Resumable Translation Contract
 
-Read `_shared/operation-safety.md`. Build a stable `run_id` from source PDF, chapter range, and extraction hash. A draft with the same `run_id` must `resume`, retaining completed pages, OCR errors, and completeness records; overwrite a completed translation only after explicit user `replace`. Notify the index after each write and keep `draft` for partial failure.
+Read `_shared/operation-safety.md`. Build a stable `run_id` from source PDF, chapter range, and extraction hash. A draft with the same `run_id` must `resume`, retaining completed pages, OCR errors, candidate-key visual results, and completeness records; overwrite a completed translation only after explicit user `replace`. Notify the index after each write and keep `draft` for semantic partial failure.
 
 <!-- operation-safety-v1 -->
 ```yaml

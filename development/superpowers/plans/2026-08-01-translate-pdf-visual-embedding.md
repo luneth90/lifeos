@@ -403,7 +403,7 @@ git commit -m "feat: 增加 PDF 区域裁剪工具"
 - 产出：Vault 相对 Obsidian 嵌入和视觉处理统计。
 - 产出：中英文完全一致的 `translate-visual-contract-v1` YAML 机器契约。
 
-- [ ] **步骤一：写 translate 机器契约 RED 测试**
+- [x] **步骤一：写 translate 机器契约 RED 测试**
 
 在 `validator.test.ts` 中先要求两个技能包含并通过以下精确契约：
 
@@ -433,7 +433,7 @@ cleanup:
 
 先增加基线 `validateAssets()` 诊断期望，再用临时 mutation 覆盖三类回归：删除契约、把第二次 padding 改为 72、把 `manual_confirmation` 改为 `required`。
 
-- [ ] **步骤二：运行契约 RED 测试**
+- [x] **步骤二：运行契约 RED 测试**
 
 ```bash
 npx vitest run tests/skill-contracts/validator.test.ts
@@ -441,7 +441,7 @@ npx vitest run tests/skill-contracts/validator.test.ts
 
 预期：当前技能缺少 marker 和校验器逻辑，因此新增测试失败；现有 validator 测试仍保持原有结果。
 
-- [ ] **步骤三：写模板与状态 RED 测试**
+- [x] **步骤三：写模板与状态 RED 测试**
 
 在 `data-contract.test.ts` 中解析中英文 Translation 模板，验证两者都提供：
 
@@ -452,7 +452,7 @@ npx vitest run tests/skill-contracts/validator.test.ts
 
 在 `pdf-extraction-validation.test.ts` 的 translate 消费流程测试中增加行为顺序断言：先保存初始视觉清单，再完成视觉语义校验，之后才裁剪与嵌入；`crop_or_anchor_failure` 不得出现在 `status: draft` 分支，`semantic_failure` 必须进入 draft 分支。
 
-- [ ] **步骤四：实现 translate 双语工作流**
+- [x] **步骤四：实现 translate 双语工作流**
 
 同步修改两个技能：
 
@@ -468,7 +468,7 @@ npx vitest run tests/skill-contracts/validator.test.ts
 
 在两个文件加入同值 `translate-visual-contract-v1` YAML 块，机器字段使用上一步的精确值。
 
-- [ ] **步骤五：更新中英文 Translation 模板**
+- [x] **步骤五：更新中英文 Translation 模板**
 
 不增加 frontmatter 字段。在“中文对照”注释中加入以下输出形状：
 
@@ -488,7 +488,7 @@ npx vitest run tests/skill-contracts/validator.test.ts
 
 英文模板使用英文指令，但规定的最终笔记结构、Obsidian 语法和五类计数完全相同。
 
-- [ ] **步骤六：实现技能契约校验器**
+- [x] **步骤六：实现技能契约校验器**
 
 在 `validate-skill-contracts.mjs` 增加 `isValidTranslateVisualContract()`，使用 `hasExactKeys()` 和 `sameValue()` 对上述对象逐层精确校验。对每个 translate 语言文件读取 marker：
 
@@ -503,7 +503,7 @@ const visualContract = readMarkedYaml(
 非法或缺失时产生 `invalid_translate_visual_contract`；中英文机器对象不完全相等时产生
 `translate_visual_contract_mismatch`。继续保留现有翻译目标目录验证。
 
-- [ ] **步骤七：运行任务三定向验证并修正**
+- [x] **步骤七：运行任务三定向验证并修正**
 
 ```bash
 npx vitest run tests/skill-contracts/validator.test.ts \
@@ -517,7 +517,7 @@ git diff --check
 
 预期：所有测试和契约校验退出 0；中英文契约不出现字段或值漂移。
 
-- [ ] **步骤八：提交任务三**
+- [x] **步骤八：提交任务三**
 
 ```bash
 git add assets/skills/translate/SKILL.zh.md \
