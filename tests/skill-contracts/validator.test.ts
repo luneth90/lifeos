@@ -192,11 +192,37 @@ describe('技能契约校验器', () => {
 			},
 		],
 		[
+			'客户端专有样例索引越界',
+			(write) =>
+				write('assets/skills/_shared/client-capabilities.en.md', (content) =>
+					content.replace(
+						'client_specific_example_indexes: [0]',
+						'client_specific_example_indexes: [99]',
+					),
+				),
+			{
+				code: 'invalid_capability_contract',
+				path: 'assets/skills/_shared/client-capabilities.en.md',
+			},
+		],
+		[
 			'正文泄漏客户端专有能力名',
 			(write) =>
 				write(
 					'assets/skills/ask/SKILL.en.md',
 					(content) => `${content}\nUse AskUserQuestion to continue.\n`,
+				),
+			{
+				code: 'client_specific_capability_name',
+				path: 'assets/skills/ask/SKILL.en.md',
+			},
+		],
+		[
+			'调用语境泄漏单词型客户端专有能力名',
+			(write) =>
+				write(
+					'assets/skills/ask/SKILL.en.md',
+					(content) => `${content}\nUse Task to spawn a worker.\n`,
 				),
 			{
 				code: 'client_specific_capability_name',
@@ -240,6 +266,15 @@ describe('技能契约校验器', () => {
 		],
 	])('拒绝%s', async (_name, mutate, expected) => {
 		await expectMutatedAssetsDiagnostic(mutate, expected);
+	});
+
+	it('允许普通 Task A 管线标签', async () => {
+		await expectMutatedAssetsOk((write) =>
+			write(
+				'assets/skills/digest/references/run-pipeline.en.md',
+				(content) => `${content}\n#### Task E: Local-only source\n`,
+			),
+		);
 	});
 
 	it.each([

@@ -115,7 +115,19 @@ describe('阶段二执行契约', () => {
 			for (const [name, definition] of Object.entries(entries)) {
 				expect(definition, `${name} 缺少 purpose`).toHaveProperty('purpose');
 				expect(definition, `${name} 缺少 examples`).toHaveProperty('examples');
+				expect(definition, `${name} 缺少专有样例索引`).toHaveProperty(
+					'client_specific_example_indexes',
+				);
 				expect(definition, `${name} 缺少 fallback`).toHaveProperty('fallback');
+				const examples = definition.examples as unknown[];
+				const indexes = definition.client_specific_example_indexes as unknown[];
+				expect(indexes.length, `${name} 至少声明一个客户端专有样例`).toBeGreaterThan(0);
+				for (const index of indexes) {
+					expect(Number.isInteger(index), `${name} 专有样例索引必须为整数`).toBe(true);
+					expect(index, `${name} 专有样例索引越界`).toBeGreaterThanOrEqual(0);
+					expect(index, `${name} 专有样例索引越界`).toBeLessThan(examples.length);
+					expect(typeof examples[index as number], `${name} 专有样例必须是字符串`).toBe('string');
+				}
 			}
 		}
 		expectSameMachineShape(zh, en, 'client-capabilities');
@@ -125,7 +137,7 @@ describe('阶段二执行契约', () => {
 		for (const [skill, expectedCapabilities] of [
 			['today', ['ask_user']],
 			['revise', ['ask_user']],
-			['digest', ['web_search', 'web_fetch']],
+			['digest', ['web_search', 'web_fetch', 'execute_command']],
 		] as const) {
 			for (const locale of ['zh', 'en'] as const) {
 				const path = `assets/skills/${skill}/SKILL.${locale}.md`;
@@ -196,12 +208,16 @@ describe('阶段二执行契约', () => {
 		}
 	});
 
-	it('读取与翻译技能通过 execute_command 解析 Python 3', () => {
+	it('脚本型技能通过 execute_command 解析 Python 3', () => {
 		for (const path of [
 			'assets/skills/read-pdf/SKILL.zh.md',
 			'assets/skills/read-pdf/SKILL.en.md',
 			'assets/skills/translate/SKILL.zh.md',
 			'assets/skills/translate/SKILL.en.md',
+			'assets/skills/digest/SKILL.zh.md',
+			'assets/skills/digest/SKILL.en.md',
+			'assets/skills/digest/references/run-pipeline.zh.md',
+			'assets/skills/digest/references/run-pipeline.en.md',
 		]) {
 			const content = read(path);
 			expect(content, path).toContain('execute_command');
@@ -209,7 +225,7 @@ describe('阶段二执行契约', () => {
 			expect(content, path).toContain('py -3');
 			expect(content, path).toMatch(/初始化阶段|initialization/i);
 			expect(content, path).toMatch(/Python 2|Python 2/);
-			expect(content, path).not.toMatch(/(?:^|\n)python\s+\.agents\/skills\/read-pdf/m);
+			expect(content, path).not.toMatch(/(?:^|\n)python\s+\.agents\/skills\/(?:read-pdf|digest)/m);
 		}
 	});
 });

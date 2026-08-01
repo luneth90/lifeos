@@ -86,7 +86,8 @@ memory_context(
 
 ### 前置检查
 
-1. 读取 `_shared/client-capabilities.md`，通过 `execute_command` 按共享协议解析 Python 3
+1. 读取 `_shared/client-capabilities.md`，通过 `execute_command` 按共享协议解析 Python 3：
+   优先使用初始化阶段记录的解释器，其次尝试 `python3`，Windows 最后尝试 `py -3`；只有 Python 2 或无法解析时明确失败
 2. 读取并解析配置笔记（按 `references/config-parser.md` 规范）
 
 能力不可用时必须执行共享降级方案：`web_search` 缺失时仅使用已提供或本地来源并记录限制；

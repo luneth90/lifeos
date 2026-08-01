@@ -4,8 +4,9 @@ When the user runs `/digest` or `/digest <topic>`, follow this pipeline to fetch
 
 ## Preflight
 
-1. Resolve Python 3 through `execute_command` according to the shared capability contract
-   - unavailable → ask the user to install Python 3 and stop
+1. Read `_shared/client-capabilities.md` and resolve Python 3 through `execute_command`
+   - use the interpreter recorded during initialization first, then try `python3`, and on Windows finally try `py -3`
+   - only Python 2 exists or no interpreter resolves → ask the user to install Python 3 and stop
 2. Scan `.md` files under `{system directory}/{digest subdirectory}/`
    - no config files → automatically enter Setup mode (see `setup-guide.md`)
    - topic specified → load only the matching file

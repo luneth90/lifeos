@@ -4,8 +4,9 @@
 
 ## 前置检查
 
-1. 通过 `execute_command` 按共享能力协议解析 Python 3
-   - 不可用 → 提示用户安装 Python 3 并重试
+1. 读取 `_shared/client-capabilities.md`，通过 `execute_command` 解析 Python 3
+   - 优先使用初始化阶段记录的解释器，其次尝试 `python3`，Windows 最后尝试 `py -3`
+   - 只有 Python 2 或无法解析 → 提示用户安装 Python 3 并停止
 2. 扫描 `{系统目录}/{信息子目录}/` 下的 `.md` 文件
    - 无配置文件 → 自动进入 Setup 模式（见 `setup-guide.md`）
    - 指定了主题名 → 只加载匹配文件

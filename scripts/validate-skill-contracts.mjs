@@ -144,13 +144,6 @@ function escapeRegularExpression(value) {
 	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function isClientSpecificCapabilityExample(value) {
-	return (
-		typeof value === 'string' &&
-		(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(value) || /^(?:[A-Z][a-z0-9]*){2,}$/.test(value))
-	);
-}
-
 function isSafeFileName(value) {
 	return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value);
 }
@@ -468,6 +461,29 @@ function sameCapabilityContract(left, right, path = '') {
 		);
 	}
 	return left === right;
+}
+
+function isValidCapabilityContract(contract) {
+	if (contract?.contract_version !== 1 || !isRecord(contract.capabilities)) return false;
+	return Object.values(contract.capabilities).every((definition) => {
+		if (
+			!isRecord(definition) ||
+			typeof definition.purpose !== 'string' ||
+			typeof definition.fallback !== 'string' ||
+			!Array.isArray(definition.examples) ||
+			!definition.examples.every((example) => typeof example === 'string') ||
+			!Array.isArray(definition.client_specific_example_indexes) ||
+			definition.client_specific_example_indexes.length === 0
+		)
+			return false;
+		const indexes = definition.client_specific_example_indexes;
+		return (
+			new Set(indexes).size === indexes.length &&
+			indexes.every(
+				(index) => Number.isInteger(index) && index >= 0 && index < definition.examples.length,
+			)
+		);
+	});
 }
 
 function collectSubdirectoryPaths(directory, value) {
@@ -917,6 +933,18 @@ export function validateSkillContracts(root) {
 		: { found: false, invalid: false, value: null };
 	const capabilitiesZh = capabilitiesZhResult.value;
 	const capabilitiesEn = capabilitiesEnResult.value;
+	for (const [path, result] of [
+		[capabilitiesZhPath, capabilitiesZhResult],
+		[capabilitiesEnPath, capabilitiesEnResult],
+	]) {
+		if (!result.invalid && result.value && !isValidCapabilityContract(result.value)) {
+			add(
+				'invalid_capability_contract',
+				assetPath(path),
+				'能力契约必须声明有效的 examples 与客户端专有样例索引',
+			);
+		}
+	}
 	if (
 		!capabilitiesZhResult.invalid &&
 		!capabilitiesEnResult.invalid &&
@@ -937,8 +965,13 @@ export function validateSkillContracts(root) {
 	const clientSpecificCapabilityNames = new Set(
 		capabilitiesZh?.capabilities && typeof capabilitiesZh.capabilities === 'object'
 			? Object.values(capabilitiesZh.capabilities).flatMap((definition) =>
-					definition && typeof definition === 'object' && Array.isArray(definition.examples)
-						? definition.examples.filter(isClientSpecificCapabilityExample)
+					definition &&
+					typeof definition === 'object' &&
+					Array.isArray(definition.examples) &&
+					Array.isArray(definition.client_specific_example_indexes)
+						? definition.client_specific_example_indexes
+								.map((index) => definition.examples[index])
+								.filter((name) => typeof name === 'string')
 						: [],
 				)
 			: [],
@@ -950,7 +983,8 @@ export function validateSkillContracts(root) {
 			: read(path);
 		for (const name of clientSpecificCapabilityNames) {
 			const escaped = escapeRegularExpression(name);
-			if (new RegExp(`(?:^|[^A-Za-z0-9_])${escaped}(?:$|[^A-Za-z0-9_])`, 'm').test(content)) {
+			const searchable = name === 'Task' ? content.replace(/\bTask [A-Z]:/g, '') : content;
+			if (new RegExp(`(?:^|[^A-Za-z0-9_])${escaped}(?:$|[^A-Za-z0-9_])`, 'm').test(searchable)) {
 				add(
 					'client_specific_capability_name',
 					assetPath(path),

@@ -86,7 +86,7 @@ Follow `references/run-pipeline.md` for the fetch pipeline.
 
 ### Preflight
 
-1. Read `_shared/client-capabilities.md` and resolve Python 3 through `execute_command` according to the shared contract
+1. Read `_shared/client-capabilities.md` and resolve Python 3 through `execute_command`: use the interpreter recorded during initialization first, then try `python3`, and on Windows finally try `py -3`; explicitly fail when only Python 2 exists or no interpreter resolves
 2. Read and parse the config note according to `references/config-parser.md`
 
 When a capability is unavailable, apply the shared fallback: without `web_search`, use only supplied or local sources and record the limitation; without `web_fetch`, record the access failure and do not use inaccessible sources for key conclusions; without `execute_command`, stop script-backed fetching and retain a copyable command.
