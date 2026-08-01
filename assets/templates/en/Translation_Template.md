@@ -5,7 +5,6 @@ created: "{{DATE}}"
 source: "{{SOURCE}}"
 project: "{{PROJECT}}"
 pdf_page_range: "{{PDF_PAGE_RANGE}}"
-pdf_page_labels: "{{PDF_PAGE_LABELS}}"
 completeness: "{{COMPLETENESS}}"
 domain: "{{DOMAIN}}"
 status: draft
@@ -18,11 +17,6 @@ id: "{{ID}}"
 > [!info] Source and range
 > Source: {{SOURCE}}
 > Physical PDF page range: {{PDF_PAGE_RANGE}}
-> Printed page labels: {{PDF_PAGE_LABELS}}
-
-## Page mapping
-
-<!-- AI instruction: Record physical PDF and printed labels page by page; write “unknown” for an unknown printed label and never infer it. -->
 
 ## Chinese companion
 
@@ -32,9 +26,9 @@ id: "{{ID}}"
 
 ![[<Vault相对图片路径>|720]]
 
-> 图 X.X · 原书印刷页 XX · PDF 物理页 XX
+> 图 X.X
 
-When the boundary or anchor cannot be resolved automatically, do not embed an image; emit the source-reference fallback instead. -->
+When the boundary or anchor cannot be resolved automatically, do not embed an image; emit the source-reference fallback instead: with a reliable figure number, `> 📖 见原书图 X.X`; without one, `> 📖 见原书相关图表（PDF 物理页 XX，block.order N）`. -->
 
 ## Mathematical source
 
@@ -46,10 +40,10 @@ When the boundary or anchor cannot be resolved automatically, do not embed an im
 
 ## Completeness record
 
-<!-- AI instruction: Record completed sections, each missing page's physical/printed labels and error code, and actual completeness. Update status to complete only when semantic content covers the full requested range; a crop or anchor failure already downgraded to reference is not a semantic gap. Append exactly:
+<!-- AI instruction: Record completed sections, each missing page's physical PDF page and error code, and actual completeness. Update status to complete only when semantic content covers the full requested range; a crop or anchor failure already downgraded to reference is not a semantic gap. Append exactly:
 
 视觉处理：嵌入 N；转 Markdown N；转 LaTeX N；原书提示 N；忽略装饰 N
 
 Record every reference item using:
-- reference：PDF 物理页 XX；印刷页 XX/未知；图号 X.X 或 block.order N；原因：<自动降级原因>
+- reference：PDF 物理页 XX；图号 X.X 或 block.order N；原因：<自动降级原因>
 -->

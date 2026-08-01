@@ -96,13 +96,13 @@ memory_context(
 处理顺序不得调整：
 
 1. 读取已通过基础校验的 v2 提取包中的 `pages`、`blocks`、`page_size`、`status`、`coverage` 与
-   `errors`；不得读取已废弃的 `full_text`。`requested_pages` 是完整性、页码映射与
+   `errors`；不得读取已废弃的 `full_text`。`requested_pages` 是完整性与
    `PDF_PAGE_RANGE` 的唯一范围依据，不得把 `requested_range` 包络内未请求的页写入翻译或
    completeness。
 2. 在任何 `inspect_image` 或 block 合并前，把初始包中的每个 `image` block 保存为本次运行的
-   `initial_image_blocks` 临时清单。每项固定保留 `{pdf_page_index, printed_page_label, order, bbox}`，
-   以 `(pdf_page_index, order)` 为候选键；印刷页码为 `null` 时保持未知。不得从语义合并后的包反推
-   这份清单，也不得为此新增 Frontmatter 字段。
+   `initial_image_blocks` 临时清单。每项固定保留 `{pdf_page_index, order, bbox}`，以
+   `(pdf_page_index, order)` 为候选键。不得从语义合并后的包反推这份清单，也不得为此新增
+   Frontmatter 字段。
 3. 对 `needs_ocr`、`partial`、`failed` 页，或初始含 `image` block 的页面使用整页渲染调用
    `inspect_image`，完成 OCR、公式、表格和图表的语义识别；按 `block.order` 合并结果并重新计算
    coverage、状态、错误和 summary。此时只保证内容语义完整，不进行局部裁剪或 Markdown 嵌入。
@@ -121,9 +121,8 @@ memory_context(
 基于提取的原文，按小节组织翻译产出。
 
 在生成前必须读取 `{系统目录}/{模板子目录}/Translation_Template.md`，并替换全部必填占位符：
-`TITLE`、`DATE`、`SOURCE`、`PROJECT`、`PDF_PAGE_RANGE`、`PDF_PAGE_LABELS`、`COMPLETENESS`、`DOMAIN`、`ID`。
-`PDF_PAGE_LABELS` 必须按 `requested_pages` 顺序从 `printed_page_label` 生成；`null` 写为“未知”。
-项目不存在时将 `project` 写为空字符串；不得保留模板占位符。
+`TITLE`、`DATE`、`SOURCE`、`PROJECT`、`PDF_PAGE_RANGE`、`COMPLETENESS`、`DOMAIN`、`ID`。项目不存在时将
+`project` 写为空字符串；不得保留模板占位符。
 
 ### 翻译原则
 
@@ -166,13 +165,12 @@ memory_context(
    删除本次运行产生且未被 Markdown 引用的候选资产，将其改为 `reference`；禁止嵌入整页截图。
 4. 裁剪通过后按锚点优先级插入：原文首次明确图号引用段落之后 → 候选前一个 `text` block 对应的
    译文段落之后。嵌入固定使用 Vault 相对语法 `![[<图片路径>|720]]`，下一行写
-   `> 图 X.X · 原书印刷页 XX · PDF 物理页 XX`；未知项明确写“未知”，不得编造。
+   `> 图 X.X`；无可靠图号时写 `> 原书图表`。不得编造图号。
 5. 若上述两个锚点都不可靠，不嵌图片；在所属小节末尾生成 `reference` 原书提示。此时
    `crop_or_anchor_failure` → `reference`，该呈现降级计为已处理，不改变语义完整性或笔记状态。
 
-`reference` 文案必须完全自动生成：有可靠图号时写 `> 📖 见原书 p.XX 图 X.X`；无图号但有印刷页时
-写 `> 📖 见原书印刷页 XX（PDF 物理页 XX，block.order N）`；印刷页未知时写
-`> 📖 见原书 PDF 物理页 XX（印刷页未知，block.order N）`。不得伪造图号，也不得留下待人工确认项。
+`reference` 文案必须完全自动生成：有可靠图号时写 `> 📖 见原书图 X.X`；无可靠图号时写
+`> 📖 见原书相关图表（PDF 物理页 XX，block.order N）`。不得伪造图号，也不得留下待人工确认项。
 
 同一 `run_id` 恢复时，以候选键和稳定文件名检查现有嵌图、Markdown、LaTeX 或原书提示，原位补全而
 不重复追加。结束前只清理本次 `initial_image_blocks` 候选集合中由当前运行新建且未被任何翻译
@@ -196,8 +194,8 @@ Markdown 引用的资产；同一来源摘要下不属于本次候选集合的�
 
 落盘后回读文件，确认请求页范围全部覆盖、全部必填占位符已替换、Frontmatter 完整且项目回填（如适用）
 已完成。Frontmatter `completeness` 必须等于请求页的实际语义 coverage；“完整性记录”列出每个语义
-非完整页的 `pdf_page_index`、`printed_page_label`（未知则明确写未知）与错误码，并固定记录五类视觉
-计数以及每个 `reference` 的物理页、印刷页、图号或 `block.order` 和自动降级原因。
+非完整页的 `pdf_page_index` 与错误码，并固定记录五类视觉计数以及每个 `reference` 的物理页、图号或
+`block.order` 和自动降级原因。
 
 步骤二的 `--require-complete` 结果是状态转换的唯一内容门禁。若为 `semantic_failure`，保持
 `status: draft`；若门禁已退出 0，且模板、页范围、占位符和项目回填校验均通过，则更新为
@@ -240,7 +238,7 @@ memory_notify(contract_version=2, file_path="<项目文件相对路径>")
 ```markdown
 ## 📖 翻译完成
 
-**来源:** [[PDF文件名]] PDF 物理页 XX — XX（印刷页码：已知值或未知）
+**来源:** [[PDF文件名]] PDF 物理页 XX — XX
 **产出:** [[{翻译子目录}/{书名}/{章节名}]]
 **小节数:** N 个小节
 **视觉处理:** 嵌入 N；转 Markdown N；转 LaTeX N；原书提示 N；忽略装饰 N
@@ -259,7 +257,6 @@ memory_notify(contract_version=2, file_path="<项目文件相对路径>")
 | 章节名匹配失败 | 输出 TOC 供用户选择 |
 | 已有翻译文件 | 提示用户是否覆盖 |
 | 无关联学习项目 | 跳过步骤五，仅产出翻译文件 |
-| 印刷页码未知 | 在页码映射与完整性记录写“未知”，不从 PDF 物理页推断 |
 | 文字层/视觉补充不完整 | 列出缺页与错误码，按实际 coverage 保持 `draft` |
 | 图表边界或两次裁剪仍不可靠 | 自动写原书提示，不嵌整页，不等待人工确认 |
 | 找不到可靠译文锚点 | 在所属小节末尾写原书提示，并删除未引用的本次候选资产 |

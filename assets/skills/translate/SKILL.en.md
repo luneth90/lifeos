@@ -96,13 +96,12 @@ Do not reorder the following sequence:
 
 1. Read `pages`, `blocks`, `page_size`, `status`, `coverage`, and `errors` from the validated v2
    package; never read the retired `full_text` field. `requested_pages` is the sole basis for
-   completeness, page mapping, and `PDF_PAGE_RANGE`; never include an unrequested page merely because
+   completeness and `PDF_PAGE_RANGE`; never include an unrequested page merely because
    it lies inside the `requested_range` envelope.
 2. Before any `inspect_image` call or block merge, persist every initial `image` block in the run-local
    `initial_image_blocks` inventory. Each item retains exactly
-   `{pdf_page_index, printed_page_label, order, bbox}` and uses `(pdf_page_index, order)` as its candidate
-   key. Preserve a null printed label as unknown. Never reconstruct this inventory from the semantically
-   merged package, and do not add a Frontmatter field for it.
+   `{pdf_page_index, order, bbox}` and uses `(pdf_page_index, order)` as its candidate key. Never
+   reconstruct this inventory from the semantically merged package, and do not add a Frontmatter field for it.
 3. For every `needs_ocr`, `partial`, or `failed` page, and every page that initially contains an `image`
    block, call `inspect_image` on the full-page render to complete OCR and the semantic content of
    formulas, tables, and charts. Merge by `block.order`, then recompute coverage, state, errors, and
@@ -123,8 +122,7 @@ semantic failure.
 Based on the extracted text, organize the translation by section.
 
 Before generating, read `{system directory}/{templates subdirectory}/Translation_Template.md` and replace every
-required placeholder: `TITLE`, `DATE`, `SOURCE`, `PROJECT`, `PDF_PAGE_RANGE`, `PDF_PAGE_LABELS`, `COMPLETENESS`, `DOMAIN`, and `ID`.
-Build `PDF_PAGE_LABELS` in `requested_pages` order from `printed_page_label`; write `unknown` for `null`.
+required placeholder: `TITLE`, `DATE`, `SOURCE`, `PROJECT`, `PDF_PAGE_RANGE`, `COMPLETENESS`, `DOMAIN`, and `ID`.
 When no project exists, write an empty `project` value; do not retain any template placeholder.
 
 ### Translation Principles
@@ -172,16 +170,14 @@ draft, or confirm the result:
 4. After a crop passes, insert it by anchor priority: after the first translated paragraph whose source
    explicitly cites the figure number, then after the translated paragraph corresponding to the preceding
    source `text` block. Use only the Vault-relative form `![[<image path>|720]]`, followed by
-   `> 图 X.X · 原书印刷页 XX · PDF 物理页 XX`. Write “未知” for an unknown value and never invent one.
+   `> 图 X.X`; without a reliable figure number, write `> 原书图表`. Never invent a figure number.
 5. If neither anchor is reliable, do not embed the image. Emit a `reference` hint at the end of the owning
    subsection. Here `crop_or_anchor_failure` → `reference`; this presentation downgrade counts as handled
    and does not change semantic completeness or note state.
 
-Generate every `reference` automatically. With a reliable figure number, write
-`> 📖 见原书 p.XX 图 X.X`. Without a figure number but with a printed label, write
-`> 📖 见原书印刷页 XX（PDF 物理页 XX，block.order N）`. When the printed label is unknown, write
-`> 📖 见原书 PDF 物理页 XX（印刷页未知，block.order N）`. Never fabricate a figure number and never
-leave an item awaiting manual confirmation.
+Generate every `reference` automatically. With a reliable figure number, write `> 📖 见原书图 X.X`.
+Without one, write `> 📖 见原书相关图表（PDF 物理页 XX，block.order N）`. Never fabricate a figure number
+and never leave an item awaiting manual confirmation.
 
 When resuming the same `run_id`, use the candidate key and stable filename to detect an existing embed,
 Markdown table, LaTeX block, or source hint; complete it in place without appending a duplicate. Before
@@ -208,9 +204,8 @@ Example: `{resources directory}/{translations subdirectory}/VGT/第9章_Sylow定
 After writing, reread the note and confirm the requested page range is fully covered, every required placeholder
 is replaced, the frontmatter is complete, and the project update (when applicable) is complete. Frontmatter
 `completeness` must equal aggregate semantic coverage. The completeness record lists every semantically
-incomplete page's `pdf_page_index`, `printed_page_label` (explicitly “unknown” when absent), and error code.
-It also records the fixed five-way visual counts and, for every `reference`, its physical page, printed label,
-figure number or `block.order`, and automatic downgrade reason.
+incomplete page's `pdf_page_index` and error code. It also records the fixed five-way visual counts and, for
+every `reference`, its physical page, figure number or `block.order`, and automatic downgrade reason.
 
 The Step 2 `--require-complete` result is the sole content gate for state transition. On `semantic_failure`,
 keep `status: draft`. When the gate exits 0 and the template, page range, placeholders, and project update all
@@ -243,7 +238,7 @@ After completion, output a concise summary:
 ```markdown
 ## 📖 Translation Complete
 
-**Source:** [[PDF filename]] physical PDF pages XX — XX (printed labels: known values or unknown)
+**Source:** [[PDF filename]] physical PDF pages XX — XX
 **Output:** [[{translations subdirectory}/{book name}/{chapter name}]]
 **Sections:** N sections
 **Visual handling:** 嵌入 N；转 Markdown N；转 LaTeX N；原书提示 N；忽略装饰 N
@@ -262,7 +257,6 @@ Usage: Read the Chinese note directly. Open PDF++ only when verifying the source
 | Chapter name mismatch | Output TOC for user selection |
 | Translation already exists | Ask user whether to overwrite |
 | No associated learning project | Skip Step 5, only produce translation |
-| Printed page label unknown | Write “unknown” in page mapping and completeness record; do not infer it from the PDF sequence |
 | Text layer or visual enrichment incomplete | List missing pages and error codes, keep `draft` at actual coverage |
 | Visual boundary or both crop attempts remain unreliable | Emit a source hint automatically; never embed a full page or await manual confirmation |
 | No reliable translation anchor | Emit the source hint at the end of the owning subsection and remove the unreferenced candidate asset from this run |
