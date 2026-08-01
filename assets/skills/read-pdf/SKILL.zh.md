@@ -10,6 +10,7 @@ dependencies:
   scripts:
     - path: scripts/read_pdf.py
     - path: scripts/validate_pdf_extraction.py
+    - path: scripts/crop_pdf_region.py
   capabilities: [execute_command, inspect_image]
   agents: []
 ---
@@ -83,6 +84,22 @@ pip install PyMuPDF Pillow
 - 默认输出名含微秒和源文件 SHA-256 前八位；只保留由输出包引用的渲染目录，失败时清理未保留临时图像
 - 为 `needs_ocr`、`partial`、`failed`、含位图 block 或矢量绘制内容的页面生成 PNG；完整纯文本页不渲染
 - 图表、公式、表格的视觉分析必须基于 `blocks` 与 `rendered_images` 回填，而不是猜测文字层缺失内容
+
+## 区域裁剪入口
+
+下游技能需要把可靠视觉区域落盘时，使用独立裁剪脚本：
+
+```bash
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/crop_pdf_region.py <PDF路径> <从1开始的物理页码> --bbox <x0> <y0> <x1> <y1> --padding <PDF point> --dpi <72..600> --output <PNG路径>
+```
+
+`--bbox` 只能来自已校验的 v2 提取包，单位为 PDF point；`--padding` 默认为 0，合法范围为
+0..144，`--dpi` 默认为 300。脚本把加留白后的区域限制在页面边界内，以目标目录中的临时文件
+原子生成 PNG。成功时标准输出 JSON 包含 `ok`、`page`、`requested_bbox`、
+`effective_bbox`、`padding`、`dpi`、`width`、`height`、`sha256` 与 `output`；失败时标准错误
+输出稳定的 `error.code` 和 `error.message`，退出码非零，且不得覆盖既有目标或遗留本次临时文件。
+
+该脚本只执行确定性局部渲染，不负责判断视觉类型、选择留白、决定译文锚点或修改 Markdown。
 
 ## 版本化提取包（必须）
 

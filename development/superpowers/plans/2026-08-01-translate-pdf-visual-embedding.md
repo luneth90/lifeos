@@ -292,7 +292,7 @@ git commit -m "feat: 公开 PDF 区域几何契约"
 - 产出：原子生成 PNG；标准输出 JSON 包含 `ok`、`page`、`requested_bbox`、`effective_bbox`、`padding`、`dpi`、`width`、`height`、`sha256`、`output`。
 - 错误：标准错误 JSON 包含稳定 `error.code` 和 `error.message`，退出码非零。
 
-- [ ] **步骤一：写成功路径 RED 测试**
+- [x] **步骤一：写成功路径 RED 测试**
 
 新测试使用真实 `formulaImagePdf`，以 `--padding 0 --dpi 144` 裁剪 `[72, 150, 540, 250]`：
 
@@ -314,7 +314,7 @@ expect(payload.sha256).toBe(createHash('sha256').update(readFileSync(outputPath)
 
 该尺寸能捕获“错误渲染整页”这一真实回归。
 
-- [ ] **步骤二：运行成功路径 RED 测试**
+- [x] **步骤二：运行成功路径 RED 测试**
 
 运行：
 
@@ -324,7 +324,7 @@ npx vitest run tests/assets/pdf-region-crop.test.ts
 
 预期：脚本文件不存在，测试失败；fixture 本身必须成功创建。
 
-- [ ] **步骤三：写边界和失败原子性 RED 测试**
+- [x] **步骤三：写边界和失败原子性 RED 测试**
 
 增加以下真实行为断言：
 
@@ -337,7 +337,7 @@ npx vitest run tests/assets/pdf-region-crop.test.ts
 - 父路径是普通文件时返回 `WRITE_FAILED`，不留下 `.tmp` 文件。
 - 目标文件已有哨兵内容且参数校验失败时，目标内容保持不变。
 
-- [ ] **步骤四：实现最小裁剪脚本**
+- [x] **步骤四：实现最小裁剪脚本**
 
 使用 `JsonArgumentParser` 和 `CropPdfError` 统一机器错误。解析参数后按以下顺序执行：
 
@@ -357,11 +357,11 @@ with fitz.open(str(resolved_pdf)) as document:
 原子写函数在目标目录使用 `tempfile.NamedTemporaryFile(delete=False, suffix=".png")`，保存成功后调用
 `Path.replace()`；异常时只删除本次临时文件。SHA-256 使用 1 MiB 分块读取。
 
-- [ ] **步骤五：更新 read-pdf 双语脚本依赖与调用说明**
+- [x] **步骤五：更新 read-pdf 双语脚本依赖与调用说明**
 
 在两个 frontmatter 的 `dependencies.scripts` 加入 `scripts/crop_pdf_region.py`。正文公开命令参数、机器输出、PDF point 单位和调用边界；明确裁剪脚本不负责视觉分类或译文插入。
 
-- [ ] **步骤六：运行任务二定向验证**
+- [x] **步骤六：运行任务二定向验证**
 
 ```bash
 npx vitest run tests/assets/pdf-region-crop.test.ts tests/assets/read-pdf-extraction.test.ts tests/assets/pdf-extraction-validation.test.ts
@@ -371,7 +371,7 @@ git diff --check
 
 预期：全部退出 0，临时目录由测试清理，技能依赖验证通过。
 
-- [ ] **步骤七：提交任务二**
+- [x] **步骤七：提交任务二**
 
 ```bash
 git add assets/skills/read-pdf/scripts/crop_pdf_region.py \

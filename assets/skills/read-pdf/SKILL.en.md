@@ -10,6 +10,7 @@ dependencies:
   scripts:
     - path: scripts/read_pdf.py
     - path: scripts/validate_pdf_extraction.py
+    - path: scripts/crop_pdf_region.py
   capabilities: [execute_command, inspect_image]
   agents: []
 ---
@@ -80,6 +81,25 @@ Script responsibilities:
 - Default output names include microseconds and the first eight source SHA-256 characters; only retain rendered directories referenced by the output package, and clean unretained temporary images on failure
 - Generate PNG files for `needs_ocr`, `partial`, or `failed` pages, and for pages containing bitmap blocks or vector drawing content; do not render complete text-only pages
 - Visual analysis of charts, formulas, and tables must enrich `blocks` and `rendered_images`, not guess missing text-layer content
+
+## Region Crop Entry Point
+
+When a downstream skill needs to persist a reliable visual region, call the standalone crop script:
+
+```bash
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/crop_pdf_region.py <PDF path> <one-based physical page> --bbox <x0> <y0> <x1> <y1> --padding <PDF points> --dpi <72..600> --output <PNG path>
+```
+
+Only pass a `--bbox` from a validated v2 extraction package; its unit is PDF points. `--padding`
+defaults to 0 and accepts 0..144; `--dpi` defaults to 300. The script clips the padded region to the
+page and atomically creates the PNG through a temporary file in the destination directory. On success,
+stdout JSON contains `ok`, `page`, `requested_bbox`, `effective_bbox`, `padding`, `dpi`, `width`,
+`height`, `sha256`, and `output`. On failure, stderr contains stable `error.code` and `error.message`
+values, the exit status is nonzero, and the script must neither overwrite an existing target nor leave
+its temporary file behind.
+
+This script only performs deterministic local rendering. It does not classify visuals, choose padding,
+select translation anchors, or modify Markdown.
 
 ## Versioned Extraction Package (Required)
 
