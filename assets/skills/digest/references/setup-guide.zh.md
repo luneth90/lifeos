@@ -41,7 +41,7 @@
 **生成策略：**
 
 1. **RSS / Newsletter**
-   - 用 WebSearch 验证 URL 可用性
+   - 用 `web_search` 验证 URL 可用性；能力不可用时仅保留已提供或本地来源，并记录限制
    - 推荐 5-15 个高质量信息源
    - 优先选择提供 RSS feed 的来源
 

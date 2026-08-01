@@ -4,7 +4,7 @@ When the user runs `/digest` or `/digest <topic>`, follow this pipeline to fetch
 
 ## Preflight
 
-1. Check that Python 3 is available: `python3 --version`
+1. Resolve Python 3 through `execute_command` according to the shared capability contract
    - unavailable → ask the user to install Python 3 and stop
 2. Scan `.md` files under `{system directory}/{digest subdirectory}/`
    - no config files → automatically enter Setup mode (see `setup-guide.md`)
@@ -60,10 +60,10 @@ For paper sources, the helper should use this runtime contract:
 7. `SocArXiv` may normalize to `OSF` landing pages; `SSRN` prefers source-hosted SSRN links
 8. keep the transport low-budget: one primary request per source and no pagination
 
-Build the JSON input and send it through stdin:
+Build the JSON input, write it to a controlled input file, and pass it through stdin; never construct JSON with shell `echo`:
 
 ```bash
-echo '<json_config>' | python3 .agents/skills/digest/references/rss-arxiv-script.py
+<resolved Python 3 interpreter> .agents/skills/digest/references/rss-arxiv-script.py < "<validated-config.json>"
 ```
 
 The payload should include at least:
@@ -110,31 +110,31 @@ The script returns JSON:
 }
 ```
 
-#### Task B: Web Search (WebSearch)
+#### Task B: Web Search (`web_search`)
 
 For each query template:
 
 1. replace `{date range}` with the actual date span
-2. run WebSearch
+2. run `web_search`
 3. collect the results
 
 For each supplemental site:
 
 1. build a `site:{url} {topic}` query
-2. run WebSearch
+2. run `web_search`
 
 Use `defuddle` on high-value results when the article body matters.
 
-#### Task C: HuggingFace Papers (WebFetch)
+#### Task C: HuggingFace Papers (`web_fetch`)
 
-1. open `https://huggingface.co/papers`
+1. open `https://huggingface.co/papers` with `web_fetch`
 2. filter results with the configured keywords
 3. collect title, link, and short description
 4. deduplicate against arXiv results with fuzzy title matching
 
-#### Task D: GitHub Trending (WebFetch, optional)
+#### Task D: GitHub Trending (`web_fetch`, optional)
 
-1. open `https://github.com/trending`
+1. open `https://github.com/trending` with `web_fetch`
 2. filter repositories with the configured keywords
 3. collect repository name, description, stars, and link
 
@@ -231,7 +231,9 @@ All weekly digests generated:
 | RSS feed timeout | mark that source as failed and continue |
 | paper source adapter failure | record a structured source error and continue with the other sources |
 | arXiv API unavailable | record a structured arXiv error and try OpenAlex fallback |
-| WebSearch returns nothing | skip that query and continue |
+| `web_search` returns nothing | skip that query and continue |
+| `web_search` unavailable | use only supplied or local sources and record the limitation |
+| `web_fetch` unavailable | record the access failure and do not use inaccessible sources for key conclusions |
 | config parsing fails | raise an error with the concrete problem |
 | every source fails | do not generate a digest; report the failure reasons |
 

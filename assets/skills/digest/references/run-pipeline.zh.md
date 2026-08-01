@@ -4,7 +4,7 @@
 
 ## 前置检查
 
-1. 检查 Python 3 是否可用：`python3 --version`
+1. 通过 `execute_command` 按共享能力协议解析 Python 3
    - 不可用 → 提示用户安装 Python 3 并重试
 2. 扫描 `{系统目录}/{信息子目录}/` 下的 `.md` 文件
    - 无配置文件 → 自动进入 Setup 模式（见 `setup-guide.md`）
@@ -59,10 +59,10 @@ config = {
 7. `SocArXiv` 可以归一化到 `OSF` 落地页；`SSRN` 优先保留源站 SSRN 链接
 8. 传输层保持低请求预算：每个来源一次主请求，不做分页
 
-构造 JSON 输入并通过 stdin 传给脚本：
+构造 JSON 输入，写入受控输入文件，再通过 stdin 传给脚本；禁止用 shell `echo` 拼接 JSON：
 
 ```bash
-echo '<json_config>' | python3 .agents/skills/digest/references/rss-arxiv-script.py
+<已解析的 Python 3 解释器> .agents/skills/digest/references/rss-arxiv-script.py < "<validated-config.json>"
 ```
 
 JSON 输入从 Phase 1 的配置构造，至少包括：
@@ -109,31 +109,31 @@ JSON 输入从 Phase 1 的配置构造，至少包括：
 }
 ```
 
-#### Task B: Web 搜索（WebSearch）
+#### Task B: Web 搜索（`web_search`）
 
 对每条搜索查询模板：
 
 1. 将 `{日期范围}` 替换为实际日期
-2. 执行 WebSearch
+2. 执行 `web_search`
 3. 收集结果
 
 对补充站点：
 
 1. 生成 `site:{url} {topic}` 查询
-2. 执行 WebSearch
+2. 执行 `web_search`
 
 对高价值结果，用 `defuddle` 提取正文摘要。
 
-#### Task C: HuggingFace 热门论文（WebFetch）
+#### Task C: HuggingFace 热门论文（`web_fetch`）
 
-1. 用 WebFetch 打开 `https://huggingface.co/papers`
+1. 用 `web_fetch` 打开 `https://huggingface.co/papers`
 2. 用配置关键词过滤结果
 3. 记录标题、链接和简要描述
 4. 与 arXiv 结果去重（按标题模糊匹配）
 
-#### Task D: GitHub Trending（WebFetch，仅启用时）
+#### Task D: GitHub Trending（`web_fetch`，仅启用时）
 
-1. 用 WebFetch 打开 `https://github.com/trending`
+1. 用 `web_fetch` 打开 `https://github.com/trending`
 2. 用配置关键词过滤结果
 3. 记录仓库名、描述、星标数和链接
 
@@ -230,7 +230,9 @@ aliases: []
 | RSS feed 超时 | 标记失败，继续其他来源 |
 | 论文来源 adapter 失败 | 记录结构化来源错误，继续执行其他来源 |
 | arXiv API 无响应 | 记录结构化 arXiv 错误，并尝试 OpenAlex fallback |
-| WebSearch 无结果 | 跳过该查询，继续 |
+| `web_search` 无结果 | 跳过该查询，继续 |
+| `web_search` 不可用 | 仅使用已提供或本地来源，记录限制 |
+| `web_fetch` 不可用 | 记录访问失败，不把不可访问来源用于关键结论 |
 | 配置解析失败 | 报错并提示具体问题 |
 | 所有来源均失败 | 不生成周报，报告失败原因 |
 

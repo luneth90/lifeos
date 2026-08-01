@@ -41,7 +41,7 @@ Based on the topic and preferences, use agent capabilities to recommend sources 
 **Generation strategy:**
 
 1. **RSS / Newsletter**
-   - verify URLs with WebSearch
+   - verify URLs with `web_search`; when unavailable, retain only supplied or local sources and record the limitation
    - recommend 5-15 high-quality sources
    - prefer sources that expose RSS feeds
 

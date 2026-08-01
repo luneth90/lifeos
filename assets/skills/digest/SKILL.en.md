@@ -9,6 +9,7 @@ dependencies:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
   protocols:
     - path: ../_shared/operation-safety.md
+  capabilities: [web_search, web_fetch, execute_command]
   agents: []
 ---
 
@@ -85,8 +86,10 @@ Follow `references/run-pipeline.md` for the fetch pipeline.
 
 ### Preflight
 
-1. Verify Python 3 is available: `python3 --version`
+1. Read `_shared/client-capabilities.md` and resolve Python 3 through `execute_command` according to the shared contract
 2. Read and parse the config note according to `references/config-parser.md`
+
+When a capability is unavailable, apply the shared fallback: without `web_search`, use only supplied or local sources and record the limitation; without `web_fetch`, record the access failure and do not use inaccessible sources for key conclusions; without `execute_command`, stop script-backed fetching and retain a copyable command.
 
 ### Execution Pipeline
 
@@ -94,9 +97,9 @@ Follow `references/run-pipeline.md` for the fetch pipeline.
 Phase 1: Parse config → structured data
 Phase 2: Fetch in parallel
   ├─ Task A: RSS + paper sources → Python script (references/rss-arxiv-script.py)
-  ├─ Task B: Web search → WebSearch tool
-  ├─ Task C: HuggingFace papers → WebFetch
-  └─ Task D: GitHub Trending → WebFetch (optional)
+  ├─ Task B: Web search → web_search
+  ├─ Task C: HuggingFace papers → web_fetch
+  └─ Task D: GitHub Trending → web_fetch (optional)
 Phase 3: Merge and deduplicate → classify by category system
 Phase 4: Write digest → {drafts directory}/<TopicName>-MMDD-MMDD.md
 ```
@@ -130,7 +133,7 @@ Invoke it like this:
 Pass configuration through stdin or a controlled input file; never construct JSON with shell `echo`:
 
 ```bash
-python3 .agents/skills/digest/references/rss-arxiv-script.py < "<validated-config.json>"
+<resolved Python 3 interpreter> .agents/skills/digest/references/rss-arxiv-script.py < "<validated-config.json>"
 ```
 
 JSON input shape:

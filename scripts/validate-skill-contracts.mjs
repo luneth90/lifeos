@@ -140,6 +140,17 @@ function sameValue(left, right) {
 	return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function escapeRegularExpression(value) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function isClientSpecificCapabilityExample(value) {
+	return (
+		typeof value === 'string' &&
+		(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/.test(value) || /^(?:[A-Z][a-z0-9]*){2,}$/.test(value))
+	);
+}
+
 function isSafeFileName(value) {
 	return typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(value);
 }
@@ -923,6 +934,31 @@ export function validateSkillContracts(root) {
 			? Object.keys(capabilitiesZh.capabilities)
 			: [],
 	);
+	const clientSpecificCapabilityNames = new Set(
+		capabilitiesZh?.capabilities && typeof capabilitiesZh.capabilities === 'object'
+			? Object.values(capabilitiesZh.capabilities).flatMap((definition) =>
+					definition && typeof definition === 'object' && Array.isArray(definition.examples)
+						? definition.examples.filter(isClientSpecificCapabilityExample)
+						: [],
+				)
+			: [],
+	);
+	const capabilityContractPaths = new Set([capabilitiesZhPath, capabilitiesEnPath]);
+	for (const path of walkFiles(skillRoot).filter((candidate) => candidate.endsWith('.md'))) {
+		const content = capabilityContractPaths.has(path)
+			? read(path).replace(/^\s+examples:\s*\[[^\n]*\]\s*$/gm, '')
+			: read(path);
+		for (const name of clientSpecificCapabilityNames) {
+			const escaped = escapeRegularExpression(name);
+			if (new RegExp(`(?:^|[^A-Za-z0-9_])${escaped}(?:$|[^A-Za-z0-9_])`, 'm').test(content)) {
+				add(
+					'client_specific_capability_name',
+					assetPath(path),
+					`客户端专有能力名只能出现在能力协议 examples：${name}`,
+				);
+			}
+		}
+	}
 
 	for (const path of walkFiles(skillRoot).filter((candidate) =>
 		/\/SKILL\.(zh|en)\.md$/.test(candidate),

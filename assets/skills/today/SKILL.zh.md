@@ -10,6 +10,7 @@ dependencies:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
   protocols:
     - path: ../_shared/operation-safety.md
+  capabilities: [ask_user]
   agents: []
 ---
 
@@ -112,7 +113,8 @@ memory_context(
 
 ## 步骤二：收集用户输入（交互）
 
-使用 AskUserQuestion 工具只询问一件事：
+执行交互前读取 `_shared/client-capabilities.md`，通过 `ask_user` 语义能力只询问一件事。
+若该能力不可用，按共享协议的降级方案停留在 pending，明确请求用户确认，不得自行从候选池选择。
 
 **问题：** "今天做什么？"
 
@@ -227,7 +229,7 @@ memory_notify(contract_version=2, file_path="{日记目录}/YYYY-MM-DD.md")
 - **周末/周一：** 说明间隔，提醒是否需要周复盘
 - **今日日记已存在：** 读取并合并优先级，不要重复
 - **草稿池为空：** 专注于项目执行
-- **AskUserQuestion 无响应：** 不得从候选池推断、选择或写入任务和项目；保持任务与相关项目托管区块为空，或只写用户本轮已经显式给出的内容，并在摘要中注明等待选择
+- **`ask_user` 无响应：** 不得从候选池推断、选择或写入任务和项目；保持任务与相关项目托管区块为空，或只写用户本轮已经显式给出的内容，并在摘要中注明等待选择
 - **文件读取失败：** 跳过该步骤，在摘要备注中注明"[文件名] 读取失败，已跳过"
 
 # 模板

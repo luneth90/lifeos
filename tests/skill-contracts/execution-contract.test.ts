@@ -121,6 +121,27 @@ describe('阶段二执行契约', () => {
 		expectSameMachineShape(zh, en, 'client-capabilities');
 	});
 
+	it('交互与网络技能只依赖语义能力并公开降级路径', () => {
+		for (const [skill, expectedCapabilities] of [
+			['today', ['ask_user']],
+			['revise', ['ask_user']],
+			['digest', ['web_search', 'web_fetch']],
+		] as const) {
+			for (const locale of ['zh', 'en'] as const) {
+				const path = `assets/skills/${skill}/SKILL.${locale}.md`;
+				const content = read(path);
+				for (const capability of expectedCapabilities) {
+					expect(content, path).toMatch(
+						new RegExp(`capabilities: \\[[^\\]]*\\b${capability}\\b[^\\]]*\\]`),
+					);
+					expect(content, path).toMatch(new RegExp(`\\b${capability}\\b`));
+				}
+				expect(content, path).toContain('client-capabilities');
+				expect(content, path).toMatch(/降级|fallback/i);
+			}
+		}
+	});
+
 	it('确认摘要在计划修订或哈希变化后失效，并按独立验收顺序提交', () => {
 		for (const path of [
 			'assets/skills/_shared/dual-agent-orchestrator.zh.md',

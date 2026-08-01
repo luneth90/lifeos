@@ -10,6 +10,7 @@ dependencies:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
   protocols:
     - path: ../_shared/operation-safety.md
+  capabilities: [ask_user]
   agents: []
 ---
 
@@ -112,7 +113,7 @@ Help the user start a new day: review yesterday's progress, create today's diary
 
 ## Step 2: Collect User Input (Interactive)
 
-Use the AskUserQuestion tool to ask only one thing:
+Before interacting, read `_shared/client-capabilities.md` and use the `ask_user` semantic capability to ask only one thing. If it is unavailable, follow the shared fallback: remain pending, explicitly request confirmation, and never choose from the candidate pool on the user's behalf.
 
 **Question:** "What will you work on today?"
 
@@ -227,7 +228,7 @@ Ready to go! Quick actions:
 - **Weekend/Monday:** Note the gap, ask if a weekly retrospective is needed
 - **Today's diary already exists:** Read and merge priorities, avoid duplicates
 - **Empty drafts pool:** Focus on project execution
-- **AskUserQuestion no response:** Never infer, select, or write tasks or projects from the candidate pool; keep the task and related-project managed blocks empty, or write only content explicitly given by the user in this turn, then note that selection is pending in the summary
+- **No response from `ask_user`:** Never infer, select, or write tasks or projects from the candidate pool; keep the task and related-project managed blocks empty, or write only content explicitly given by the user in this turn, then note that selection is pending in the summary
 - **File read failure:** Skip that step, note "[filename] read failed, skipped" in the summary notes
 
 # Template

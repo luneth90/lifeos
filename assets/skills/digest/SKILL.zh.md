@@ -9,6 +9,7 @@ dependencies:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
   protocols:
     - path: ../_shared/operation-safety.md
+  capabilities: [web_search, web_fetch, execute_command]
   agents: []
 ---
 
@@ -85,8 +86,11 @@ memory_context(
 
 ### 前置检查
 
-1. 验证 Python 3 可用：`python3 --version`
+1. 读取 `_shared/client-capabilities.md`，通过 `execute_command` 按共享协议解析 Python 3
 2. 读取并解析配置笔记（按 `references/config-parser.md` 规范）
+
+能力不可用时必须执行共享降级方案：`web_search` 缺失时仅使用已提供或本地来源并记录限制；
+`web_fetch` 缺失时记录访问失败，不得把不可访问来源用于关键结论；`execute_command` 缺失时停止脚本来源抓取并保留可复制命令。
 
 ### 执行管线
 
@@ -94,9 +98,9 @@ memory_context(
 Phase 1: 解析配置 → 结构化数据
 Phase 2: 并行抓取
   ├─ Task A: RSS + paper sources → Python 脚本（references/rss-arxiv-script.py）
-  ├─ Task B: Web 搜索 → WebSearch 工具
-  ├─ Task C: HuggingFace 热门 → WebFetch
-  └─ Task D: GitHub Trending → WebFetch（可选）
+  ├─ Task B: Web 搜索 → web_search
+  ├─ Task C: HuggingFace 热门 → web_fetch
+  └─ Task D: GitHub Trending → web_fetch（可选）
 Phase 3: 合并去重 → 按分类体系归类
 Phase 4: 写入周报 → {草稿目录}/<TopicName>-MMDD-MMDD.md
 ```
@@ -125,7 +129,7 @@ RSS + paper source 抓取通过参数化 Python 脚本执行。技能先解析�
 通过 stdin 或受控输入文件传递配置，禁止用 shell `echo` 拼接 JSON：
 
 ```bash
-python3 .agents/skills/digest/references/rss-arxiv-script.py < "<validated-config.json>"
+<已解析的 Python 3 解释器> .agents/skills/digest/references/rss-arxiv-script.py < "<validated-config.json>"
 ```
 
 JSON 输入格式：

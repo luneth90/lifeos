@@ -10,6 +10,7 @@ dependencies:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
   protocols:
     - path: ../_shared/operation-safety.md
+  capabilities: [ask_user]
   agents: []
 ---
 
@@ -83,7 +84,8 @@ memory_query(contract_version=2, query="<章节主题或原书约定关键词> �
 
 ## 阶段1：配置（1 轮交互）
 
-使用 AskUserQuestion 工具，一次性收集：
+先读取 `_shared/client-capabilities.md`，再通过 `ask_user` 语义能力一次性收集：
+若该能力不可用，按共享协议的降级方案保持本次复习为 pending，明确请求用户确认，不创建复习文件。
 
 **问题 1：** "复习哪个范围？"
 - 选项：基于 Phase 0 扫描结果生成（如"VGT 第3章"、"第4章"、"某 Domain 全部"等）

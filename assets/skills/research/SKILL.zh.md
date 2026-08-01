@@ -40,7 +40,9 @@ memory_context(
 )
 ```
 
-未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。> [!config]
+未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
+
+> [!config]
 > 本技能中的路径引用使用逻辑名（如 `{研究目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
 > 路径映射：
@@ -61,7 +63,7 @@ memory_context(
 
 # 阶段0：记忆前置检查（必须）
 
-按 `_shared/dual-agent-orchestrator.md` 阶段0 执行，实体类型 `filters.type = “research”`。
+按 `_shared/dual-agent-orchestrator.md` 阶段0 执行，实体类型 `filters.type = "research"`。
 
 # 工作流概述
 

@@ -10,6 +10,7 @@ dependencies:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
   protocols:
     - path: ../_shared/operation-safety.md
+  capabilities: [ask_user]
   agents: []
 ---
 
@@ -83,7 +84,7 @@ memory_query(contract_version=2, query="<chapter topic or source book convention
 
 ## Phase 1: Configuration (1 Round of Interaction)
 
-Use the AskUserQuestion tool to collect in one go:
+First read `_shared/client-capabilities.md`, then use the `ask_user` semantic capability to collect the following in one go. If it is unavailable, follow the shared fallback: keep this review pending, explicitly request confirmation, and do not create a review file.
 
 **Question 1:** "What scope would you like to review?"
 - Options: generated based on Phase 0 scan results (e.g., "VGT Chapter 3", "Chapter 4", "All of a Domain", etc.)

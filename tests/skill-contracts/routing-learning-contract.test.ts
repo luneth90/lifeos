@@ -49,13 +49,15 @@ function expectSameContract<T>(marker: string, zhPath: string, enPath: string): 
 
 describe('阶段三路由与学习链路契约', () => {
 	it('按固定优先级将每日、周报和翻译请求路由到声明的技能', () => {
-		const contract = expectSameContract<RoutingContract>(
-			'routing-contract-v1',
+		const zhContract = readContractYaml(
 			'assets/skills/ask/SKILL.zh.md',
+			'routing-contract-v1',
+		) as RoutingContract;
+		const enContract = readContractYaml(
 			'assets/skills/ask/SKILL.en.md',
-		);
-		expect(contract.contract_version).toBe(1);
-		expect(contract.order).toEqual([
+			'routing-contract-v1',
+		) as RoutingContract;
+		const expectedOrder = [
 			'explicit_skill',
 			'daily_planning',
 			'pdf_reading',
@@ -66,13 +68,30 @@ describe('阶段三路由与学习链路契约', () => {
 			'knowledge',
 			'brainstorm',
 			'direct_answer',
-		]);
-		expect(route('询问今日安排', contract)).toBe('today');
-		expect(route('生成信息周报', contract)).toBe('digest');
-		expect(route('翻译这个 PDF 章节', contract)).toBe('translate');
+		];
+		for (const contract of [zhContract, enContract]) {
+			expect(contract.contract_version).toBe(1);
+			expect(contract.order).toEqual(expectedOrder);
+		}
+		expect(enContract.routes.map(({ id, target }) => ({ id, target }))).toEqual(
+			zhContract.routes.map(({ id, target }) => ({ id, target })),
+		);
+		expect(zhContract.routes.flatMap(({ examples }) => examples).join('')).toMatch(
+			/[\u4e00-\u9fff]/,
+		);
+		expect(enContract.routes.flatMap(({ examples }) => examples).join('')).toMatch(/[A-Za-z]/);
+		expect(enContract.routes.flatMap(({ examples }) => examples).join('')).not.toMatch(
+			/[\u3400-\u9fff]/,
+		);
+		expect(route('询问今日安排', zhContract)).toBe('today');
+		expect(route('生成信息周报', zhContract)).toBe('digest');
+		expect(route('翻译这个 PDF 章节', zhContract)).toBe('translate');
+		expect(route("what is today's plan", enContract)).toBe('today');
+		expect(route('generate an information digest', enContract)).toBe('digest');
+		expect(route('translate this PDF chapter', enContract)).toBe('translate');
 		expect(
 			route('重叠意图', {
-				...contract,
+				...zhContract,
 				order: ['translation', 'pdf_reading'],
 				routes: [
 					{ id: 'pdf_reading', target: 'read-pdf', examples: ['重叠意图'] },
@@ -80,11 +99,23 @@ describe('阶段三路由与学习链路契约', () => {
 				],
 			}),
 		).toBe('translate');
-		expect(route('未匹配的普通提问', contract)).toBe('direct_answer');
+		expect(route('未匹配的普通提问', zhContract)).toBe('direct_answer');
 		const skills = declaredSkills();
-		for (const candidate of contract.routes) {
+		for (const candidate of zhContract.routes) {
 			expect(skills.has(candidate.target), `${candidate.target} 不是已声明技能`).toBe(true);
 		}
+	});
+
+	it('Research 的作用域记忆与配置 callout 保持可解析边界', () => {
+		for (const path of [
+			'assets/skills/research/SKILL.zh.md',
+			'assets/skills/research/SKILL.en.md',
+		]) {
+			const content = read(path);
+			expect(content, path).not.toContain('bootstrap.> [!config]');
+			expect(content, path).toMatch(/bootstrap[^\n]*\n\n> \[!config\]/);
+		}
+		expect(read('assets/skills/research/SKILL.zh.md')).toContain('filters.type = "research"');
 	});
 
 	it('公开学习链路节点与交接边', () => {

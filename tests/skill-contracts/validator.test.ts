@@ -192,6 +192,42 @@ describe('技能契约校验器', () => {
 			},
 		],
 		[
+			'正文泄漏客户端专有能力名',
+			(write) =>
+				write(
+					'assets/skills/ask/SKILL.en.md',
+					(content) => `${content}\nUse AskUserQuestion to continue.\n`,
+				),
+			{
+				code: 'client_specific_capability_name',
+				path: 'assets/skills/ask/SKILL.en.md',
+			},
+		],
+		[
+			'引用文档泄漏客户端专有能力名',
+			(write) =>
+				write(
+					'assets/skills/digest/references/run-pipeline.en.md',
+					(content) => `${content}\nRun WebSearch to continue.\n`,
+				),
+			{
+				code: 'client_specific_capability_name',
+				path: 'assets/skills/digest/references/run-pipeline.en.md',
+			},
+		],
+		[
+			'能力协议 examples 以外泄漏客户端专有名',
+			(write) =>
+				write(
+					'assets/skills/_shared/client-capabilities.en.md',
+					(content) => `${content}\nUse WebFetch directly.\n`,
+				),
+			{
+				code: 'client_specific_capability_name',
+				path: 'assets/skills/_shared/client-capabilities.en.md',
+			},
+		],
+		[
 			'同名模板但错误逻辑目录',
 			(write) =>
 				write('assets/skills/ask/SKILL.en.md', (content) =>

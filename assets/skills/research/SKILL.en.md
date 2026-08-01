@@ -40,7 +40,9 @@ memory_context(
 )
 ```
 
-Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.> [!config]
+Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
+
+> [!config]
 > Path references in this skill use logical names (e.g., `{research directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
 > Path mappings:

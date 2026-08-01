@@ -73,28 +73,28 @@ order:
 routes:
   - id: daily_planning
     target: today
-    examples: ["询问今日安排"]
+    examples: ["what is today's plan"]
   - id: pdf_reading
     target: read-pdf
-    examples: ["读取这个 PDF 章节"]
+    examples: ["read this PDF chapter"]
   - id: translation
     target: translate
-    examples: ["翻译这个 PDF 章节"]
+    examples: ["translate this PDF chapter"]
   - id: digest
     target: digest
-    examples: ["生成信息周报"]
+    examples: ["generate an information digest"]
   - id: research
     target: research
-    examples: ["系统调研这个主题"]
+    examples: ["research this topic systematically"]
   - id: project
     target: project
-    examples: ["把这个想法做成项目"]
+    examples: ["turn this idea into a project"]
   - id: knowledge
     target: knowledge
-    examples: ["整理这个知识点"]
+    examples: ["organize this knowledge point"]
   - id: brainstorm
     target: brainstorm
-    examples: ["一起发散这个想法"]
+    examples: ["brainstorm this idea together"]
 ```
 
 Route by the first matching item in the contract `order`: an explicit skill wins; “today” requests go to `/today`; PDF reading precedes translation; an explicit request to translate an English PDF chapter goes to `/translate`; weekly updates go to `/digest`. Return `direct_answer` when no specialized route matches.
