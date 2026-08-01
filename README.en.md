@@ -5,7 +5,7 @@ LifeOS helps you grow scattered ideas into structured knowledge and truly master
 
 ## Why Build LifeOS?
 
-LifeOS started from a simple goal: package learning workflows, skills, templates, prompts, and a memory system into one complete setup you can use immediately. Instead of assembling your own toolchain from scratch or jumping between disconnected tools, you can initialize once, start working right away, and keep accumulating knowledge, process, and preferences as you go.
+LifeOS started from a simple goal: package learning workflows, skills, templates, prompts, and a memory system into one complete setup you can use immediately. Instead of assembling your own toolchain from scratch or jumping between disconnected tools, you can initialize once, start working right away, and keep accumulating knowledge, process, and preferences as you go. Agent tools may change, but your memory and context do not have to start over: LifeOS keeps them in the workspace, so you can move freely between different Agent tools while carrying forward your knowledge, preferences, and work progress.
 
 ## Installation and Initialization
 
