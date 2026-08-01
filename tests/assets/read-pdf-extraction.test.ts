@@ -305,6 +305,28 @@ describe('read_pdf.py 提取包', () => {
 		generatedPaths.push(join(output.rendered_images[0].path, '..'));
 	});
 
+	it('在单轴稠密装饰线下不会进入无界矩形组合搜索', () => {
+		const program = [
+			'import importlib.util, sys, fitz',
+			'spec = importlib.util.spec_from_file_location("lifeos_read_pdf", sys.argv[1])',
+			'module = importlib.util.module_from_spec(spec)',
+			'sys.modules[spec.name] = module',
+			'spec.loader.exec_module(module)',
+			'class FakePage:',
+			'    rect = fitz.Rect(0, 0, 600, 7000)',
+			'    def get_drawings(self):',
+			'        return [{"rect": fitz.Rect(50, y, 550, y), "items": [("l", fitz.Point(50, y), fitz.Point(550, y))], "fill": None} for y in range(1, 6001)]',
+			'print(module.vector_visual_anchor(FakePage()))',
+		].join('\n');
+		const result = spawnSync('python3', ['-c', program, scriptPath], {
+			encoding: 'utf-8',
+			timeout: 1000,
+		});
+
+		expect(result.status, result.error?.message ?? result.stderr).toBe(0);
+		expect(result.stdout.trim()).toBe('None');
+	});
+
 	it('默认只渲染需要视觉补充的页面', () => {
 		const fixture = createFixtures();
 		const outputPath = join(fixture.workspace, 'text-with-render-default.json');

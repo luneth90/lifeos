@@ -561,6 +561,8 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
         rectangles = set()
         horizontal_positions = sorted(horizontal_intervals)
         vertical_positions = sorted(vertical_intervals)
+        if len(horizontal_positions) < 2 or len(vertical_positions) < 2:
+            return []
         for top_index, top in enumerate(horizontal_positions):
             for bottom in horizontal_positions[top_index + 1 :]:
                 if bottom - top < 4:
@@ -589,7 +591,7 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
         horizontal_regions + vertical_regions
         if horizontal_regions
         and vertical_regions
-        and len(horizontal_regions) + len(vertical_regions) > 128
+        and len(horizontal_regions) + len(vertical_regions) > 64
         else []
     )
     rectangle_regions = [] if grid_regions or dense_axis_regions else find_rectangles()
