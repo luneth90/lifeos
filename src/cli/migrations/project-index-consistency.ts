@@ -233,7 +233,7 @@ export function reindexAndAssertProjectCatalog(
 	return reindex();
 }
 
-/** 严格保证每条 project scope 都指向当前 catalog 中仍存在且已正确索引的主文件。 */
+/** 严格保证每条 active project scope 都指向当前 catalog 中仍存在且已正确索引的主文件。 */
 export function assertProjectMemoryScopesResolveToCatalog(
 	db: Database.Database,
 	vaultRoot: string,
@@ -249,7 +249,7 @@ export function assertProjectMemoryScopesResolveToCatalog(
 		.prepare(
 			`SELECT slot_key, scope_key
 			 FROM memory_items
-			 WHERE scope_type = 'project'
+			 WHERE scope_type = 'project' AND status = 'active'
 			 ORDER BY slot_key, scope_key`,
 		)
 		.all() as Array<{ slot_key: string; scope_key: string }>;

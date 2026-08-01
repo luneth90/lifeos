@@ -1536,6 +1536,73 @@ setTimeout(() => {
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
+	it('V4 重跑允许保留当前 catalog 外的 archived project scope', async () => {
+		await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		const archiveDir = join(fixture.root, '90_系统', '归档', '项目', '2026');
+		mkdirSync(archiveDir, { recursive: true });
+		const archivedProjectPath = join(archiveDir, 'Archived.md');
+		writeFileSync(
+			archivedProjectPath,
+			'---\ntitle: Archived\ntype: project\nid: archived-project\nstatus: archived\n---\n历史项目\n',
+			'utf-8',
+		);
+		const staleDb = new Database(fixture.dbPath);
+		try {
+			staleDb
+				.prepare(`
+					INSERT INTO memory_items(
+						slot_key, content, item_kind, scope_type, scope_key, status,
+						created_at, updated_at, archived_at, archive_reason
+					) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				`)
+				.run(
+					'decision:archived-project',
+					'保留历史决策',
+					'decision',
+					'project',
+					'archived-project',
+					'archived',
+					'2026-01-01T00:00:00.000Z',
+					'2026-01-02T00:00:00.000Z',
+					'2026-01-02T00:00:00.000Z',
+					'项目已归档',
+				);
+		} finally {
+			staleDb.close();
+		}
+
+		await upgrade([fixture.root]);
+
+		const upgradedDb = new Database(fixture.dbPath, {
+			readonly: true,
+			fileMustExist: true,
+		});
+		try {
+			expect(
+				upgradedDb
+					.prepare(`
+						SELECT scope_key, status, archived_at, archive_reason
+						FROM memory_items WHERE slot_key = ?
+					`)
+					.get('decision:archived-project'),
+			).toEqual({
+				scope_key: 'archived-project',
+				status: 'archived',
+				archived_at: '2026-01-02T00:00:00.000Z',
+				archive_reason: '项目已归档',
+			});
+			expect(
+				upgradedDb.prepare("SELECT file_path FROM vault_index WHERE type = 'project'").all(),
+			).toEqual([{ file_path: '20_项目/GTS.md' }]);
+		} finally {
+			upgradedDb.close();
+		}
+		expect(readFileSync(archivedProjectPath, 'utf-8')).toContain('id: archived-project');
+		expect(validateRuntimeContract({ vaultRoot: fixture.root, runtimeVersion: VERSION }).ok).toBe(
+			true,
+		);
+	});
+
 	it('V4 重跑失败后恢复原 Vault，并且仍只保留一个可用备份', async () => {
 		const first = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
 		const yamlBefore = readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8');

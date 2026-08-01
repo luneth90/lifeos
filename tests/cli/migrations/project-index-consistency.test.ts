@@ -183,6 +183,70 @@ describe('升级期项目索引一致性', () => {
 		);
 	});
 
+	it('只校验 active project scope，保留 archived 与 expired 历史记录', () => {
+		writeTestNote(vault.root, '20_项目/Current.md', {
+			type: 'project',
+			id: 'current-project',
+		});
+		const catalog = [{ id: 'current-project', paths: ['20_项目/Current.md'] }];
+		reindexAndAssertProjectCatalog(db, vault.root, config, catalog);
+		const insert = db.prepare(`
+			INSERT INTO memory_items(
+				slot_key, content, item_kind, scope_type, scope_key, status,
+				created_at, updated_at, expires_at, archived_at, archive_reason
+			) VALUES (?, ?, 'decision', 'project', ?, ?, ?, ?, ?, ?, ?)
+		`);
+		insert.run(
+			'decision:archived-project',
+			'已归档项目决策',
+			'archived-project',
+			'archived',
+			'2026-01-01T00:00:00.000Z',
+			'2026-01-02T00:00:00.000Z',
+			null,
+			'2026-01-02T00:00:00.000Z',
+			'项目已归档',
+		);
+		insert.run(
+			'decision:expired-project',
+			'已过期项目决策',
+			'expired-project',
+			'expired',
+			'2026-01-01T00:00:00.000Z',
+			'2026-01-03T00:00:00.000Z',
+			'2026-01-02T00:00:00.000Z',
+			null,
+			null,
+		);
+
+		expect(() =>
+			assertProjectMemoryScopesResolveToCatalog(db, vault.root, config, catalog),
+		).not.toThrow();
+		expect(
+			db
+				.prepare(`
+					SELECT slot_key, scope_key, status, archived_at, archive_reason
+					FROM memory_items ORDER BY slot_key
+				`)
+				.all(),
+		).toEqual([
+			{
+				slot_key: 'decision:archived-project',
+				scope_key: 'archived-project',
+				status: 'archived',
+				archived_at: '2026-01-02T00:00:00.000Z',
+				archive_reason: '项目已归档',
+			},
+			{
+				slot_key: 'decision:expired-project',
+				scope_key: 'expired-project',
+				status: 'expired',
+				archived_at: null,
+				archive_reason: null,
+			},
+		]);
+	});
+
 	it('project scope 只能解析到当前 catalog 中仍存在的项目主文件', () => {
 		writeTestNote(vault.root, '20_项目/Current.md', {
 			type: 'project',
