@@ -37,10 +37,13 @@ function extract(pdfPath: string, outputPath: string | undefined, target = '1') 
 	};
 }
 
-afterEach(() => {
+afterEach(async () => {
 	for (const fixture of fixtures.splice(0)) fixture.cleanup();
 	for (const generatedPath of generatedPaths.splice(0))
 		rmSync(generatedPath, { force: true, recursive: true });
+
+	// 慢速 CI 上连续同步 Python 调用会饿死 Vitest worker 的 RPC 回包处理。
+	await new Promise<void>((resolve) => setImmediate(resolve));
 });
 
 describe('read_pdf.py 提取包', () => {

@@ -10,7 +10,7 @@
 
 在 CI 与 Release 两个工作流中显式建立相同的 Python 测试环境：
 
-- 使用 `actions/setup-python@v5` 安装 Python 3.12。
+- 使用 `actions/setup-python@v7` 安装 Python 3.12；同时把 checkout 与 setup-node 升到 `v7`，确保三个官方 Action 都使用 `node24` runner。
 - 使用 `python -m pip install --disable-pip-version-check PyMuPDF==1.26.5` 安装固定版本依赖。
 - 保留现有 Node.js 矩阵、类型检查、lint、测试、构建、打包和发布步骤。
 
@@ -25,6 +25,20 @@
 3. 删除任一工作流中的 Python 初始化或依赖安装时，契约测试必须失败。
 
 测试先在现有工作流上观察红灯，再修改生产工作流并观察绿灯。随后运行类型检查、lint、全量测试和构建。
+
+## 首次远程回归暴露的第二根因
+
+补齐 PyMuPDF 后，远程 CI 的 1064 项断言全部通过，但 Vitest 最终报告一个未处理错误：
+
+```text
+[vitest-worker]: Timeout calling "onTaskUpdate"
+```
+
+`tests/assets/read-pdf-extraction.test.ts` 在 GitHub runner 上耗时 76.92 秒，超过 Vitest worker RPC 固定的 60 秒等待窗口。该文件连续使用 `spawnSync` 调用 Python；每次同步调用返回后，下一项测试会立即再次阻塞事件循环，导致 worker 无法及时消费主进程对 `onTaskUpdate` 的 RPC 回包。本地同一文件约 44 秒，未越过 60 秒窗口，所以本地全绿不能复现该超时。
+
+采用最小修复：把该文件现有的 `afterEach` 清理钩子改为异步，并在清理完成后等待一次 `setImmediate`。这不会改变提取断言、子进程退出码或 fixture 生命周期，只在每个测试之间给 worker 一次处理 IPC 的机会。与把约 80 个同步测试整体重写为异步子进程相比，此方案改动更小，且直接修复事件循环饥饿根因。
+
+同一次运行还显示 checkout、setup-node 与 setup-python 的旧主版本仍以 Node.js 20 运行。官方最新 `v7` 的 `action.yml` 已核实均声明 `using: node24`，因此同步升级并增加工作流契约，避免发布时留下弃用告警。
 
 ## 发布策略
 

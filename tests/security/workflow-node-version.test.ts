@@ -77,7 +77,7 @@ function isVersionAtLeast(actualVersion: string, minimumVersion: string): boolea
 }
 
 function expectPythonTestEnvironment(steps: WorkflowStep[], verificationCommand: string): void {
-	const setupIndex = steps.findIndex((step) => step.uses === 'actions/setup-python@v5');
+	const setupIndex = steps.findIndex((step) => step.uses === 'actions/setup-python@v7');
 	const installIndex = steps.findIndex(
 		(step) =>
 			step.run?.trim() === 'python -m pip install --disable-pip-version-check PyMuPDF==1.26.5',
@@ -88,6 +88,18 @@ function expectPythonTestEnvironment(steps: WorkflowStep[], verificationCommand:
 	expect(steps[setupIndex]?.with?.['python-version']).toBe('3.12');
 	expect(installIndex).toBeGreaterThan(setupIndex);
 	expect(verificationIndex).toBeGreaterThan(installIndex);
+}
+
+function expectNode24OfficialActions(steps: WorkflowStep[]): void {
+	const actions = steps.flatMap((step) => (step.uses ? [step.uses] : []));
+
+	for (const expected of [
+		'actions/checkout@v7',
+		'actions/setup-python@v7',
+		'actions/setup-node@v7',
+	]) {
+		expect(actions).toContain(expected);
+	}
 }
 
 describe('GitHub workflow Node.js versions', () => {
@@ -129,5 +141,19 @@ describe('GitHub 工作流 Python 测试环境', () => {
 		const steps = workflow.jobs?.release?.steps ?? [];
 
 		expectPythonTestEnvironment(steps, 'npm run release:verify');
+	});
+});
+
+describe('GitHub 工作流官方 Action runner', () => {
+	it('CI 只采用当前 node24 主版本的基础 Action', () => {
+		const workflow = readYaml<CiWorkflow>('.github/workflows/ci.yml');
+
+		expectNode24OfficialActions(workflow.jobs?.test?.steps ?? []);
+	});
+
+	it('Release 只采用当前 node24 主版本的基础 Action', () => {
+		const workflow = readYaml<ReleaseWorkflow>('.github/workflows/release.yml');
+
+		expectNode24OfficialActions(workflow.jobs?.release?.steps ?? []);
 	});
 });
