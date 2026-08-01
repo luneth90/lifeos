@@ -91,14 +91,15 @@ function expectPythonTestEnvironment(steps: WorkflowStep[], verificationCommand:
 }
 
 function expectNode24OfficialActions(steps: WorkflowStep[]): void {
-	const actions = steps.flatMap((step) => (step.uses ? [step.uses] : []));
-
-	for (const expected of [
-		'actions/checkout@v7',
-		'actions/setup-python@v7',
-		'actions/setup-node@v7',
+	for (const [action, expected] of [
+		['actions/checkout', 'actions/checkout@v7'],
+		['actions/setup-python', 'actions/setup-python@v7'],
+		['actions/setup-node', 'actions/setup-node@v7'],
 	]) {
-		expect(actions).toContain(expected);
+		const matchingUses = steps.flatMap((step) =>
+			step.uses?.startsWith(`${action}@`) ? [step.uses] : [],
+		);
+		expect(matchingUses).toEqual([expected]);
 	}
 }
 
