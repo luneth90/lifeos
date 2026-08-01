@@ -176,6 +176,7 @@ function parseTar(tar: Buffer): ParsedEntry[] {
 	}
 	const entries: ParsedEntry[] = [];
 	const targets = new Set<string>();
+	const prefixSpellings = new Map<string, string>();
 	let pendingPaxPath: string | undefined;
 	let pendingGnuPath: string | undefined;
 	let offset = 0;
@@ -254,6 +255,19 @@ function parseTar(tar: Buffer): ParsedEntry[] {
 			throw new Error('tar 目录 entry 不得包含数据');
 		}
 		const safePath = sanitizePath(rawPath, kind);
+		let rawPrefix = '';
+		let portablePrefix = '';
+		for (const segment of safePath.segments) {
+			rawPrefix = rawPrefix === '' ? segment : `${rawPrefix}/${segment}`;
+			const portableSegment = segment.normalize('NFC').toLowerCase();
+			portablePrefix =
+				portablePrefix === '' ? portableSegment : `${portablePrefix}/${portableSegment}`;
+			const existingSpelling = prefixSpellings.get(portablePrefix);
+			if (existingSpelling !== undefined && existingSpelling !== rawPrefix) {
+				throw new Error(`tar 路径前缀发生跨平台拼写碰撞：${rawPrefix}`);
+			}
+			prefixSpellings.set(portablePrefix, rawPrefix);
+		}
 		if (targets.has(safePath.portableKey)) {
 			throw new Error(`tar 目标重复或发生跨平台碰撞：${safePath.path}`);
 		}

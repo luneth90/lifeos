@@ -61,8 +61,18 @@ function directoryLinkType(platform: NodeJS.Platform = process.platform): 'dir' 
 	return platform === 'win32' ? 'junction' : 'dir';
 }
 
-function npmExecutable(platform: NodeJS.Platform = process.platform): 'npm' | 'npm.cmd' {
-	return platform === 'win32' ? 'npm.cmd' : 'npm';
+function npmInvocation(
+	platform: NodeJS.Platform = process.platform,
+	npmExecPath: string | undefined = process.env.npm_execpath,
+	nodeExecutable: string = process.execPath,
+): { command: string; prefixArgs: string[] } {
+	if (npmExecPath) {
+		return { command: nodeExecutable, prefixArgs: [npmExecPath] };
+	}
+	if (platform === 'win32') {
+		throw new Error('Windows 包运行时测试需要 npm_execpath 才能安全启动 npm CLI');
+	}
+	return { command: 'npm', prefixArgs: [] };
 }
 
 describe('assetsDir', () => {
@@ -73,12 +83,16 @@ describe('assetsDir', () => {
 	] as const)('%s 使用 %s 连接测试 node_modules', (platform, expected) => {
 		expect(directoryLinkType(platform)).toBe(expected);
 	});
-	test.each([
-		['win32', 'npm.cmd'],
-		['darwin', 'npm'],
-		['linux', 'npm'],
-	] as const)('%s 使用 %s 启动 npm', (platform, expected) => {
-		expect(npmExecutable(platform)).toBe(expected);
+	test('Windows 通过 Node 启动 npm CLI，而不是直接执行 npm.cmd', () => {
+		expect(npmInvocation('win32', 'C:\\npm-cli.js', 'C:\\node.exe')).toEqual({
+			command: 'C:\\node.exe',
+			prefixArgs: ['C:\\npm-cli.js'],
+		});
+		expect(() => npmInvocation('win32', '', 'C:\\node.exe')).toThrow();
+		expect(npmInvocation('linux', '', '/usr/bin/node')).toEqual({
+			command: 'npm',
+			prefixArgs: [],
+		});
 	});
 
 	test('发布资产通过双语技能契约校验', async () => {
@@ -98,15 +112,16 @@ describe('assetsDir', () => {
 				directoryLinkType(),
 			);
 			const environment = { ...process.env, NPM_CONFIG_CACHE: join(directory, 'npm-cache') };
-			const built = spawnSync(npmExecutable(), ['run', 'build'], {
+			const npm = npmInvocation();
+			const built = spawnSync(npm.command, [...npm.prefixArgs, 'run', 'build'], {
 				cwd: packageSource,
 				encoding: 'utf8',
 				env: environment,
 			});
 			expect(built.status, built.stderr).toBe(0);
 			const packed = spawnSync(
-				npmExecutable(),
-				['pack', '--json', '--pack-destination', directory],
+				npm.command,
+				[...npm.prefixArgs, 'pack', '--json', '--pack-destination', directory],
 				{
 					cwd: packageSource,
 					encoding: 'utf8',

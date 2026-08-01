@@ -175,6 +175,24 @@ describe('纯 Node tar.gz 测试解包器', () => {
 		}
 	});
 
+	test.each([
+		{
+			entries: [
+				{ name: 'package/Foo/a.txt', data: 'first' },
+				{ name: 'package/foo/b.txt', data: 'second' },
+			],
+		},
+		{
+			entries: [
+				{ name: 'package/café/a.txt', data: 'first' },
+				{ name: 'package/café/b.txt', data: 'second' },
+			],
+		},
+	])('拒绝隐式父目录的大小写或 Unicode 规范化碰撞', ({ entries }) => {
+		const archive = writeArchive(createTar(entries));
+		expect(() => extractTarGz(archive, join(workspace, 'out'))).toThrow();
+	});
+
 	test.each(['1', '2'])('拒绝链接类型 %s', (type) => {
 		const archive = writeArchive(
 			createTar([{ name: 'package/link', type, linkName: '../outside', data: '' }]),
