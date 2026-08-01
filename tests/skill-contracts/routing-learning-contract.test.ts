@@ -307,4 +307,31 @@ describe('阶段三路由与学习链路契约', () => {
 			}
 		}
 	});
+
+	it('Knowledge 分别约束独立 Wiki 证据与项目绑定原文，不把路径 B 前置条件施加给路径 A', () => {
+		const cases = [
+			{
+				path: 'assets/skills/knowledge/SKILL.zh.md',
+				standaloneSource: '独立 Wiki 证据（路径 A）',
+				standaloneMissing: '缺失时仅停止路径 A',
+				projectSource: '项目原文（路径 B）',
+				standaloneExtraction: '路径 A 只创建用户明确请求的一个概念',
+				projectExtraction: '路径 B 只提取项目对应章节明确规划的概念',
+			},
+			{
+				path: 'assets/skills/knowledge/SKILL.en.md',
+				standaloneSource: 'Standalone Wiki evidence (Path A)',
+				standaloneMissing: 'If missing, stop Path A only',
+				projectSource: 'Project source text (Path B)',
+				standaloneExtraction: 'Path A creates only the single concept explicitly requested',
+				projectExtraction:
+					'Path B extracts only concepts explicitly planned for the corresponding project chapter',
+			},
+		];
+		for (const expected of cases) {
+			const content = read(expected.path);
+			for (const value of Object.values(expected).slice(1))
+				expect(content, expected.path).toContain(value);
+		}
+	});
 });
