@@ -121,10 +121,9 @@ def normalize_source_label(raw_label: Optional[str], resolved_pdf_path: Path) ->
     if (
         not normalized
         or normalized != normalized.strip()
-        or normalized.startswith("/")
+        or normalized.startswith(("/", "~/"))
         or "\\" in normalized
-        or "://" in normalized
-        or re.match(r"^[A-Za-z]:", normalized)
+        or ":" in normalized
         or any(not segment or segment in {".", ".."} for segment in segments)
         or any(ord(character) < 32 for character in normalized)
     ):
@@ -312,6 +311,12 @@ def extract_blocks(page: fitz.Page) -> List[Dict[str, Any]]:
                 sortable.append((float(bbox[1]), float(bbox[0]), "text", content))
         elif kind == 1:
             sortable.append((float(bbox[1]), float(bbox[0]), "image", ""))
+
+    for drawing in page.get_drawings():
+        rectangle = drawing.get("rect")
+        if rectangle is None:
+            continue
+        sortable.append((float(rectangle.y0), float(rectangle.x0), "image", ""))
     sortable.sort(key=lambda item: (item[0], item[1]))
     return [
         {"kind": kind, "order": index, "content": content}
@@ -435,7 +440,7 @@ def main() -> int:
             visual_pages = [
                 page["pdf_page_index"]
                 for page in extracted_pages
-                if page["status"] in {"needs_ocr", "partial"}
+                if page["status"] in {"needs_ocr", "partial", "failed"}
                 or any(block["kind"] == "image" for block in page["blocks"])
             ]
             if not args.skip_render and visual_pages:

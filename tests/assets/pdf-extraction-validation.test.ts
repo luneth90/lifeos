@@ -12,6 +12,7 @@ const validatorPath = join(
 	'scripts',
 	'validate_pdf_extraction.py',
 );
+const pdfSchemaPath = join(process.cwd(), 'assets', 'schema', 'PDF_Extraction_Schema.json');
 const temporaryDirectories: string[] = [];
 
 interface Diagnostic {
@@ -70,12 +71,26 @@ function partialPackage() {
 	return value;
 }
 
-function runValidator(value: unknown, args: string[] = []) {
+function runValidator(value: unknown, args: string[] = [], includeDefaultSchema = true) {
 	const directory = mkdtempSync(join(tmpdir(), 'lifeos-pdf-validator-'));
 	temporaryDirectories.push(directory);
 	const packagePath = join(directory, 'package.json');
 	writeFileSync(packagePath, JSON.stringify(value));
-	return spawnSync('python3', [validatorPath, packagePath, ...args], { encoding: 'utf-8' });
+	const schemaArgs =
+		includeDefaultSchema && !args.includes('--schema') ? ['--schema', pdfSchemaPath] : [];
+	return spawnSync('python3', [validatorPath, packagePath, ...schemaArgs, ...args], {
+		encoding: 'utf-8',
+	});
+}
+
+function runValidatorRaw(value: string, args: string[] = []) {
+	const directory = mkdtempSync(join(tmpdir(), 'lifeos-pdf-validator-raw-'));
+	temporaryDirectories.push(directory);
+	const packagePath = join(directory, 'package.json');
+	writeFileSync(packagePath, value);
+	return spawnSync('python3', [validatorPath, packagePath, '--schema', pdfSchemaPath, ...args], {
+		encoding: 'utf-8',
+	});
 }
 
 function diagnostics(result: ReturnType<typeof runValidator>): Diagnostic[] {
@@ -90,6 +105,16 @@ afterEach(() => {
 });
 
 describe('PDF 提取包完整性校验 CLI', () => {
+	it('要求安装态调用显式传入可配置 Schema 路径', () => {
+		const result = runValidator(completePackage(), [], false);
+
+		expect(result.status).toBe(2);
+		expect(JSON.parse(result.stderr)).toMatchObject({
+			ok: false,
+			diagnostics: [{ code: 'input_error', path: '$' }],
+		});
+	});
+
 	it('接受合法 complete 包并通过强完整性门禁', () => {
 		const result = runValidator(completePackage(), ['--require-complete']);
 		expect(result.status, result.stderr).toBe(0);
@@ -175,9 +200,11 @@ describe('PDF 提取包完整性校验 CLI', () => {
 
 	it.each([
 		'/Users/alice/book.pdf',
+		' /Users/alice/book.pdf',
 		'../book.pdf',
 		'books/../book.pdf',
 		'C:\\Users\\alice\\book.pdf',
+		'file:/Users/alice/book.pdf',
 	])('拒绝泄露本机位置的 source.path：%s', (sourcePath) => {
 		const value = completePackage();
 		value.source.path = sourcePath;
@@ -185,6 +212,18 @@ describe('PDF 提取包完整性校验 CLI', () => {
 
 		expect(result.status).toBe(1);
 		expect(diagnostics(result).map((item) => item.code)).toContain('schema_pattern');
+	});
+
+	it('拒绝 Unicode 规范化后伪装成绝对路径的 source.path', () => {
+		const value = completePackage();
+		value.source.path = '／Users/alice/book.pdf';
+		const result = runValidator(value);
+
+		expect(result.status).toBe(1);
+		expect(diagnostics(result)).toContainEqual({
+			code: 'unsafe_source_path',
+			path: '$.source.path',
+		});
 	});
 
 	it('拒绝覆盖率、错误和图像占位符伪造的 complete 页面', () => {
@@ -310,6 +349,65 @@ describe('PDF 提取包完整性校验 CLI', () => {
 			code: 'schema_unsupported_keyword',
 			path: '$.requested_pages',
 		});
+	});
+
+	it('Schema 未实现关键字位于缺席的可选分支时仍失败关闭', () => {
+		const directory = mkdtempSync(join(tmpdir(), 'lifeos-pdf-schema-absent-keyword-'));
+		temporaryDirectories.push(directory);
+		const schema = JSON.parse(readFileSync(pdfSchemaPath, 'utf-8')) as {
+			properties: { rendered_images: { items: Record<string, unknown> } };
+		};
+		schema.properties.rendered_images.items.maxProperties = 2;
+		const schemaPath = join(directory, 'schema.json');
+		writeFileSync(schemaPath, JSON.stringify(schema));
+		const result = runValidator(completePackage(), ['--schema', schemaPath]);
+
+		expect(result.status).toBe(1);
+		expect(diagnostics(result)).toContainEqual({
+			code: 'schema_unsupported_keyword',
+			path: '$.rendered_images[]',
+		});
+	});
+
+	it.each(['NaN', 'Infinity', '-Infinity'])('拒绝非标准 JSON 数值常量：%s', (nonFiniteValue) => {
+		const raw = JSON.stringify(completePackage()).replace(
+			'"confidence":1',
+			`"confidence":${nonFiniteValue}`,
+		);
+		const result = runValidatorRaw(raw);
+
+		expect(result.status).toBe(2);
+		expect(JSON.parse(result.stderr)).toMatchObject({
+			ok: false,
+			diagnostics: [{ code: 'input_error', path: '$' }],
+		});
+	});
+
+	it('严格按 RFC 3339 拒绝非 T 分隔的时间', () => {
+		const value = completePackage();
+		value.source.mtime = '2026-07-31X00:00:00Z';
+		const result = runValidator(value);
+
+		expect(result.status).toBe(1);
+		expect(diagnostics(result)).toContainEqual({ code: 'schema_format', path: '$.source.mtime' });
+	});
+
+	it.each([
+		['非请求页', [{ page: 999, path: '/tmp/page-999.png' }], 'rendered_image_page'],
+		[
+			'重复页',
+			[
+				{ page: 1, path: '/tmp/page-1-a.png' },
+				{ page: 1, path: '/tmp/page-1-b.png' },
+			],
+			'rendered_image_duplicate',
+		],
+	])('拒绝 rendered_images %s', (_name, renderedImages, code) => {
+		const value = Object.assign(completePackage(), { rendered_images: renderedImages });
+		const result = runValidator(value);
+
+		expect(result.status).toBe(1);
+		expect(diagnostics(result).map((item) => item.code)).toContain(code);
 	});
 });
 

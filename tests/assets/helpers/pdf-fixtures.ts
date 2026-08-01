@@ -10,6 +10,7 @@ export interface PdfFixtures {
 	printedLabelPdf: string;
 	sparsePagesPdf: string;
 	textPdf: string;
+	vectorVisualPdf: string;
 	workspace: string;
 	cleanup(): void;
 }
@@ -22,6 +23,7 @@ export function createPdfFixtures(): PdfFixtures {
 	const formulaImagePdf = join(workspace, 'formula-image.pdf');
 	const mixedVisualPdf = join(workspace, 'mixed-visual.pdf');
 	const sparsePagesPdf = join(workspace, 'sparse-pages.pdf');
+	const vectorVisualPdf = join(workspace, 'vector-visual.pdf');
 	const program = [
 		'import fitz, sys',
 		'text_path, no_text_path = sys.argv[1:3]',
@@ -70,6 +72,13 @@ export function createPdfFixtures(): PdfFixtures {
 		"    page.insert_text((72, 72), f'Sparse page {index}', fontsize=12)",
 		'sparse.save(sys.argv[5])',
 		'sparse.close()',
+		'vector = fitz.open()',
+		'vector_page = vector.new_page()',
+		"vector_page.insert_text((72, 72), 'Revenue by quarter', fontsize=12)",
+		'vector_page.draw_rect(fitz.Rect(72, 120, 160, 300), color=(0, 0, 0), fill=(0.2, 0.4, 0.8))',
+		'vector_page.draw_rect(fitz.Rect(190, 180, 278, 300), color=(0, 0, 0), fill=(0.8, 0.4, 0.2))',
+		'vector.save(sys.argv[7])',
+		'vector.close()',
 	].join('\n');
 	const result = spawnSync(
 		'python3',
@@ -82,6 +91,7 @@ export function createPdfFixtures(): PdfFixtures {
 			formulaImagePdf,
 			sparsePagesPdf,
 			mixedVisualPdf,
+			vectorVisualPdf,
 		],
 		{
 			encoding: 'utf-8',
@@ -100,6 +110,7 @@ export function createPdfFixtures(): PdfFixtures {
 		formulaImagePdf,
 		mixedVisualPdf,
 		sparsePagesPdf,
+		vectorVisualPdf,
 		cleanup: () => rmSync(workspace, { force: true, recursive: true }),
 	};
 }

@@ -140,6 +140,26 @@ describe('read_pdf.py 提取包', () => {
 		generatedPaths.push(join(rendered[0].path as string, '..'));
 	});
 
+	it('将含文字的矢量图表标记为待视觉补充并渲染', () => {
+		const fixture = createFixtures();
+		const result = runScript([fixture.vectorVisualPdf, '1']);
+		expect(result.status, result.stderr).toBe(0);
+		const outputPath = result.stdout.match(/已输出 JSON：(.*)/)?.[1]?.trim();
+		expect(outputPath).toBeTruthy();
+		generatedPaths.push(outputPath as string);
+		const output = JSON.parse(readFileSync(outputPath as string, 'utf-8')) as {
+			pages: Array<{ status: string; errors: string[]; blocks: Array<{ kind: string }> }>;
+			rendered_images: Array<{ page: number; path: string }>;
+		};
+
+		expect(output.pages[0].status).toBe('partial');
+		expect(output.pages[0].errors).toContain('VISUAL_CONTENT_PENDING');
+		expect(output.pages[0].blocks.map((block) => block.kind)).toContain('image');
+		expect(output.rendered_images.map((image) => image.page)).toEqual([1]);
+		expect(existsSync(output.rendered_images[0].path)).toBe(true);
+		generatedPaths.push(join(output.rendered_images[0].path, '..'));
+	});
+
 	it('默认只渲染需要视觉补充的页面', () => {
 		const fixture = createFixtures();
 		const outputPath = join(fixture.workspace, 'text-with-render-default.json');
@@ -191,24 +211,62 @@ describe('read_pdf.py 提取包', () => {
 		expect(JSON.stringify(output)).not.toContain(fixture.workspace);
 	});
 
-	it.each(['', '/tmp/leak.pdf', '../leak.pdf', 'books/../leak.pdf', './leak.pdf', 'C:\\leak.pdf'])(
-		'拒绝不安全的 source-label：%s',
-		(sourceLabel) => {
-			const fixture = createFixtures();
-			const result = runScript([
-				fixture.textPdf,
-				'1',
-				'--skip-render',
-				'--source-label',
-				sourceLabel,
-				'--output',
-				join(fixture.workspace, 'unsafe-label.json'),
-			]);
+	it.each([
+		'',
+		'/tmp/leak.pdf',
+		' /tmp/leak.pdf',
+		'../leak.pdf',
+		'books/../leak.pdf',
+		'./leak.pdf',
+		'C:\\leak.pdf',
+		'file:/Users/alice/leak.pdf',
+		'／Users/alice/leak.pdf',
+	])('拒绝不安全的 source-label：%s', (sourceLabel) => {
+		const fixture = createFixtures();
+		const result = runScript([
+			fixture.textPdf,
+			'1',
+			'--skip-render',
+			'--source-label',
+			sourceLabel,
+			'--output',
+			join(fixture.workspace, 'unsafe-label.json'),
+		]);
 
-			expect(result.status).toBe(2);
-			expect(JSON.parse(result.stderr)).toMatchObject({ error: { code: 'INVALID_SOURCE_LABEL' } });
-		},
-	);
+		expect(result.status).toBe(2);
+		expect(JSON.parse(result.stderr)).toMatchObject({ error: { code: 'INVALID_SOURCE_LABEL' } });
+	});
+
+	it('为提取失败页生成视觉恢复所需的 PNG', () => {
+		const fixture = createFixtures();
+		const outputPath = join(fixture.workspace, 'failed-page-result.json');
+		const program = [
+			'import importlib.util, sys',
+			'spec = importlib.util.spec_from_file_location("lifeos_read_pdf", sys.argv[1])',
+			'module = importlib.util.module_from_spec(spec)',
+			'sys.modules[spec.name] = module',
+			'spec.loader.exec_module(module)',
+			'def failed_page(_page, index):',
+			'    return {"pdf_page_index": index, "printed_page_label": None, "status": "failed", "coverage": 0, "confidence": 0, "errors": ["EXTRACTION_FAILED"], "blocks": []}',
+			'module.extract_page = failed_page',
+			'sys.argv = [sys.argv[1], sys.argv[2], "1", "--output", sys.argv[3]]',
+			'raise SystemExit(module.main())',
+		].join('\n');
+		const result = spawnSync('python3', ['-c', program, scriptPath, fixture.textPdf, outputPath], {
+			encoding: 'utf-8',
+		});
+
+		expect(result.status, result.stderr).toBe(0);
+		generatedPaths.push(outputPath);
+		const output = JSON.parse(readFileSync(outputPath, 'utf-8')) as {
+			pages: Array<{ status: string }>;
+			rendered_images: Array<{ page: number; path: string }>;
+		};
+		expect(output.pages[0].status).toBe('failed');
+		expect(output.rendered_images.map((image) => image.page)).toEqual([1]);
+		expect(existsSync(output.rendered_images[0].path)).toBe(true);
+		generatedPaths.push(join(output.rendered_images[0].path, '..'));
+	});
 
 	it('以分块读取计算 SHA-256，不依赖 Path.read_bytes', () => {
 		const fixture = createFixtures();

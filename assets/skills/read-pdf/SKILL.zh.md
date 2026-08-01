@@ -81,7 +81,7 @@ pip install PyMuPDF Pillow
   `full_text`、`text_layer_missing_pages` 等扁平字段
 - `source.path` 只保存安全的 Vault 相对显示标签；可通过 `--source-label` 显式传入，默认仅使用 PDF 文件名，禁止写入本机绝对路径
 - 默认输出名含微秒和源文件 SHA-256 前八位；只保留由输出包引用的渲染目录，失败时清理未保留临时图像
-- 只为 `needs_ocr`、`partial` 或含 `image` block 的页面生成 PNG；完整纯文本页不渲染
+- 为 `needs_ocr`、`partial`、`failed`、含位图 block 或矢量绘制内容的页面生成 PNG；完整纯文本页不渲染
 - 图表、公式、表格的视觉分析必须基于 `blocks` 与 `rendered_images` 回填，而不是猜测文字层缺失内容
 
 ## 版本化提取包（必须）
@@ -97,9 +97,10 @@ pip install PyMuPDF Pillow
 - `coverage`、`confidence` 与机器可读的 `errors`
 - 按 `order` 排序的 `blocks`；`image` block 表示尚需视觉补充的区域
 
-仅对 `needs_ocr`、`partial` 页面，或含 `image` block 的页面调用 `inspect_image`。把 OCR、公式、表格或图表
+仅对 `needs_ocr`、`partial`、`failed` 页面，或含 `image` block 的页面调用 `inspect_image`。把 OCR、公式、表格或图表
 结果追加为对应位置的 block，按 `order` 合并，并重新计算 `coverage`、`confidence`、`status` 与 `errors`。
 视觉补充没有完成前，页面不得宣称 `complete`。
+校验脚本每次调用都必须通过 `--schema` 显式传入由 `lifeos.yaml` 解析的 Schema 路径，不得推测安装目录。
 
 # 输入协议
 

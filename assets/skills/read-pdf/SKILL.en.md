@@ -78,7 +78,7 @@ Script responsibilities:
 - Output a versioned package conforming to `PDF_Extraction_Schema.json`; do not consume retired flat fields such as `full_text` or `text_layer_missing_pages`
 - Store only a safe Vault-relative display label in `source.path`. Pass it with `--source-label`, or accept the default PDF basename; never persist the local absolute source path
 - Default output names include microseconds and the first eight source SHA-256 characters; only retain rendered directories referenced by the output package, and clean unretained temporary images on failure
-- Generate PNG files only for `needs_ocr` or `partial` pages, or pages containing an `image` block; do not render complete text-only pages
+- Generate PNG files for `needs_ocr`, `partial`, or `failed` pages, and for pages containing bitmap blocks or vector drawing content; do not render complete text-only pages
 - Visual analysis of charts, formulas, and tables must enrich `blocks` and `rendered_images`, not guess missing text-layer content
 
 ## Versioned Extraction Package (Required)
@@ -94,7 +94,8 @@ For every page, inspect:
 - `coverage`, `confidence`, and machine-readable `errors`
 - `blocks` sorted by `order`; an `image` block marks a region requiring visual enrichment
 
-Call `inspect_image` only for `needs_ocr` or `partial` pages, or pages containing an `image` block. Append OCR, formula, table, or chart results at the relevant position, merge by `order`, and recompute `coverage`, `confidence`, `status`, and `errors`. A page is never `complete` before visual enrichment is complete.
+Call `inspect_image` only for `needs_ocr`, `partial`, or `failed` pages, or pages containing an `image` block. Append OCR, formula, table, or chart results at the relevant position, merge by `order`, and recompute `coverage`, `confidence`, `status`, and `errors`. A page is never `complete` before visual enrichment is complete.
+Every validator invocation must pass the Schema path resolved from `lifeos.yaml` explicitly through `--schema`; never infer it from the installation directory.
 
 # Input Protocol
 

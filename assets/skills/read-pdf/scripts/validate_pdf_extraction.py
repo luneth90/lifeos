@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
+import unicodedata
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
 
 
 Diagnostic = Dict[str, str]
@@ -33,6 +35,18 @@ SUPPORTED_SCHEMA_KEYWORDS = {
     "type",
     "uniqueItems",
 }
+RFC3339_PATTERN = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\Z"
+)
+
+
+class ValidatorInputError(Exception):
+    """用于将参数和 JSON 输入错误统一转换为机器可读诊断。"""
+
+
+class JsonArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:
+        raise ValidatorInputError(message)
 
 
 def add_diagnostic(diagnostics: List[Diagnostic], code: str, path: str) -> None:
@@ -57,7 +71,11 @@ def matches_type(value: Any, expected: str) -> bool:
     if expected == "integer":
         return isinstance(value, int) and not isinstance(value, bool)
     if expected == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and (not isinstance(value, float) or math.isfinite(value))
+        )
     if expected == "boolean":
         return isinstance(value, bool)
     return False
@@ -78,11 +96,67 @@ def json_equal(left: Any, right: Any) -> bool:
 
 
 def valid_date_time(value: str) -> bool:
+    if RFC3339_PATTERN.fullmatch(value) is None:
+        return False
     try:
         parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
     except ValueError:
         return False
     return parsed.tzinfo is not None
+
+
+def validate_schema_definition(
+    schema: Any,
+    path: str,
+    diagnostics: List[Diagnostic],
+) -> None:
+    """先遍历整份 Schema，确保可选分支也不能隐藏未实现关键字。"""
+    if not isinstance(schema, dict):
+        add_diagnostic(diagnostics, "schema_definition", path)
+        return
+
+    if any(keyword not in SUPPORTED_SCHEMA_KEYWORDS for keyword in schema):
+        add_diagnostic(diagnostics, "schema_unsupported_keyword", path)
+
+    declared_type = schema.get("type")
+    if declared_type is not None:
+        expected_types = [declared_type] if isinstance(declared_type, str) else declared_type
+        if not isinstance(expected_types, list) or not all(
+            isinstance(item, str) for item in expected_types
+        ):
+            add_diagnostic(diagnostics, "schema_definition", path)
+
+    required = schema.get("required")
+    if required is not None and (
+        not isinstance(required, list) or not all(isinstance(item, str) for item in required)
+    ):
+        add_diagnostic(diagnostics, "schema_definition", path)
+
+    properties = schema.get("properties")
+    if properties is not None:
+        if not isinstance(properties, dict):
+            add_diagnostic(diagnostics, "schema_definition", path)
+        else:
+            for key, property_schema in properties.items():
+                property_path = child_path(path, str(key))
+                validate_schema_definition(property_schema, property_path, diagnostics)
+
+    if "items" in schema:
+        validate_schema_definition(schema["items"], f"{path}[]", diagnostics)
+
+    pattern = schema.get("pattern")
+    if pattern is not None:
+        if not isinstance(pattern, str):
+            add_diagnostic(diagnostics, "schema_definition", path)
+        else:
+            try:
+                re.compile(pattern)
+            except re.error:
+                add_diagnostic(diagnostics, "schema_definition", path)
+
+    schema_format = schema.get("format")
+    if schema_format is not None and schema_format != "date-time":
+        add_diagnostic(diagnostics, "schema_unsupported_keyword", path)
 
 
 def validate_schema_value(
@@ -91,9 +165,6 @@ def validate_schema_value(
     path: str,
     diagnostics: List[Diagnostic],
 ) -> None:
-    if any(keyword not in SUPPORTED_SCHEMA_KEYWORDS for keyword in schema):
-        add_diagnostic(diagnostics, "schema_unsupported_keyword", path)
-
     declared_type = schema.get("type")
     if declared_type is not None:
         expected_types = [declared_type] if isinstance(declared_type, str) else declared_type
@@ -174,10 +245,28 @@ def integer_list(value: Any) -> Optional[List[int]]:
     return value
 
 
-def number_value(value: Any) -> Optional[float]:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return float(value)
+def number_value(value: Any) -> Optional[Union[int, float]]:
+    if (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and (not isinstance(value, float) or math.isfinite(value))
+    ):
+        return value
     return None
+
+
+def safe_source_path(value: str) -> bool:
+    normalized = unicodedata.normalize("NFKC", value)
+    segments = normalized.split("/")
+    return not (
+        not normalized
+        or normalized != normalized.strip()
+        or normalized.startswith(("/", "~/"))
+        or "\\" in normalized
+        or ":" in normalized
+        or any(not segment or segment in {".", ".."} for segment in segments)
+        or any(ord(character) < 32 for character in normalized)
+    )
 
 
 def validate_page_semantics(page: Dict[str, Any], index: int, diagnostics: List[Diagnostic]) -> None:
@@ -251,11 +340,26 @@ def validate_semantics(package: Any, require_complete: bool) -> List[Diagnostic]
                 add_diagnostic(diagnostics, "requested_range_mismatch", "$.requested_range")
 
     source = package.get("source")
-    if isinstance(source, dict) and requested_pages:
-        page_count = source.get("page_count")
-        if isinstance(page_count, int) and not isinstance(page_count, bool):
-            if requested_pages[0] < 1 or requested_pages[-1] > page_count:
-                add_diagnostic(diagnostics, "page_out_of_source", "$.requested_pages")
+    if isinstance(source, dict):
+        source_path = source.get("path")
+        if isinstance(source_path, str) and not safe_source_path(source_path):
+            add_diagnostic(diagnostics, "unsafe_source_path", "$.source.path")
+        if requested_pages:
+            page_count = source.get("page_count")
+            if isinstance(page_count, int) and not isinstance(page_count, bool):
+                if requested_pages[0] < 1 or requested_pages[-1] > page_count:
+                    add_diagnostic(diagnostics, "page_out_of_source", "$.requested_pages")
+
+    rendered_images = package.get("rendered_images")
+    if isinstance(rendered_images, list) and all(isinstance(item, dict) for item in rendered_images):
+        rendered_pages = integer_list([item.get("page") for item in rendered_images])
+        if rendered_pages is not None:
+            if len(rendered_pages) != len(set(rendered_pages)):
+                add_diagnostic(diagnostics, "rendered_image_duplicate", "$.rendered_images")
+            if requested_pages is not None and any(
+                page not in requested_pages for page in rendered_pages
+            ):
+                add_diagnostic(diagnostics, "rendered_image_page", "$.rendered_images")
 
     if page_objects is not None:
         for index, page in enumerate(page_objects):
@@ -286,30 +390,36 @@ def unique_diagnostics(diagnostics: Iterable[Diagnostic]) -> List[Diagnostic]:
 
 def validate_package(package: Any, schema: Dict[str, Any], require_complete: bool = False) -> List[Diagnostic]:
     diagnostics: List[Diagnostic] = []
+    validate_schema_definition(schema, "$", diagnostics)
     validate_schema_value(package, schema, "$", diagnostics)
     diagnostics.extend(validate_semantics(package, require_complete))
     return unique_diagnostics(diagnostics)
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    default_schema = Path(__file__).resolve().parents[3] / "schema" / "PDF_Extraction_Schema.json"
-    parser = argparse.ArgumentParser(description="校验 LifeOS PDF 提取包")
+    parser = JsonArgumentParser(description="校验 LifeOS PDF 提取包")
     parser.add_argument("package_path", help="待校验的 JSON 提取包")
-    parser.add_argument("--schema", default=str(default_schema), help="PDF 提取包 JSON Schema")
+    parser.add_argument("--schema", required=True, help="PDF 提取包 JSON Schema")
     parser.add_argument("--require-complete", action="store_true", help="要求所有请求页均为 complete")
     return parser.parse_args(argv)
 
 
 def read_json(path: str) -> Any:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    def reject_nonstandard_constant(value: str) -> None:
+        raise ValidatorInputError(f"非标准 JSON 数值常量：{value}")
+
+    return json.loads(
+        Path(path).read_text(encoding="utf-8"),
+        parse_constant=reject_nonstandard_constant,
+    )
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = parse_args(argv)
     try:
+        args = parse_args(argv)
         package = read_json(args.package_path)
         schema = read_json(args.schema)
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, json.JSONDecodeError, ValidatorInputError):
         payload = {"ok": False, "diagnostics": [{"code": "input_error", "path": "$"}]}
         print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
         return 2
