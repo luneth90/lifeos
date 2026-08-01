@@ -12,6 +12,51 @@ LifeOS 帮助你将碎片灵感发展为结构化知识，并真正掌握它，�
 
 LifeOS 的出发点很直接：把学习工作流、技能、模板、提示词和记忆系统整合成一套可以直接落地的完整方案。你不需要自己从零拼装工具链，也不必在不同工具之间来回切换，初始化后即可开箱即用，并在真实使用中持续沉淀知识、流程与偏好。
 
+## 安装与初始化
+
+```bash
+# 第一步：全局安装 CLI
+npm install -g lifeos
+
+# 第二步：创建新的 LifeOS 工作空间（根据系统 locale 自动检测语言）
+lifeos init ./my-vault
+
+# 或显式指定语言
+lifeos init ./my-vault --lang zh   # 中文
+lifeos init ./my-vault --lang en   # 英文
+```
+
+## 升级
+
+当 LifeOS 发布新版本后，按以下步骤升级已有 Vault：
+
+```bash
+# 第一步：更新 CLI 到最新版本
+npm update -g lifeos
+
+# 第二步：升级 Vault 资产与脚手架
+lifeos upgrade ./my-vault
+```
+
+`npm update -g lifeos` 会更新 CLI 和内置资源；`lifeos upgrade` 会自动升级 Vault，并在升级前保留最近一次回滚备份。
+
+### 手动回滚
+
+备份位于 Vault 同级的 `.lifeos-cutovers` 目录。先查找对应的 `journal.json`：
+
+```bash
+find /absolute/path/to/.lifeos-cutovers -type f -name journal.json -print
+```
+
+然后使用该 journal 回滚：
+
+```bash
+lifeos upgrade /absolute/path/to/my-vault \
+  --restore /absolute/path/to/.lifeos-cutovers/my-vault-<id>/<cutover-id>/journal.json
+```
+
+回滚会替换整个 Vault；请先保存升级后仍需保留的内容。
+
 ## 核心功能
 
 ### 目录结构
@@ -101,51 +146,6 @@ memory_bootstrap
 | **Python 3** | 必须 | PDF 提取（`/read-pdf`）和信息周报抓取脚本（`/digest`） |
 
 `lifeos init` 会在创建工作空间前自动检查所有前置依赖。
-
-### 安装与初始化
-
-```bash
-# 第一步：全局安装 CLI
-npm install -g lifeos
-
-# 第二步：创建新的 LifeOS 工作空间（根据系统 locale 自动检测语言）
-lifeos init ./my-vault
-
-# 或显式指定语言
-lifeos init ./my-vault --lang zh   # 中文
-lifeos init ./my-vault --lang en   # 英文
-```
-
-## 升级
-
-当 LifeOS 发布新版本后，按以下步骤升级已有 Vault：
-
-```bash
-# 第一步：更新 CLI 到最新版本
-npm update -g lifeos
-
-# 第二步：升级 Vault 资产与脚手架
-lifeos upgrade ./my-vault
-```
-
-`npm update -g lifeos` 会更新 CLI 和内置资源；`lifeos upgrade` 会自动升级 Vault，并在升级前保留最近一次回滚备份。
-
-### 手动回滚
-
-备份位于 Vault 同级的 `.lifeos-cutovers` 目录。先查找对应的 `journal.json`：
-
-```bash
-find /absolute/path/to/.lifeos-cutovers -type f -name journal.json -print
-```
-
-然后使用该 journal 回滚：
-
-```bash
-lifeos upgrade /absolute/path/to/my-vault \
-  --restore /absolute/path/to/.lifeos-cutovers/my-vault-<id>/<cutover-id>/journal.json
-```
-
-回滚会替换整个 Vault；请先保存升级后仍需保留的内容。
 
 ## CLI 命令
 

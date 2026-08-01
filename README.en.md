@@ -7,6 +7,53 @@ LifeOS helps you grow scattered ideas into structured knowledge and truly master
 
 LifeOS started from a simple goal: package learning workflows, skills, templates, prompts, and a memory system into one complete setup you can use immediately. Instead of assembling your own toolchain from scratch or jumping between disconnected tools, you can initialize once, start working right away, and keep accumulating knowledge, process, and preferences as you go.
 
+## Installation and Initialization
+
+```bash
+# Step 1: install the CLI globally
+npm install -g lifeos
+
+# Step 2: create a new LifeOS workspace (auto-detects language from system locale)
+lifeos init ./my-vault
+
+# Or specify language explicitly
+lifeos init ./my-vault --lang zh   # Chinese
+lifeos init ./my-vault --lang en   # English
+```
+
+If you want version control for the vault, initialize and manage Git yourself. LifeOS does not create or manage Git metadata for you.
+
+## Upgrading
+
+When a new version of LifeOS is released, upgrade your existing vault in two steps:
+
+```bash
+# Step 1: update the CLI to the latest version
+npm update -g lifeos
+
+# Step 2: upgrade vault assets and scaffold
+lifeos upgrade ./my-vault
+```
+
+`npm update -g lifeos` updates the CLI and built-in resources. `lifeos upgrade` upgrades the vault automatically and keeps the latest rollback backup.
+
+### Rollback
+
+Backups are stored in `.lifeos-cutovers` next to the vault. Find the matching `journal.json` with:
+
+```bash
+find /absolute/path/to/.lifeos-cutovers -type f -name journal.json -print
+```
+
+Then restore the vault with that journal:
+
+```bash
+lifeos upgrade /absolute/path/to/my-vault \
+  --restore /absolute/path/to/.lifeos-cutovers/my-vault-<id>/<cutover-id>/journal.json
+```
+
+Rollback replaces the entire vault. Save any post-upgrade content you still need before running it.
+
 ## Core Features
 
 ### Directory Structure
@@ -79,53 +126,6 @@ Launch any supported client in the vault directory to use all skills. Other plat
 | **Python 3** | Required | PDF extraction (`/read-pdf`) and digest fetch helpers (`/digest`) |
 
 `lifeos init` checks all prerequisites before creating the workspace.
-
-### Installation and Initialization
-
-```bash
-# Step 1: install the CLI globally
-npm install -g lifeos
-
-# Step 2: create a new LifeOS workspace (auto-detects language from system locale)
-lifeos init ./my-vault
-
-# Or specify language explicitly
-lifeos init ./my-vault --lang zh   # Chinese
-lifeos init ./my-vault --lang en   # English
-```
-
-If you want version control for the vault, initialize and manage Git yourself. LifeOS does not create or manage Git metadata for you.
-
-## Upgrading
-
-When a new version of LifeOS is released, upgrade your existing vault in two steps:
-
-```bash
-# Step 1: update the CLI to the latest version
-npm update -g lifeos
-
-# Step 2: upgrade vault assets and scaffold
-lifeos upgrade ./my-vault
-```
-
-`npm update -g lifeos` updates the CLI and built-in resources. `lifeos upgrade` upgrades the vault automatically and keeps the latest rollback backup.
-
-### Rollback
-
-Backups are stored in `.lifeos-cutovers` next to the vault. Find the matching `journal.json` with:
-
-```bash
-find /absolute/path/to/.lifeos-cutovers -type f -name journal.json -print
-```
-
-Then restore the vault with that journal:
-
-```bash
-lifeos upgrade /absolute/path/to/my-vault \
-  --restore /absolute/path/to/.lifeos-cutovers/my-vault-<id>/<cutover-id>/journal.json
-```
-
-Rollback replaces the entire vault. Save any post-upgrade content you still need before running it.
 
 ## CLI Commands
 
