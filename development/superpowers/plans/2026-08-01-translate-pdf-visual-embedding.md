@@ -545,11 +545,11 @@ git commit -m "feat: 强化翻译图表自动嵌入契约"
 - 消费：前三个任务的提交。
 - 产出：可复现的全量验证证据和干净工作区；本任务不制造“仅为提交而提交”的空变更。
 
-- [ ] **步骤一：逐条核对设计覆盖**
+- [x] **步骤一：逐条核对设计覆盖**
 
 确认以下每项都有源码和测试证据：v2 几何、矢量并集、局部裁剪、两次 padding、稳定资产、Vault 相对嵌入、三层锚点、五类视觉结果、自动 `reference`、内容失败 draft、无人工确认、临时资产清理、中英文一致。
 
-- [ ] **步骤二：运行完整验证矩阵**
+- [x] **步骤二：运行完整验证矩阵**
 
 ```bash
 npm run build
@@ -562,11 +562,22 @@ git diff --check
 
 预期：全部退出 0；Vitest 报告 0 个失败测试；契约校验输出通过；无 whitespace error。
 
-- [ ] **步骤三：核对提交和工作区**
+- [x] **步骤三：核对提交和工作区**
 
 ```bash
 git status --short --branch
-git log -4 --oneline
+git log -7 --oneline
 ```
 
-预期：工作区干净，最近提交依次包含设计、PDF 几何、裁剪工具和 translate 视觉契约；不包含 `package.json`、版本号、tag、push 或其他工作树的改动。
+预期：工作区干净，近期提交包含设计、实施计划、PDF 几何、裁剪工具和 translate 视觉契约；不包含 `package.json`、版本号、tag、push 或其他工作树的改动。
+
+## 验收结果（2026-08-01）
+
+- `npm run build`：通过。
+- `npm test`：59 个测试文件、1060 项测试全部通过。
+- `npm run typecheck`：通过。
+- `npm run lint`：通过，49 个源码文件无问题。
+- `node scripts/validate-skill-contracts.mjs`：通过。
+- `git diff --check`：通过。
+- 功能提交：`d4ee0da`（PDF 几何）、`fcf38d1`（区域裁剪）、`bb15d40`（translate 双语视觉编排）。
+- 分支未修改 `package.json`、产品版本或标签，未执行 push。
