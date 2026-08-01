@@ -3,14 +3,27 @@
 	"$id": "https://lifeos.dev/schema/pdf-extraction-v1.json",
 	"title": "LifeOS PDF Extraction Package",
 	"type": "object",
-	"required": ["schema_version", "source", "extractor", "requested_range", "requested_pages", "pages", "summary"],
+	"required": [
+		"schema_version",
+		"source",
+		"extractor",
+		"requested_range",
+		"requested_pages",
+		"pages",
+		"summary"
+	],
 	"properties": {
 		"schema_version": { "const": 1 },
 		"source": {
 			"type": "object",
 			"required": ["path", "sha256", "mtime", "page_count"],
 			"properties": {
-				"path": { "type": "string", "minLength": 1 },
+				"path": {
+					"type": "string",
+					"minLength": 1,
+					"pattern": "^(?!/)(?![A-Za-z]:[\\\\/])(?!.*//)(?!.*(?:^|/)\\.\\.?(/|$))(?!.*/$)[^\\\\\\u0000-\\u001f]+$",
+					"description": "安全的 Vault 相对显示标签；默认仅为源 PDF 文件名，不得包含本机绝对路径"
+				},
 				"sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
 				"mtime": { "type": "string", "format": "date-time" },
 				"page_count": { "type": "integer", "minimum": 1 }
@@ -43,9 +56,18 @@
 		},
 		"pages": {
 			"type": "array",
+			"minItems": 1,
 			"items": {
 				"type": "object",
-				"required": ["pdf_page_index", "printed_page_label", "status", "coverage", "confidence", "errors", "blocks"],
+				"required": [
+					"pdf_page_index",
+					"printed_page_label",
+					"status",
+					"coverage",
+					"confidence",
+					"errors",
+					"blocks"
+				],
 				"properties": {
 					"pdf_page_index": { "type": "integer", "minimum": 1 },
 					"printed_page_label": { "type": ["string", "null"] },
@@ -81,7 +103,18 @@
 			},
 			"additionalProperties": false
 		},
-		"rendered_images": { "type": "array", "items": { "type": "object" } }
+		"rendered_images": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"required": ["page", "path"],
+				"properties": {
+					"page": { "type": "integer", "minimum": 1 },
+					"path": { "type": "string", "minLength": 1 }
+				},
+				"additionalProperties": false
+			}
+		}
 	},
 	"additionalProperties": false
 }

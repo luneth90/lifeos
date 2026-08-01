@@ -7,6 +7,9 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/PDF_Extraction_Schema.json"
+  scripts:
+    - path: scripts/read_pdf.py
+    - path: scripts/validate_pdf_extraction.py
   capabilities: [execute_command, inspect_image]
   agents: []
 ---
@@ -76,7 +79,9 @@ pip install PyMuPDF Pillow
 - 只处理命中的页，不加载整本 PDF 到下游上下文
 - 输出符合 `PDF_Extraction_Schema.json` 的版本化提取包；不得消费已废弃的
   `full_text`、`text_layer_missing_pages` 等扁平字段
+- `source.path` 只保存安全的 Vault 相对显示标签；可通过 `--source-label` 显式传入，默认仅使用 PDF 文件名，禁止写入本机绝对路径
 - 默认输出名含微秒和源文件 SHA-256 前八位；只保留由输出包引用的渲染目录，失败时清理未保留临时图像
+- 只为 `needs_ocr`、`partial` 或含 `image` block 的页面生成 PNG；完整纯文本页不渲染
 - 图表、公式、表格的视觉分析必须基于 `blocks` 与 `rendered_images` 回填，而不是猜测文字层缺失内容
 
 ## 版本化提取包（必须）
@@ -122,10 +127,13 @@ digraph read_pdf {
     "解析页码范围" -> "章节名?" [label="是章节名"];
     "解析页码范围" -> "提取文字" [label="是数字"];
     "章节名?" -> "提取 TOC 匹配" -> "提取文字";
-    "提取文字" -> "逐页 PyMuPDF extract_text()";
-    "逐页 PyMuPDF extract_text()" -> "逐页渲染 300DPI PNG";
-    "逐页渲染 300DPI PNG" -> "Claude Vision 分析每页图片";
-    "Claude Vision 分析每页图片" -> "合并输出 JSON";
+    "提取文字" -> "按页提取 blocks 与状态";
+    "按页提取 blocks 与状态" -> "校验初始 JSON";
+    "校验初始 JSON" -> "筛选待视觉补充页";
+    "筛选待视觉补充页" -> "仅渲染命中页";
+    "仅渲染命中页" -> "Vision 分析命中图片";
+    "Vision 分析命中图片" -> "合并输出 JSON";
+    "合并输出 JSON" -> "复核合并后 JSON";
 }
 ```
 
@@ -136,6 +144,14 @@ package = json.load(open(output_path, encoding="utf-8"))
 for page in package["pages"]:
     print(page["pdf_page_index"], page["printed_page_label"], page["status"])
 ```
+
+读取业务字段前，先对脚本生成的初始包执行结构与跨字段校验：
+
+```bash
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/validate_pdf_extraction.py <JSON输出路径> --schema "{系统目录}/{规范子目录}/PDF_Extraction_Schema.json"
+```
+
+校验失败时停止消费，保留诊断并重新提取；不得基于无效包继续视觉补充或下游交接。
 
 - 保留物理页序与印刷页码的双字段；印刷页码未知时保持 `null`
 - 对于 300+ 页大 PDF，**只处理指定范围**，不加载全文
@@ -160,16 +176,27 @@ for page in package["pages"]:
 
 ## 步骤四：组装与复核 JSON 输出
 
-将所有提取结果合并为结构化 JSON，写入临时文件：
+将所有提取结果合并为结构化 JSON，重排每页 `blocks.order` 为连续的 `1..N`，重新计算页级状态与 `summary`，写入临时文件：
 
 ```jsonc
 {
   "schema_version": 1,
+  "source": {"path": "VGT.pdf", "sha256": "<64位小写十六进制>", "mtime": "2026-08-01T00:00:00Z", "page_count": 300},
+  "extractor": {"name": "lifeos-read-pdf", "version": "1"},
+  "requested_range": {"start": 245, "end": 245},
   "requested_pages": [245],
-  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "blocks": []}],
+  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "coverage": 1, "confidence": 1, "errors": [], "blocks": [{"kind": "text", "order": 1, "content": "..."}]}],
   "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "partial_pages": 0, "failed_pages": 0}
 }
 ```
+
+视觉合并写回后必须再次执行同一校验器：
+
+```bash
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/validate_pdf_extraction.py <JSON输出路径> --schema "{系统目录}/{规范子目录}/PDF_Extraction_Schema.json"
+```
+
+只有第二次校验退出 0 才能交给下游；`complete` 页必须 `coverage: 1`、`errors: []` 且不含 `image` block。
 
 输出路径：`/tmp/read-pdf-<timestamp>.json`
 

@@ -1105,6 +1105,31 @@ describe('技能契约校验器', () => {
 		}
 	});
 
+	it('接受声明的 Python 技能脚本并在文件缺失时诊断', async () => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-python-script-dependency-'));
+		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
+		try {
+			const { validateSkillContracts } = await loadValidator();
+			expect(validateSkillContracts(root)).toEqual({ ok: true, diagnostics: [] });
+
+			rmSync(join(root, 'assets', 'skills', 'read-pdf', 'scripts', 'validate_pdf_extraction.py'));
+			expect(validateSkillContracts(root).diagnostics).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						code: 'missing_dependency',
+						path: 'assets/skills/read-pdf/SKILL.zh.md',
+					}),
+					expect.objectContaining({
+						code: 'missing_dependency',
+						path: 'assets/skills/read-pdf/SKILL.en.md',
+					}),
+				]),
+			);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
 	it('真实 assets 通过所有跨资产检查', async () => {
 		const { validateSkillContracts } = await loadValidator();
 		expect(validateSkillContracts(repositoryRoot)).toEqual({ ok: true, diagnostics: [] });

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 export interface PdfFixtures {
 	formulaImagePdf: string;
+	mixedVisualPdf: string;
 	noTextLayerPdf: string;
 	printedLabelPdf: string;
 	sparsePagesPdf: string;
@@ -19,6 +20,7 @@ export function createPdfFixtures(): PdfFixtures {
 	const noTextLayerPdf = join(workspace, 'no-text-layer.pdf');
 	const printedLabelPdf = join(workspace, 'printed-label.pdf');
 	const formulaImagePdf = join(workspace, 'formula-image.pdf');
+	const mixedVisualPdf = join(workspace, 'mixed-visual.pdf');
 	const sparsePagesPdf = join(workspace, 'sparse-pages.pdf');
 	const program = [
 		'import fitz, sys',
@@ -54,6 +56,14 @@ export function createPdfFixtures(): PdfFixtures {
 		"formula_page.insert_text((72, 300), 'Text after formula.', fontsize=13)",
 		'formula.save(sys.argv[4])',
 		'formula.close()',
+		'mixed = fitz.open()',
+		'mixed_text_page = mixed.new_page()',
+		"mixed_text_page.insert_text((72, 72), 'Complete text-only page.', fontsize=12)",
+		'mixed_visual_page = mixed.new_page()',
+		"mixed_visual_page.insert_text((72, 100), 'Page with formula.', fontsize=13)",
+		'mixed_visual_page.insert_image(fitz.Rect(72, 150, 540, 250), filename=formula_image_path)',
+		'mixed.save(sys.argv[6])',
+		'mixed.close()',
 		'sparse = fitz.open()',
 		'for index in range(1, 4):',
 		'    page = sparse.new_page()',
@@ -61,9 +71,22 @@ export function createPdfFixtures(): PdfFixtures {
 		'sparse.save(sys.argv[5])',
 		'sparse.close()',
 	].join('\n');
-	const result = spawnSync('python3', ['-c', program, textPdf, noTextLayerPdf, printedLabelPdf, formulaImagePdf, sparsePagesPdf], {
-		encoding: 'utf-8',
-	});
+	const result = spawnSync(
+		'python3',
+		[
+			'-c',
+			program,
+			textPdf,
+			noTextLayerPdf,
+			printedLabelPdf,
+			formulaImagePdf,
+			sparsePagesPdf,
+			mixedVisualPdf,
+		],
+		{
+			encoding: 'utf-8',
+		},
+	);
 	if (result.status !== 0) {
 		rmSync(workspace, { force: true, recursive: true });
 		throw new Error(`无法生成 PDF 测试夹具：${result.stderr}`);
@@ -75,6 +98,7 @@ export function createPdfFixtures(): PdfFixtures {
 		noTextLayerPdf,
 		printedLabelPdf,
 		formulaImagePdf,
+		mixedVisualPdf,
 		sparsePagesPdf,
 		cleanup: () => rmSync(workspace, { force: true, recursive: true }),
 	};

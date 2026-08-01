@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { extractPlaceholders } from '../skill-contracts/helpers.js';
-import { createPdfFixtures, type PdfFixtures } from './helpers/pdf-fixtures.js';
+import { type PdfFixtures, createPdfFixtures } from './helpers/pdf-fixtures.js';
 
 const scriptPath = join(process.cwd(), 'assets', 'skills', 'read-pdf', 'scripts', 'read_pdf.py');
 const fixtures: PdfFixtures[] = [];
@@ -28,14 +29,18 @@ function extract(pdfPath: string, outputPath: string | undefined, target = '1') 
 	expect(actualOutputPath).toBeTruthy();
 	generatedPaths.push(actualOutputPath as string);
 	return {
-		output: JSON.parse(readFileSync(actualOutputPath as string, 'utf-8')) as Record<string, unknown>,
+		output: JSON.parse(readFileSync(actualOutputPath as string, 'utf-8')) as Record<
+			string,
+			unknown
+		>,
 		stdout: result.stdout,
 	};
 }
 
 afterEach(() => {
 	for (const fixture of fixtures.splice(0)) fixture.cleanup();
-	for (const generatedPath of generatedPaths.splice(0)) rmSync(generatedPath, { force: true, recursive: true });
+	for (const generatedPath of generatedPaths.splice(0))
+		rmSync(generatedPath, { force: true, recursive: true });
 });
 
 describe('read_pdf.py 提取包', () => {
@@ -49,6 +54,8 @@ describe('read_pdf.py 提取包', () => {
 		const blocks = firstPage.blocks as Array<Record<string, unknown>>;
 
 		expect(output.schema_version).toBe(1);
+		expect(source.path).toBe('text-layer.pdf');
+		expect(JSON.stringify(output)).not.toContain(fixture.workspace);
 		expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 		expect(source.mtime).toEqual(expect.any(String));
 		expect(extractor.name).toBe('lifeos-read-pdf');
@@ -61,7 +68,10 @@ describe('read_pdf.py 提取包', () => {
 
 	it('将没有文字层的页面标记为需要 OCR，而不是完整页面', () => {
 		const fixture = createFixtures();
-		const { output } = extract(fixture.noTextLayerPdf, join(fixture.workspace, 'no-text-result.json'));
+		const { output } = extract(
+			fixture.noTextLayerPdf,
+			join(fixture.workspace, 'no-text-result.json'),
+		);
 		const page = (output.pages as Array<Record<string, unknown>>)[0];
 
 		expect(page.status).toBe('needs_ocr');
@@ -72,10 +82,18 @@ describe('read_pdf.py 提取包', () => {
 	it('将页脚中可验证的印刷页码与物理 PDF 页序分开输出', () => {
 		const fixture = createFixtures();
 		const outputPath = join(fixture.workspace, 'printed-label-result.json');
-		const result = runScript([fixture.printedLabelPdf, '10', '--skip-render', '--output', outputPath]);
+		const result = runScript([
+			fixture.printedLabelPdf,
+			'10',
+			'--skip-render',
+			'--output',
+			outputPath,
+		]);
 		expect(result.status, result.stderr).toBe(0);
 		generatedPaths.push(outputPath);
-		const page = (JSON.parse(readFileSync(outputPath, 'utf-8')) as { pages: Array<Record<string, unknown>> }).pages[0];
+		const page = (
+			JSON.parse(readFileSync(outputPath, 'utf-8')) as { pages: Array<Record<string, unknown>> }
+		).pages[0];
 
 		expect(page.pdf_page_index).toBe(10);
 		expect(page.printed_page_label).toBe('1');
@@ -83,11 +101,17 @@ describe('read_pdf.py 提取包', () => {
 
 	it('保留离散 target 的精确请求页而不把中间页误称为已请求', () => {
 		const fixture = createFixtures();
-		const { output } = extract(fixture.sparsePagesPdf, join(fixture.workspace, 'sparse-result.json'), '1,3');
+		const { output } = extract(
+			fixture.sparsePagesPdf,
+			join(fixture.workspace, 'sparse-result.json'),
+			'1,3',
+		);
 
 		expect(output.requested_pages).toEqual([1, 3]);
 		expect(output.requested_range).toEqual({ start: 1, end: 3 });
-		expect((output.pages as Array<Record<string, unknown>>).map((page) => page.pdf_page_index)).toEqual([1, 3]);
+		expect(
+			(output.pages as Array<Record<string, unknown>>).map((page) => page.pdf_page_index),
+		).toEqual([1, 3]);
 	});
 
 	it('以真实位图公式的有序 blocks 标记部分页面并保留默认渲染目录', () => {
@@ -97,16 +121,115 @@ describe('read_pdf.py 提取包', () => {
 		const outputPath = result.stdout.match(/已输出 JSON：(.*)/)?.[1]?.trim();
 		expect(outputPath).toBeTruthy();
 		generatedPaths.push(outputPath as string);
-		const output = JSON.parse(readFileSync(outputPath as string, 'utf-8')) as Record<string, unknown>;
+		const output = JSON.parse(readFileSync(outputPath as string, 'utf-8')) as Record<
+			string,
+			unknown
+		>;
 		const page = (output.pages as Array<Record<string, unknown>>)[0];
 		const rendered = output.rendered_images as Array<Record<string, unknown>>;
 
-		expect((page.blocks as Array<Record<string, unknown>>).map((block) => block.kind)).toEqual(['text', 'image', 'text']);
+		expect((page.blocks as Array<Record<string, unknown>>).map((block) => block.kind)).toEqual([
+			'text',
+			'image',
+			'text',
+		]);
 		expect(page.status).toBe('partial');
 		expect(page.errors).toEqual(['VISUAL_CONTENT_PENDING']);
 		expect(output.summary).toMatchObject({ partial_pages: 1 });
 		expect(existsSync(rendered[0].path as string)).toBe(true);
 		generatedPaths.push(join(rendered[0].path as string, '..'));
+	});
+
+	it('默认只渲染需要视觉补充的页面', () => {
+		const fixture = createFixtures();
+		const outputPath = join(fixture.workspace, 'text-with-render-default.json');
+		const result = runScript([fixture.textPdf, '1', '--output', outputPath]);
+		expect(result.status, result.stderr).toBe(0);
+		generatedPaths.push(outputPath);
+		const output = JSON.parse(readFileSync(outputPath, 'utf-8')) as Record<string, unknown>;
+
+		expect(output).not.toHaveProperty('rendered_images');
+		expect(readdirSync(fixture.workspace).filter((name) => name.includes('-images-'))).toEqual([]);
+	});
+
+	it('混合页面只渲染待补充页并保留精确页码', () => {
+		const fixture = createFixtures();
+		const outputPath = join(fixture.workspace, 'mixed-render-result.json');
+		const result = runScript([fixture.mixedVisualPdf, '1-2', '--output', outputPath]);
+		expect(result.status, result.stderr).toBe(0);
+		generatedPaths.push(outputPath);
+		const output = JSON.parse(readFileSync(outputPath, 'utf-8')) as {
+			pages: Array<{ status: string }>;
+			rendered_images: Array<{ page: number; path: string }>;
+		};
+
+		expect(output.pages.map((page) => page.status)).toEqual(['complete', 'partial']);
+		expect(output.rendered_images.map((image) => image.page)).toEqual([2]);
+		expect(existsSync(output.rendered_images[0].path)).toBe(true);
+		generatedPaths.push(join(output.rendered_images[0].path, '..'));
+	});
+
+	it('支持安全的 Vault 相对 source-label', () => {
+		const fixture = createFixtures();
+		const outputPath = join(fixture.workspace, 'source-label-result.json');
+		const result = runScript([
+			fixture.textPdf,
+			'1',
+			'--skip-render',
+			'--source-label',
+			'70_资源/书籍/代数.pdf',
+			'--output',
+			outputPath,
+		]);
+		expect(result.status, result.stderr).toBe(0);
+		generatedPaths.push(outputPath);
+		const output = JSON.parse(readFileSync(outputPath, 'utf-8')) as {
+			source: { path: string };
+		};
+
+		expect(output.source.path).toBe('70_资源/书籍/代数.pdf');
+		expect(JSON.stringify(output)).not.toContain(fixture.workspace);
+	});
+
+	it.each(['', '/tmp/leak.pdf', '../leak.pdf', 'books/../leak.pdf', './leak.pdf', 'C:\\leak.pdf'])(
+		'拒绝不安全的 source-label：%s',
+		(sourceLabel) => {
+			const fixture = createFixtures();
+			const result = runScript([
+				fixture.textPdf,
+				'1',
+				'--skip-render',
+				'--source-label',
+				sourceLabel,
+				'--output',
+				join(fixture.workspace, 'unsafe-label.json'),
+			]);
+
+			expect(result.status).toBe(2);
+			expect(JSON.parse(result.stderr)).toMatchObject({ error: { code: 'INVALID_SOURCE_LABEL' } });
+		},
+	);
+
+	it('以分块读取计算 SHA-256，不依赖 Path.read_bytes', () => {
+		const fixture = createFixtures();
+		const program = [
+			'import importlib.util, pathlib, sys',
+			'spec = importlib.util.spec_from_file_location("lifeos_read_pdf", sys.argv[1])',
+			'module = importlib.util.module_from_spec(spec)',
+			'sys.modules[spec.name] = module',
+			'spec.loader.exec_module(module)',
+			'pathlib.Path.read_bytes = lambda self: (_ for _ in ()).throw(RuntimeError("read_bytes forbidden"))',
+			'metadata = module.source_metadata(pathlib.Path(sys.argv[2]), 1, "safe.pdf")',
+			'print(metadata["sha256"])',
+		].join('\n');
+		const result = spawnSync('python3', ['-c', program, scriptPath, fixture.textPdf], {
+			encoding: 'utf-8',
+		});
+
+		expect(result.status, result.stderr).toBe(0);
+		expect(result.stdout.trim()).toBe(
+			createHash('sha256').update(readFileSync(fixture.textPdf)).digest('hex'),
+		);
 	});
 
 	it('输出写入失败时清理本次自动创建的渲染目录，却不删除既有用户目录', () => {
@@ -120,12 +243,18 @@ describe('read_pdf.py 提取包', () => {
 
 		expect(result.status).not.toBe(0);
 		expect(existsSync(join(preexistingImages, 'user-note.txt'))).toBe(true);
-		expect(readdirSync(fixture.workspace).filter((name) => name.startsWith('blocked-output-images-'))).toEqual([]);
+		expect(
+			readdirSync(fixture.workspace).filter((name) => name.startsWith('blocked-output-images-')),
+		).toEqual([]);
 	});
 
 	it('将参数解析失败统一为机器可读错误 JSON', () => {
 		const fixture = createFixtures();
-		for (const args of [[], [fixture.textPdf, '1', '--dpi', 'bad'], [fixture.textPdf, '1', '--unknown-flag']]) {
+		for (const args of [
+			[],
+			[fixture.textPdf, '1', '--dpi', 'bad'],
+			[fixture.textPdf, '1', '--unknown-flag'],
+		]) {
 			const result = runScript(args);
 			expect(result.status).not.toBe(0);
 			const error = JSON.parse(result.stderr) as { error: { code: string; message: string } };
@@ -147,8 +276,14 @@ describe('read_pdf.py 提取包', () => {
 			'{{ID}}',
 		];
 		for (const language of ['zh', 'en']) {
-			const template = readFileSync(join(process.cwd(), 'assets', 'templates', language, 'Translation_Template.md'), 'utf-8');
-			const skill = readFileSync(join(process.cwd(), 'assets', 'skills', 'translate', `SKILL.${language}.md`), 'utf-8');
+			const template = readFileSync(
+				join(process.cwd(), 'assets', 'templates', language, 'Translation_Template.md'),
+				'utf-8',
+			);
+			const skill = readFileSync(
+				join(process.cwd(), 'assets', 'skills', 'translate', `SKILL.${language}.md`),
+				'utf-8',
+			);
 			expect([...new Set(extractPlaceholders(template))]).toEqual(placeholders);
 			for (const placeholder of placeholders) expect(skill).toContain(placeholder.slice(2, -2));
 			expect(skill).toContain('requested_pages');

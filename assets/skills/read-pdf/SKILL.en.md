@@ -7,6 +7,9 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/PDF_Extraction_Schema.json"
+  scripts:
+    - path: scripts/read_pdf.py
+    - path: scripts/validate_pdf_extraction.py
   capabilities: [execute_command, inspect_image]
   agents: []
 ---
@@ -73,7 +76,9 @@ Script responsibilities:
 
 - Only process matched pages; do not load the entire PDF into downstream context
 - Output a versioned package conforming to `PDF_Extraction_Schema.json`; do not consume retired flat fields such as `full_text` or `text_layer_missing_pages`
+- Store only a safe Vault-relative display label in `source.path`. Pass it with `--source-label`, or accept the default PDF basename; never persist the local absolute source path
 - Default output names include microseconds and the first eight source SHA-256 characters; only retain rendered directories referenced by the output package, and clean unretained temporary images on failure
+- Generate PNG files only for `needs_ocr` or `partial` pages, or pages containing an `image` block; do not render complete text-only pages
 - Visual analysis of charts, formulas, and tables must enrich `blocks` and `rendered_images`, not guess missing text-layer content
 
 ## Versioned Extraction Package (Required)
@@ -117,10 +122,13 @@ digraph read_pdf {
     "Resolve page range" -> "Chapter name?" [label="is chapter name"];
     "Resolve page range" -> "Extract text" [label="is numeric"];
     "Chapter name?" -> "Extract TOC & match" -> "Extract text";
-    "Extract text" -> "Per-page PyMuPDF extract_text()";
-    "Per-page PyMuPDF extract_text()" -> "Render each page as 300DPI PNG";
-    "Render each page as 300DPI PNG" -> "Claude Vision analyzes each page image";
-    "Claude Vision analyzes each page image" -> "Merge into output JSON";
+    "Extract text" -> "Extract per-page blocks and status";
+    "Extract per-page blocks and status" -> "Validate initial JSON";
+    "Validate initial JSON" -> "Select pages needing visual enrichment";
+    "Select pages needing visual enrichment" -> "Render selected pages only";
+    "Render selected pages only" -> "Analyze selected images";
+    "Analyze selected images" -> "Merge into output JSON";
+    "Merge into output JSON" -> "Validate merged JSON";
 }
 ```
 
@@ -131,6 +139,14 @@ package = json.load(open(output_path, encoding="utf-8"))
 for page in package["pages"]:
     print(page["pdf_page_index"], page["printed_page_label"], page["status"])
 ```
+
+Before consuming business fields, validate the initial package emitted by the extractor:
+
+```bash
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/validate_pdf_extraction.py <JSON output path> --schema "{system directory}/{schema subdirectory}/PDF_Extraction_Schema.json"
+```
+
+If validation fails, stop consumption, preserve the diagnostics, and extract again. Never enrich or hand off an invalid package.
 
 - Preserve both physical sequence and printed-page fields; keep an unknown printed label as `null`
 - For large PDFs (300+ pages), **only process the specified range** — do not load the full text
@@ -155,16 +171,27 @@ Use `inspect_image` for each qualifying PNG, then merge results by block order:
 
 ## Step 4: Assemble and Verify JSON Output
 
-Merge all extracted results into structured JSON and write to a temporary file:
+Merge all extracted results into structured JSON, renumber each page's `blocks.order` as contiguous `1..N`, recompute page state and `summary`, then write the temporary file:
 
 ```jsonc
 {
   "schema_version": 1,
+  "source": {"path": "VGT.pdf", "sha256": "<64 lowercase hex characters>", "mtime": "2026-08-01T00:00:00Z", "page_count": 300},
+  "extractor": {"name": "lifeos-read-pdf", "version": "1"},
+  "requested_range": {"start": 245, "end": 245},
   "requested_pages": [245],
-  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "blocks": []}],
+  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "coverage": 1, "confidence": 1, "errors": [], "blocks": [{"kind": "text", "order": 1, "content": "..."}]}],
   "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "partial_pages": 0, "failed_pages": 0}
 }
 ```
+
+After writing the visual merge, run the same validator again:
+
+```bash
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/validate_pdf_extraction.py <JSON output path> --schema "{system directory}/{schema subdirectory}/PDF_Extraction_Schema.json"
+```
+
+Hand the package downstream only when the second validation exits 0. A `complete` page has `coverage: 1`, `errors: []`, and no `image` block.
 
 Output path: `/tmp/read-pdf-<timestamp>.json`
 

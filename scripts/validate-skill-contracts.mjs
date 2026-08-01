@@ -161,7 +161,7 @@ function parseDependencyPath(group, requested, locale) {
 	};
 	if (group === 'protocols') return requested === '../_shared/operation-safety.md' ? {} : null;
 	if (group === 'scripts') {
-		const match = requested.match(/^scripts\/([A-Za-z0-9][A-Za-z0-9_.-]*\.mjs)$/);
+		const match = requested.match(/^scripts\/([A-Za-z0-9][A-Za-z0-9_.-]*\.(?:mjs|py))$/);
 		return match && isSafeFileName(match[1]) ? { fileName: match[1] } : null;
 	}
 	if (group === 'agents' || group === 'references') {

@@ -60,6 +60,10 @@ def parse_args() -> argparse.Namespace:
         help="输出 JSON 路径；默认写入 /tmp/read-pdf-时间戳.json",
     )
     parser.add_argument(
+        "--source-label",
+        help="提取包中的安全 Vault 相对来源标签；默认仅使用 PDF 文件名",
+    )
+    parser.add_argument(
         "--images-dir",
         help="页面 PNG 输出目录；默认写入临时目录",
     )
@@ -108,6 +112,27 @@ def resolve_pdf_path(raw_path: str, cwd: Path) -> Path:
     if candidate.suffix.lower() != ".pdf":
         raise ReadPdfError("INVALID_PDF_PATH", f"目标文件不是 PDF：{candidate}")
     return candidate
+
+
+def normalize_source_label(raw_label: Optional[str], resolved_pdf_path: Path) -> str:
+    label = resolved_pdf_path.name if raw_label is None else raw_label
+    normalized = unicodedata.normalize("NFKC", label)
+    segments = normalized.split("/")
+    if (
+        not normalized
+        or normalized != normalized.strip()
+        or normalized.startswith("/")
+        or "\\" in normalized
+        or "://" in normalized
+        or re.match(r"^[A-Za-z]:", normalized)
+        or any(not segment or segment in {".", ".."} for segment in segments)
+        or any(ord(character) < 32 for character in normalized)
+    ):
+        raise ReadPdfError(
+            "INVALID_SOURCE_LABEL",
+            "--source-label 必须是非空、安全的 Vault 相对标签，且不得包含绝对路径或上级目录。",
+        )
+    return normalized
 
 
 def get_toc_entries(doc: fitz.Document) -> List[Tuple[int, str, int]]:
@@ -240,11 +265,19 @@ def resolve_images_dir(output_path: Path, raw_images_dir: Optional[str]) -> Tupl
     return Path(tempfile.mkdtemp(prefix=f"{output_path.stem}-images-", dir=str(output_path.parent))), True
 
 
-def source_metadata(resolved_pdf_path: Path, page_count: int) -> Dict[str, Any]:
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def source_metadata(resolved_pdf_path: Path, page_count: int, source_label: str) -> Dict[str, Any]:
     stat = resolved_pdf_path.stat()
     return {
-        "path": str(resolved_pdf_path),
-        "sha256": hashlib.sha256(resolved_pdf_path.read_bytes()).hexdigest(),
+        "path": source_label,
+        "sha256": file_sha256(resolved_pdf_path),
         "mtime": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z"),
         "page_count": page_count,
     }
@@ -393,15 +426,22 @@ def main() -> int:
                 pages = page_spec
 
             ensure_page_limit(pages, args.max_pages, args.force_large_range)
-            source = source_metadata(resolved_pdf_path, doc.page_count)
+            source_label = normalize_source_label(args.source_label, resolved_pdf_path)
+            source = source_metadata(resolved_pdf_path, doc.page_count, source_label)
             output_path = build_output_path(args.output, source["sha256"])
             extracted_pages = [extract_page(doc[page_number - 1], page_number) for page_number in pages]
 
             images: List[Dict[str, Any]] = []
-            if not args.skip_render:
+            visual_pages = [
+                page["pdf_page_index"]
+                for page in extracted_pages
+                if page["status"] in {"needs_ocr", "partial"}
+                or any(block["kind"] == "image" for block in page["blocks"])
+            ]
+            if not args.skip_render and visual_pages:
                 images_dir, owns_generated_images_dir = resolve_images_dir(output_path, args.images_dir)
                 generated_images_dir = images_dir if owns_generated_images_dir else None
-                _, images = render_pages(doc, pages, args.dpi, images_dir)
+                _, images = render_pages(doc, visual_pages, args.dpi, images_dir)
 
             result = build_result(source, pages, extracted_pages, images)
             output_path.write_text(

@@ -8,6 +8,7 @@ dependencies:
   prompts: []
   schemas:
     - path: "{system directory}/{schema subdirectory}/Frontmatter_Schema.md"
+    - path: "{system directory}/{schema subdirectory}/PDF_Extraction_Schema.json"
   protocols:
     - path: ../_shared/operation-safety.md
   capabilities: [execute_command, inspect_image]
@@ -137,7 +138,15 @@ After writing, reread the note and confirm the requested page range is fully cov
 is replaced, the frontmatter is complete, and the project update (when applicable) is complete. Frontmatter
 `completeness` must equal aggregate actual coverage. The completeness record lists every incomplete page's
 `pdf_page_index`, `printed_page_label` (explicitly “unknown” when absent), and error code. Keep `status: draft`
-for any gap; update to `status: complete` only when every page is `complete`.
+for any gap.
+
+Before changing status, write the visually merged extraction package back to JSON and run the strict completeness gate:
+
+```bash
+<resolved Python 3 interpreter> .agents/skills/read-pdf/scripts/validate_pdf_extraction.py <JSON output path> --schema "{system directory}/{schema subdirectory}/PDF_Extraction_Schema.json" --require-complete
+```
+
+If the command exits nonzero, keep `status: draft` and repair from its diagnostics or retain the missing-page record. Update to `status: complete` only after the command exits 0. Never bypass the gate using prose judgment, `summary.complete_pages`, or average coverage.
 
 ```
 memory_notify(contract_version=2, file_path="<translation file relative path>")

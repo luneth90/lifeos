@@ -8,6 +8,7 @@ dependencies:
   prompts: []
   schemas:
     - path: "{系统目录}/{规范子目录}/Frontmatter_Schema.md"
+    - path: "{系统目录}/{规范子目录}/PDF_Extraction_Schema.json"
   protocols:
     - path: ../_shared/operation-safety.md
   capabilities: [execute_command, inspect_image]
@@ -135,8 +136,16 @@ memory_context(
 
 落盘后回读文件，确认请求页范围全部覆盖、全部必填占位符已替换、Frontmatter 完整且项目回填（如适用）
 已完成。Frontmatter `completeness` 必须等于请求页的实际总 coverage；“完整性记录”列出每个非完整页的
-`pdf_page_index`、`printed_page_label`（未知则明确写未知）与错误码。任何缺口都保持 `status: draft`；只有全部页
-`complete` 时才更新为 `status: complete`。
+`pdf_page_index`、`printed_page_label`（未知则明确写未知）与错误码。任何缺口都保持 `status: draft`。
+
+尝试改变状态前，把视觉合并后的提取包写回 JSON，并执行强完整性门禁：
+
+```bash
+<已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/validate_pdf_extraction.py <JSON输出路径> --schema "{系统目录}/{规范子目录}/PDF_Extraction_Schema.json" --require-complete
+```
+
+命令非 0 时保持 `status: draft`，按诊断修复或保留缺页记录；只有命令退出 0 后才更新为 `status: complete`。
+不得仅凭自然语言判断、`summary.complete_pages` 或 coverage 平均值绕过门禁。
 
 ```
 memory_notify(contract_version=2, file_path="<翻译文件相对路径>")
