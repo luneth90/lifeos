@@ -21,6 +21,7 @@ import fitz
 
 
 MAX_DEFAULT_PAGES = 50
+MAX_LOCAL_GRID_EDGE_MATCHES = 50_000
 ALLOWED_FORMAT_CONTROLS = {"\u200c", "\u200d"}
 
 
@@ -625,7 +626,36 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             result = search(1, 0, tree_size - 1)
             return positions[result] if result is not None else None
 
-        return find_position
+        def find_positions(
+            query_start: int,
+            query_end: int,
+            coordinate: float,
+            max_results: int,
+        ) -> List[float]:
+            results: List[int] = []
+            if query_start > query_end or max_results < 1:
+                return []
+
+            def search(node: int, start: int, end: int) -> None:
+                if (
+                    len(results) >= max_results
+                    or end < query_start
+                    or start > query_end
+                    or not node_covers(node, coordinate)
+                ):
+                    return
+                if start == end:
+                    if start < len(positions):
+                        results.append(start)
+                    return
+                midpoint = (start + end) // 2
+                search(node * 2, start, midpoint)
+                search(node * 2 + 1, midpoint + 1, end)
+
+            search(1, 0, tree_size - 1)
+            return [positions[index] for index in results]
+
+        return find_position, find_positions
 
     def find_local_axis_cells(
         limit: int = 3,
@@ -638,7 +668,7 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             vertical_sides: bool,
         ) -> bool:
             edge_positions = sorted(edge_intervals)
-            find_edge_position = build_edge_coverage_index(
+            find_edge_position, find_edge_positions = build_edge_coverage_index(
                 edge_positions, edge_intervals
             )
             edge_ends = {
@@ -646,7 +676,13 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                 for coordinate, intervals in edge_intervals.items()
             }
             span_groups: Dict[Tuple[float, float], List[float]] = {}
-            for coordinate, spans in side_intervals.items():
+            overlap_cache: Dict[
+                Tuple[float, float], List[Tuple[float, float]]
+            ] = {}
+            remaining_match_budget = MAX_LOCAL_GRID_EDGE_MATCHES
+            for coordinate in sorted(side_intervals):
+                coordinate_pairs = set()
+                spans = side_intervals[coordinate]
                 for start, end in spans:
                     query_start = bisect_left(edge_positions, start - 2.0)
                     query_end = bisect_right(edge_positions, end + 2.0) - 1
@@ -662,39 +698,59 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                         or mapped_end - mapped_start < 4
                     ):
                         continue
-                    span_groups.setdefault((mapped_start, mapped_end), []).append(
-                        coordinate
+                    coordinate_pairs.add((mapped_start, mapped_end))
+                    matches = find_edge_positions(
+                        query_start,
+                        query_end,
+                        coordinate,
+                        remaining_match_budget,
+                    )
+                    remaining_match_budget -= len(matches)
+                    coordinate_pairs.update(
+                        (first, second)
+                        for first, second in zip(matches, matches[1:])
+                        if second - first >= 4
                     )
 
-            for (start, end), coordinates in span_groups.items():
-                coordinates = sorted(set(coordinates))
-                start_edges = edge_intervals.get(start)
-                end_edges = edge_intervals.get(end)
-                if not start_edges or not end_edges:
-                    continue
-                for overlap_start, overlap_end in overlapping_intervals(
-                    start_edges,
-                    edge_ends[start],
-                    end_edges,
-                    edge_ends[end],
-                ):
-                    enclosed = coordinates[
-                        bisect_left(coordinates, overlap_start) : bisect_right(
-                            coordinates, overlap_end
-                        )
-                    ]
-                    for first_side, second_side in zip(enclosed, enclosed[1:]):
-                        if second_side - first_side < 4:
+                for start, end in coordinate_pairs:
+                    coordinates = span_groups.setdefault((start, end), [])
+                    if coordinates and coordinates[-1] == coordinate:
+                        continue
+                    coordinates.append(coordinate)
+                    if len(coordinates) < 2:
+                        continue
+                    first_side, second_side = coordinates[-2:]
+                    if second_side - first_side < 4:
+                        continue
+                    overlaps = overlap_cache.get((start, end))
+                    if overlaps is None:
+                        start_edges = edge_intervals.get(start)
+                        end_edges = edge_intervals.get(end)
+                        if not start_edges or not end_edges:
+                            overlap_cache[(start, end)] = []
                             continue
-                        region = (
-                            (first_side, start, second_side, end)
-                            if vertical_sides
-                            else (start, first_side, end, second_side)
+                        overlaps = overlapping_intervals(
+                            start_edges,
+                            edge_ends[start],
+                            end_edges,
+                            edge_ends[end],
                         )
-                        if meaningful_region(region):
-                            cells.add(region)
-                            if len(cells) >= limit:
-                                return True
+                        overlap_cache[(start, end)] = overlaps
+                    if not any(
+                        overlap_start <= first_side
+                        and overlap_end >= second_side
+                        for overlap_start, overlap_end in overlaps
+                    ):
+                        continue
+                    region = (
+                        (first_side, start, second_side, end)
+                        if vertical_sides
+                        else (start, first_side, end, second_side)
+                    )
+                    if meaningful_region(region):
+                        cells.add(region)
+                        if len(cells) >= limit:
+                            return True
             return False
 
         if collect_cells(vertical_intervals, horizontal_intervals, True):

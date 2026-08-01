@@ -213,6 +213,8 @@ describe('read_pdf.py 提取包', () => {
 		['横边两端各短 1pt 并附加 59 条不相交刻线', 19],
 		['内竖线端点邻近空间不相交刻线并另附 56 条刻线', 20],
 		['内竖线端点邻近空间不相交刻线并另附 57 条刻线', 21],
+		['内竖线端点短刻线包围共同内层边对并另附 54 条刻线', 22],
+		['内竖线端点短刻线包围共同内层边对并另附 55 条刻线', 23],
 	])('将%s编码的等价网格标记为待视觉补充', (_description, page) => {
 		const fixture = createFixtures();
 		const result = runScript([fixture.unfilledVectorPdf, String(page)]);
@@ -363,6 +365,33 @@ describe('read_pdf.py 提取包', () => {
 
 		expect(result.status, result.error?.message ?? result.stderr).toBe(0);
 		expect(result.stdout.trim()).toBe('None');
+	});
+
+	it('在双轴全相交的稠密网格中找到三个单元格后提前停止', () => {
+		const program = [
+			'import importlib.util, sys, fitz',
+			'spec = importlib.util.spec_from_file_location("lifeos_read_pdf", sys.argv[1])',
+			'module = importlib.util.module_from_spec(spec)',
+			'sys.modules[spec.name] = module',
+			'spec.loader.exec_module(module)',
+			'class FakePage:',
+			'    count = 3000',
+			'    rect = fitz.Rect(0, 0, 4000, 4000)',
+			'    def get_drawings(self):',
+			'        count = self.count',
+			'        positions = [100, 700, 1300, 1900] + [2000 + index * 0.5 for index in range(count - 4)]',
+			'        horizontal = [{"rect": fitz.Rect(0, y, 3500, y), "items": [("l", fitz.Point(0, y), fitz.Point(3500, y))], "fill": None} for y in positions]',
+			'        vertical = [{"rect": fitz.Rect(x, 0, x, 3500), "items": [("l", fitz.Point(x, 0), fitz.Point(x, 3500))], "fill": None} for x in positions]',
+			'        return horizontal + vertical',
+			'print(module.vector_visual_anchor(FakePage()))',
+		].join('\n');
+		const result = spawnSync('python3', ['-c', program, scriptPath], {
+			encoding: 'utf-8',
+			timeout: 1000,
+		});
+
+		expect(result.status, result.error?.message ?? result.stderr).toBe(0);
+		expect(result.stdout.trim()).not.toBe('None');
 	});
 
 	it('在共享长边且跨度各异的无单元格输入下保持次二次复杂度', () => {
