@@ -33,7 +33,7 @@
 - 消费：`assertProjectMemoryScopesResolveToCatalog(db, vaultRoot, config, catalog): void`
 - 产出：该函数只查询 active project scope；异常类型和错误文案保持不变。
 
-- [ ] **步骤 1：添加单元回归测试，覆盖 archived 与 expired 孤儿 scope**
+- [x] **步骤 1：添加单元回归测试，覆盖 archived 与 expired 孤儿 scope**
 
 在 `project scope 只能解析到当前 catalog 中仍存在的项目主文件` 用例之前添加：
 
@@ -101,7 +101,7 @@ it('只校验 active project scope，保留 archived 与 expired 历史记录', 
 });
 ```
 
-- [ ] **步骤 2：添加 V4 重跑升级集成回归**
+- [x] **步骤 2：添加 V4 重跑升级集成回归**
 
 在 `V4 重跑失败后恢复原 Vault` 用例之前添加：
 
@@ -165,7 +165,7 @@ it('V4 重跑允许保留当前 catalog 外的 archived project scope', async ()
 });
 ```
 
-- [ ] **步骤 3：运行新增用例并确认红灯来自 archived/expired 被误校验**
+- [x] **步骤 3：运行新增用例并确认红灯来自 archived/expired 被误校验**
 
 运行：
 
@@ -177,7 +177,7 @@ npx vitest run tests/cli/migrations/project-index-consistency.test.ts \
 
 预期：两个新增用例均失败，错误包含“当前项目 catalog 不存在”；不能出现 SQL 约束、测试夹具或文件路径错误。
 
-- [ ] **步骤 4：实现最小状态过滤**
+- [x] **步骤 4：实现最小状态过滤**
 
 将 `assertProjectMemoryScopesResolveToCatalog` 的查询改为：
 
@@ -194,7 +194,7 @@ const projectScopes = db
 
 同时把函数注释改为“严格保证每条 active project scope 都指向当前 catalog 中仍存在且已正确索引的主文件”。不得修改其他断言、catalog 生成或回滚逻辑。
 
-- [ ] **步骤 5：运行目标测试并确认绿灯**
+- [x] **步骤 5：运行目标测试并确认绿灯**
 
 运行：
 
@@ -204,7 +204,7 @@ npx vitest run tests/cli/migrations/project-index-consistency.test.ts tests/cli/
 
 预期：两个测试文件全部通过；现有 active 孤儿 scope 用例仍通过其失败断言。
 
-- [ ] **步骤 6：提交源码与回归测试**
+- [x] **步骤 6：提交源码与回归测试**
 
 ```bash
 git add src/cli/migrations/project-index-consistency.ts \
@@ -228,7 +228,7 @@ git commit -m "fix: 兼容已归档项目记忆升级"
 - 消费：已通过的升级回归行为。
 - 产出：`2.2.0` 发布说明明确 archived/expired 历史 project scope 不再阻断升级。
 
-- [ ] **步骤 1：在 2.2.0 的“修复”章节添加发布说明**
+- [x] **步骤 1：在 2.2.0 的“修复”章节添加发布说明**
 
 添加以下条目：
 
@@ -236,7 +236,7 @@ git commit -m "fix: 兼容已归档项目记忆升级"
 - 修正升级终态校验误把 archived/expired project scope 当作当前项目依赖的问题；已归档项目的历史记忆保持不变，只有 active scope 必须解析到当前项目 catalog
 ```
 
-- [ ] **步骤 2：验证版本与发布说明可提取**
+- [x] **步骤 2：验证版本与发布说明可提取**
 
 ```bash
 npm run release:check-version -- v2.2.0
@@ -246,7 +246,7 @@ git diff --check
 
 预期：版本一致性通过，提取结果包含新增修复条目，工作区无空白错误。
 
-- [ ] **步骤 3：提交 Changelog**
+- [x] **步骤 3：提交 Changelog**
 
 ```bash
 git add CHANGELOG.md
@@ -270,7 +270,7 @@ git commit -m "docs: 补充归档项目升级兼容说明"
 - 消费：任务一的修复提交、任务二的 Changelog 提交。
 - 产出：指向最终验证提交的本地 `v2.2.0` 标签与测试包；远端保持不变。
 
-- [ ] **步骤 1：运行完整发布门禁**
+- [x] **步骤 1：运行完整发布门禁**
 
 ```bash
 npm run release:check-version -- v2.2.0
@@ -280,7 +280,7 @@ npm run release:pack
 
 预期：版本一致性、类型检查、Lint、全量测试、构建和打包全部以状态码 0 结束，并输出 `lifeos-2.2.0.tgz`。
 
-- [ ] **步骤 2：核验提交边界与用户改动隔离**
+- [x] **步骤 2：核验提交边界与用户改动隔离**
 
 ```bash
 git status --short --branch
@@ -291,7 +291,7 @@ git log -3 --oneline --decorate
 
 预期：只有 `package.json` 的用户格式化改动未提交；源码、测试、Changelog 和设计/计划均已提交。旧 `v2.2.0` 仍指向 `c2cbd0a`，当前 HEAD 位于其后。
 
-- [ ] **步骤 3：在验证通过后重建本地注解标签**
+- [x] **步骤 3：在验证通过后重建本地注解标签**
 
 ```bash
 git tag -d v2.2.0
@@ -300,7 +300,7 @@ git tag -a v2.2.0 -m "LifeOS v2.2.0"
 
 不得在发布门禁失败时执行本步骤。
 
-- [ ] **步骤 4：核验最终标签、测试包和远端未变**
+- [x] **步骤 4：核验最终标签、测试包和远端未变**
 
 ```bash
 git rev-parse HEAD
