@@ -22,6 +22,7 @@ import fitz
 
 MAX_DEFAULT_PAGES = 50
 MAX_LOCAL_GRID_EDGE_MATCHES = 50_000
+MAX_LOCAL_GRID_EDGE_PAIR_CHECKS = 50_000
 ALLOWED_FORMAT_CONTROLS = {"\u200c", "\u200d"}
 
 
@@ -598,34 +599,6 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                 interval_tree[node][insertion][0] <= coordinate
             )
 
-        def find_position(
-            query_start: int, query_end: int, coordinate: float, reverse: bool
-        ) -> Optional[float]:
-            if query_start > query_end:
-                return None
-
-            def search(node: int, start: int, end: int) -> Optional[int]:
-                if end < query_start or start > query_end or not node_covers(
-                    node, coordinate
-                ):
-                    return None
-                if start == end:
-                    return start if start < len(positions) else None
-                midpoint = (start + end) // 2
-                children = (
-                    ((node * 2 + 1, midpoint + 1, end), (node * 2, start, midpoint))
-                    if reverse
-                    else ((node * 2, start, midpoint), (node * 2 + 1, midpoint + 1, end))
-                )
-                for child, child_start, child_end in children:
-                    result = search(child, child_start, child_end)
-                    if result is not None:
-                        return result
-                return None
-
-            result = search(1, 0, tree_size - 1)
-            return positions[result] if result is not None else None
-
         def find_positions(
             query_start: int,
             query_end: int,
@@ -655,22 +628,20 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             search(1, 0, tree_size - 1)
             return [positions[index] for index in results]
 
-        return find_position, find_positions
+        return find_positions
 
     def find_local_axis_cells(
         limit: int = 3,
-    ) -> List[Tuple[float, float, float, float]]:
+    ) -> Tuple[List[Tuple[float, float, float, float]], bool]:
         cells = set()
 
         def collect_cells(
             side_intervals: Dict[float, List[Tuple[float, float]]],
             edge_intervals: Dict[float, List[Tuple[float, float]]],
             vertical_sides: bool,
-        ) -> bool:
+        ) -> Tuple[bool, bool]:
             edge_positions = sorted(edge_intervals)
-            find_edge_position, find_edge_positions = build_edge_coverage_index(
-                edge_positions, edge_intervals
-            )
+            find_edge_positions = build_edge_coverage_index(edge_positions, edge_intervals)
             edge_ends = {
                 coordinate: [end + 2.0 for _, end in intervals]
                 for coordinate, intervals in edge_intervals.items()
@@ -680,37 +651,31 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                 Tuple[float, float], List[Tuple[float, float]]
             ] = {}
             remaining_match_budget = MAX_LOCAL_GRID_EDGE_MATCHES
+            remaining_pair_check_budget = MAX_LOCAL_GRID_EDGE_PAIR_CHECKS
             for coordinate in sorted(side_intervals):
                 coordinate_pairs = set()
                 spans = side_intervals[coordinate]
                 for start, end in spans:
                     query_start = bisect_left(edge_positions, start - 2.0)
                     query_end = bisect_right(edge_positions, end + 2.0) - 1
-                    mapped_start = find_edge_position(
-                        query_start, query_end, coordinate, False
-                    )
-                    mapped_end = find_edge_position(
-                        query_start, query_end, coordinate, True
-                    )
-                    if (
-                        mapped_start is None
-                        or mapped_end is None
-                        or mapped_end - mapped_start < 4
-                    ):
-                        continue
-                    coordinate_pairs.add((mapped_start, mapped_end))
+                    if remaining_match_budget < 1:
+                        return False, True
                     matches = find_edge_positions(
                         query_start,
                         query_end,
                         coordinate,
-                        remaining_match_budget,
+                        remaining_match_budget + 1,
                     )
+                    if len(matches) > remaining_match_budget:
+                        return False, True
                     remaining_match_budget -= len(matches)
-                    coordinate_pairs.update(
-                        (first, second)
-                        for first, second in zip(matches, matches[1:])
-                        if second - first >= 4
-                    )
+                    for first_index, first in enumerate(matches):
+                        for second in matches[first_index + 1 :]:
+                            if remaining_pair_check_budget < 1:
+                                return False, True
+                            remaining_pair_check_budget -= 1
+                            if second - first >= 4:
+                                coordinate_pairs.add((first, second))
 
                 for start, end in coordinate_pairs:
                     coordinates = span_groups.setdefault((start, end), [])
@@ -750,15 +715,20 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                     if meaningful_region(region):
                         cells.add(region)
                         if len(cells) >= limit:
-                            return True
-            return False
+                            return True, False
+            return False, False
 
-        if collect_cells(vertical_intervals, horizontal_intervals, True):
-            return list(cells)
-        collect_cells(horizontal_intervals, vertical_intervals, False)
-        return list(cells)
+        found_cells, budget_exhausted = collect_cells(
+            vertical_intervals, horizontal_intervals, True
+        )
+        if found_cells or budget_exhausted:
+            return list(cells), budget_exhausted
+        _, budget_exhausted = collect_cells(
+            horizontal_intervals, vertical_intervals, False
+        )
+        return list(cells), budget_exhausted
 
-    local_axis_cells = find_local_axis_cells()
+    local_axis_cells, local_axis_budget_exhausted = find_local_axis_cells()
     horizontal_regions = [
         (start, y, end, y)
         for y, intervals in horizontal_intervals.items()
@@ -861,6 +831,8 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
         selected_regions = filled_regions
     elif grid_regions:
         selected_regions = grid_regions
+    elif local_axis_budget_exhausted:
+        selected_regions = horizontal_regions + vertical_regions
     elif len(local_axis_cells) >= 3:
         selected_regions = local_axis_cells
     elif axis_cycle_count >= 3:

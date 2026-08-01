@@ -215,6 +215,8 @@ describe('read_pdf.py 提取包', () => {
 		['内竖线端点邻近空间不相交刻线并另附 57 条刻线', 21],
 		['内竖线端点短刻线包围共同内层边对并另附 54 条刻线', 22],
 		['内竖线端点短刻线包围共同内层边对并另附 55 条刻线', 23],
+		['横纵双向不相邻噪声隐藏共同边对并另附 46 条刻线', 24],
+		['横纵双向不相邻噪声隐藏共同边对并另附 47 条刻线', 25],
 	])('将%s编码的等价网格标记为待视觉补充', (_description, page) => {
 		const fixture = createFixtures();
 		const result = runScript([fixture.unfilledVectorPdf, String(page)]);
@@ -367,7 +369,7 @@ describe('read_pdf.py 提取包', () => {
 		expect(result.stdout.trim()).toBe('None');
 	});
 
-	it('在双轴全相交的稠密网格中找到三个单元格后提前停止', () => {
+	it('在双轴全相交的稠密网格中保持有界并失败关闭', () => {
 		const program = [
 			'import importlib.util, sys, fitz',
 			'spec = importlib.util.spec_from_file_location("lifeos_read_pdf", sys.argv[1])',
