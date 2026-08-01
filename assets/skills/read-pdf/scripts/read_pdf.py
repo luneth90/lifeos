@@ -11,6 +11,7 @@ import shutil
 import sys
 import tempfile
 import unicodedata
+from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -506,6 +507,76 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
 
     horizontal_intervals = merge_intervals(horizontal_intervals)
     vertical_intervals = merge_intervals(vertical_intervals)
+
+    def overlapping_intervals(
+        first: Sequence[Tuple[float, float]],
+        second: Sequence[Tuple[float, float]],
+    ) -> List[Tuple[float, float]]:
+        overlaps: List[Tuple[float, float]] = []
+        first_index = 0
+        second_index = 0
+        while first_index < len(first) and second_index < len(second):
+            first_start, first_end = first[first_index]
+            second_start, second_end = second[second_index]
+            overlap_start = max(first_start, second_start)
+            overlap_end = min(first_end, second_end)
+            if overlap_end - overlap_start >= 4:
+                overlaps.append((overlap_start, overlap_end))
+            if first_end <= second_end:
+                first_index += 1
+            else:
+                second_index += 1
+        return overlaps
+
+    def find_local_axis_cells(
+        limit: int = 3,
+    ) -> List[Tuple[float, float, float, float]]:
+        cells = set()
+
+        def collect_cells(
+            side_intervals: Dict[float, List[Tuple[float, float]]],
+            edge_intervals: Dict[float, List[Tuple[float, float]]],
+            vertical_sides: bool,
+        ) -> bool:
+            span_groups: Dict[Tuple[float, float], List[float]] = {}
+            for coordinate, spans in side_intervals.items():
+                for start, end in spans:
+                    span_groups.setdefault((start, end), []).append(coordinate)
+
+            for (start, end), coordinates in span_groups.items():
+                coordinates = sorted(set(coordinates))
+                start_edges = edge_intervals.get(start)
+                end_edges = edge_intervals.get(end)
+                if not start_edges or not end_edges:
+                    continue
+                for overlap_start, overlap_end in overlapping_intervals(
+                    start_edges, end_edges
+                ):
+                    enclosed = coordinates[
+                        bisect_left(coordinates, overlap_start) : bisect_right(
+                            coordinates, overlap_end
+                        )
+                    ]
+                    for first_side, second_side in zip(enclosed, enclosed[1:]):
+                        if second_side - first_side < 4:
+                            continue
+                        region = (
+                            (first_side, start, second_side, end)
+                            if vertical_sides
+                            else (start, first_side, end, second_side)
+                        )
+                        if meaningful_region(region):
+                            cells.add(region)
+                            if len(cells) >= limit:
+                                return True
+            return False
+
+        if collect_cells(vertical_intervals, horizontal_intervals, True):
+            return list(cells)
+        collect_cells(horizontal_intervals, vertical_intervals, False)
+        return list(cells)
+
+    local_axis_cells = find_local_axis_cells()
     horizontal_regions = [
         (start, y, end, y)
         for y, intervals in horizontal_intervals.items()
@@ -608,6 +679,8 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
         selected_regions = filled_regions
     elif grid_regions:
         selected_regions = grid_regions
+    elif len(local_axis_cells) >= 3:
+        selected_regions = local_axis_cells
     elif axis_cycle_count >= 3:
         selected_regions = axis_cycle_regions
     elif len(rectangle_regions) >= 3:

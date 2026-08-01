@@ -203,6 +203,8 @@ describe('read_pdf.py 提取包', () => {
 		['同一 Shape 内的 re 外框加内部线', 4],
 		['同一 Shape 内的六条边线', 7],
 		['同一 Shape 内的线框加内部线', 9],
+		['re 外框加两条内部竖线及 58 条不相交刻线', 12],
+		['四条独立边线外框加两条内部竖线及 59 条不相交刻线', 13],
 	])('将%s编码的等价网格标记为待视觉补充', (_description, page) => {
 		const fixture = createFixtures();
 		const result = runScript([fixture.unfilledVectorPdf, String(page)]);
@@ -320,6 +322,30 @@ describe('read_pdf.py 提取包', () => {
 			'    rect = fitz.Rect(0, 0, 600, 7000)',
 			'    def get_drawings(self):',
 			'        return [{"rect": fitz.Rect(50, y, 550, y), "items": [("l", fitz.Point(50, y), fitz.Point(550, y))], "fill": None} for y in range(1, 6001)]',
+			'print(module.vector_visual_anchor(FakePage()))',
+		].join('\n');
+		const result = spawnSync('python3', ['-c', program, scriptPath], {
+			encoding: 'utf-8',
+			timeout: 1000,
+		});
+
+		expect(result.status, result.error?.message ?? result.stderr).toBe(0);
+		expect(result.stdout.trim()).toBe('None');
+	});
+
+	it('在双轴稠密但不相交的装饰线下保持有界搜索', () => {
+		const program = [
+			'import importlib.util, sys, fitz',
+			'spec = importlib.util.spec_from_file_location("lifeos_read_pdf", sys.argv[1])',
+			'module = importlib.util.module_from_spec(spec)',
+			'sys.modules[spec.name] = module',
+			'spec.loader.exec_module(module)',
+			'class FakePage:',
+			'    rect = fitz.Rect(0, 0, 4000, 4000)',
+			'    def get_drawings(self):',
+			'        horizontal = [{"rect": fitz.Rect(50, y, 550, y), "items": [("l", fitz.Point(50, y), fitz.Point(550, y))], "fill": None} for y in range(1, 3001)]',
+			'        vertical = [{"rect": fitz.Rect(x, 3200, x, 3800), "items": [("l", fitz.Point(x, 3200), fitz.Point(x, 3800))], "fill": None} for x in range(700, 3700)]',
+			'        return horizontal + vertical',
 			'print(module.vector_visual_anchor(FakePage()))',
 		].join('\n');
 		const result = spawnSync('python3', ['-c', program, scriptPath], {
