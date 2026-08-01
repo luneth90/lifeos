@@ -93,6 +93,19 @@ function runValidatorRaw(value: string, args: string[] = []) {
 	});
 }
 
+function runValidatorWithSchemaMutation(
+	value: unknown,
+	mutate: (schema: Record<string, unknown>) => void,
+) {
+	const directory = mkdtempSync(join(tmpdir(), 'lifeos-pdf-validator-schema-shape-'));
+	temporaryDirectories.push(directory);
+	const schema = JSON.parse(readFileSync(pdfSchemaPath, 'utf-8')) as Record<string, unknown>;
+	mutate(schema);
+	const schemaPath = join(directory, 'schema.json');
+	writeFileSync(schemaPath, JSON.stringify(schema));
+	return runValidator(value, ['--schema', schemaPath]);
+}
+
 function diagnostics(result: ReturnType<typeof runValidator>): Diagnostic[] {
 	const output = JSON.parse(result.stderr) as { diagnostics: Diagnostic[] };
 	return output.diagnostics;
@@ -217,6 +230,22 @@ describe('PDF 提取包完整性校验 CLI', () => {
 	it('拒绝 Unicode 规范化后伪装成绝对路径的 source.path', () => {
 		const value = completePackage();
 		value.source.path = '／Users/alice/book.pdf';
+		const result = runValidator(value);
+
+		expect(result.status).toBe(1);
+		expect(diagnostics(result)).toContainEqual({
+			code: 'unsafe_source_path',
+			path: '$.source.path',
+		});
+	});
+
+	it.each([
+		'\u200b/Users/alice/book.pdf',
+		'\u2060/Users/alice/book.pdf',
+		'\u202e/Users/alice/book.pdf',
+	])('拒绝使用 Unicode 格式控制字符隐藏的 source.path：%s', (sourcePath) => {
+		const value = completePackage();
+		value.source.path = sourcePath;
 		const result = runValidator(value);
 
 		expect(result.status).toBe(1);
@@ -369,6 +398,84 @@ describe('PDF 提取包完整性校验 CLI', () => {
 		});
 	});
 
+	it.each([
+		[
+			'合法但未实现的 additionalProperties Schema',
+			(schema: Record<string, unknown>) => {
+				schema.additionalProperties = { type: 'string' };
+			},
+			'schema_unsupported_keyword',
+		],
+		[
+			'$schema 非字符串',
+			(schema: Record<string, unknown>) => {
+				schema.$schema = 1;
+			},
+			'schema_definition',
+		],
+		[
+			'负 minLength',
+			(schema: Record<string, unknown>) => {
+				schema.minLength = -1;
+			},
+			'schema_definition',
+		],
+		[
+			'字符串 minimum',
+			(schema: Record<string, unknown>) => {
+				schema.minimum = '0';
+			},
+			'schema_definition',
+		],
+		[
+			'非布尔 uniqueItems',
+			(schema: Record<string, unknown>) => {
+				schema.uniqueItems = 'true';
+			},
+			'schema_definition',
+		],
+		[
+			'重复 required',
+			(schema: Record<string, unknown>) => {
+				schema.required = ['source', 'source'];
+			},
+			'schema_definition',
+		],
+		[
+			'重复 type',
+			(schema: Record<string, unknown>) => {
+				schema.type = ['object', 'object'];
+			},
+			'schema_definition',
+		],
+		[
+			'空 enum',
+			(schema: Record<string, unknown>) => {
+				schema.enum = [];
+			},
+			'schema_definition',
+		],
+		[
+			'重复 enum',
+			(schema: Record<string, unknown>) => {
+				schema.enum = [1, 1];
+			},
+			'schema_definition',
+		],
+		[
+			'未实现的 format',
+			(schema: Record<string, unknown>) => {
+				schema.format = 'email';
+			},
+			'schema_unsupported_keyword',
+		],
+	])('Schema 已知关键字形态异常时失败关闭：%s', (_name, mutate, code) => {
+		const result = runValidatorWithSchemaMutation(completePackage(), mutate);
+
+		expect(result.status).toBe(1);
+		expect(diagnostics(result).map((item) => item.code)).toContain(code);
+	});
+
 	it.each(['NaN', 'Infinity', '-Infinity'])('拒绝非标准 JSON 数值常量：%s', (nonFiniteValue) => {
 		const raw = JSON.stringify(completePackage()).replace(
 			'"confidence":1',
@@ -391,6 +498,17 @@ describe('PDF 提取包完整性校验 CLI', () => {
 		expect(result.status).toBe(1);
 		expect(diagnostics(result)).toContainEqual({ code: 'schema_format', path: '$.source.mtime' });
 	});
+
+	it.each(['2026-07-31t00:00:00z', '2026-12-31T23:59:60Z'])(
+		'接受 RFC 3339 合法时间变体：%s',
+		(mtime) => {
+			const value = completePackage();
+			value.source.mtime = mtime;
+			const result = runValidator(value);
+
+			expect(result.status, result.stderr).toBe(0);
+		},
+	);
 
 	it.each([
 		['非请求页', [{ page: 999, path: '/tmp/page-999.png' }], 'rendered_image_page'],
@@ -428,6 +546,7 @@ describe('PDF 消费流程契约', () => {
 				body.match(new RegExp(`--schema ${schemaPath.replace(/[{}\/\.]/g, '\\$&')}`, 'g')),
 				language,
 			).toHaveLength(2);
+			expect(body, language).toContain('page["status"] in {"needs_ocr", "partial", "failed"}');
 			expect(skill, language).toMatch(/needs_ocr[\s\S]*partial[\s\S]*image/);
 			expect(skill, language).not.toMatch(/逐页渲染|analy[sz]e every page/i);
 		}

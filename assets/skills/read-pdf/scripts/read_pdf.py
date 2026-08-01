@@ -125,7 +125,7 @@ def normalize_source_label(raw_label: Optional[str], resolved_pdf_path: Path) ->
         or "\\" in normalized
         or ":" in normalized
         or any(not segment or segment in {".", ".."} for segment in segments)
-        or any(ord(character) < 32 for character in normalized)
+        or any(unicodedata.category(character).startswith("C") for character in normalized)
     ):
         raise ReadPdfError(
             "INVALID_SOURCE_LABEL",
@@ -294,6 +294,61 @@ def build_output_path(raw_output: Optional[str], source_hash: str) -> Path:
     return output_path
 
 
+def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
+    """把有意义的矢量内容合并为一个页级视觉占位。
+
+    单条分隔线、无填充页框和微小装饰不足以让页面降级；填充图形、复杂路径，
+    或至少四个绘制原语组成的较大区域则交由视觉分析。
+    """
+    page_area = max(float(page.rect.width * page.rect.height), 1.0)
+    all_regions: List[Tuple[float, float, float, float]] = []
+    meaningful_regions: List[Tuple[float, float, float, float]] = []
+
+    for drawing in page.get_drawings():
+        rectangle = drawing.get("rect")
+        if rectangle is None:
+            continue
+        region = (
+            float(rectangle.x0),
+            float(rectangle.y0),
+            float(rectangle.x1),
+            float(rectangle.y1),
+        )
+        all_regions.append(region)
+        width = max(region[2] - region[0], 0.0)
+        height = max(region[3] - region[1], 0.0)
+        area_ratio = width * height / page_area
+        items = drawing.get("items", [])
+        item_count = len(items) if isinstance(items, (list, tuple)) else 0
+        if 0.001 <= area_ratio <= 0.75 and (
+            drawing.get("fill") is not None or item_count >= 3
+        ):
+            meaningful_regions.append(region)
+
+    selected_regions = meaningful_regions
+    if not selected_regions and len(all_regions) >= 4:
+        aggregate = (
+            min(region[0] for region in all_regions),
+            min(region[1] for region in all_regions),
+            max(region[2] for region in all_regions),
+            max(region[3] for region in all_regions),
+        )
+        aggregate_ratio = (
+            max(aggregate[2] - aggregate[0], 0.0)
+            * max(aggregate[3] - aggregate[1], 0.0)
+            / page_area
+        )
+        if 0.005 <= aggregate_ratio <= 0.75:
+            selected_regions = all_regions
+
+    if not selected_regions:
+        return None
+    return (
+        min(region[1] for region in selected_regions),
+        min(region[0] for region in selected_regions),
+    )
+
+
 def extract_blocks(page: fitz.Page) -> List[Dict[str, Any]]:
     """按页面阅读顺序公开文字与待视觉分析的图像区域。"""
     raw_blocks = page.get_text("dict").get("blocks", [])
@@ -312,11 +367,9 @@ def extract_blocks(page: fitz.Page) -> List[Dict[str, Any]]:
         elif kind == 1:
             sortable.append((float(bbox[1]), float(bbox[0]), "image", ""))
 
-    for drawing in page.get_drawings():
-        rectangle = drawing.get("rect")
-        if rectangle is None:
-            continue
-        sortable.append((float(rectangle.y0), float(rectangle.x0), "image", ""))
+    vector_anchor = vector_visual_anchor(page)
+    if vector_anchor is not None:
+        sortable.append((vector_anchor[0], vector_anchor[1], "image", ""))
     sortable.sort(key=lambda item: (item[0], item[1]))
     return [
         {"kind": kind, "order": index, "content": content}

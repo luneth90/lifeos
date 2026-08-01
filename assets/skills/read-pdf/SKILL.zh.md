@@ -161,7 +161,7 @@ for page in package["pages"]:
 
 ```python
 for page in package["pages"]:
-    if page["status"] in {"needs_ocr", "partial"} or any(block["kind"] == "image" for block in page["blocks"]):
+    if page["status"] in {"needs_ocr", "partial", "failed"} or any(block["kind"] == "image" for block in page["blocks"]):
         inspect_image(page)
 ```
 
@@ -205,7 +205,7 @@ for page in package["pages"]:
 
 - JSON 文件路径告知用户，供下游技能读取
 - 同时在对话中给出**摘要**：完整、待 OCR、部分和失败页数
-- 若视觉补充尚未完成，保留对应页的 `partial` 或 `needs_ocr`，不伪造公式、图表或表格
+- 若视觉补充尚未完成，保留对应页的 `partial`、`needs_ocr` 或 `failed`，不伪造公式、图表或表格
 - **不做知识整理**——这是中间产物，整理交给 `/knowledge`, `/ask`,`/revise`等技能
 
 # 常见问题

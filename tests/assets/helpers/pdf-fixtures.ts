@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export interface PdfFixtures {
+	decorativeVectorPdf: string;
 	formulaImagePdf: string;
 	mixedVisualPdf: string;
 	noTextLayerPdf: string;
@@ -24,6 +25,7 @@ export function createPdfFixtures(): PdfFixtures {
 	const mixedVisualPdf = join(workspace, 'mixed-visual.pdf');
 	const sparsePagesPdf = join(workspace, 'sparse-pages.pdf');
 	const vectorVisualPdf = join(workspace, 'vector-visual.pdf');
+	const decorativeVectorPdf = join(workspace, 'decorative-vector.pdf');
 	const program = [
 		'import fitz, sys',
 		'text_path, no_text_path = sys.argv[1:3]',
@@ -79,6 +81,13 @@ export function createPdfFixtures(): PdfFixtures {
 		'vector_page.draw_rect(fitz.Rect(190, 180, 278, 300), color=(0, 0, 0), fill=(0.8, 0.4, 0.2))',
 		'vector.save(sys.argv[7])',
 		'vector.close()',
+		'decorative = fitz.open()',
+		'decorative_page = decorative.new_page()',
+		"decorative_page.insert_text((72, 72), 'Text with decorative rules only.', fontsize=12)",
+		'decorative_page.draw_line(fitz.Point(72, 96), fitz.Point(520, 96), color=(0.5, 0.5, 0.5))',
+		'decorative_page.draw_rect(fitz.Rect(36, 36, 559, 806), color=(0.7, 0.7, 0.7))',
+		'decorative.save(sys.argv[8])',
+		'decorative.close()',
 	].join('\n');
 	const result = spawnSync(
 		'python3',
@@ -92,6 +101,7 @@ export function createPdfFixtures(): PdfFixtures {
 			sparsePagesPdf,
 			mixedVisualPdf,
 			vectorVisualPdf,
+			decorativeVectorPdf,
 		],
 		{
 			encoding: 'utf-8',
@@ -103,6 +113,7 @@ export function createPdfFixtures(): PdfFixtures {
 	}
 
 	return {
+		decorativeVectorPdf,
 		workspace,
 		textPdf,
 		noTextLayerPdf,

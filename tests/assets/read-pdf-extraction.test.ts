@@ -160,6 +160,22 @@ describe('read_pdf.py 提取包', () => {
 		generatedPaths.push(join(output.rendered_images[0].path, '..'));
 	});
 
+	it('不把普通分隔线和页框误判为待补充的矢量图表', () => {
+		const fixture = createFixtures();
+		const outputPath = join(fixture.workspace, 'decorative-vector-result.json');
+		const result = runScript([fixture.decorativeVectorPdf, '1', '--output', outputPath]);
+		expect(result.status, result.stderr).toBe(0);
+		generatedPaths.push(outputPath);
+		const output = JSON.parse(readFileSync(outputPath, 'utf-8')) as {
+			pages: Array<{ status: string; blocks: Array<{ kind: string }> }>;
+			rendered_images?: Array<{ page: number; path: string }>;
+		};
+
+		expect(output.pages[0].status).toBe('complete');
+		expect(output.pages[0].blocks.map((block) => block.kind)).toEqual(['text']);
+		expect(output).not.toHaveProperty('rendered_images');
+	});
+
 	it('默认只渲染需要视觉补充的页面', () => {
 		const fixture = createFixtures();
 		const outputPath = join(fixture.workspace, 'text-with-render-default.json');
@@ -221,6 +237,9 @@ describe('read_pdf.py 提取包', () => {
 		'C:\\leak.pdf',
 		'file:/Users/alice/leak.pdf',
 		'／Users/alice/leak.pdf',
+		'\u200b/Users/alice/leak.pdf',
+		'\u2060/Users/alice/leak.pdf',
+		'\u202e/Users/alice/leak.pdf',
 	])('拒绝不安全的 source-label：%s', (sourceLabel) => {
 		const fixture = createFixtures();
 		const result = runScript([

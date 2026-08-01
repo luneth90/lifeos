@@ -156,7 +156,7 @@ If validation fails, stop consumption, preserve the diagnostics, and extract aga
 
 ```python
 for page in package["pages"]:
-    if page["status"] in {"needs_ocr", "partial"} or any(block["kind"] == "image" for block in page["blocks"]):
+    if page["status"] in {"needs_ocr", "partial", "failed"} or any(block["kind"] == "image" for block in page["blocks"]):
         inspect_image(page)
 ```
 
@@ -200,7 +200,7 @@ Output path: `/tmp/read-pdf-<timestamp>.json`
 
 - Provide the JSON file path to the user for downstream skills to read
 - Also give a **summary** in the conversation: complete, needs-OCR, partial, and failed page counts
-- If visual enrichment remains incomplete, retain `partial` or `needs_ocr`; do not fabricate formulas, charts, or tables
+- If visual enrichment remains incomplete, retain `partial`, `needs_ocr`, or `failed`; do not fabricate formulas, charts, or tables
 - **Do not perform knowledge organization** — this is an intermediate product; organization is handled by `/knowledge`, `/ask`, `/revise`, and other skills
 
 # Common Issues

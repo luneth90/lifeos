@@ -35,8 +35,11 @@ SUPPORTED_SCHEMA_KEYWORDS = {
     "type",
     "uniqueItems",
 }
+SUPPORTED_SCHEMA_TYPES = {"null", "object", "array", "string", "integer", "number", "boolean"}
 RFC3339_PATTERN = re.compile(
-    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})\Z"
+    r"^(?P<date>\d{4}-\d{2}-\d{2})[Tt]"
+    r"(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})"
+    r"(?P<fraction>\.\d+)?(?P<zone>[Zz]|[+-]\d{2}:\d{2})\Z"
 )
 
 
@@ -96,13 +99,44 @@ def json_equal(left: Any, right: Any) -> bool:
 
 
 def valid_date_time(value: str) -> bool:
-    if RFC3339_PATTERN.fullmatch(value) is None:
+    match = RFC3339_PATTERN.fullmatch(value)
+    if match is None:
         return False
+    second = int(match.group("second"))
+    if second > 60:
+        return False
+    normalized_second = "59" if second == 60 else match.group("second")
+    zone = match.group("zone")
+    normalized_zone = "+00:00" if zone in {"Z", "z"} else zone
+    normalized = (
+        f"{match.group('date')}T{match.group('hour')}:{match.group('minute')}:"
+        f"{normalized_second}{match.group('fraction') or ''}{normalized_zone}"
+    )
     try:
-        parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
+        parsed = datetime.fromisoformat(normalized)
     except ValueError:
         return False
     return parsed.tzinfo is not None
+
+
+def has_json_duplicates(items: Sequence[Any]) -> bool:
+    return any(
+        json_equal(item, earlier)
+        for index, item in enumerate(items)
+        for earlier in items[:index]
+    )
+
+
+def is_finite_number(value: Any) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and (not isinstance(value, float) or math.isfinite(value))
+    )
+
+
+def is_nonnegative_integer(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def validate_schema_definition(
@@ -118,18 +152,53 @@ def validate_schema_definition(
     if any(keyword not in SUPPORTED_SCHEMA_KEYWORDS for keyword in schema):
         add_diagnostic(diagnostics, "schema_unsupported_keyword", path)
 
+    for metadata_keyword in ("$id", "$schema", "description", "title"):
+        if metadata_keyword in schema and not isinstance(schema[metadata_keyword], str):
+            add_diagnostic(diagnostics, "schema_definition", path)
+
     declared_type = schema.get("type")
     if declared_type is not None:
         expected_types = [declared_type] if isinstance(declared_type, str) else declared_type
-        if not isinstance(expected_types, list) or not all(
-            isinstance(item, str) for item in expected_types
+        if (
+            not isinstance(expected_types, list)
+            or not expected_types
+            or not all(isinstance(item, str) and item in SUPPORTED_SCHEMA_TYPES for item in expected_types)
+            or len(expected_types) != len(set(expected_types))
         ):
             add_diagnostic(diagnostics, "schema_definition", path)
 
     required = schema.get("required")
     if required is not None and (
-        not isinstance(required, list) or not all(isinstance(item, str) for item in required)
+        not isinstance(required, list)
+        or not all(isinstance(item, str) for item in required)
+        or len(required) != len(set(required))
     ):
+        add_diagnostic(diagnostics, "schema_definition", path)
+
+    enum = schema.get("enum")
+    if enum is not None and (
+        not isinstance(enum, list) or not enum or has_json_duplicates(enum)
+    ):
+        add_diagnostic(diagnostics, "schema_definition", path)
+
+    additional_properties = schema.get("additionalProperties")
+    if additional_properties is not None and not isinstance(additional_properties, bool):
+        code = (
+            "schema_unsupported_keyword"
+            if isinstance(additional_properties, dict)
+            else "schema_definition"
+        )
+        add_diagnostic(diagnostics, code, path)
+
+    for numeric_keyword in ("minimum", "maximum"):
+        if numeric_keyword in schema and not is_finite_number(schema[numeric_keyword]):
+            add_diagnostic(diagnostics, "schema_definition", path)
+
+    for integer_keyword in ("minItems", "minLength"):
+        if integer_keyword in schema and not is_nonnegative_integer(schema[integer_keyword]):
+            add_diagnostic(diagnostics, "schema_definition", path)
+
+    if "uniqueItems" in schema and not isinstance(schema["uniqueItems"], bool):
         add_diagnostic(diagnostics, "schema_definition", path)
 
     properties = schema.get("properties")
@@ -155,8 +224,11 @@ def validate_schema_definition(
                 add_diagnostic(diagnostics, "schema_definition", path)
 
     schema_format = schema.get("format")
-    if schema_format is not None and schema_format != "date-time":
-        add_diagnostic(diagnostics, "schema_unsupported_keyword", path)
+    if schema_format is not None:
+        if not isinstance(schema_format, str):
+            add_diagnostic(diagnostics, "schema_definition", path)
+        elif schema_format != "date-time":
+            add_diagnostic(diagnostics, "schema_unsupported_keyword", path)
 
 
 def validate_schema_value(
@@ -265,7 +337,7 @@ def safe_source_path(value: str) -> bool:
         or "\\" in normalized
         or ":" in normalized
         or any(not segment or segment in {".", ".."} for segment in segments)
-        or any(ord(character) < 32 for character in normalized)
+        or any(unicodedata.category(character).startswith("C") for character in normalized)
     )
 
 
@@ -391,6 +463,8 @@ def unique_diagnostics(diagnostics: Iterable[Diagnostic]) -> List[Diagnostic]:
 def validate_package(package: Any, schema: Dict[str, Any], require_complete: bool = False) -> List[Diagnostic]:
     diagnostics: List[Diagnostic] = []
     validate_schema_definition(schema, "$", diagnostics)
+    if diagnostics:
+        return unique_diagnostics(diagnostics)
     validate_schema_value(package, schema, "$", diagnostics)
     diagnostics.extend(validate_semantics(package, require_complete))
     return unique_diagnostics(diagnostics)
