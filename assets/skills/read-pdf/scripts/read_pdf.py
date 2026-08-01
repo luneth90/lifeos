@@ -324,19 +324,13 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
 
     单个标题条、平行分隔线、无填充页框和微小装饰不足以让页面降级；
     复杂路径、多个填充图形、至少三个二维框，或带内部分隔的网格则交由视觉分析。
-    判断基于绘制原语的几何关系，不依赖 PyMuPDF 如何把原语分组为 drawing。
+    先把 line、rect 与 quad 规范化为全页线段，再按几何关系判断，避免同一视觉内容
+    因 PDF 原语编码或 PyMuPDF drawing 分组不同而得到相反结果。
     """
     page_area = max(float(page.rect.width * page.rect.height), 1.0)
     complex_regions: List[Tuple[float, float, float, float]] = []
     filled_regions: List[Tuple[float, float, float, float]] = []
-    box_regions: List[Tuple[float, float, float, float]] = []
-    horizontal_lines: Dict[
-        Tuple[float, float, float, float], Tuple[float, float, float, float]
-    ] = {}
-    vertical_lines: Dict[
-        Tuple[float, float, float, float], Tuple[float, float, float, float]
-    ] = {}
-    seen_lines = set()
+    segments = set()
 
     def rect_region(rectangle: Any) -> Tuple[float, float, float, float]:
         return (
@@ -353,28 +347,61 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             / page_area
         )
 
-    def line_key(
-        x0: float, y0: float, x1: float, y1: float
-    ) -> Tuple[float, float, float, float]:
-        endpoints = sorted(
-            ((round(x0, 3), round(y0, 3)), (round(x1, 3), round(y1, 3)))
+    def meaningful_region(region: Tuple[float, float, float, float]) -> bool:
+        return 0.001 <= area_ratio(region) <= 0.75
+
+    def canonical_point(point: Any) -> Tuple[float, float]:
+        return (round(float(point.x), 2), round(float(point.y), 2))
+
+    def coordinate_point(x: float, y: float) -> Tuple[float, float]:
+        return (round(float(x), 2), round(float(y), 2))
+
+    def add_segment(start: Tuple[float, float], end: Tuple[float, float]) -> None:
+        if start == end:
+            return
+        ordered = sorted((start, end))
+        segments.add((ordered[0], ordered[1]))
+
+    def add_polygon(points: Sequence[Tuple[float, float]]) -> None:
+        for index, start in enumerate(points):
+            add_segment(start, points[(index + 1) % len(points)])
+
+    def add_rectangle(rectangle: Any) -> Tuple[float, float, float, float]:
+        region = rect_region(rectangle)
+        add_polygon(
+            (
+                coordinate_point(region[0], region[1]),
+                coordinate_point(region[2], region[1]),
+                coordinate_point(region[2], region[3]),
+                coordinate_point(region[0], region[3]),
+            )
         )
-        return endpoints[0] + endpoints[1]
+        return region
+
+    def add_quad(quad: Any) -> Tuple[float, float, float, float]:
+        points = tuple(
+            canonical_point(point)
+            for point in (quad.ul, quad.ur, quad.lr, quad.ll)
+        )
+        add_polygon(points)
+        return (
+            min(point[0] for point in points),
+            min(point[1] for point in points),
+            max(point[0] for point in points),
+            max(point[1] for point in points),
+        )
 
     for drawing in page.get_drawings():
         rectangle = drawing.get("rect")
         if rectangle is None:
             continue
         region = rect_region(rectangle)
-        drawing_area_ratio = area_ratio(region)
         items = drawing.get("items", [])
         if not isinstance(items, (list, tuple)):
             items = []
         drawing_has_fill = drawing.get("fill") is not None
-        rectangle_items = 0
-        unique_line_count = 0
-        diagonal_line_count = 0
         has_complex_primitive = False
+        has_area_primitive = False
 
         for item in items:
             if not isinstance(item, (list, tuple)) or not item:
@@ -382,48 +409,105 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                 continue
             kind = item[0]
             if kind == "re" and len(item) >= 2:
-                rectangle_items += 1
-                item_region = rect_region(item[1])
-                width = max(item_region[2] - item_region[0], 0.0)
-                height = max(item_region[3] - item_region[1], 0.0)
-                if 0.001 <= area_ratio(item_region) <= 0.75 and width >= 4 and height >= 4:
-                    if drawing_has_fill:
-                        filled_regions.append(item_region)
-                    else:
-                        box_regions.append(item_region)
+                has_area_primitive = True
+                item_region = add_rectangle(item[1])
+                if drawing_has_fill and meaningful_region(item_region):
+                    filled_regions.append(item_region)
                 continue
-            if kind != "l" or len(item) < 3:
+            if kind == "qu" and len(item) >= 2:
+                has_area_primitive = True
+                item_region = add_quad(item[1])
+                if drawing_has_fill and meaningful_region(item_region):
+                    filled_regions.append(item_region)
+                continue
+            if kind == "l" and len(item) >= 3:
+                add_segment(canonical_point(item[1]), canonical_point(item[2]))
+                continue
+            if kind == "c":
                 has_complex_primitive = True
                 continue
+            has_complex_primitive = True
 
-            start = item[1]
-            end = item[2]
-            x0, y0 = float(start.x), float(start.y)
-            x1, y1 = float(end.x), float(end.y)
-            key = line_key(x0, y0, x1, y1)
-            if key in seen_lines:
-                continue
-            seen_lines.add(key)
-            unique_line_count += 1
-            item_region = (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
-            width = item_region[2] - item_region[0]
-            height = item_region[3] - item_region[1]
-            if height <= 2 and width >= 24:
-                horizontal_lines[key] = item_region
-            elif width <= 2 and height >= 24:
-                vertical_lines[key] = item_region
-            else:
-                diagonal_line_count += 1
-
-        if 0.001 <= drawing_area_ratio <= 0.75 and (
-            has_complex_primitive
-            or (diagonal_line_count > 0 and unique_line_count >= 3)
-            or (drawing_has_fill and rectangle_items == 0)
+        if meaningful_region(region) and (
+            has_complex_primitive or (drawing_has_fill and not has_area_primitive)
         ):
             complex_regions.append(region)
 
-    horizontal_regions = list(horizontal_lines.values())
-    vertical_regions = list(vertical_lines.values())
+    horizontal_intervals: Dict[float, List[Tuple[float, float]]] = {}
+    vertical_intervals: Dict[float, List[Tuple[float, float]]] = {}
+    non_axis_points = set()
+    adjacency: Dict[Tuple[float, float], set] = {}
+
+    for start, end in segments:
+        adjacency.setdefault(start, set()).add(end)
+        adjacency.setdefault(end, set()).add(start)
+        width = abs(end[0] - start[0])
+        height = abs(end[1] - start[1])
+        if height <= 2:
+            if width >= 4:
+                y = round((start[1] + end[1]) / 2, 2)
+                horizontal_intervals.setdefault(y, []).append(
+                    (min(start[0], end[0]), max(start[0], end[0]))
+                )
+        elif width <= 2:
+            if height >= 4:
+                x = round((start[0] + end[0]) / 2, 2)
+                vertical_intervals.setdefault(x, []).append(
+                    (min(start[1], end[1]), max(start[1], end[1]))
+                )
+        else:
+            non_axis_points.update((start, end))
+
+    unseen_points = set(adjacency)
+    while unseen_points:
+        first = unseen_points.pop()
+        component = {first}
+        pending = [first]
+        while pending:
+            point = pending.pop()
+            for neighbor in adjacency[point]:
+                if neighbor not in component:
+                    component.add(neighbor)
+                    unseen_points.discard(neighbor)
+                    pending.append(neighbor)
+        edge_count = sum(len(adjacency[point]) for point in component) // 2
+        if edge_count < len(component) or not component.intersection(non_axis_points):
+            continue
+        component_region = (
+            min(point[0] for point in component),
+            min(point[1] for point in component),
+            max(point[0] for point in component),
+            max(point[1] for point in component),
+        )
+        if meaningful_region(component_region):
+            complex_regions.append(component_region)
+
+    def merge_intervals(
+        grouped: Dict[float, List[Tuple[float, float]]], tolerance: float = 2.0
+    ) -> Dict[float, List[Tuple[float, float]]]:
+        merged: Dict[float, List[Tuple[float, float]]] = {}
+        for coordinate, intervals in grouped.items():
+            combined: List[Tuple[float, float]] = []
+            for start, end in sorted(intervals):
+                if not combined or start > combined[-1][1] + tolerance:
+                    combined.append((start, end))
+                else:
+                    combined[-1] = (combined[-1][0], max(combined[-1][1], end))
+            merged[coordinate] = combined
+        return merged
+
+    horizontal_intervals = merge_intervals(horizontal_intervals)
+    vertical_intervals = merge_intervals(vertical_intervals)
+    horizontal_regions = [
+        (start, y, end, y)
+        for y, intervals in horizontal_intervals.items()
+        for start, end in intervals
+    ]
+    vertical_regions = [
+        (x, start, x, end)
+        for x, intervals in vertical_intervals.items()
+        for start, end in intervals
+    ]
     grid_regions: List[Tuple[float, float, float, float]] = []
     if len(horizontal_regions) >= 2 and len(vertical_regions) >= 2:
         all_line_regions = horizontal_regions + vertical_regions
@@ -433,12 +517,6 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             max(region[2] for region in all_line_regions),
             max(region[3] for region in all_line_regions),
         )
-        horizontal_positions = {
-            round((region[1] + region[3]) / 2, 2) for region in horizontal_regions
-        }
-        vertical_positions = {
-            round((region[0] + region[2]) / 2, 2) for region in vertical_regions
-        }
         tolerance = 2.0
         spanning_horizontal = [
             region
@@ -452,22 +530,80 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             if region[1] <= aggregate[1] + tolerance
             and region[3] >= aggregate[3] - tolerance
         ]
+        internal_horizontal = [
+            region
+            for region in spanning_horizontal
+            if aggregate[1] + tolerance < region[1] < aggregate[3] - tolerance
+        ]
+        internal_vertical = [
+            region
+            for region in spanning_vertical
+            if aggregate[0] + tolerance < region[0] < aggregate[2] - tolerance
+        ]
         if (
             0.005 <= area_ratio(aggregate) <= 0.75
-            and (len(horizontal_positions) >= 3 or len(vertical_positions) >= 3)
             and len(spanning_horizontal) >= 2
             and len(spanning_vertical) >= 2
+            and (internal_horizontal or internal_vertical)
         ):
             grid_regions = all_line_regions
+
+    def interval_covers(
+        intervals: Sequence[Tuple[float, float]], start: float, end: float
+    ) -> bool:
+        tolerance = 2.0
+        return any(
+            interval_start <= start + tolerance and interval_end >= end - tolerance
+            for interval_start, interval_end in intervals
+        )
+
+    def find_rectangles(limit: int = 3) -> List[Tuple[float, float, float, float]]:
+        rectangles = set()
+        horizontal_positions = sorted(horizontal_intervals)
+        vertical_positions = sorted(vertical_intervals)
+        for top_index, top in enumerate(horizontal_positions):
+            for bottom in horizontal_positions[top_index + 1 :]:
+                if bottom - top < 4:
+                    continue
+                candidates = [
+                    x
+                    for x in vertical_positions
+                    if interval_covers(vertical_intervals[x], top, bottom)
+                ]
+                for left_index, left in enumerate(candidates):
+                    for right in candidates[left_index + 1 :]:
+                        if right - left < 4:
+                            continue
+                        if not interval_covers(horizontal_intervals[top], left, right):
+                            continue
+                        if not interval_covers(horizontal_intervals[bottom], left, right):
+                            continue
+                        region = (left, top, right, bottom)
+                        if meaningful_region(region):
+                            rectangles.add(region)
+                            if len(rectangles) >= limit:
+                                return list(rectangles)
+        return list(rectangles)
+
+    dense_axis_regions = (
+        horizontal_regions + vertical_regions
+        if horizontal_regions
+        and vertical_regions
+        and len(horizontal_regions) + len(vertical_regions) > 128
+        else []
+    )
+    rectangle_regions = [] if grid_regions or dense_axis_regions else find_rectangles()
 
     if complex_regions:
         selected_regions = complex_regions
     elif len(filled_regions) >= 2:
         selected_regions = filled_regions
-    elif len(box_regions) >= 3:
-        selected_regions = box_regions
     elif grid_regions:
         selected_regions = grid_regions
+    elif dense_axis_regions:
+        selected_regions = dense_axis_regions
+    elif len(rectangle_regions) >= 3:
+        selected_regions = rectangle_regions
     else:
         selected_regions = []
 

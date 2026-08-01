@@ -198,6 +198,53 @@ describe('read_pdf.py 提取包', () => {
 		generatedPaths.push(join(output.rendered_images[0].path, '..'));
 	});
 
+	it.each([
+		['独立 re 外框加内部线', 3],
+		['同一 Shape 内的 re 外框加内部线', 4],
+		['同一 Shape 内的六条边线', 7],
+		['同一 Shape 内的线框加内部线', 9],
+	])('将%s编码的等价网格标记为待视觉补充', (_description, page) => {
+		const fixture = createFixtures();
+		const result = runScript([fixture.unfilledVectorPdf, String(page)]);
+		expect(result.status, result.stderr).toBe(0);
+		const outputPath = result.stdout.match(/已输出 JSON：(.*)/)?.[1]?.trim();
+		expect(outputPath).toBeTruthy();
+		generatedPaths.push(outputPath as string);
+		const output = JSON.parse(readFileSync(outputPath as string, 'utf-8')) as {
+			pages: Array<{ status: string; blocks: Array<{ kind: string }> }>;
+			rendered_images: Array<{ page: number; path: string }>;
+		};
+
+		expect(output.pages[0].status).toBe('partial');
+		expect(output.pages[0].blocks.filter((block) => block.kind === 'image')).toHaveLength(1);
+		expect(output.rendered_images.map((image) => image.page)).toEqual([page]);
+		expect(existsSync(output.rendered_images[0].path)).toBe(true);
+		generatedPaths.push(join(output.rendered_images[0].path, '..'));
+	});
+
+	it.each([
+		['十二条独立边线', 5],
+		['同一 Shape 内的三个 re', 6],
+		['同一 Shape 内的十二条边线', 8],
+	])('将%s编码的三个等价框标记为待视觉补充', (_description, page) => {
+		const fixture = createFixtures();
+		const result = runScript([fixture.unfilledVectorPdf, String(page)]);
+		expect(result.status, result.stderr).toBe(0);
+		const outputPath = result.stdout.match(/已输出 JSON：(.*)/)?.[1]?.trim();
+		expect(outputPath).toBeTruthy();
+		generatedPaths.push(outputPath as string);
+		const output = JSON.parse(readFileSync(outputPath as string, 'utf-8')) as {
+			pages: Array<{ status: string; blocks: Array<{ kind: string }> }>;
+			rendered_images: Array<{ page: number; path: string }>;
+		};
+
+		expect(output.pages[0].status).toBe('partial');
+		expect(output.pages[0].blocks.filter((block) => block.kind === 'image')).toHaveLength(1);
+		expect(output.rendered_images.map((image) => image.page)).toEqual([page]);
+		expect(existsSync(output.rendered_images[0].path)).toBe(true);
+		generatedPaths.push(join(output.rendered_images[0].path, '..'));
+	});
+
 	it('不把普通分隔线和页框误判为待补充的矢量图表', () => {
 		const fixture = createFixtures();
 		const outputPath = join(fixture.workspace, 'decorative-vector-result.json');
@@ -217,6 +264,9 @@ describe('read_pdf.py 提取包', () => {
 	it.each([
 		['同一路径内的平行装饰线', 2],
 		['由四条独立边线组成的页框', 3],
+		['由四条独立边线组成的内嵌框', 4],
+		['由同一 Shape 编码的等价内嵌框', 5],
+		['由单一 re 编码的等价内嵌框', 8],
 	])('不把%s误判为待补充的矢量图表', (_description, page) => {
 		const fixture = createFixtures();
 		const outputPath = join(fixture.workspace, `decorative-vector-page-${page}.json`);
@@ -231,6 +281,28 @@ describe('read_pdf.py 提取包', () => {
 		expect(output.pages[0].status).toBe('complete');
 		expect(output.pages[0].blocks.map((block) => block.kind)).toEqual(['text']);
 		expect(output).not.toHaveProperty('rendered_images');
+	});
+
+	it.each([
+		['三条独立边线', 6],
+		['同一 Shape', 7],
+	])('将%s编码的等价三角形标记为待视觉补充', (_description, page) => {
+		const fixture = createFixtures();
+		const result = runScript([fixture.decorativeVectorPdf, String(page)]);
+		expect(result.status, result.stderr).toBe(0);
+		const outputPath = result.stdout.match(/已输出 JSON：(.*)/)?.[1]?.trim();
+		expect(outputPath).toBeTruthy();
+		generatedPaths.push(outputPath as string);
+		const output = JSON.parse(readFileSync(outputPath as string, 'utf-8')) as {
+			pages: Array<{ status: string; blocks: Array<{ kind: string }> }>;
+			rendered_images: Array<{ page: number; path: string }>;
+		};
+
+		expect(output.pages[0].status).toBe('partial');
+		expect(output.pages[0].blocks.filter((block) => block.kind === 'image')).toHaveLength(1);
+		expect(output.rendered_images.map((image) => image.page)).toEqual([page]);
+		expect(existsSync(output.rendered_images[0].path)).toBe(true);
+		generatedPaths.push(join(output.rendered_images[0].path, '..'));
 	});
 
 	it('默认只渲染需要视觉补充的页面', () => {
@@ -327,6 +399,10 @@ describe('read_pdf.py 提取包', () => {
 		'70_资源/a \u200db.pdf',
 		'70_资源/a\u200c b.pdf',
 		'70_资源/a \u200cb.pdf',
+		'70_资源/a\u200d\u00a0b.pdf',
+		'70_资源/a\u200c\u202fb.pdf',
+		'70_资源/a\u200d\u3000b.pdf',
+		'70_资源/a\u200c\u2028b.pdf',
 	])('拒绝不安全的 source-label：%s', (sourceLabel) => {
 		const fixture = createFixtures();
 		const result = runScript([

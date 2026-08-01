@@ -249,6 +249,10 @@ describe('PDF 提取包完整性校验 CLI', () => {
 		'70_资源/a \u200db.pdf',
 		'70_资源/a\u200c b.pdf',
 		'70_资源/a \u200cb.pdf',
+		'70_资源/a\u200d\u00a0b.pdf',
+		'70_资源/a\u200c\u202fb.pdf',
+		'70_资源/a\u200d\u3000b.pdf',
+		'70_资源/a\u200c\u2028b.pdf',
 	])('拒绝使用 Unicode 格式控制字符隐藏的 source.path：%s', (sourcePath) => {
 		const value = completePackage();
 		value.source.path = sourcePath;
