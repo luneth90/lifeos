@@ -242,7 +242,7 @@ memory_notify(contract_version=2, file_path="{日记目录}/YYYY-MM-DD.md")
 
 ## 可重跑日记契约
 
-先读取 `_shared/operation-safety.md`。同日运行固定复用同一 `run_id` 与日记路径，选择 `merge`；只更新 `BEGIN AUTO` / `END AUTO` 托管区块。每条自动任务必须携带稳定 `task_id`（来自规范化的来源对象与动作），按 `task_id` 更新而非追加，故重复运行不得复制任务或相关项目。
+先读取 `_shared/operation-safety.md`。同一天且规范化后的 `selected-items` 相同时复用同一 `run_id`。`selected-items` 变化表示规范化输入变化，必须生成新 `run_id`，但仍以 `merge` 更新同一日记路径；只更新 `BEGIN AUTO` / `END AUTO` 托管区块。每条自动任务必须携带稳定 `task_id`（来自规范化的来源对象与动作），按 `task_id` 更新而非追加，故重复运行不得复制任务或相关项目。
 
 <!-- operation-safety-v1 -->
 ```yaml

@@ -174,6 +174,33 @@ describe('阶段五幂等与归档契约', () => {
 		}
 	});
 
+	it('Today 以规范化选择确定 run_id，并以 task_id 合并同日日记', () => {
+		expect(contract('assets/skills/today/SKILL.zh.md').run_id).toBe(
+			'stable(today, YYYY-MM-DD, selected-items)',
+		);
+		const cases = [
+			{
+				path: 'assets/skills/today/SKILL.zh.md',
+				sameInput: '同一天且规范化后的 `selected-items` 相同时复用同一 `run_id`',
+				changedInput: '`selected-items` 变化表示规范化输入变化，必须生成新 `run_id`',
+				mergeTarget: '仍以 `merge` 更新同一日记路径',
+			},
+			{
+				path: 'assets/skills/today/SKILL.en.md',
+				sameInput: 'The same day and the same normalized `selected-items` reuse the same `run_id`',
+				changedInput:
+					'A change to `selected-items` changes the canonical input and requires a new `run_id`',
+				mergeTarget: 'still `merge` into the same diary path',
+			},
+		];
+		for (const { path, sameInput, changedInput, mergeTarget } of cases) {
+			const content = read(path);
+			expect(content, path).toContain(sameInput);
+			expect(content, path).toContain(changedInput);
+			expect(content, path).toContain(mergeTarget);
+		}
+	});
+
 	it('Archive 机器契约固定通知、索引确认和遗忘顺序', () => {
 		const extra = {
 			adapter: 'scripts/archive_transaction.mjs',

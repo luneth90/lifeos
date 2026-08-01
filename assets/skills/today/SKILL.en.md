@@ -241,7 +241,7 @@ Use `{system directory}/{templates subdirectory}/Daily_Template.md` as the base 
 
 ## Rerunnable Diary Contract
 
-Read `_shared/operation-safety.md`. The same day reuses the same `run_id` and diary path with `merge`; update only `BEGIN AUTO` / `END AUTO` managed regions. Every automatic task carries a stable `task_id` derived from normalized source object and action, and is updated by `task_id` rather than appended, so a repeat run cannot duplicate tasks or related projects.
+Read `_shared/operation-safety.md`. The same day and the same normalized `selected-items` reuse the same `run_id`. A change to `selected-items` changes the canonical input and requires a new `run_id`, but it must still `merge` into the same diary path; update only `BEGIN AUTO` / `END AUTO` managed regions. Every automatic task carries a stable `task_id` derived from normalized source object and action, and is updated by `task_id` rather than appended, so a repeat run cannot duplicate tasks or related projects.
 
 <!-- operation-safety-v1 -->
 ```yaml
