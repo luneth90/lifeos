@@ -437,6 +437,8 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
     vertical_intervals: Dict[float, List[Tuple[float, float]]] = {}
     non_axis_points = set()
     adjacency: Dict[Tuple[float, float], set] = {}
+    axis_cycle_regions: List[Tuple[float, float, float, float]] = []
+    axis_cycle_count = 0
 
     for start, end in segments:
         adjacency.setdefault(start, set()).add(end)
@@ -471,7 +473,8 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                     unseen_points.discard(neighbor)
                     pending.append(neighbor)
         edge_count = sum(len(adjacency[point]) for point in component) // 2
-        if edge_count < len(component) or not component.intersection(non_axis_points):
+        cycle_count = edge_count - len(component) + 1
+        if cycle_count < 1:
             continue
         component_region = (
             min(point[0] for point in component),
@@ -479,8 +482,13 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             max(point[0] for point in component),
             max(point[1] for point in component),
         )
-        if meaningful_region(component_region):
+        if not meaningful_region(component_region):
+            continue
+        if component.intersection(non_axis_points):
             complex_regions.append(component_region)
+        else:
+            axis_cycle_regions.append(component_region)
+            axis_cycle_count += cycle_count
 
     def merge_intervals(
         grouped: Dict[float, List[Tuple[float, float]]], tolerance: float = 2.0
@@ -600,6 +608,8 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
         selected_regions = filled_regions
     elif grid_regions:
         selected_regions = grid_regions
+    elif axis_cycle_count >= 3:
+        selected_regions = axis_cycle_regions
     elif len(rectangle_regions) >= 3:
         selected_regions = rectangle_regions
     else:

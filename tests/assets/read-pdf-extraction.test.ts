@@ -226,6 +226,8 @@ describe('read_pdf.py 提取包', () => {
 		['十二条独立边线', 5],
 		['同一 Shape 内的三个 re', 6],
 		['同一 Shape 内的十二条边线', 8],
+		['三个 re 加 52 条不相交刻线', 10],
+		['三个 re 加 53 条不相交刻线', 11],
 	])('将%s编码的三个等价框标记为待视觉补充', (_description, page) => {
 		const fixture = createFixtures();
 		const result = runScript([fixture.unfilledVectorPdf, String(page)]);
