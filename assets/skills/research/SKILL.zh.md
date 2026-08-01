@@ -1,7 +1,7 @@
 ---
 name: research
 description: '深入研究主题或草稿时使用；产出研究计划与结构化研究报告。'
-version: 2.1.2
+version: 2.2.0
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Research_Template.md"

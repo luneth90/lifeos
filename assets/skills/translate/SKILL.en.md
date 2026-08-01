@@ -1,7 +1,7 @@
 ---
 name: translate
 description: "Translate English PDF chapters into Chinese companion notes and update the linked learning project's progress."
-version: 2.1.2
+version: 2.2.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Translation_Template.md"
