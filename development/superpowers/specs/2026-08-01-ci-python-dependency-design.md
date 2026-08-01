@@ -42,21 +42,23 @@
 
 ## 发布策略
 
-`v2.2.0` 已经推送，但第一次发布在构建验证阶段终止，npm publish 与 GitHub Release 均未执行。热修不改 `package.json` 版本、不新增版本号，也不移动远端标签。
+`v2.2.0` 已经推送，但第一次发布在构建验证阶段终止，npm publish 与 GitHub Release 均未执行。热修不改 `package.json` 版本，也不新增版本号。
 
-修复提交进入 `main` 且远程 CI 全绿后，从最新 `main` 手动触发 Release 工作流，并传入现有标签 `v2.2.0`。工作流定义来自修复后的 `main`，源码检出仍指向既有标签；由于 Python 安装命令直接写在工作流中，即使标签提交本身不含热修，也能获得完整测试环境。
+补齐 Python 依赖后，首次远程回归又暴露了测试 worker RPC 超时；这一修复位于源码测试钩子中，旧标签提交无法通过单纯重跑工作流获得。用户因此明确授权把尚未形成 npm/GitHub Release 的 `v2.2.0` 重打到最终热修提交。
+
+最终策略是：最新 `main` 通过全部远程 CI 后，重新创建 annotated tag `v2.2.0`，并使用带旧远端标签对象校验的 `--force-with-lease` 原子更新远端标签。这样只有远端仍保持诊断时记录的旧对象才允许移动，避免覆盖并发变更；标签 push 自动触发包含完整热修的 Release 工作流，不再额外执行 `workflow_dispatch`。
 
 发布完成后同时验证：
 
 - Release 工作流全部步骤成功。
 - GitHub Release `v2.2.0` 存在并附带 npm tarball。
 - npm registry 可查询到 `lifeos@2.2.0`。
-- 远端 `v2.2.0` peeled commit 仍为原提交，证明没有重写标签。
+- 远端 `v2.2.0` peeled commit 等于最终热修提交，且只发生一次带 lease 的受控更新。
 
 ## 非目标
 
 - 不修改 PDF 提取脚本或测试跳过策略。
 - 不改变 CI 的 Node.js 版本矩阵。
 - 不修改用户主工作区中未提交的 `package.json`。
-- 不改写 `v2.2.0` 标签，不创建 `v2.2.1`。
+- 不创建 `v2.2.1`；只按用户明确授权受控重打尚未发布成功的 `v2.2.0`。
 - 不引入与当前失败无关的 Python 包。
