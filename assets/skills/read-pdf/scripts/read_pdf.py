@@ -587,14 +587,12 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                                 return list(rectangles)
         return list(rectangles)
 
-    dense_axis_regions = (
-        horizontal_regions + vertical_regions
-        if horizontal_regions
+    dense_axis_guard = bool(
+        horizontal_regions
         and vertical_regions
         and len(horizontal_regions) + len(vertical_regions) > 64
-        else []
     )
-    rectangle_regions = [] if grid_regions or dense_axis_regions else find_rectangles()
+    rectangle_regions = [] if grid_regions or dense_axis_guard else find_rectangles()
 
     if complex_regions:
         selected_regions = complex_regions
@@ -602,8 +600,6 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
         selected_regions = filled_regions
     elif grid_regions:
         selected_regions = grid_regions
-    elif dense_axis_regions:
-        selected_regions = dense_axis_regions
     elif len(rectangle_regions) >= 3:
         selected_regions = rectangle_regions
     else:

@@ -267,6 +267,8 @@ describe('read_pdf.py 提取包', () => {
 		['由四条独立边线组成的内嵌框', 4],
 		['由同一 Shape 编码的等价内嵌框', 5],
 		['由单一 re 编码的等价内嵌框', 8],
+		['由 32 条横线与 32 条竖线组成的两簇不相交刻线', 9],
+		['由 33 条横线与 32 条竖线组成的两簇不相交刻线', 10],
 	])('不把%s误判为待补充的矢量图表', (_description, page) => {
 		const fixture = createFixtures();
 		const outputPath = join(fixture.workspace, `decorative-vector-page-${page}.json`);
