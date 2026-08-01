@@ -75,7 +75,7 @@ Examples:
 Script responsibilities:
 
 - Only process matched pages; do not load the entire PDF into downstream context
-- Output a versioned package conforming to `PDF_Extraction_Schema.json`; do not consume retired flat fields such as `full_text` or `text_layer_missing_pages`
+- Output a v2 package conforming to `PDF_Extraction_Schema.json`; do not consume retired flat fields such as `full_text` or `text_layer_missing_pages`
 - Store only a safe Vault-relative display label in `source.path`. Pass it with `--source-label`, or accept the default PDF basename; never persist the local absolute source path
 - Default output names include microseconds and the first eight source SHA-256 characters; only retain rendered directories referenced by the output package, and clean unretained temporary images on failure
 - Generate PNG files for `needs_ocr`, `partial`, or `failed` pages, and for pages containing bitmap blocks or vector drawing content; do not render complete text-only pages
@@ -87,12 +87,17 @@ Read `pages[*].pdf_page_index` as the one-based physical PDF sequence. A `null`
 `printed_page_label` means unknown; never infer a printed book page from the physical sequence.
 `requested_pages` is the unique, ascending exact selection. `requested_range` is only its min/max envelope;
 never treat an unlisted page inside that envelope as requested or complete.
+In v2, each page's `page_size` and every block's `bbox` use PDF points with the origin at the
+top-left corner. A `bbox` must satisfy `0 <= x0 < x1 <= width` and `0 <= y0 < y1 <= height`.
+Bitmap blocks use the actual raw PDF image-block boundary. Vector visuals use the union of the
+regions selected by visual detection; never replace that union with a single anchor point.
 
 For every page, inspect:
 
 - `status`: `complete`, `needs_ocr`, `partial`, or `failed`
 - `coverage`, `confidence`, and machine-readable `errors`
-- `blocks` sorted by `order`; an `image` block marks a region requiring visual enrichment
+- Positive `page_size.width` and `page_size.height`
+- `blocks` sorted by `order` with a valid `bbox`; an `image` block marks a region requiring visual enrichment
 
 Call `inspect_image` only for `needs_ocr`, `partial`, or `failed` pages, or pages containing an `image` block. Append OCR, formula, table, or chart results at the relevant position, merge by `order`, and recompute `coverage`, `confidence`, `status`, and `errors`. A page is never `complete` before visual enrichment is complete.
 Every validator invocation must pass the Schema path resolved from `lifeos.yaml` explicitly through `--schema`; never infer it from the installation directory.
@@ -176,12 +181,12 @@ Merge all extracted results into structured JSON, renumber each page's `blocks.o
 
 ```jsonc
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "source": {"path": "VGT.pdf", "sha256": "<64 lowercase hex characters>", "mtime": "2026-08-01T00:00:00Z", "page_count": 300},
-  "extractor": {"name": "lifeos-read-pdf", "version": "1"},
+  "extractor": {"name": "lifeos-read-pdf", "version": "2"},
   "requested_range": {"start": 245, "end": 245},
   "requested_pages": [245],
-  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "coverage": 1, "confidence": 1, "errors": [], "blocks": [{"kind": "text", "order": 1, "content": "..."}]}],
+  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "page_size": {"width": 595, "height": 842}, "status": "complete", "coverage": 1, "confidence": 1, "errors": [], "blocks": [{"kind": "text", "order": 1, "content": "...", "bbox": {"x0": 72, "y0": 60, "x1": 160, "y1": 78}}]}],
   "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "partial_pages": 0, "failed_pages": 0}
 }
 ```

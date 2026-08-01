@@ -24,6 +24,7 @@ MAX_DEFAULT_PAGES = 50
 MAX_LOCAL_GRID_EDGE_MATCHES = 50_000
 MAX_LOCAL_GRID_EDGE_PAIR_CHECKS = 50_000
 ALLOWED_FORMAT_CONTROLS = {"\u200c", "\u200d"}
+BBox = Tuple[float, float, float, float]
 
 
 @dataclass
@@ -322,8 +323,25 @@ def build_output_path(raw_output: Optional[str], source_hash: str) -> Path:
     return output_path
 
 
-def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
-    """把有意义的矢量内容合并为一个页级视觉占位。
+def bounded_bbox(page: fitz.Page, raw_bbox: Sequence[float]) -> Optional[BBox]:
+    """把原始 PDF 坐标限制在页面内，并拒绝退化区域。"""
+    rectangle = fitz.Rect(*raw_bbox) & page.rect
+    if not rectangle.is_valid or rectangle.is_empty:
+        return None
+    return (
+        float(rectangle.x0),
+        float(rectangle.y0),
+        float(rectangle.x1),
+        float(rectangle.y1),
+    )
+
+
+def bbox_payload(bbox: BBox) -> Dict[str, float]:
+    return {"x0": bbox[0], "y0": bbox[1], "x1": bbox[2], "y1": bbox[3]}
+
+
+def vector_visual_bbox(page: fitz.Page) -> Optional[BBox]:
+    """把有意义的矢量内容合并为一个页级视觉区域。
 
     单个标题条、平行分隔线、无填充页框和微小装饰不足以让页面降级；
     复杂路径、多个填充图形、至少三个二维框，或带内部分隔的网格则交由视觉分析。
@@ -845,18 +863,25 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
 
     if not selected_regions:
         return None
-    return (
-        min(region[1] for region in selected_regions),
-        min(region[0] for region in selected_regions),
+    return bounded_bbox(
+        page,
+        (
+            min(region[0] for region in selected_regions),
+            min(region[1] for region in selected_regions),
+            max(region[2] for region in selected_regions),
+            max(region[3] for region in selected_regions),
+        ),
     )
 
 
 def extract_blocks(page: fitz.Page) -> List[Dict[str, Any]]:
     """按页面阅读顺序公开文字与待视觉分析的图像区域。"""
     raw_blocks = page.get_text("dict").get("blocks", [])
-    sortable: List[Tuple[float, float, str, str]] = []
+    sortable: List[Tuple[float, float, str, str, BBox]] = []
     for raw in raw_blocks:
-        bbox = raw.get("bbox", (0, 0, 0, 0))
+        bbox = bounded_bbox(page, raw.get("bbox", (0, 0, 0, 0)))
+        if bbox is None:
+            continue
         kind = raw.get("type")
         if kind == 0:
             content = "".join(
@@ -865,17 +890,22 @@ def extract_blocks(page: fitz.Page) -> List[Dict[str, Any]]:
                 for span in line.get("spans", [])
             ).strip()
             if content:
-                sortable.append((float(bbox[1]), float(bbox[0]), "text", content))
+                sortable.append((bbox[1], bbox[0], "text", content, bbox))
         elif kind == 1:
-            sortable.append((float(bbox[1]), float(bbox[0]), "image", ""))
+            sortable.append((bbox[1], bbox[0], "image", "", bbox))
 
-    vector_anchor = vector_visual_anchor(page)
-    if vector_anchor is not None:
-        sortable.append((vector_anchor[0], vector_anchor[1], "image", ""))
+    vector_bbox = vector_visual_bbox(page)
+    if vector_bbox is not None:
+        sortable.append((vector_bbox[1], vector_bbox[0], "image", "", vector_bbox))
     sortable.sort(key=lambda item: (item[0], item[1]))
     return [
-        {"kind": kind, "order": index, "content": content}
-        for index, (_top, _left, kind, content) in enumerate(sortable, start=1)
+        {
+            "kind": kind,
+            "order": index,
+            "content": content,
+            "bbox": bbox_payload(bbox),
+        }
+        for index, (_top, _left, kind, content, bbox) in enumerate(sortable, start=1)
     ]
 
 
@@ -898,6 +928,7 @@ def extract_printed_page_label(page: fitz.Page) -> Optional[str]:
 
 
 def extract_page(page: fitz.Page, pdf_page_index: int) -> Dict[str, Any]:
+    page_size = {"width": float(page.rect.width), "height": float(page.rect.height)}
     try:
         blocks = extract_blocks(page)
         printed_page_label = extract_printed_page_label(page)
@@ -912,6 +943,7 @@ def extract_page(page: fitz.Page, pdf_page_index: int) -> Dict[str, Any]:
         return {
             "pdf_page_index": pdf_page_index,
             "printed_page_label": printed_page_label,
+            "page_size": page_size,
             "status": status,
             "coverage": coverage,
             "confidence": confidence,
@@ -922,6 +954,7 @@ def extract_page(page: fitz.Page, pdf_page_index: int) -> Dict[str, Any]:
         return {
             "pdf_page_index": pdf_page_index,
             "printed_page_label": None,
+            "page_size": page_size,
             "status": "failed",
             "coverage": 0,
             "confidence": 0,
@@ -940,9 +973,9 @@ def build_result(
         "failed_pages": sum(page["status"] == "failed" for page in extracted_pages),
     }
     result: Dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": source,
-        "extractor": {"name": "lifeos-read-pdf", "version": "1"},
+        "extractor": {"name": "lifeos-read-pdf", "version": "2"},
         "requested_range": {"start": min(pages), "end": max(pages)},
         "requested_pages": list(pages),
         "pages": list(extracted_pages),

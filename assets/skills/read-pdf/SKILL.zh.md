@@ -77,7 +77,7 @@ pip install PyMuPDF Pillow
 脚本职责：
 
 - 只处理命中的页，不加载整本 PDF 到下游上下文
-- 输出符合 `PDF_Extraction_Schema.json` 的版本化提取包；不得消费已废弃的
+- 输出符合 `PDF_Extraction_Schema.json` 的 v2 版本化提取包；不得消费已废弃的
   `full_text`、`text_layer_missing_pages` 等扁平字段
 - `source.path` 只保存安全的 Vault 相对显示标签；可通过 `--source-label` 显式传入，默认仅使用 PDF 文件名，禁止写入本机绝对路径
 - 默认输出名含微秒和源文件 SHA-256 前八位；只保留由输出包引用的渲染目录，失败时清理未保留临时图像
@@ -90,12 +90,16 @@ pip install PyMuPDF Pillow
 `printed_page_label` 为 `null` 时表示未知，禁止从物理页序推断书本印刷页码。
 `requested_pages` 是唯一、升序的精确请求页集合；`requested_range` 只是其最小/最大页的包络，
 不得把包络内未列出的页当作已请求或已完成。
+v2 中每页的 `page_size` 以及每个 block 的 `bbox` 均使用 PDF point，坐标原点位于页面左上角。
+`bbox` 必须满足 `0 <= x0 < x1 <= width` 与 `0 <= y0 < y1 <= height`；位图使用 PDF
+原始 image block 的实际边界，矢量视觉使用参与判定区域的并集边界，不得用单点锚点代替。
 
 每页必须检查：
 
 - `status`：`complete`、`needs_ocr`、`partial` 或 `failed`
 - `coverage`、`confidence` 与机器可读的 `errors`
-- 按 `order` 排序的 `blocks`；`image` block 表示尚需视觉补充的区域
+- 正数 `page_size.width` 与 `page_size.height`
+- 按 `order` 排序且携带合法 `bbox` 的 `blocks`；`image` block 表示尚需视觉补充的区域
 
 仅对 `needs_ocr`、`partial`、`failed` 页面，或含 `image` block 的页面调用 `inspect_image`。把 OCR、公式、表格或图表
 结果追加为对应位置的 block，按 `order` 合并，并重新计算 `coverage`、`confidence`、`status` 与 `errors`。
@@ -181,12 +185,12 @@ for page in package["pages"]:
 
 ```jsonc
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "source": {"path": "VGT.pdf", "sha256": "<64位小写十六进制>", "mtime": "2026-08-01T00:00:00Z", "page_count": 300},
-  "extractor": {"name": "lifeos-read-pdf", "version": "1"},
+  "extractor": {"name": "lifeos-read-pdf", "version": "2"},
   "requested_range": {"start": 245, "end": 245},
   "requested_pages": [245],
-  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "status": "complete", "coverage": 1, "confidence": 1, "errors": [], "blocks": [{"kind": "text", "order": 1, "content": "..."}]}],
+  "pages": [{"pdf_page_index": 245, "printed_page_label": null, "page_size": {"width": 595, "height": 842}, "status": "complete", "coverage": 1, "confidence": 1, "errors": [], "blocks": [{"kind": "text", "order": 1, "content": "...", "bbox": {"x0": 72, "y0": 60, "x1": 160, "y1": 78}}]}],
   "summary": {"complete_pages": 1, "needs_ocr_pages": 0, "partial_pages": 0, "failed_pages": 0}
 }
 ```

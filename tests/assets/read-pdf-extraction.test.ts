@@ -53,16 +53,23 @@ describe('read_pdf.py 提取包', () => {
 		const firstPage = pages[0];
 		const blocks = firstPage.blocks as Array<Record<string, unknown>>;
 
-		expect(output.schema_version).toBe(1);
+		expect(output.schema_version).toBe(2);
 		expect(source.path).toBe('text-layer.pdf');
 		expect(JSON.stringify(output)).not.toContain(fixture.workspace);
 		expect(source.sha256).toMatch(/^[a-f0-9]{64}$/);
 		expect(source.mtime).toEqual(expect.any(String));
 		expect(extractor.name).toBe('lifeos-read-pdf');
+		expect(extractor.version).toBe('2');
 		expect(output.requested_pages).toEqual([1]);
 		expect(pages[0].pdf_page_index).toBe(1);
 		expect(pages[0].printed_page_label).toBeNull();
+		expect(firstPage.page_size).toEqual({ width: 595, height: 842 });
 		expect(blocks[0].kind).toBe('text');
+		const textBbox = blocks[0].bbox as Record<string, number>;
+		expect(textBbox.x0).toBeCloseTo(72, 5);
+		expect(textBbox.y0).toBeCloseTo(59.1, 5);
+		expect(textBbox.x1).toBeCloseTo(231.39597, 5);
+		expect(textBbox.y1).toBeCloseTo(75.588, 5);
 		expect(firstPage.status).toBe('complete');
 	});
 
@@ -128,11 +135,18 @@ describe('read_pdf.py 提取包', () => {
 		const page = (output.pages as Array<Record<string, unknown>>)[0];
 		const rendered = output.rendered_images as Array<Record<string, unknown>>;
 
-		expect((page.blocks as Array<Record<string, unknown>>).map((block) => block.kind)).toEqual([
+		const blocks = page.blocks as Array<Record<string, unknown>>;
+		expect(blocks.map((block) => block.kind)).toEqual([
 			'text',
 			'image',
 			'text',
 		]);
+		expect(blocks.find((block) => block.kind === 'image')?.bbox).toEqual({
+			x0: 72,
+			y0: 150,
+			x1: 540,
+			y1: 250,
+		});
 		expect(page.status).toBe('partial');
 		expect(page.errors).toEqual(['VISUAL_CONTENT_PENDING']);
 		expect(output.summary).toMatchObject({ partial_pages: 1 });
@@ -148,13 +162,23 @@ describe('read_pdf.py 提取包', () => {
 		expect(outputPath).toBeTruthy();
 		generatedPaths.push(outputPath as string);
 		const output = JSON.parse(readFileSync(outputPath as string, 'utf-8')) as {
-			pages: Array<{ status: string; errors: string[]; blocks: Array<{ kind: string }> }>;
+			pages: Array<{
+				status: string;
+				errors: string[];
+				blocks: Array<{ kind: string; bbox: Record<string, number> }>;
+			}>;
 			rendered_images: Array<{ page: number; path: string }>;
 		};
 
 		expect(output.pages[0].status).toBe('partial');
 		expect(output.pages[0].errors).toContain('VISUAL_CONTENT_PENDING');
 		expect(output.pages[0].blocks.map((block) => block.kind)).toContain('image');
+		expect(output.pages[0].blocks.find((block) => block.kind === 'image')?.bbox).toEqual({
+			x0: 72,
+			y0: 120,
+			x1: 278,
+			y1: 300,
+		});
 		expect(output.rendered_images.map((image) => image.page)).toEqual([1]);
 		expect(existsSync(output.rendered_images[0].path)).toBe(true);
 		generatedPaths.push(join(output.rendered_images[0].path, '..'));
@@ -334,7 +358,7 @@ describe('read_pdf.py 提取包', () => {
 			'    rect = fitz.Rect(0, 0, 600, 7000)',
 			'    def get_drawings(self):',
 			'        return [{"rect": fitz.Rect(50, y, 550, y), "items": [("l", fitz.Point(50, y), fitz.Point(550, y))], "fill": None} for y in range(1, 6001)]',
-			'print(module.vector_visual_anchor(FakePage()))',
+			'print(module.vector_visual_bbox(FakePage()))',
 		].join('\n');
 		const result = spawnSync('python3', ['-c', program, scriptPath], {
 			encoding: 'utf-8',
@@ -358,7 +382,7 @@ describe('read_pdf.py 提取包', () => {
 			'        horizontal = [{"rect": fitz.Rect(50, y, 550, y), "items": [("l", fitz.Point(50, y), fitz.Point(550, y))], "fill": None} for y in range(1, 3001)]',
 			'        vertical = [{"rect": fitz.Rect(x, 3200, x, 3800), "items": [("l", fitz.Point(x, 3200), fitz.Point(x, 3800))], "fill": None} for x in range(700, 3700)]',
 			'        return horizontal + vertical',
-			'print(module.vector_visual_anchor(FakePage()))',
+			'print(module.vector_visual_bbox(FakePage()))',
 		].join('\n');
 		const result = spawnSync('python3', ['-c', program, scriptPath], {
 			encoding: 'utf-8',
@@ -385,7 +409,7 @@ describe('read_pdf.py 提取包', () => {
 			'        horizontal = [{"rect": fitz.Rect(0, y, 3500, y), "items": [("l", fitz.Point(0, y), fitz.Point(3500, y))], "fill": None} for y in positions]',
 			'        vertical = [{"rect": fitz.Rect(x, 0, x, 3500), "items": [("l", fitz.Point(x, 0), fitz.Point(x, 3500))], "fill": None} for x in positions]',
 			'        return horizontal + vertical',
-			'print(module.vector_visual_anchor(FakePage()))',
+			'print(module.vector_visual_bbox(FakePage()))',
 		].join('\n');
 		const result = spawnSync('python3', ['-c', program, scriptPath], {
 			encoding: 'utf-8',
@@ -411,7 +435,7 @@ describe('read_pdf.py 提取包', () => {
 			'        horizontal = [{"rect": fitz.Rect(value - 2, value, value + 2, value), "items": [("l", fitz.Point(value - 2, value), fitz.Point(value + 2, value))], "fill": None} for value in positions]',
 			'        vertical = [{"rect": fitz.Rect(value, value - 2, value, value + 2), "items": [("l", fitz.Point(value, value - 2), fitz.Point(value, value + 2))], "fill": None} for value in positions]',
 			'        return horizontal + vertical',
-			'print(module.vector_visual_anchor(FakePage()))',
+			'print(module.vector_visual_bbox(FakePage()))',
 		].join('\n');
 		const result = spawnSync('python3', ['-c', program, scriptPath], {
 			encoding: 'utf-8',
@@ -443,7 +467,7 @@ describe('read_pdf.py 提取包', () => {
 			'            ends.append({"rect": fitz.Rect(x - 2, y, x + 2, y), "items": [("l", fitz.Point(x - 2, y), fitz.Point(x + 2, y))], "fill": None})',
 			'            sides.append({"rect": fitz.Rect(x, 0, x, y), "items": [("l", fitz.Point(x, 0), fitz.Point(x, y))], "fill": None})',
 			'        return shared + ends + sides',
-			'print(module.vector_visual_anchor(FakePage()))',
+			'print(module.vector_visual_bbox(FakePage()))',
 		].join('\n');
 		const result = spawnSync('python3', ['-c', program, scriptPath], {
 			encoding: 'utf-8',

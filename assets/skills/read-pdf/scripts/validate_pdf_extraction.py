@@ -377,6 +377,43 @@ def safe_source_path(value: str) -> bool:
     )
 
 
+def validate_page_geometry(page: Dict[str, Any], index: int, diagnostics: List[Diagnostic]) -> None:
+    path = f"$.pages[{index}]"
+    page_size = page.get("page_size")
+    if not isinstance(page_size, dict):
+        return
+
+    width = number_value(page_size.get("width"))
+    height = number_value(page_size.get("height"))
+    if width is None or height is None or width <= 0 or height <= 0:
+        add_diagnostic(diagnostics, "page_size_positive", f"{path}.page_size")
+        return
+
+    blocks = page.get("blocks")
+    if not isinstance(blocks, list):
+        return
+
+    for block_index, block in enumerate(blocks):
+        if not isinstance(block, dict):
+            continue
+        bbox = block.get("bbox")
+        if not isinstance(bbox, dict):
+            continue
+
+        x0 = number_value(bbox.get("x0"))
+        y0 = number_value(bbox.get("y0"))
+        x1 = number_value(bbox.get("x1"))
+        y1 = number_value(bbox.get("y1"))
+        if None in (x0, y0, x1, y1):
+            continue
+
+        bbox_path = f"{path}.blocks[{block_index}].bbox"
+        if not x0 < x1 or not y0 < y1:
+            add_diagnostic(diagnostics, "bbox_order", bbox_path)
+        elif x0 < 0 or y0 < 0 or x1 > width or y1 > height:
+            add_diagnostic(diagnostics, "bbox_page_bounds", bbox_path)
+
+
 def validate_page_semantics(page: Dict[str, Any], index: int, diagnostics: List[Diagnostic]) -> None:
     path = f"$.pages[{index}]"
     status = page.get("status")
@@ -470,6 +507,7 @@ def validate_semantics(package: Any, require_complete: bool) -> List[Diagnostic]
 
     if page_objects is not None:
         for index, page in enumerate(page_objects):
+            validate_page_geometry(page, index, diagnostics)
             validate_page_semantics(page, index, diagnostics)
 
         statuses = [page.get("status") for page in page_objects]

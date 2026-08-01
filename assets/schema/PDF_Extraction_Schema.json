@@ -1,6 +1,6 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
-	"$id": "https://lifeos.dev/schema/pdf-extraction-v1.json",
+	"$id": "https://lifeos.dev/schema/pdf-extraction-v2.json",
 	"title": "LifeOS PDF Extraction Package",
 	"type": "object",
 	"required": [
@@ -13,7 +13,7 @@
 		"summary"
 	],
 	"properties": {
-		"schema_version": { "const": 1 },
+		"schema_version": { "const": 2 },
 		"source": {
 			"type": "object",
 			"required": ["path", "sha256", "mtime", "page_count"],
@@ -35,7 +35,7 @@
 			"required": ["name", "version"],
 			"properties": {
 				"name": { "const": "lifeos-read-pdf" },
-				"version": { "const": "1" }
+				"version": { "const": "2" }
 			},
 			"additionalProperties": false
 		},
@@ -62,6 +62,7 @@
 				"required": [
 					"pdf_page_index",
 					"printed_page_label",
+					"page_size",
 					"status",
 					"coverage",
 					"confidence",
@@ -71,6 +72,15 @@
 				"properties": {
 					"pdf_page_index": { "type": "integer", "minimum": 1 },
 					"printed_page_label": { "type": ["string", "null"] },
+					"page_size": {
+						"type": "object",
+						"required": ["width", "height"],
+						"properties": {
+							"width": { "type": "number", "minimum": 0 },
+							"height": { "type": "number", "minimum": 0 }
+						},
+						"additionalProperties": false
+					},
 					"status": { "enum": ["complete", "needs_ocr", "partial", "failed"] },
 					"coverage": { "type": "number", "minimum": 0, "maximum": 1 },
 					"confidence": { "type": "number", "minimum": 0, "maximum": 1 },
@@ -79,11 +89,22 @@
 						"type": "array",
 						"items": {
 							"type": "object",
-							"required": ["kind", "order", "content"],
+							"required": ["kind", "order", "content", "bbox"],
 							"properties": {
 								"kind": { "enum": ["text", "image"] },
 								"order": { "type": "integer", "minimum": 1 },
-								"content": { "type": "string" }
+								"content": { "type": "string" },
+								"bbox": {
+									"type": "object",
+									"required": ["x0", "y0", "x1", "y1"],
+									"properties": {
+										"x0": { "type": "number", "minimum": 0 },
+										"y0": { "type": "number", "minimum": 0 },
+										"x1": { "type": "number", "minimum": 0 },
+										"y1": { "type": "number", "minimum": 0 }
+									},
+									"additionalProperties": false
+								}
 							},
 							"additionalProperties": false
 						}

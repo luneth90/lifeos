@@ -24,24 +24,32 @@ function completePage(index = 1) {
 	return {
 		pdf_page_index: index,
 		printed_page_label: null,
+		page_size: { width: 595, height: 842 },
 		status: 'complete',
 		coverage: 1,
 		confidence: 1,
 		errors: [],
-		blocks: [{ kind: 'text', order: 1, content: `page ${index}` }],
+		blocks: [
+			{
+				kind: 'text',
+				order: 1,
+				content: `page ${index}`,
+				bbox: { x0: 72, y0: 60, x1: 160, y1: 78 },
+			},
+		],
 	};
 }
 
 function completePackage(indices = [1]) {
 	return {
-		schema_version: 1,
+		schema_version: 2,
 		source: {
 			path: '70_资源/书籍/example.pdf',
 			sha256: 'a'.repeat(64),
 			mtime: '2026-07-31T00:00:00Z',
 			page_count: 10,
 		},
-		extractor: { name: 'lifeos-read-pdf', version: '1' },
+		extractor: { name: 'lifeos-read-pdf', version: '2' },
 		requested_range: { start: Math.min(...indices), end: Math.max(...indices) },
 		requested_pages: indices,
 		pages: indices.map(completePage),
@@ -165,9 +173,14 @@ describe('PDF 提取包完整性校验 CLI', () => {
 			'schema_additional_property',
 		],
 		[
-			'固定值',
+			'提取器版本固定值',
 			(value: ReturnType<typeof completePackage>) =>
-				Object.assign(value.extractor, { version: '2' }),
+				Object.assign(value.extractor, { version: '1' }),
+			'schema_const',
+		],
+		[
+			'提取包版本固定值',
+			(value: ReturnType<typeof completePackage>) => Object.assign(value, { schema_version: 1 }),
 			'schema_const',
 		],
 		[
@@ -280,7 +293,14 @@ describe('PDF 提取包完整性校验 CLI', () => {
 		const value = completePackage();
 		value.pages[0].coverage = 0.5;
 		value.pages[0].errors = ['VISUAL_CONTENT_PENDING'];
-		value.pages[0].blocks = [{ kind: 'image', order: 1, content: '' }];
+		value.pages[0].blocks = [
+			{
+				kind: 'image',
+				order: 1,
+				content: '',
+				bbox: { x0: 72, y0: 150, x1: 540, y1: 250 },
+			},
+		];
 		const result = runValidator(value, ['--require-complete']);
 		const codes = diagnostics(result).map((item) => item.code);
 
@@ -332,7 +352,12 @@ describe('PDF 提取包完整性校验 CLI', () => {
 		['断档', [1, 3]],
 	])('拒绝 block.order %s', (_name, orders) => {
 		const value = completePackage();
-		value.pages[0].blocks = orders.map((order) => ({ kind: 'text', order, content: 'x' }));
+		value.pages[0].blocks = orders.map((order) => ({
+			kind: 'text',
+			order,
+			content: 'x',
+			bbox: { x0: 72, y0: 60, x1: 160, y1: 78 },
+		}));
 		const result = runValidator(value);
 
 		expect(result.status).toBe(1);
@@ -340,6 +365,47 @@ describe('PDF 提取包完整性校验 CLI', () => {
 			code: 'block_order_sequence',
 			path: '$.pages[0].blocks',
 		});
+	});
+
+	it('拒绝缺少或非正的页面尺寸', () => {
+		const missing = completePackage();
+		delete (missing.pages[0] as { page_size?: unknown }).page_size;
+		const missingResult = runValidator(missing);
+
+		expect(missingResult.status).toBe(1);
+		expect(diagnostics(missingResult)).toContainEqual({
+			code: 'schema_required',
+			path: '$.pages[0].page_size',
+		});
+
+		const zero = completePackage();
+		zero.pages[0].page_size.width = 0;
+		const zeroResult = runValidator(zero);
+
+		expect(zeroResult.status).toBe(1);
+		expect(diagnostics(zeroResult)).toContainEqual({
+			code: 'page_size_positive',
+			path: '$.pages[0].page_size',
+		});
+	});
+
+	it.each([
+		['缺少', undefined, 'schema_required'],
+		['横向退化', { x0: 72, y0: 60, x1: 72, y1: 78 }, 'bbox_order'],
+		['纵向退化', { x0: 72, y0: 78, x1: 160, y1: 78 }, 'bbox_order'],
+		['横向越界', { x0: 72, y0: 60, x1: 596, y1: 78 }, 'bbox_page_bounds'],
+		['纵向越界', { x0: 72, y0: 60, x1: 160, y1: 843 }, 'bbox_page_bounds'],
+	])('拒绝 block bbox：%s', (_name, bbox, code) => {
+		const value = completePackage();
+		if (bbox === undefined) {
+			delete (value.pages[0].blocks[0] as { bbox?: unknown }).bbox;
+		} else {
+			value.pages[0].blocks[0].bbox = bbox;
+		}
+		const result = runValidator(value);
+
+		expect(result.status).toBe(1);
+		expect(diagnostics(result).map((item) => item.code)).toContain(code);
 	});
 
 	it.each([

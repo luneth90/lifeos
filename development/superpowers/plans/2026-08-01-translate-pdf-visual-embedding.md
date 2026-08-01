@@ -62,7 +62,7 @@
 - 产出：`schema_version: 2` 和 `extractor.version: "2"`。
 - 消费：PyMuPDF `page.rect`、文字/位图 raw block bbox、矢量判定中的 `selected_regions`。
 
-- [ ] **步骤一：写真实提取 RED 测试**
+- [x] **步骤一：写真实提取 RED 测试**
 
 在 `read-pdf-extraction.test.ts` 中把首个版本断言改为 v2，并增加手工推导的几何断言：
 
@@ -89,7 +89,7 @@ expect(imageBlock?.bbox).toEqual({ x0: 72, y0: 150, x1: 540, y1: 250 });
 expect(imageBlock?.bbox).toEqual({ x0: 72, y0: 120, x1: 278, y1: 300 });
 ```
 
-- [ ] **步骤二：运行提取 RED 测试并确认失败原因**
+- [x] **步骤二：运行提取 RED 测试并确认失败原因**
 
 运行：
 
@@ -99,7 +99,7 @@ npx vitest run tests/assets/read-pdf-extraction.test.ts
 
 预期：因实际 `schema_version` 仍为 1、页面缺少 `page_size`、block 缺少 `bbox` 而失败；不得接受因 fixture 创建失败或 Python 导入失败导致的错误。
 
-- [ ] **步骤三：写 Schema 与语义校验 RED 测试**
+- [x] **步骤三：写 Schema 与语义校验 RED 测试**
 
 把 `completePage()` 和 `completePackage()` 更新为合法 v2 基线：
 
@@ -146,7 +146,7 @@ it.each([
 
 增加版本不一致用例，分别捕获错误 extractor 版本和旧 schema 版本。
 
-- [ ] **步骤四：运行校验 RED 测试并确认失败原因**
+- [x] **步骤四：运行校验 RED 测试并确认失败原因**
 
 运行：
 
@@ -156,7 +156,7 @@ npx vitest run tests/assets/pdf-extraction-validation.test.ts
 
 预期：合法 v2 基线被当前 v1 Schema 拒绝，几何诊断尚不存在；失败必须来自缺失功能。
 
-- [ ] **步骤五：实现最小 v2 Schema**
+- [x] **步骤五：实现最小 v2 Schema**
 
 将 `$id`、版本常量和 required 字段更新为 v2。`page_size` 和 `bbox` 使用 `additionalProperties: false`，每个坐标声明为 number；数值关系交给语义校验器。
 
@@ -176,7 +176,7 @@ npx vitest run tests/assets/pdf-extraction-validation.test.ts
 
 当前自建 Schema 校验器不支持 `exclusiveMinimum`，因此使用 `minimum: 0`，并由语义校验器严格拒绝零尺寸。增加一个 `page_size.width = 0` 的用例，要求诊断 `page_size_positive`。block 的 bbox 同理只声明 number，顺序与边界由语义校验器检查。
 
-- [ ] **步骤六：实现提取器几何输出**
+- [x] **步骤六：实现提取器几何输出**
 
 在 `read_pdf.py` 中定义类型和裁剪助手：
 
@@ -214,7 +214,7 @@ return (
 
 `build_result()` 输出版本 2。
 
-- [ ] **步骤七：实现跨字段几何校验**
+- [x] **步骤七：实现跨字段几何校验**
 
 在 `validate_pdf_extraction.py` 新增：
 
@@ -248,11 +248,11 @@ def validate_page_geometry(page: Dict[str, Any], index: int, diagnostics: List[D
 
 在每页既有状态语义校验前调用它，并验证 `schema_version == 2` 与 `extractor.version == "2"` 一致。
 
-- [ ] **步骤八：更新 read-pdf 双语契约和示例**
+- [x] **步骤八：更新 read-pdf 双语契约和示例**
 
 同步声明提取包 v2、`page_size`、`bbox`、PDF point 单位和矢量并集边界；更新示例 JSON。保持两次校验入口、选择性整页渲染和 Python 3 解析规则不变。
 
-- [ ] **步骤九：运行定向测试并重构**
+- [x] **步骤九：运行定向测试并重构**
 
 运行：
 
@@ -262,7 +262,7 @@ npx vitest run tests/assets/read-pdf-extraction.test.ts tests/assets/pdf-extract
 
 预期：两个测试文件全部通过。随后运行 `git diff --check`，只在测试保持绿色时整理命名和重复代码。
 
-- [ ] **步骤十：提交任务一**
+- [x] **步骤十：提交任务一**
 
 ```bash
 git add assets/schema/PDF_Extraction_Schema.json \
