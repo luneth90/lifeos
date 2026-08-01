@@ -396,6 +396,32 @@ describe('read_pdf.py 提取包', () => {
 		expect(result.stdout.trim()).not.toBe('None');
 	});
 
+	it('在横纵合计越过全局匹配预算时保持有界并失败关闭', () => {
+		const program = [
+			'import importlib.util, sys, fitz',
+			'spec = importlib.util.spec_from_file_location("lifeos_read_pdf", sys.argv[1])',
+			'module = importlib.util.module_from_spec(spec)',
+			'sys.modules[spec.name] = module',
+			'spec.loader.exec_module(module)',
+			'class FakePage:',
+			'    count = 26000',
+			'    rect = fitz.Rect(0, 0, count * 10 + 20, count * 10 + 20)',
+			'    def get_drawings(self):',
+			'        positions = [index * 10 + 5 for index in range(self.count)]',
+			'        horizontal = [{"rect": fitz.Rect(value - 2, value, value + 2, value), "items": [("l", fitz.Point(value - 2, value), fitz.Point(value + 2, value))], "fill": None} for value in positions]',
+			'        vertical = [{"rect": fitz.Rect(value, value - 2, value, value + 2), "items": [("l", fitz.Point(value, value - 2), fitz.Point(value, value + 2))], "fill": None} for value in positions]',
+			'        return horizontal + vertical',
+			'print(module.vector_visual_anchor(FakePage()))',
+		].join('\n');
+		const result = spawnSync('python3', ['-c', program, scriptPath], {
+			encoding: 'utf-8',
+			timeout: 4000,
+		});
+
+		expect(result.status, result.error?.message ?? result.stderr).toBe(0);
+		expect(result.stdout.trim()).not.toBe('None');
+	});
+
 	it('在共享长边且跨度各异的无单元格输入下保持次二次复杂度', () => {
 		const program = [
 			'import importlib.util, sys, fitz',

@@ -634,12 +634,15 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
         limit: int = 3,
     ) -> Tuple[List[Tuple[float, float, float, float]], bool]:
         cells = set()
+        remaining_match_budget = MAX_LOCAL_GRID_EDGE_MATCHES
+        remaining_pair_check_budget = MAX_LOCAL_GRID_EDGE_PAIR_CHECKS
 
         def collect_cells(
             side_intervals: Dict[float, List[Tuple[float, float]]],
             edge_intervals: Dict[float, List[Tuple[float, float]]],
             vertical_sides: bool,
         ) -> Tuple[bool, bool]:
+            nonlocal remaining_match_budget, remaining_pair_check_budget
             edge_positions = sorted(edge_intervals)
             find_edge_positions = build_edge_coverage_index(edge_positions, edge_intervals)
             edge_ends = {
@@ -650,8 +653,6 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             overlap_cache: Dict[
                 Tuple[float, float], List[Tuple[float, float]]
             ] = {}
-            remaining_match_budget = MAX_LOCAL_GRID_EDGE_MATCHES
-            remaining_pair_check_budget = MAX_LOCAL_GRID_EDGE_PAIR_CHECKS
             for coordinate in sorted(side_intervals):
                 coordinate_pairs = set()
                 spans = side_intervals[coordinate]
