@@ -177,7 +177,7 @@ target_version: V0.2
 **已链接的 Vault 资源:** [列出实际链接到的笔记和资源]
 **ID 自检:** 已回读，格式合法且全局唯一
 **来源草稿:** [{草稿目录}/文件名.md，或"无来源草稿"]（状态保持不变，等待 Orchestrator 验收）
-**计划:** [实际计划文件路径]（保持 `status: pending`，等待 Orchestrator 验收）
+**计划:** [实际计划文件路径]（保持 `status: active`，等待 Orchestrator 验收）
 
 若为开发类项目，再补充：
 

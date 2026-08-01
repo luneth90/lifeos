@@ -208,6 +208,17 @@ describe('阶段二执行契约', () => {
 		}
 	});
 
+	it('项目 Execution 完成报告保持 Orchestrator 已切换的 active 计划状态', () => {
+		for (const path of [
+			'assets/skills/project/references/execution-agent-prompt.zh.md',
+			'assets/skills/project/references/execution-agent-prompt.en.md',
+		]) {
+			const content = read(path);
+			expect(content, path).toMatch(/\*\*(?:计划|Plan):\*\*[^\n]*status:\s*active/i);
+			expect(content, path).not.toMatch(/\*\*(?:计划|Plan):\*\*[^\n]*status:\s*pending/i);
+		}
+	});
+
 	it('脚本型技能通过 execute_command 解析 Python 3', () => {
 		for (const path of [
 			'assets/skills/read-pdf/SKILL.zh.md',

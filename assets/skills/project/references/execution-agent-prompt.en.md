@@ -184,7 +184,7 @@ After completion, report in English:
 **Linked Vault resources:** [List actually linked notes and resources]
 **ID self-check:** Reread, valid format, and globally unique
 **Source draft:** [{drafts directory}/filename.md, or "No source draft"] (status unchanged, awaiting Orchestrator acceptance)
-**Plan:** [actual plan path] (remains `status: pending`, awaiting Orchestrator acceptance)
+**Plan:** [actual plan path] (remains `status: active`, awaiting Orchestrator acceptance)
 
 If it is a development project, also include:
 
