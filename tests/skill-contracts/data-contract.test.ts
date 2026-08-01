@@ -153,7 +153,7 @@ describe('阶段一数据契约', () => {
 		const embed = '![[<Vault相对图片路径>|720]]';
 		const visualSummary = '视觉处理：嵌入 N；转 Markdown N；转 LaTeX N；原书提示 N；忽略装饰 N';
 		const referenceItem =
-			'- reference：PDF 物理页 XX；印刷页 XX/未知；图号 X.X 或 block.order N；原因：<自动降级原因>';
+			'- reference：PDF 物理页 XX；图号 X.X 或 block.order N；原因：<自动降级原因>';
 
 		for (const template of templates) {
 			const body = readMarkdownAsset(template.path).body;
@@ -165,11 +165,15 @@ describe('阶段一数据契约', () => {
 
 			expect(companion, template.path).toMatch(template.orderPattern);
 			expect(companion, template.path).toContain(embed);
-			expect(companion, template.path).toMatch(
-				/译文段落。[\s\S]*图 X\.X · 原书印刷页 XX · PDF 物理页 XX/,
+			expect(companion, template.path).toMatch(/译文段落。[\s\S]*> 图 X\.X/);
+			expect(companion, template.path).not.toMatch(
+				/印刷页|printed page|printed label|page mapping/i,
 			);
 			expect(completeness, template.path).toContain(visualSummary);
 			expect(completeness, template.path).toContain(referenceItem);
+			expect(completeness, template.path).not.toMatch(
+				/印刷页|printed page|printed label|page mapping/i,
+			);
 		}
 	});
 });

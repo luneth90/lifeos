@@ -676,14 +676,13 @@ describe('read_pdf.py 提取包', () => {
 		}
 	});
 
-	it('双语翻译技能消费全部模板占位符，包括按精确请求页生成的印刷页码', () => {
+	it('Translate 不消费印刷页码，Read PDF 仍保留通用字段', () => {
 		const placeholders = [
 			'{{TITLE}}',
 			'{{DATE}}',
 			'{{SOURCE}}',
 			'{{PROJECT}}',
 			'{{PDF_PAGE_RANGE}}',
-			'{{PDF_PAGE_LABELS}}',
 			'{{COMPLETENESS}}',
 			'{{DOMAIN}}',
 			'{{ID}}',
@@ -700,7 +699,20 @@ describe('read_pdf.py 提取包', () => {
 			expect([...new Set(extractPlaceholders(template))]).toEqual(placeholders);
 			for (const placeholder of placeholders) expect(skill).toContain(placeholder.slice(2, -2));
 			expect(skill).toContain('requested_pages');
+			const forbidden =
+				language === 'zh'
+					? /PDF_PAGE_LABELS|pdf_page_labels|印刷页|页码映射/
+					: /PDF_PAGE_LABELS|pdf_page_labels|printed page|printed label|page mapping/i;
+			expect(template, language).not.toMatch(forbidden);
+			expect(skill, language).not.toMatch(forbidden);
+			expect(skill, language).toContain('{pdf_page_index, order, bbox}');
 		}
+		expect(
+			readFileSync(
+				join(process.cwd(), 'assets/schema/PDF_Extraction_Schema.json'),
+				'utf-8',
+			),
+		).toContain('"printed_page_label"');
 	});
 
 	it('默认输出文件名包含微秒和来源摘要前缀', () => {
