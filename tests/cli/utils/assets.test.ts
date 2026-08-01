@@ -17,6 +17,7 @@ import { pathToFileURL } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { assetsDir, copyDir, ensureDir } from '../../../src/cli/utils/assets.js';
 import { parseArgs } from '../../../src/cli/utils/ui.js';
+import { extractTarGz } from '../../helpers/tar.js';
 
 const contractValidatorPath = join(process.cwd(), 'scripts', 'validate-skill-contracts.mjs');
 const packageSourceEntries = [
@@ -56,7 +57,30 @@ function copyPackageSource(source: string, destination: string): void {
 	}
 }
 
+function directoryLinkType(platform: NodeJS.Platform = process.platform): 'dir' | 'junction' {
+	return platform === 'win32' ? 'junction' : 'dir';
+}
+
+function npmExecutable(platform: NodeJS.Platform = process.platform): 'npm' | 'npm.cmd' {
+	return platform === 'win32' ? 'npm.cmd' : 'npm';
+}
+
 describe('assetsDir', () => {
+	test.each([
+		['win32', 'junction'],
+		['darwin', 'dir'],
+		['linux', 'dir'],
+	] as const)('%s 使用 %s 连接测试 node_modules', (platform, expected) => {
+		expect(directoryLinkType(platform)).toBe(expected);
+	});
+	test.each([
+		['win32', 'npm.cmd'],
+		['darwin', 'npm'],
+		['linux', 'npm'],
+	] as const)('%s 使用 %s 启动 npm', (platform, expected) => {
+		expect(npmExecutable(platform)).toBe(expected);
+	});
+
 	test('发布资产通过双语技能契约校验', async () => {
 		const { validateSkillContracts: validate } = await validateSkillContracts();
 		expect(validate(assetsDir())).toEqual({ ok: true, diagnostics: [] });
@@ -68,26 +92,32 @@ describe('assetsDir', () => {
 		mkdirSync(directory, { recursive: true });
 		try {
 			copyPackageSource(process.cwd(), packageSource);
-			symlinkSync(join(process.cwd(), 'node_modules'), join(packageSource, 'node_modules'), 'dir');
+			symlinkSync(
+				join(process.cwd(), 'node_modules'),
+				join(packageSource, 'node_modules'),
+				directoryLinkType(),
+			);
 			const environment = { ...process.env, NPM_CONFIG_CACHE: join(directory, 'npm-cache') };
-			const built = spawnSync('npm', ['run', 'build'], {
+			const built = spawnSync(npmExecutable(), ['run', 'build'], {
 				cwd: packageSource,
 				encoding: 'utf8',
 				env: environment,
 			});
 			expect(built.status, built.stderr).toBe(0);
-			const packed = spawnSync('npm', ['pack', '--json', '--pack-destination', directory], {
-				cwd: packageSource,
-				encoding: 'utf8',
-				env: environment,
-			});
+			const packed = spawnSync(
+				npmExecutable(),
+				['pack', '--json', '--pack-destination', directory],
+				{
+					cwd: packageSource,
+					encoding: 'utf8',
+					env: environment,
+				},
+			);
 			expect(packed.status, packed.stderr).toBe(0);
 			const [{ filename }] = JSON.parse(packed.stdout) as Array<{ filename: string }>;
-			const unpacked = join(directory, 'package');
-			const extracted = spawnSync('tar', ['-xzf', join(directory, filename), '-C', directory], {
-				encoding: 'utf8',
-			});
-			expect(extracted.status, extracted.stderr).toBe(0);
+			const extractionRoot = join(directory, 'unpacked');
+			extractTarGz(join(directory, filename), extractionRoot);
+			const unpacked = join(extractionRoot, 'package');
 			const { validateSkillContracts: validate } = await validateSkillContracts();
 			const runtimeAssets = await import(
 				pathToFileURL(join(unpacked, 'dist', 'cli', 'utils', 'assets.js')).href
