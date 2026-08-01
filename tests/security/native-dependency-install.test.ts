@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 
 interface RootPackageJson {
+	bundleDependencies?: string[];
 	dependencies?: Record<string, string>;
 }
 
@@ -28,7 +29,7 @@ function readJson<T>(path: string): T {
 }
 
 describe('原生数据库生产依赖', () => {
-	it('使用无弃用下载器和安装脚本的 better-sqlite3 13', () => {
+	it('使用无弃用下载器且随制品发布的 better-sqlite3 13', () => {
 		const packageJson = readJson<RootPackageJson>('package.json');
 		const packageLock = readJson<PackageLock>('package-lock.json');
 		const sqliteManifest = readJson<DependencyManifest>(
@@ -37,6 +38,7 @@ describe('原生数据库生产依赖', () => {
 		const lockedSqlite = packageLock.packages?.['node_modules/better-sqlite3'];
 
 		expect(packageJson.dependencies?.['better-sqlite3']).toBe('^13.0.2');
+		expect(packageJson.bundleDependencies ?? []).toContain('better-sqlite3');
 		expect(sqliteManifest.version).toMatch(/^13\./);
 		expect(sqliteManifest.dependencies?.['prebuild-install']).toBeUndefined();
 		expect(sqliteManifest.scripts?.install).toBeUndefined();

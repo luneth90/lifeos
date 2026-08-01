@@ -4,7 +4,7 @@
 
 **目标：** 将 LifeOS 升级到 `better-sqlite3@^13.0.2`，验证常规全局安装不再出现 `prebuild-install` 与 `allowScripts` 警告，并发布 `v2.2.1`。
 
-**架构：** 保持现有数据库适配层、SQL 和运行时契约不变，只升级原生 SQLite 依赖并增加面向安装行为的依赖契约测试。继续使用仓库既有版本同步脚本、Release 工作流和 npm trusted publishing；先推送 `main`，再推送注解标签触发发布。
+**架构：** 保持现有数据库适配层、SQL 和运行时契约不变，升级原生 SQLite 依赖并通过 `bundleDependencies` 随发布制品携带预编译模块；增加安装行为与锁文件安全基线测试。继续使用仓库既有版本同步脚本、Release 工作流和 npm trusted publishing；先推送 `main`，再推送注解标签触发发布。
 
 **技术栈：** TypeScript、Vitest、Node.js 24.14.1+、npm、better-sqlite3 13、GitHub Actions、npm trusted publishing。
 
@@ -13,7 +13,8 @@
 - LifeOS 运行时基线保持 Node.js `>=24.14.1`。
 - `better-sqlite3` 依赖声明固定为 `^13.0.2`。
 - 生产依赖树不得包含 `prebuild-install`。
-- `better-sqlite3` 不得声明 `install` 生命周期脚本或锁文件 `hasInstallScript: true`。
+- `better-sqlite3` 不得显式声明 `install` 生命周期脚本或锁文件 `hasInstallScript: true`，并必须列入 `bundleDependencies` 以避免 npm 根据 `binding.gyp` 推导全局安装脚本。
+- 完整 `npm audit` 必须为 0 漏洞。
 - 用户安装命令保持 `npm install -g lifeos`，不增加 `allowScripts` 或日志隐藏参数。
 - 不修改数据库访问接口、SQL、迁移逻辑或用户配置。
 - 保留工作区原有 `package.json` 数组格式化结果，不恢复或覆盖该改动。
@@ -25,8 +26,9 @@
 
 ## 文件职责
 
-- `tests/security/native-dependency-install.test.ts`：验证 LifeOS 的 SQLite 生产依赖不会触发目标弃用和安装脚本警告，并执行真实内存数据库查询。
-- `package.json`：声明 `better-sqlite3@^13.0.2` 和 LifeOS 版本。
+- `tests/security/native-dependency-install.test.ts`：验证 LifeOS 的 SQLite 生产依赖随制品打包、不含弃用下载器，并执行真实内存数据库查询。
+- `tests/security/dependency-audit-baseline.test.ts`：验证锁文件中的已知漏洞依赖均达到修复版本。
+- `package.json`：声明 `better-sqlite3@^13.0.2`、`bundleDependencies`、安全补丁依赖和 LifeOS 版本。
 - `package-lock.json`：锁定可复现的 13.x 依赖树，并证明生产树不含 `prebuild-install`。
 - `CHANGELOG.md`：记录 2.2.1 的安装警告修复、N-API 升级与验证范围。
 - `assets/skills/*/SKILL.{zh,en}.md`：由版本脚本把发布资产版本统一同步到 2.2.1。
@@ -61,6 +63,7 @@ import { describe, expect, it } from 'vitest';
 const require = createRequire(import.meta.url);
 
 interface RootPackageJson {
+	bundleDependencies?: string[];
 	dependencies?: Record<string, string>;
 }
 
@@ -83,7 +86,7 @@ function readJson<T>(path: string): T {
 }
 
 describe('原生数据库生产依赖', () => {
-	it('使用无弃用下载器和安装脚本的 better-sqlite3 13', () => {
+	it('使用无弃用下载器且随制品发布的 better-sqlite3 13', () => {
 		const packageJson = readJson<RootPackageJson>('package.json');
 		const packageLock = readJson<PackageLock>('package-lock.json');
 		const sqliteManifest = readJson<DependencyManifest>(
@@ -92,6 +95,7 @@ describe('原生数据库生产依赖', () => {
 		const lockedSqlite = packageLock.packages?.['node_modules/better-sqlite3'];
 
 		expect(packageJson.dependencies?.['better-sqlite3']).toBe('^13.0.2');
+		expect(packageJson.bundleDependencies ?? []).toContain('better-sqlite3');
 		expect(sqliteManifest.version).toMatch(/^13\./);
 		expect(sqliteManifest.dependencies).not.toHaveProperty('prebuild-install');
 		expect(sqliteManifest.scripts?.install).toBeUndefined();
@@ -110,7 +114,7 @@ describe('原生数据库生产依赖', () => {
 });
 ```
 
-该测试捕获的生产回归是：LifeOS 再次声明 12.x、锁入 `prebuild-install`，或选用需要安装脚本的 `better-sqlite3` 制品。
+该测试捕获的生产回归是：LifeOS 再次声明 12.x、锁入 `prebuild-install`，或发布时漏掉已审查的预编译 `better-sqlite3` 制品。
 
 - [ ] **步骤 2：运行 RED 测试并确认失败原因**
 
@@ -120,7 +124,7 @@ describe('原生数据库生产依赖', () => {
 npx vitest run tests/security/native-dependency-install.test.ts
 ```
 
-预期：第一个用例因实际依赖仍为 `^12.10.0`、manifest 包含 `prebuild-install` 与 `scripts.install`、锁文件包含 `hasInstallScript` 和 `node_modules/prebuild-install` 而失败；第二个真实数据库用例继续通过。不得接受模块解析、JSON 语法或测试导入错误。
+预期：第一个用例因实际依赖仍为 `^12.10.0`、未声明 `bundleDependencies`、manifest 包含 `prebuild-install` 与 `scripts.install`、锁文件包含 `hasInstallScript` 和 `node_modules/prebuild-install` 而失败；第二个真实数据库用例继续通过。不得接受模块解析、JSON 语法或测试导入错误。
 
 ---
 
@@ -145,7 +149,7 @@ npx vitest run tests/security/native-dependency-install.test.ts
 npm install --save 'better-sqlite3@^13.0.2'
 ```
 
-预期：`package.json` 写入 `^13.0.2`；`package-lock.json` 锁定 13.0.2，删除 `prebuild-install` 及其仅由旧链路需要的传递依赖。安装输出不得包含目标两项警告。
+预期：`package.json` 写入 `^13.0.2` 并将 `better-sqlite3` 列入 `bundleDependencies`；`package-lock.json` 锁定 13.0.2，删除 `prebuild-install` 及其仅由旧链路需要的传递依赖。此时弃用警告消失；npm 11.17 对 `binding.gyp` 推导出的脚本警告由后续 bundledDependencies 制品安装验证关闭。
 
 - [ ] **步骤 2：运行 GREEN 测试**
 
@@ -188,6 +192,32 @@ git commit -m "fix: 升级 better-sqlite3 13"
 
 ---
 
+### 任务二补充：清零 npm 安全审计
+
+**文件：**
+
+- 创建：`tests/security/dependency-audit-baseline.test.ts`
+- 修改：`package.json`
+- 修改：`package-lock.json`
+
+- [ ] **步骤 1：运行完整审计并记录全部生产与开发依赖链**
+
+运行 `npm audit --json` 与 `npm ls --all`，确认漏洞分别来自 `@modelcontextprotocol/sdk` 的 Hono/Express/AJV 链，以及 Vitest/tsx 的 Vite/PostCSS/esbuild 链。
+
+- [ ] **步骤 2：写入并运行 RED 安全基线测试**
+
+测试必须遍历锁文件中的全部同名实例，并按 npm advisory 的修复边界拒绝旧版本。预期首先因 `@hono/node-server@1.19.14` 失败。
+
+- [ ] **步骤 3：应用兼容补丁并刷新锁文件**
+
+升级 `@modelcontextprotocol/sdk@^1.30.0`、`vitest@^3.2.7`、`tsx@^4.23.1`，再使用不带 `--force` 的 `npm audit fix` 刷新安全传递依赖。
+
+- [ ] **步骤 4：验证安全门禁**
+
+运行安全基线测试和完整 `npm audit --json`。预期测试通过，审计的 low、moderate、high、critical 与 total 均为 0。
+
+---
+
 ### 任务三：同步 LifeOS 2.2.1 发布版本与更新日志
 
 **文件：**
@@ -224,7 +254,8 @@ npm run release:bump -- patch
 
 ### 修复
 
-- 将 `better-sqlite3` 升级至 13.0.2，改用随包发布的 N-API 预编译二进制，移除已弃用的 `prebuild-install` 传递依赖和原生模块安装脚本，消除 `npm install -g lifeos` 的弃用与 `allowScripts` 警告
+- 将 `better-sqlite3` 升级至 13.0.2，并随 LifeOS 制品打包 N-API 预编译二进制，移除已弃用的 `prebuild-install` 传递依赖，避免全局安装触发源码编译脚本警告
+- 更新 MCP SDK、Vitest 与 tsx 的安全补丁版本并刷新传递依赖，使完整 npm 审计归零
 
 ### 测试
 
@@ -281,9 +312,10 @@ git commit -m "release: LifeOS 2.2.1"
 
 ```bash
 npm run release:verify
+npm audit --json
 ```
 
-预期：typecheck、Biome、完整 Vitest 和 build 全部以退出码 0 完成。
+预期：typecheck、Biome、完整 Vitest 和 build 全部以退出码 0 完成，完整 npm 审计为 0 漏洞。
 
 - [ ] **步骤 2：生成发布制品**
 

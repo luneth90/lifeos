@@ -18,6 +18,16 @@ function readWorkflow(): ReleaseWorkflow {
 }
 
 describe('release workflow notes', () => {
+	it('blocks npm publishing when any dependency vulnerability is reported', () => {
+		const workflow = readWorkflow();
+		const steps = workflow.jobs?.release?.steps ?? [];
+		const auditIndex = steps.findIndex((step) => step.run === 'npm audit --audit-level=low');
+		const publishIndex = steps.findIndex((step) => step.name === 'Publish to npm');
+
+		expect(auditIndex).toBeGreaterThanOrEqual(0);
+		expect(auditIndex).toBeLessThan(publishIndex);
+	});
+
 	it('extracts changelog notes before creating the GitHub release', () => {
 		const workflow = readWorkflow();
 		const steps = workflow.jobs?.release?.steps ?? [];

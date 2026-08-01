@@ -1,6 +1,6 @@
 {
 	"name": "lifeos",
-	"version": "2.2.0",
+	"version": "2.2.1",
 	"description": "LifeOS — AI-native knowledge OS runtime, CLI scaffold, and MCP memory server",
 	"type": "module",
 	"main": "dist/index.js",
@@ -28,19 +28,22 @@
 		"prepublishOnly": "npm run build && npm run test"
 	},
 	"dependencies": {
-		"@modelcontextprotocol/sdk": "^1.12.0",
+		"@modelcontextprotocol/sdk": "^1.30.0",
 		"@node-rs/jieba": "^2.0.1",
 		"better-sqlite3": "^13.0.2",
 		"yaml": "^2.5.0",
 		"zod": "^3.23.0"
 	},
+	"bundleDependencies": [
+		"better-sqlite3"
+	],
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.0",
 		"@types/better-sqlite3": "^7.6.0",
 		"@types/node": "^24.3.1",
-		"tsx": "^4.19.0",
+		"tsx": "^4.23.1",
 		"typescript": "^5.6.0",
-		"vitest": "^3.0.0"
+		"vitest": "^3.2.7"
 	},
 	"engines": {
 		"node": ">=24.14.1"
