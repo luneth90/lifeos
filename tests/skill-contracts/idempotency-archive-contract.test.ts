@@ -304,8 +304,41 @@ describe('阶段五幂等与归档契约', () => {
 			},
 			post_transaction_writes: {
 				current_run: 'forbidden',
-				archived_frontmatter: 'separate_guarded_operation',
-				diary_log: 'separate_guarded_operation',
+				archived_frontmatter: 'required_metadata_transaction',
+				diary_log: 'not_part_of_archive',
+			},
+			metadata_transaction: {
+				adapter: 'scripts/archive_metadata_transaction.mjs',
+				required_after: 'move_transaction_complete',
+				run_id: 'stable(archive-metadata, parent-run-id, archive-date, derived-target-paths)',
+				parent_trust: 'verify_completed_move_envelope_receipt',
+				target_derivation: 'exactly_one_matching_frontmatter_per_non_diary_candidate',
+				eligible_entity_types: ['project', 'draft', 'plan'],
+				preserved_status: 'done',
+				mutation: { field: 'archived', value: 'YYYY-MM-DD' },
+				external_callbacks: [
+					'persist_manifest',
+					'verify_manifest_receipt',
+					'write_archived_frontmatter',
+					'memory_notify',
+					'confirm_index',
+				],
+				transaction_steps: [
+					'verify_parent_receipt',
+					'derive_metadata_targets',
+					'persist_manifest',
+					'persist_write_intent',
+					'write_archived_frontmatter',
+					'persist_write_receipt',
+					'memory_notify_each',
+					'confirm_index_each',
+				],
+				completion_gate: 'move_and_metadata_transactions_complete',
+				recovery: 'same_run_id_same_authenticated_envelope',
+				guarantees: {
+					exactly_once: false,
+					atomic_with_move_transaction: false,
+				},
 			},
 			bare_mv: 'forbidden',
 		};
@@ -335,7 +368,10 @@ describe('阶段五幂等与归档契约', () => {
 		] as const) {
 			const path = `assets/skills/archive/SKILL.${lang}.md`;
 			expect(frontmatter(path).dependencies).toMatchObject({
-				scripts: [{ path: 'scripts/archive_transaction.mjs' }],
+				scripts: [
+					{ path: 'scripts/archive_transaction.mjs' },
+					{ path: 'scripts/archive_metadata_transaction.mjs' },
+				],
 			});
 			expect(contract(path)).toEqual({
 				contract_version: 1,
@@ -349,12 +385,18 @@ describe('阶段五幂等与归档契约', () => {
 		}
 	});
 
-	it('Archive 双语说明禁止在已完成事务后执行未受清单保护的写入', () => {
+	it('Archive 双语说明把 archived 日期纳入必需元数据事务和总体完成门禁', () => {
 		expect(read('assets/skills/archive/SKILL.zh.md')).toContain(
-			'本次 Archive run 禁止在事务完成后直接改写归档目标 frontmatter 或今日日记',
+			'只有移动事务与元数据事务都返回 `complete`，本次 Archive 工作流才可报告完成',
 		);
 		expect(read('assets/skills/archive/SKILL.en.md')).toContain(
-			'This Archive run must not directly rewrite archived-target frontmatter or today’s diary after the transaction completes',
+			'Only when both the move transaction and metadata transaction return `complete` may this Archive workflow report completion',
+		);
+		expect(read('assets/skills/_shared/lifecycle.zh.md')).toContain(
+			'移动事务完成后必须运行归档元数据事务',
+		);
+		expect(read('assets/skills/_shared/lifecycle.en.md')).toContain(
+			'After the move transaction completes, the archive metadata transaction is required',
 		);
 	});
 

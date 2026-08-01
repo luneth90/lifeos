@@ -8,6 +8,7 @@ dependencies:
   schemas: []
   scripts:
     - path: scripts/archive_transaction.mjs
+    - path: scripts/archive_metadata_transaction.mjs
   protocols:
     - path: ../_shared/operation-safety.md
   capabilities: [move_with_link_update]
@@ -180,12 +181,15 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
    5. 草稿、计划与日记候选只能是普通文件；项目可以是普通文件，或包含至少一个可确认普通文件的非空目录。目录子项必须保持原始 NFC，并拒绝控制字符、Windows 非法字符、保留名、符号链接与非普通文件。
    6. 任一步骤失败都停止整个 run，不再处理其他候选。恢复必须使用相同 `run_id`、原候选和同一份已认证 envelope；source 被恢复、候选图交叉、路径、派生 ID、inventory 或 receipt 不一致时拒绝自动恢复。Schema、Vault 身份与 receipt 校验属于未受信阶段：失败时只返回本地 `failed`、`unverified`、空 receipt 和人工恢复指引，禁止调用持久化或任何业务副作用，且不得覆盖受信存储的最后一个合法恢复点。若 `confirm_index` 或 `memory_forget` 已发生后发现目标漂移，必须明确记录对应副作用并禁止返回 complete。
 
-4. **保持事务终点不变：**
-   - 本次 Archive run 禁止在事务完成后直接改写归档目标 frontmatter 或今日日记；这类未进入原 manifest、inventory、intent 和 receipt 的写入会破坏已经确认的事务边界
-   - 如确需补写 `archived` 日期或日记记录，必须使用新的 `run_id`，作为独立的受 guard、manifest、intent、receipt、`memory_notify` 与 `confirm_index` 保护的 operation 执行
-   - 独立 operation 未成功并持久化回执时，不得声称元数据或日记更新完成，也不得把它并入原 Archive run 的恢复流程
+4. **运行必需的归档元数据事务：**
+   - 移动事务返回经认证的 `complete` envelope 后，立即调用 `scripts/archive_metadata_transaction.mjs` 的 `runArchiveMetadataTransaction({ vault_root, run_id, archive_date, move_envelope, manifest, adapters })`。元数据事务必须使用区别于移动事务的新 `run_id`；`adapters` 必须提供 `persist_manifest`、`verify_manifest_receipt`、`write_archived_frontmatter`、`memory_notify` 与 `confirm_index`
+   - 元数据事务先验证父移动 envelope 的回执，只从父 manifest 的逐文件 `moves` 派生目标。每个 `project`、`draft`、`plan` 候选必须且只能找到一个 `type` 匹配、`status: done` 的主文件；日记不写 `archived` 字段。零个或多个匹配都失败关闭，不执行任何元数据写入
+   - 每个目标先持久化写入 intent，再由 `write_archived_frontmatter` 以 `before_sha256` 比较交换写入 `archived: "YYYY-MM-DD"`，保留 `status: done`；写入回执持久化后，逐文件执行 `memory_notify` 和 `confirm_index` 并分别持久化回执
+   - 元数据步骤失败时，移动事务的结果保持不变；使用同一元数据 `run_id` 和已认证 envelope 恢复，已持久化的写入、通知或确认回执才可跳过。禁止重新运行或伪装回滚已经完成的移动事务
+   - 本次 Archive run 禁止在两个事务之外直接改写归档目标 frontmatter 或今日日记。日记记录不属于 Archive 写集，也不作为归档完成条件
+   - 只有移动事务与元数据事务都返回 `complete`，本次 Archive 工作流才可报告完成；任一 `project`、`draft`、`plan` 的 `archived` 写入、通知或索引确认缺失时必须报告部分完成及恢复动作
 
-6. **清理检查：**
+5. **清理检查：**
    - 检查 `{资源目录}/` 中是否有关联的孤立资源
    - 若有，保留原位并在完成报告中列出；不要扩大归档范围，也不要中断流程询问用户
 
@@ -235,7 +239,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 - **禁止模拟移动** — 禁止通过“写新文件 + 删除原文件”模拟移动
 - **按规则组织** — 项目按完成年，草稿和日记按归档年月，计划统一放入 `{归档计划子目录}`
 - **默认全部归档** — 扫描后自动执行全部合规候选，不要求用户审核、选择、确认或回复
-- **禁止事务后裸写入** — 本次 Archive run 完成后不直接改写归档目标或今日日记；需要时另启受完整事务保护的 operation
+- **元数据事务是完成门禁** — 移动完成后必须运行归档元数据事务；不得在事务外补写 `archived`，两个事务未同时完成时不得报告归档完成
 
 # 边界情况
 
@@ -329,7 +333,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 ## 归档事务契约
 
-先读取 `_shared/operation-safety.md`，再使用发布资产 `scripts/archive_transaction.mjs`。适配器预检整个候选图和全部 collision，逐级安全创建目标父目录，冻结并重复验证逐文件 inventory；每个副作用前持久化 intent，每个成功副作用后持久化回执。恢复只信任经 `verify_manifest_receipt` 验证的精确 envelope；已认证的外部回执可跳过对应步骤，未获回执的外部调用只能以同一 `idempotency_key` 安全重放。任一步骤失败立即停止整个 run，并以同一 manifest 恢复。该适配器不承诺 exactly-once，不承诺文件系统、索引和记忆系统之间的跨系统原子性，也不能消除最后一次复核到系统调用之间的竞态；adapter 与认证回执仍是外部信任边界。
+先读取 `_shared/operation-safety.md`，再依次使用发布资产 `scripts/archive_transaction.mjs` 与 `scripts/archive_metadata_transaction.mjs`。移动适配器预检整个候选图和全部 collision，逐级安全创建目标父目录，冻结并重复验证逐文件 inventory；元数据适配器验证已完成移动 envelope，派生唯一主文件并闭环写入 `archived` 日期。两个事务都在每个副作用前持久化 intent、在每个成功副作用后持久化回执，恢复只信任经 `verify_manifest_receipt` 验证的精确 envelope。两个适配器都不承诺 exactly-once 或跨系统原子性，也不能消除最后一次复核到系统调用之间的竞态；adapter 与认证回执仍是外部信任边界。
 
 <!-- operation-safety-v1 -->
 ```yaml
@@ -441,7 +445,23 @@ guarantees:
   last_revalidate_to_syscall_atomic: false
 post_transaction_writes:
   current_run: forbidden
-  archived_frontmatter: separate_guarded_operation
-  diary_log: separate_guarded_operation
+  archived_frontmatter: required_metadata_transaction
+  diary_log: not_part_of_archive
+metadata_transaction:
+  adapter: scripts/archive_metadata_transaction.mjs
+  required_after: move_transaction_complete
+  run_id: stable(archive-metadata, parent-run-id, archive-date, derived-target-paths)
+  parent_trust: verify_completed_move_envelope_receipt
+  target_derivation: exactly_one_matching_frontmatter_per_non_diary_candidate
+  eligible_entity_types: [project, draft, plan]
+  preserved_status: done
+  mutation: { field: archived, value: YYYY-MM-DD }
+  external_callbacks: [persist_manifest, verify_manifest_receipt, write_archived_frontmatter, memory_notify, confirm_index]
+  transaction_steps: [verify_parent_receipt, derive_metadata_targets, persist_manifest, persist_write_intent, write_archived_frontmatter, persist_write_receipt, memory_notify_each, confirm_index_each]
+  completion_gate: move_and_metadata_transactions_complete
+  recovery: same_run_id_same_authenticated_envelope
+  guarantees:
+    exactly_once: false
+    atomic_with_move_transaction: false
 bare_mv: forbidden
 ```

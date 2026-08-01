@@ -8,6 +8,7 @@ dependencies:
   schemas: []
   scripts:
     - path: scripts/archive_transaction.mjs
+    - path: scripts/archive_metadata_transaction.mjs
   protocols:
     - path: ../_shared/operation-safety.md
   capabilities: [move_with_link_update]
@@ -180,12 +181,15 @@ After scanning, process every eligible item in the execution list by default:
    5. Draft, plan, and diary candidates must be regular files. A project can be a regular file or a non-empty directory containing at least one confirmable regular file. Every raw directory entry must already be NFC and must reject controls, Windows-invalid characters, reserved names, symlinks, and non-regular files.
    6. Any failure stops the entire run; do not process another candidate. Resume only with the same `run_id`, original candidates, and the same authenticated envelope. Reject automatic resume when a source reappears or when the candidate graph, path, derived ID, inventory, or receipt differs. Schema, Vault identity, and receipt validation are untrusted stages: failure returns only a local `failed`, `unverified`, null-receipt result with manual-recovery guidance, calls neither persistence nor business side effects, and never overwrites the trusted store's last valid recovery point. If target drift is found after `confirm_index` or `memory_forget` has occurred, explicitly record the corresponding applied effect and never return complete.
 
-4. **Preserve the transaction endpoint:**
-   - This Archive run must not directly rewrite archived-target frontmatter or today’s diary after the transaction completes. Such writes are absent from the original manifest, inventory, intents, and receipts and would invalidate the confirmed transaction boundary
-   - If an `archived` date or diary record is required, use a new `run_id` and execute it as a separate operation protected by its own guard, manifest, intent, receipt, `memory_notify`, and `confirm_index`
-   - Until that separate operation succeeds and persists its receipt, do not claim that metadata or diary updates completed, and do not include it in the original Archive run's recovery flow
+4. **Run the required archive metadata transaction:**
+   - After the move transaction returns an authenticated `complete` envelope, immediately call `runArchiveMetadataTransaction({ vault_root, run_id, archive_date, move_envelope, manifest, adapters })` from `scripts/archive_metadata_transaction.mjs`. The metadata transaction uses a new `run_id` distinct from the move transaction. Its `adapters` must provide `persist_manifest`, `verify_manifest_receipt`, `write_archived_frontmatter`, `memory_notify`, and `confirm_index`
+   - The metadata transaction first verifies the parent move-envelope receipt and derives targets only from the parent manifest's per-file `moves`. Every `project`, `draft`, and `plan` candidate must have exactly one main file whose `type` matches and whose `status` is `done`; diary entries do not receive an `archived` field. Zero or multiple matches fail closed before any metadata write
+   - Persist a write intent for each target, then have `write_archived_frontmatter` compare-and-swap against `before_sha256`, add `archived: "YYYY-MM-DD"`, and preserve `status: done`. After persisting the write receipt, run and persist per-file `memory_notify` and `confirm_index` receipts
+   - A metadata failure leaves the completed move transaction unchanged. Resume with the same metadata `run_id` and authenticated envelope; only persisted write, notification, or confirmation receipts may skip work. Never rerun or pretend to roll back the completed move transaction
+   - This Archive run must not rewrite archived-target frontmatter or today's diary outside these two transactions. A diary log is outside the Archive write set and is not an archival completion condition
+   - Only when both the move transaction and metadata transaction return `complete` may this Archive workflow report completion. A missing `archived` write, notification, or index confirmation for any `project`, `draft`, or `plan` must be reported as partial completion with recovery instructions
 
-6. **Cleanup check:**
+5. **Cleanup check:**
    - Check if there are orphaned associated resources in `{resources directory}/`
    - If found, leave them in place and list them in the completion report; do not expand the archival scope or interrupt the workflow to ask the user
 
@@ -235,7 +239,7 @@ After scanning, process every eligible item in the execution list by default:
 - **No simulated moves** — do not simulate a move with “write new file + delete old file”
 - **Organize by archive rule** — projects by completion year, drafts and diary entries by archival year and month, plans in `{archived plans subdirectory}`
 - **Archive all by default** — after scanning, automatically process every eligible candidate without requiring review, selection, confirmation, or a reply
-- **No untracked post-transaction writes** — after this Archive run completes, do not directly rewrite archived targets or today's diary; use a separate fully protected operation when needed
+- **Metadata transaction is a completion gate** — after moving, the archive metadata transaction is required; never patch `archived` outside the transaction or report completion until both transactions complete
 
 # Edge Cases
 
@@ -329,7 +333,7 @@ After archival is complete, suggestions:
 
 ## Archive Transaction Contract
 
-Read `_shared/operation-safety.md`, then use the published asset `scripts/archive_transaction.mjs`. The adapter preflights the whole candidate graph and every collision, safely creates destination parents one level at a time, and freezes and repeatedly verifies per-file inventories. It persists an intent before every side effect and a receipt after every successful side effect. Resume trusts only an exact envelope verified by `verify_manifest_receipt`; a persisted external receipt can skip its corresponding step, while a call without a receipt may only be replayed safely with the same `idempotency_key`. Any failure stops the entire run and resumes from the same manifest. The adapter promises neither exactly-once behavior nor cross-system atomicity across the filesystem, index, and memory system, and it cannot eliminate the race between final revalidation and the system call. Adapters and authentication receipts remain external trust boundaries.
+Read `_shared/operation-safety.md`, then use the published assets `scripts/archive_transaction.mjs` and `scripts/archive_metadata_transaction.mjs` in order. The move adapter preflights the whole candidate graph and every collision, safely creates destination parents, and freezes and repeatedly verifies per-file inventories. The metadata adapter verifies the completed move envelope, derives the unique main files, and closes the `archived` date write. Both transactions persist an intent before every side effect and a receipt after every successful side effect, and resume trusts only an exact envelope verified by `verify_manifest_receipt`. Neither adapter promises exactly-once behavior or cross-system atomicity, and neither can eliminate the race between final revalidation and the system call. Adapters and authentication receipts remain external trust boundaries.
 
 <!-- operation-safety-v1 -->
 ```yaml
@@ -441,7 +445,23 @@ guarantees:
   last_revalidate_to_syscall_atomic: false
 post_transaction_writes:
   current_run: forbidden
-  archived_frontmatter: separate_guarded_operation
-  diary_log: separate_guarded_operation
+  archived_frontmatter: required_metadata_transaction
+  diary_log: not_part_of_archive
+metadata_transaction:
+  adapter: scripts/archive_metadata_transaction.mjs
+  required_after: move_transaction_complete
+  run_id: stable(archive-metadata, parent-run-id, archive-date, derived-target-paths)
+  parent_trust: verify_completed_move_envelope_receipt
+  target_derivation: exactly_one_matching_frontmatter_per_non_diary_candidate
+  eligible_entity_types: [project, draft, plan]
+  preserved_status: done
+  mutation: { field: archived, value: YYYY-MM-DD }
+  external_callbacks: [persist_manifest, verify_manifest_receipt, write_archived_frontmatter, memory_notify, confirm_index]
+  transaction_steps: [verify_parent_receipt, derive_metadata_targets, persist_manifest, persist_write_intent, write_archived_frontmatter, persist_write_receipt, memory_notify_each, confirm_index_each]
+  completion_gate: move_and_metadata_transactions_complete
+  recovery: same_run_id_same_authenticated_envelope
+  guarantees:
+    exactly_once: false
+    atomic_with_move_transaction: false
 bare_mv: forbidden
 ```

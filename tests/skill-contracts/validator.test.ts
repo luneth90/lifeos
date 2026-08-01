@@ -449,6 +449,25 @@ describe('技能契约校验器', () => {
 		);
 	});
 
+	it('拒绝 Archive 元数据事务不再作为总体完成门禁', async () => {
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/skills/archive/SKILL.en.md', (content) =>
+					content.replace(
+						'completion_gate: move_and_metadata_transactions_complete',
+						'completion_gate: move_transaction_complete',
+					),
+				),
+			[
+				{
+					code: 'invalid_archive_transaction_contract',
+					path: 'assets/skills/archive/SKILL.en.md',
+					message: 'Archive 发布事务、manifest 或 resume 机器字段非法',
+				},
+			],
+		);
+	});
+
 	it.each([
 		[
 			'Vault 身份字段',

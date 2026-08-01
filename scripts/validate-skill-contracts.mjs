@@ -431,8 +431,41 @@ function isValidArchiveTransactionContract(contract) {
 		}) &&
 		sameValue(contract.post_transaction_writes, {
 			current_run: 'forbidden',
-			archived_frontmatter: 'separate_guarded_operation',
-			diary_log: 'separate_guarded_operation',
+			archived_frontmatter: 'required_metadata_transaction',
+			diary_log: 'not_part_of_archive',
+		}) &&
+		sameValue(contract.metadata_transaction, {
+			adapter: 'scripts/archive_metadata_transaction.mjs',
+			required_after: 'move_transaction_complete',
+			run_id: 'stable(archive-metadata, parent-run-id, archive-date, derived-target-paths)',
+			parent_trust: 'verify_completed_move_envelope_receipt',
+			target_derivation: 'exactly_one_matching_frontmatter_per_non_diary_candidate',
+			eligible_entity_types: ['project', 'draft', 'plan'],
+			preserved_status: 'done',
+			mutation: { field: 'archived', value: 'YYYY-MM-DD' },
+			external_callbacks: [
+				'persist_manifest',
+				'verify_manifest_receipt',
+				'write_archived_frontmatter',
+				'memory_notify',
+				'confirm_index',
+			],
+			transaction_steps: [
+				'verify_parent_receipt',
+				'derive_metadata_targets',
+				'persist_manifest',
+				'persist_write_intent',
+				'write_archived_frontmatter',
+				'persist_write_receipt',
+				'memory_notify_each',
+				'confirm_index_each',
+			],
+			completion_gate: 'move_and_metadata_transactions_complete',
+			recovery: 'same_run_id_same_authenticated_envelope',
+			guarantees: {
+				exactly_once: false,
+				atomic_with_move_transaction: false,
+			},
 		}) &&
 		contract.bare_mv === 'forbidden'
 	);
@@ -1280,6 +1313,9 @@ export function validateSkillContracts(root) {
 					!isValidArchiveTransactionContract(operation) ||
 					!scriptDependencies.some(
 						(dependency) => dependency?.path === 'scripts/archive_transaction.mjs',
+					) ||
+					!scriptDependencies.some(
+						(dependency) => dependency?.path === 'scripts/archive_metadata_transaction.mjs',
 					)
 				) {
 					add(

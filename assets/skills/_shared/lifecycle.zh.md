@@ -17,7 +17,7 @@ pending ──/research,/project,/knowledge──→ done ──/archive──�
 
 - /archive 仅归档状态为 `done` 的草稿。
 - /archive 绝不归档 `pending` 状态的草稿。
-- /archive 移动文件后仅追加 `archived: "YYYY-MM-DD"`，保留 `status: done`。
+- /archive 移动事务完成后必须运行归档元数据事务；该事务只追加 `archived: "YYYY-MM-DD"`，保留 `status: done`，并完成文件通知与索引确认。两个事务都完成后才算归档完成。
 
 ## 知识笔记生命周期 (Knowledge Note Lifecycle)
 
@@ -56,7 +56,7 @@ active ⇄ frozen ──→ done ──/archive──→ 保留 done
 - 用户手动修改 frontmatter `status: frozen` 完成冻结，改回 `status: active` 解冻
 - frozen 项目的关联知识笔记（通过 `project` 字段关联）从复习列表中隐藏
 - frozen 项目可直接转为 `done`，也可解冻回 `active`
-- /archive 归档 `done` 项目时只追加 `archived: "YYYY-MM-DD"`。
+- /archive 归档 `done` 项目时，移动事务完成后必须运行归档元数据事务；该事务只追加 `archived: "YYYY-MM-DD"` 并保留 `status: done`。
 
 ## 计划生命周期
 
@@ -78,7 +78,7 @@ pending ──确认后──→ active ──执行完成──→ done ──/
 
 - /project 和 /research 创建计划文件时，必须写入 `type: plan` 与 `status: pending`
 - /project 和 /research 执行完成后，只将计划状态更新为 `done`，不直接移动计划文件
-- /archive 仅归档 `status: done` 的计划，并在移动后追加 `archived: "YYYY-MM-DD"`
+- /archive 仅归档 `status: done` 的计划；移动事务完成后必须运行归档元数据事务，追加 `archived: "YYYY-MM-DD"` 并保留 `status: done`
 
 ## 研究生命周期 (Research Lifecycle)
 
