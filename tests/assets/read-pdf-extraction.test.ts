@@ -701,8 +701,8 @@ describe('read_pdf.py 提取包', () => {
 			expect(skill).toContain('requested_pages');
 			const forbidden =
 				language === 'zh'
-					? /PDF_PAGE_LABELS|pdf_page_labels|印刷页|页码映射/
-					: /PDF_PAGE_LABELS|pdf_page_labels|printed page|printed label|page mapping/i;
+					? /PDF_PAGE_LABELS|pdf_page_labels|printed_page_label|印刷页|页码映射/
+					: /PDF_PAGE_LABELS|pdf_page_labels|printed_page_label|printed page|printed label|page mapping/i;
 			expect(template, language).not.toMatch(forbidden);
 			expect(skill, language).not.toMatch(forbidden);
 			expect(skill, language).toContain('{pdf_page_index, order, bbox}');

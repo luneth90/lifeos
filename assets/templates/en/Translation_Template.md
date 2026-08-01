@@ -26,7 +26,15 @@ id: "{{ID}}"
 
 ![[<Vault相对图片路径>|720]]
 
+Choose the embed caption by figure-number reliability. With a reliable figure number, write:
+
 > 图 X.X
+
+Without a reliable figure number, write:
+
+> 原书图表
+
+Never invent a figure number.
 
 When the boundary or anchor cannot be resolved automatically, do not embed an image; emit the source-reference fallback instead: with a reliable figure number, `> 📖 见原书图 X.X`; without one, `> 📖 见原书相关图表（PDF 物理页 XX，block.order N）`. -->
 

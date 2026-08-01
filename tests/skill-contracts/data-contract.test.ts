@@ -154,6 +154,8 @@ describe('阶段一数据契约', () => {
 		const visualSummary = '视觉处理：嵌入 N；转 Markdown N；转 LaTeX N；原书提示 N；忽略装饰 N';
 		const referenceItem =
 			'- reference：PDF 物理页 XX；图号 X.X 或 block.order N；原因：<自动降级原因>';
+		const embedWithFigure = '> 图 X.X';
+		const embedWithoutFigure = '> 原书图表';
 		const referenceWithFigure = '> 📖 见原书图 X.X';
 		const referenceWithoutFigure = '> 📖 见原书相关图表（PDF 物理页 XX，block.order N）';
 
@@ -167,16 +169,33 @@ describe('阶段一数据契约', () => {
 
 			expect(companion, template.path).toMatch(template.orderPattern);
 			expect(companion, template.path).toContain(embed);
-			expect(companion, template.path).toMatch(/译文段落。[\s\S]*> 图 X\.X/);
+			expect(companion, template.path).toContain(embedWithFigure);
+			expect(companion, template.path).toContain(embedWithoutFigure);
 			expect(companion, template.path).not.toMatch(
-				/印刷页|printed page|printed label|page mapping/i,
+				/PDF_PAGE_LABELS|pdf_page_labels|印刷页|printed page|printed label|printed_page_label|page mapping/i,
 			);
 			expect(companion, template.path).toContain(referenceWithFigure);
 			expect(companion, template.path).toContain(referenceWithoutFigure);
 			expect(completeness, template.path).toContain(visualSummary);
 			expect(completeness, template.path).toContain(referenceItem);
 			expect(completeness, template.path).not.toMatch(
-				/印刷页|printed page|printed label|page mapping/i,
+				/PDF_PAGE_LABELS|pdf_page_labels|印刷页|printed page|printed label|printed_page_label|page mapping/i,
+			);
+		}
+
+		for (const path of [
+			'assets/templates/zh/Translation_Template.md',
+			'assets/templates/en/Translation_Template.md',
+			'assets/skills/translate/SKILL.zh.md',
+			'assets/skills/translate/SKILL.en.md',
+		]) {
+			const content = read(path);
+			expect(content, path).toContain(embedWithFigure);
+			expect(content, path).toContain(embedWithoutFigure);
+			expect(content, path).toContain(referenceWithFigure);
+			expect(content, path).toContain(referenceWithoutFigure);
+			expect(content, path).not.toMatch(
+				/PDF_PAGE_LABELS|pdf_page_labels|印刷页|printed page|printed label|printed_page_label|page mapping/i,
 			);
 		}
 	});
