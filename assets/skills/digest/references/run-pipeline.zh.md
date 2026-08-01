@@ -239,4 +239,4 @@ aliases: []
 
 ## 幂等运行
 
-执行前计算 `run_id = stable(config-hash, time-window)` 并预检现有周报。命中时 `merge` 已有来源台账，不重复创建；来源台账逐条记录 `published_at`、`fetched_at`、`health` 和 `errors`。单个来源失败不提前完成，全部来源失败保持非完成状态。输入 JSON 仅经 stdin 或受控文件传递，禁止 `echo` 组装。
+执行前计算 `run_id = stable(digest, config-hash, time-window)` 并预检现有周报。命中时 `merge` 已有来源台账，不重复创建；来源台账逐条记录 `published_at`、`fetched_at`、`health` 和 `errors`。单个来源失败不提前完成，全部来源失败保持非完成状态。输入 JSON 仅经 stdin 或受控文件传递，禁止 `echo` 组装。

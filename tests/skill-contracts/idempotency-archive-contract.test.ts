@@ -163,6 +163,17 @@ describe('阶段五幂等与归档契约', () => {
 		expect(contract(`assets/skills/${name}/SKILL.en.md`)).toEqual({ ...base, target_path: en });
 	});
 
+	it('Digest 流水线说明与机器契约使用同一个带技能命名空间的 run_id', () => {
+		const runId = contract('assets/skills/digest/SKILL.zh.md').run_id;
+		expect(runId).toBe('stable(digest, config-hash, time-window)');
+		for (const path of [
+			'assets/skills/digest/references/run-pipeline.zh.md',
+			'assets/skills/digest/references/run-pipeline.en.md',
+		]) {
+			expect(read(path), path).toContain(`run_id = ${runId}`);
+		}
+	});
+
 	it('Archive 机器契约固定通知、索引确认和遗忘顺序', () => {
 		const extra = {
 			adapter: 'scripts/archive_transaction.mjs',

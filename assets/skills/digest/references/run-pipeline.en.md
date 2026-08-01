@@ -240,4 +240,4 @@ All weekly digests generated:
 
 ## Idempotent Runs
 
-Calculate `run_id = stable(config-hash, time-window)` and preflight an existing digest before execution. On a match, `merge` its source ledger rather than create a duplicate; every source record includes `published_at`, `fetched_at`, `health`, and `errors`. One source failure never declares completion early, and all sources failed remains non-completed. Pass JSON only through stdin or a controlled file, never assembled by `echo`.
+Calculate `run_id = stable(digest, config-hash, time-window)` and preflight an existing digest before execution. On a match, `merge` its source ledger rather than create a duplicate; every source record includes `published_at`, `fetched_at`, `health`, and `errors`. One source failure never declares completion early, and all sources failed remains non-completed. Pass JSON only through stdin or a controlled file, never assembled by `echo`.
