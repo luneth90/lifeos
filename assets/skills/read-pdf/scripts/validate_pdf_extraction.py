@@ -36,6 +36,8 @@ SUPPORTED_SCHEMA_KEYWORDS = {
     "uniqueItems",
 }
 SUPPORTED_SCHEMA_TYPES = {"null", "object", "array", "string", "integer", "number", "boolean"}
+SUPPORTED_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
+ALLOWED_FORMAT_CONTROLS = {"\u200c", "\u200d"}
 RFC3339_PATTERN = re.compile(
     r"^(?P<date>\d{4}-\d{2}-\d{2})[Tt]"
     r"(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})"
@@ -72,7 +74,11 @@ def matches_type(value: Any, expected: str) -> bool:
     if expected == "string":
         return isinstance(value, str)
     if expected == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and (not isinstance(value, float) or math.isfinite(value) and value.is_integer())
+        )
     if expected == "number":
         return (
             isinstance(value, (int, float))
@@ -103,7 +109,7 @@ def valid_date_time(value: str) -> bool:
     if match is None:
         return False
     second = int(match.group("second"))
-    if second > 60:
+    if second > 60 or (second == 60 and match.group("minute") != "59"):
         return False
     normalized_second = "59" if second == 60 else match.group("second")
     zone = match.group("zone")
@@ -152,9 +158,16 @@ def validate_schema_definition(
     if any(keyword not in SUPPORTED_SCHEMA_KEYWORDS for keyword in schema):
         add_diagnostic(diagnostics, "schema_unsupported_keyword", path)
 
-    for metadata_keyword in ("$id", "$schema", "description", "title"):
+    for metadata_keyword in ("$id", "description", "title"):
         if metadata_keyword in schema and not isinstance(schema[metadata_keyword], str):
             add_diagnostic(diagnostics, "schema_definition", path)
+
+    schema_dialect = schema.get("$schema")
+    if schema_dialect is not None:
+        if not isinstance(schema_dialect, str):
+            add_diagnostic(diagnostics, "schema_definition", path)
+        elif schema_dialect != SUPPORTED_SCHEMA_DIALECT:
+            add_diagnostic(diagnostics, "schema_unsupported_keyword", path)
 
     declared_type = schema.get("type")
     if declared_type is not None:
@@ -276,8 +289,7 @@ def validate_schema_value(
         if isinstance(min_items, int) and len(value) < min_items:
             add_diagnostic(diagnostics, "schema_min_items", path)
         if schema.get("uniqueItems") is True:
-            serialized = [json.dumps(item, ensure_ascii=False, sort_keys=True) for item in value]
-            if len(serialized) != len(set(serialized)):
+            if has_json_duplicates(value):
                 add_diagnostic(diagnostics, "schema_unique_items", path)
         item_schema = schema.get("items")
         if isinstance(item_schema, dict):
@@ -312,9 +324,9 @@ def validate_schema_value(
 def integer_list(value: Any) -> Optional[List[int]]:
     if not isinstance(value, list):
         return None
-    if not all(isinstance(item, int) and not isinstance(item, bool) for item in value):
+    if not all(matches_type(item, "integer") for item in value):
         return None
-    return value
+    return [int(item) for item in value]
 
 
 def number_value(value: Any) -> Optional[Union[int, float]]:
@@ -327,6 +339,28 @@ def number_value(value: Any) -> Optional[Union[int, float]]:
     return None
 
 
+def unsafe_source_character(value: str, index: int) -> bool:
+    character = value[index]
+    category = unicodedata.category(character)
+    if category in {"Cc", "Cs"}:
+        return True
+    if category != "Cf":
+        return False
+    if character not in ALLOWED_FORMAT_CONTROLS:
+        return True
+    if index == 0 or index == len(value) - 1:
+        return True
+
+    previous = value[index - 1]
+    following = value[index + 1]
+    return (
+        previous in {"/", "\\"}
+        or following in {"/", "\\"}
+        or unicodedata.category(previous).startswith("C")
+        or unicodedata.category(following).startswith("C")
+    )
+
+
 def safe_source_path(value: str) -> bool:
     normalized = unicodedata.normalize("NFKC", value)
     segments = normalized.split("/")
@@ -337,7 +371,7 @@ def safe_source_path(value: str) -> bool:
         or "\\" in normalized
         or ":" in normalized
         or any(not segment or segment in {".", ".."} for segment in segments)
-        or any(unicodedata.category(character).startswith("C") for character in normalized)
+        or any(unsafe_source_character(normalized, index) for index in range(len(normalized)))
     )
 
 
@@ -400,15 +434,14 @@ def validate_semantics(package: Any, require_complete: bool) -> List[Diagnostic]
     if isinstance(requested_range, dict):
         start = requested_range.get("start")
         end = requested_range.get("end")
-        if (
-            isinstance(start, int)
-            and not isinstance(start, bool)
-            and isinstance(end, int)
-            and not isinstance(end, bool)
-        ):
-            if start > end:
+        if matches_type(start, "integer") and matches_type(end, "integer"):
+            start_integer = int(start)
+            end_integer = int(end)
+            if start_integer > end_integer:
                 add_diagnostic(diagnostics, "requested_range_order", "$.requested_range")
-            if requested_pages and (start != requested_pages[0] or end != requested_pages[-1]):
+            if requested_pages and (
+                start_integer != requested_pages[0] or end_integer != requested_pages[-1]
+            ):
                 add_diagnostic(diagnostics, "requested_range_mismatch", "$.requested_range")
 
     source = package.get("source")
@@ -418,8 +451,8 @@ def validate_semantics(package: Any, require_complete: bool) -> List[Diagnostic]
             add_diagnostic(diagnostics, "unsafe_source_path", "$.source.path")
         if requested_pages:
             page_count = source.get("page_count")
-            if isinstance(page_count, int) and not isinstance(page_count, bool):
-                if requested_pages[0] < 1 or requested_pages[-1] > page_count:
+            if matches_type(page_count, "integer"):
+                if requested_pages[0] < 1 or requested_pages[-1] > int(page_count):
                     add_diagnostic(diagnostics, "page_out_of_source", "$.requested_pages")
 
     rendered_images = package.get("rendered_images")

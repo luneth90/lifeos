@@ -20,6 +20,7 @@ import fitz
 
 
 MAX_DEFAULT_PAGES = 50
+ALLOWED_FORMAT_CONTROLS = {"\u200c", "\u200d"}
 
 
 @dataclass
@@ -103,6 +104,28 @@ def normalize_text(value: str) -> str:
     return normalized
 
 
+def unsafe_source_character(value: str, index: int) -> bool:
+    character = value[index]
+    category = unicodedata.category(character)
+    if category in {"Cc", "Cs"}:
+        return True
+    if category != "Cf":
+        return False
+    if character not in ALLOWED_FORMAT_CONTROLS:
+        return True
+    if index == 0 or index == len(value) - 1:
+        return True
+
+    previous = value[index - 1]
+    following = value[index + 1]
+    return (
+        previous in {"/", "\\"}
+        or following in {"/", "\\"}
+        or unicodedata.category(previous).startswith("C")
+        or unicodedata.category(following).startswith("C")
+    )
+
+
 def resolve_pdf_path(raw_path: str, cwd: Path) -> Path:
     candidate = Path(raw_path)
     if not candidate.is_absolute():
@@ -125,7 +148,7 @@ def normalize_source_label(raw_label: Optional[str], resolved_pdf_path: Path) ->
         or "\\" in normalized
         or ":" in normalized
         or any(not segment or segment in {".", ".."} for segment in segments)
-        or any(unicodedata.category(character).startswith("C") for character in normalized)
+        or any(unsafe_source_character(normalized, index) for index in range(len(normalized)))
     ):
         raise ReadPdfError(
             "INVALID_SOURCE_LABEL",
@@ -297,12 +320,15 @@ def build_output_path(raw_output: Optional[str], source_hash: str) -> Path:
 def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
     """把有意义的矢量内容合并为一个页级视觉占位。
 
-    单条分隔线、无填充页框和微小装饰不足以让页面降级；填充图形、复杂路径，
-    或至少四个绘制原语组成的较大区域则交由视觉分析。
+    单个标题条、平行分隔线、无填充页框和微小装饰不足以让页面降级；
+    复杂路径、多个填充图形、至少三个二维框，或水平与垂直线组成的网格则交由视觉分析。
     """
     page_area = max(float(page.rect.width * page.rect.height), 1.0)
-    all_regions: List[Tuple[float, float, float, float]] = []
-    meaningful_regions: List[Tuple[float, float, float, float]] = []
+    complex_regions: List[Tuple[float, float, float, float]] = []
+    filled_regions: List[Tuple[float, float, float, float]] = []
+    box_regions: List[Tuple[float, float, float, float]] = []
+    horizontal_lines: List[Tuple[float, float, float, float]] = []
+    vertical_lines: List[Tuple[float, float, float, float]] = []
 
     for drawing in page.get_drawings():
         rectangle = drawing.get("rect")
@@ -314,32 +340,33 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             float(rectangle.x1),
             float(rectangle.y1),
         )
-        all_regions.append(region)
         width = max(region[2] - region[0], 0.0)
         height = max(region[3] - region[1], 0.0)
         area_ratio = width * height / page_area
         items = drawing.get("items", [])
         item_count = len(items) if isinstance(items, (list, tuple)) else 0
-        if 0.001 <= area_ratio <= 0.75 and (
-            drawing.get("fill") is not None or item_count >= 3
-        ):
-            meaningful_regions.append(region)
+        if 0.001 <= area_ratio <= 0.75:
+            if item_count >= 3:
+                complex_regions.append(region)
+            elif drawing.get("fill") is not None:
+                filled_regions.append(region)
+            elif width >= 4 and height >= 4:
+                box_regions.append(region)
+        if height <= 2 and width >= 24:
+            horizontal_lines.append(region)
+        elif width <= 2 and height >= 24:
+            vertical_lines.append(region)
 
-    selected_regions = meaningful_regions
-    if not selected_regions and len(all_regions) >= 4:
-        aggregate = (
-            min(region[0] for region in all_regions),
-            min(region[1] for region in all_regions),
-            max(region[2] for region in all_regions),
-            max(region[3] for region in all_regions),
-        )
-        aggregate_ratio = (
-            max(aggregate[2] - aggregate[0], 0.0)
-            * max(aggregate[3] - aggregate[1], 0.0)
-            / page_area
-        )
-        if 0.005 <= aggregate_ratio <= 0.75:
-            selected_regions = all_regions
+    if complex_regions:
+        selected_regions = complex_regions
+    elif len(filled_regions) >= 2:
+        selected_regions = filled_regions
+    elif len(box_regions) >= 3:
+        selected_regions = box_regions
+    elif len(horizontal_lines) >= 2 and len(vertical_lines) >= 2:
+        selected_regions = horizontal_lines + vertical_lines
+    else:
+        selected_regions = []
 
     if not selected_regions:
         return None

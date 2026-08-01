@@ -160,6 +160,25 @@ describe('read_pdf.py 提取包', () => {
 		generatedPaths.push(join(output.rendered_images[0].path, '..'));
 	});
 
+	it('将三格无填充矢量图标记为待视觉补充的单一页级占位', () => {
+		const fixture = createFixtures();
+		const result = runScript([fixture.unfilledVectorPdf, '1']);
+		expect(result.status, result.stderr).toBe(0);
+		const outputPath = result.stdout.match(/已输出 JSON：(.*)/)?.[1]?.trim();
+		expect(outputPath).toBeTruthy();
+		generatedPaths.push(outputPath as string);
+		const output = JSON.parse(readFileSync(outputPath as string, 'utf-8')) as {
+			pages: Array<{ status: string; blocks: Array<{ kind: string }> }>;
+			rendered_images: Array<{ page: number; path: string }>;
+		};
+
+		expect(output.pages[0].status).toBe('partial');
+		expect(output.pages[0].blocks.filter((block) => block.kind === 'image')).toHaveLength(1);
+		expect(output.rendered_images.map((image) => image.page)).toEqual([1]);
+		expect(existsSync(output.rendered_images[0].path)).toBe(true);
+		generatedPaths.push(join(output.rendered_images[0].path, '..'));
+	});
+
 	it('不把普通分隔线和页框误判为待补充的矢量图表', () => {
 		const fixture = createFixtures();
 		const outputPath = join(fixture.workspace, 'decorative-vector-result.json');
@@ -227,6 +246,30 @@ describe('read_pdf.py 提取包', () => {
 		expect(JSON.stringify(output)).not.toContain(fixture.workspace);
 	});
 
+	it.each(['70_资源/👩‍💻.pdf', '70_资源/\ue000.pdf'])(
+		'支持不会隐藏路径的 Unicode source-label：%s',
+		(sourceLabel) => {
+			const fixture = createFixtures();
+			const outputPath = join(fixture.workspace, 'unicode-label-result.json');
+			const result = runScript([
+				fixture.textPdf,
+				'1',
+				'--skip-render',
+				'--source-label',
+				sourceLabel,
+				'--output',
+				outputPath,
+			]);
+
+			expect(result.status, result.stderr).toBe(0);
+			generatedPaths.push(outputPath);
+			const output = JSON.parse(readFileSync(outputPath, 'utf-8')) as {
+				source: { path: string };
+			};
+			expect(output.source.path).toBe(sourceLabel);
+		},
+	);
+
 	it.each([
 		'',
 		'/tmp/leak.pdf',
@@ -240,6 +283,8 @@ describe('read_pdf.py 提取包', () => {
 		'\u200b/Users/alice/leak.pdf',
 		'\u2060/Users/alice/leak.pdf',
 		'\u202e/Users/alice/leak.pdf',
+		'\u200d/Users/alice/leak.pdf',
+		'books/\u200dleak.pdf',
 	])('拒绝不安全的 source-label：%s', (sourceLabel) => {
 		const fixture = createFixtures();
 		const result = runScript([

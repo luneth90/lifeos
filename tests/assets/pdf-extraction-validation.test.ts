@@ -243,6 +243,8 @@ describe('PDF 提取包完整性校验 CLI', () => {
 		'\u200b/Users/alice/book.pdf',
 		'\u2060/Users/alice/book.pdf',
 		'\u202e/Users/alice/book.pdf',
+		'\u200d/Users/alice/book.pdf',
+		'books/\u200dprivate.pdf',
 	])('拒绝使用 Unicode 格式控制字符隐藏的 source.path：%s', (sourcePath) => {
 		const value = completePackage();
 		value.source.path = sourcePath;
@@ -254,6 +256,17 @@ describe('PDF 提取包完整性校验 CLI', () => {
 			path: '$.source.path',
 		});
 	});
+
+	it.each(['70_资源/👩‍💻.pdf', '70_资源/\ue000.pdf'])(
+		'接受不会隐藏路径的 Unicode source.path：%s',
+		(sourcePath) => {
+			const value = completePackage();
+			value.source.path = sourcePath;
+			const result = runValidator(value);
+
+			expect(result.status, result.stderr).toBe(0);
+		},
+	);
 
 	it('拒绝覆盖率、错误和图像占位符伪造的 complete 页面', () => {
 		const value = completePackage();
@@ -469,11 +482,42 @@ describe('PDF 提取包完整性校验 CLI', () => {
 			},
 			'schema_unsupported_keyword',
 		],
+		[
+			'未支持的 $schema dialect',
+			(schema: Record<string, unknown>) => {
+				schema.$schema = 'https://json-schema.org/draft/2019-09/schema';
+			},
+			'schema_unsupported_keyword',
+		],
 	])('Schema 已知关键字形态异常时失败关闭：%s', (_name, mutate, code) => {
 		const result = runValidatorWithSchemaMutation(completePackage(), mutate);
 
 		expect(result.status).toBe(1);
 		expect(diagnostics(result).map((item) => item.code)).toContain(code);
+	});
+
+	it('uniqueItems 按 JSON 数值语义识别 1 与 1.0 重复', () => {
+		const raw = JSON.stringify(completePackage([1, 2])).replace(
+			'"requested_pages":[1,2]',
+			'"requested_pages":[1,1.0]',
+		);
+		const result = runValidatorRaw(raw);
+
+		expect(result.status).toBe(1);
+		expect(diagnostics(result)).toContainEqual({
+			code: 'schema_unique_items',
+			path: '$.requested_pages',
+		});
+	});
+
+	it('integer 按数学值接受 1.0', () => {
+		const raw = JSON.stringify(completePackage()).replace(
+			'"pdf_page_index":1',
+			'"pdf_page_index":1.0',
+		);
+		const result = runValidatorRaw(raw);
+
+		expect(result.status, result.stderr).toBe(0);
 	});
 
 	it.each(['NaN', 'Infinity', '-Infinity'])('拒绝非标准 JSON 数值常量：%s', (nonFiniteValue) => {
@@ -509,6 +553,15 @@ describe('PDF 提取包完整性校验 CLI', () => {
 			expect(result.status, result.stderr).toBe(0);
 		},
 	);
+
+	it('拒绝不在分钟末尾的伪闰秒', () => {
+		const value = completePackage();
+		value.source.mtime = '2026-01-01T12:34:60Z';
+		const result = runValidator(value);
+
+		expect(result.status).toBe(1);
+		expect(diagnostics(result)).toContainEqual({ code: 'schema_format', path: '$.source.mtime' });
+	});
 
 	it.each([
 		['非请求页', [{ page: 999, path: '/tmp/page-999.png' }], 'rendered_image_page'],

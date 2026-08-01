@@ -11,6 +11,7 @@ export interface PdfFixtures {
 	printedLabelPdf: string;
 	sparsePagesPdf: string;
 	textPdf: string;
+	unfilledVectorPdf: string;
 	vectorVisualPdf: string;
 	workspace: string;
 	cleanup(): void;
@@ -26,6 +27,7 @@ export function createPdfFixtures(): PdfFixtures {
 	const sparsePagesPdf = join(workspace, 'sparse-pages.pdf');
 	const vectorVisualPdf = join(workspace, 'vector-visual.pdf');
 	const decorativeVectorPdf = join(workspace, 'decorative-vector.pdf');
+	const unfilledVectorPdf = join(workspace, 'unfilled-vector.pdf');
 	const program = [
 		'import fitz, sys',
 		'text_path, no_text_path = sys.argv[1:3]',
@@ -85,9 +87,21 @@ export function createPdfFixtures(): PdfFixtures {
 		'decorative_page = decorative.new_page()',
 		"decorative_page.insert_text((72, 72), 'Text with decorative rules only.', fontsize=12)",
 		'decorative_page.draw_line(fitz.Point(72, 96), fitz.Point(520, 96), color=(0.5, 0.5, 0.5))',
+		'decorative_page.draw_line(fitz.Point(72, 112), fitz.Point(520, 112), color=(0.5, 0.5, 0.5))',
+		'decorative_page.draw_line(fitz.Point(72, 128), fitz.Point(520, 128), color=(0.5, 0.5, 0.5))',
+		'decorative_page.draw_line(fitz.Point(72, 144), fitz.Point(520, 144), color=(0.5, 0.5, 0.5))',
+		'decorative_page.draw_rect(fitz.Rect(72, 160, 520, 180), color=(0.2, 0.2, 0.2), fill=(0.9, 0.9, 0.9))',
 		'decorative_page.draw_rect(fitz.Rect(36, 36, 559, 806), color=(0.7, 0.7, 0.7))',
 		'decorative.save(sys.argv[8])',
 		'decorative.close()',
+		'unfilled = fitz.open()',
+		'unfilled_page = unfilled.new_page()',
+		"unfilled_page.insert_text((72, 72), 'Three-cell comparison diagram', fontsize=12)",
+		'unfilled_page.draw_rect(fitz.Rect(72, 140, 200, 300), color=(0, 0, 0))',
+		'unfilled_page.draw_rect(fitz.Rect(230, 140, 358, 300), color=(0, 0, 0))',
+		'unfilled_page.draw_rect(fitz.Rect(388, 140, 516, 300), color=(0, 0, 0))',
+		'unfilled.save(sys.argv[9])',
+		'unfilled.close()',
 	].join('\n');
 	const result = spawnSync(
 		'python3',
@@ -102,6 +116,7 @@ export function createPdfFixtures(): PdfFixtures {
 			mixedVisualPdf,
 			vectorVisualPdf,
 			decorativeVectorPdf,
+			unfilledVectorPdf,
 		],
 		{
 			encoding: 'utf-8',
@@ -122,6 +137,7 @@ export function createPdfFixtures(): PdfFixtures {
 		mixedVisualPdf,
 		sparsePagesPdf,
 		vectorVisualPdf,
+		unfilledVectorPdf,
 		cleanup: () => rmSync(workspace, { force: true, recursive: true }),
 	};
 }
