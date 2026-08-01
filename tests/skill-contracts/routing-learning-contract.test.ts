@@ -264,6 +264,30 @@ describe('阶段三路由与学习链路契约', () => {
 		}
 	});
 
+	it('Brainstorm handoff 示例使用运行时日期与主题占位符，且英文示例已本地化', () => {
+		const cases = [
+			{
+				path: 'assets/skills/brainstorm/SKILL.zh.md',
+				sourcePath: 'source_path: "{草稿目录}/Brainstorm_YYYY-MM-DD_<已确认主题>.md"',
+				intent: 'intent: "将已确认的头脑风暴主题转为项目"',
+			},
+			{
+				path: 'assets/skills/brainstorm/SKILL.en.md',
+				sourcePath: 'source_path: "{drafts directory}/Brainstorm_YYYY-MM-DD_<ConfirmedTopic>.md"',
+				intent: 'intent: "Turn the confirmed brainstorm topic into a project"',
+			},
+		];
+		for (const { path, sourcePath, intent } of cases) {
+			const content = read(path);
+			const block = content.match(/```yaml\nhandoff:\n[\s\S]*?\n```/)?.[0];
+			expect(block, `${path} 缺少 handoff YAML 示例`).toBeDefined();
+			expect(block, path).toContain(sourcePath);
+			expect(block, path).toContain(intent);
+			expect(block, path).not.toMatch(/\b20\d{2}-\d{2}-\d{2}\b/);
+			if (path.endsWith('.en.md')) expect(block, path).not.toMatch(/[\u3400-\u9fff]/);
+		}
+	});
+
 	it('行为证据在已追踪文件中完整保存，且不依赖 SDD 临时目录', () => {
 		const evidence = read('development/skill-tests/2026-07-31-phase-3-routing-learning.md');
 		expect(evidence).not.toContain('.superpowers/sdd/');
