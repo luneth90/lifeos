@@ -510,23 +510,43 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
 
     def overlapping_intervals(
         first: Sequence[Tuple[float, float]],
+        first_ends: Sequence[float],
         second: Sequence[Tuple[float, float]],
+        second_ends: Sequence[float],
     ) -> List[Tuple[float, float]]:
         overlaps: List[Tuple[float, float]] = []
-        first_index = 0
-        second_index = 0
-        while first_index < len(first) and second_index < len(second):
-            first_start, first_end = first[first_index]
-            second_start, second_end = second[second_index]
-            overlap_start = max(first_start, second_start)
-            overlap_end = min(first_end, second_end)
-            if overlap_end - overlap_start >= 4:
-                overlaps.append((overlap_start, overlap_end))
-            if first_end <= second_end:
-                first_index += 1
-            else:
-                second_index += 1
+        if len(first) <= len(second):
+            shorter = first
+            longer = second
+            longer_ends = second_ends
+        else:
+            shorter = second
+            longer = first
+            longer_ends = first_ends
+
+        for shorter_start, shorter_end in shorter:
+            longer_index = bisect_left(longer_ends, shorter_start)
+            while (
+                longer_index < len(longer)
+                and longer[longer_index][0] <= shorter_end
+            ):
+                longer_start, longer_end = longer[longer_index]
+                overlap_start = max(shorter_start, longer_start)
+                overlap_end = min(shorter_end, longer_end)
+                if overlap_end - overlap_start >= 4:
+                    overlaps.append((overlap_start, overlap_end))
+                longer_index += 1
         return overlaps
+
+    def nearest_coordinate(
+        positions: Sequence[float], target: float, tolerance: float = 2.0
+    ) -> Optional[float]:
+        insertion = bisect_left(positions, target)
+        candidates = positions[max(0, insertion - 1) : insertion + 1]
+        if not candidates:
+            return None
+        nearest = min(candidates, key=lambda position: (abs(position - target), position))
+        return nearest if abs(nearest - target) <= tolerance else None
 
     def find_local_axis_cells(
         limit: int = 3,
@@ -538,10 +558,25 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             edge_intervals: Dict[float, List[Tuple[float, float]]],
             vertical_sides: bool,
         ) -> bool:
+            edge_positions = sorted(edge_intervals)
+            edge_ends = {
+                coordinate: [end for _, end in intervals]
+                for coordinate, intervals in edge_intervals.items()
+            }
             span_groups: Dict[Tuple[float, float], List[float]] = {}
             for coordinate, spans in side_intervals.items():
                 for start, end in spans:
-                    span_groups.setdefault((start, end), []).append(coordinate)
+                    mapped_start = nearest_coordinate(edge_positions, start)
+                    mapped_end = nearest_coordinate(edge_positions, end)
+                    if (
+                        mapped_start is None
+                        or mapped_end is None
+                        or mapped_end - mapped_start < 4
+                    ):
+                        continue
+                    span_groups.setdefault((mapped_start, mapped_end), []).append(
+                        coordinate
+                    )
 
             for (start, end), coordinates in span_groups.items():
                 coordinates = sorted(set(coordinates))
@@ -550,7 +585,10 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                 if not start_edges or not end_edges:
                     continue
                 for overlap_start, overlap_end in overlapping_intervals(
-                    start_edges, end_edges
+                    start_edges,
+                    edge_ends[start],
+                    end_edges,
+                    edge_ends[end],
                 ):
                     enclosed = coordinates[
                         bisect_left(coordinates, overlap_start) : bisect_right(

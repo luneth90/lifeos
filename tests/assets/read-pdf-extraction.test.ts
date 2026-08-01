@@ -205,6 +205,8 @@ describe('read_pdf.py 提取包', () => {
 		['同一 Shape 内的线框加内部线', 9],
 		['re 外框加两条内部竖线及 58 条不相交刻线', 12],
 		['四条独立边线外框加两条内部竖线及 59 条不相交刻线', 13],
+		['外框与内分隔线端点相差 1pt 并附加 58 条不相交刻线', 14],
+		['外框与内分隔线端点相差 1pt 并附加 59 条不相交刻线', 15],
 	])('将%s编码的等价网格标记为待视觉补充', (_description, page) => {
 		const fixture = createFixtures();
 		const result = runScript([fixture.unfilledVectorPdf, String(page)]);
@@ -351,6 +353,38 @@ describe('read_pdf.py 提取包', () => {
 		const result = spawnSync('python3', ['-c', program, scriptPath], {
 			encoding: 'utf-8',
 			timeout: 1000,
+		});
+
+		expect(result.status, result.error?.message ?? result.stderr).toBe(0);
+		expect(result.stdout.trim()).toBe('None');
+	});
+
+	it('在共享长边且跨度各异的无单元格输入下保持次二次复杂度', () => {
+		const program = [
+			'import importlib.util, sys, fitz',
+			'spec = importlib.util.spec_from_file_location("lifeos_read_pdf", sys.argv[1])',
+			'module = importlib.util.module_from_spec(spec)',
+			'sys.modules[spec.name] = module',
+			'spec.loader.exec_module(module)',
+			'class FakePage:',
+			'    count = 3000',
+			'    rect = fitz.Rect(0, 0, count * 16 + 200, count * 5 + 20)',
+			'    def get_drawings(self):',
+			'        count = self.count',
+			'        shared = [{"rect": fitz.Rect(index * 8, 0, index * 8 + 4, 0), "items": [("l", fitz.Point(index * 8, 0), fitz.Point(index * 8 + 4, 0))], "fill": None} for index in range(count)]',
+			'        ends = []',
+			'        sides = []',
+			'        for index in range(count):',
+			'            x = count * 8 + 100 + index * 8',
+			'            y = 10 + index * 5',
+			'            ends.append({"rect": fitz.Rect(x - 2, y, x + 2, y), "items": [("l", fitz.Point(x - 2, y), fitz.Point(x + 2, y))], "fill": None})',
+			'            sides.append({"rect": fitz.Rect(x, 0, x, y), "items": [("l", fitz.Point(x, 0), fitz.Point(x, y))], "fill": None})',
+			'        return shared + ends + sides',
+			'print(module.vector_visual_anchor(FakePage()))',
+		].join('\n');
+		const result = spawnSync('python3', ['-c', program, scriptPath], {
+			encoding: 'utf-8',
+			timeout: 1500,
 		});
 
 		expect(result.status, result.error?.message ?? result.stderr).toBe(0);
