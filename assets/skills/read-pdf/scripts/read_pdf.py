@@ -524,13 +524,17 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             longer = first
             longer_ends = first_ends
 
-        for shorter_start, shorter_end in shorter:
+        for raw_shorter_start, raw_shorter_end in shorter:
+            shorter_start = raw_shorter_start - 2.0
+            shorter_end = raw_shorter_end + 2.0
             longer_index = bisect_left(longer_ends, shorter_start)
             while (
                 longer_index < len(longer)
-                and longer[longer_index][0] <= shorter_end
+                and longer[longer_index][0] - 2.0 <= shorter_end
             ):
-                longer_start, longer_end = longer[longer_index]
+                raw_longer_start, raw_longer_end = longer[longer_index]
+                longer_start = raw_longer_start - 2.0
+                longer_end = raw_longer_end + 2.0
                 overlap_start = max(shorter_start, longer_start)
                 overlap_end = min(shorter_end, longer_end)
                 if overlap_end - overlap_start >= 4:
@@ -538,15 +542,90 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
                 longer_index += 1
         return overlaps
 
-    def nearest_coordinate(
-        positions: Sequence[float], target: float, tolerance: float = 2.0
-    ) -> Optional[float]:
-        insertion = bisect_left(positions, target)
-        candidates = positions[max(0, insertion - 1) : insertion + 1]
-        if not candidates:
-            return None
-        nearest = min(candidates, key=lambda position: (abs(position - target), position))
-        return nearest if abs(nearest - target) <= tolerance else None
+    def merge_interval_union(
+        first: Sequence[Tuple[float, float]],
+        second: Sequence[Tuple[float, float]],
+    ) -> List[Tuple[float, float]]:
+        merged: List[Tuple[float, float]] = []
+        first_index = 0
+        second_index = 0
+        while first_index < len(first) or second_index < len(second):
+            if second_index >= len(second) or (
+                first_index < len(first)
+                and first[first_index][0] <= second[second_index][0]
+            ):
+                interval = first[first_index]
+                first_index += 1
+            else:
+                interval = second[second_index]
+                second_index += 1
+            if not merged or interval[0] > merged[-1][1]:
+                merged.append(interval)
+            else:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))
+        return merged
+
+    def build_edge_coverage_index(
+        positions: Sequence[float],
+        intervals_by_position: Dict[float, List[Tuple[float, float]]],
+    ):
+        tree_size = 1
+        while tree_size < len(positions):
+            tree_size *= 2
+        interval_tree: List[List[Tuple[float, float]]] = [
+            [] for _ in range(tree_size * 2)
+        ]
+        for position_index, position in enumerate(positions):
+            expanded = [
+                (start - 2.0, end + 2.0)
+                for start, end in intervals_by_position[position]
+            ]
+            interval_tree[tree_size + position_index] = merge_interval_union(
+                expanded, []
+            )
+        for node in range(tree_size - 1, 0, -1):
+            interval_tree[node] = merge_interval_union(
+                interval_tree[node * 2], interval_tree[node * 2 + 1]
+            )
+        end_tree = [
+            [end for _, end in intervals] for intervals in interval_tree
+        ]
+
+        def node_covers(node: int, coordinate: float) -> bool:
+            insertion = bisect_left(end_tree[node], coordinate)
+            return insertion < len(interval_tree[node]) and (
+                interval_tree[node][insertion][0] <= coordinate
+            )
+
+        def find_position(
+            query_start: int, query_end: int, coordinate: float, reverse: bool
+        ) -> Optional[float]:
+            if query_start > query_end:
+                return None
+
+            def search(node: int, start: int, end: int) -> Optional[int]:
+                if end < query_start or start > query_end or not node_covers(
+                    node, coordinate
+                ):
+                    return None
+                if start == end:
+                    return start if start < len(positions) else None
+                midpoint = (start + end) // 2
+                children = (
+                    ((node * 2 + 1, midpoint + 1, end), (node * 2, start, midpoint))
+                    if reverse
+                    else ((node * 2, start, midpoint), (node * 2 + 1, midpoint + 1, end))
+                )
+                for child, child_start, child_end in children:
+                    result = search(child, child_start, child_end)
+                    if result is not None:
+                        return result
+                return None
+
+            result = search(1, 0, tree_size - 1)
+            return positions[result] if result is not None else None
+
+        return find_position
 
     def find_local_axis_cells(
         limit: int = 3,
@@ -559,15 +638,24 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
             vertical_sides: bool,
         ) -> bool:
             edge_positions = sorted(edge_intervals)
+            find_edge_position = build_edge_coverage_index(
+                edge_positions, edge_intervals
+            )
             edge_ends = {
-                coordinate: [end for _, end in intervals]
+                coordinate: [end + 2.0 for _, end in intervals]
                 for coordinate, intervals in edge_intervals.items()
             }
             span_groups: Dict[Tuple[float, float], List[float]] = {}
             for coordinate, spans in side_intervals.items():
                 for start, end in spans:
-                    mapped_start = nearest_coordinate(edge_positions, start)
-                    mapped_end = nearest_coordinate(edge_positions, end)
+                    query_start = bisect_left(edge_positions, start - 2.0)
+                    query_end = bisect_right(edge_positions, end + 2.0) - 1
+                    mapped_start = find_edge_position(
+                        query_start, query_end, coordinate, False
+                    )
+                    mapped_end = find_edge_position(
+                        query_start, query_end, coordinate, True
+                    )
                     if (
                         mapped_start is None
                         or mapped_end is None
