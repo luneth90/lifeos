@@ -356,8 +356,10 @@ def unsafe_source_character(value: str, index: int) -> bool:
     return (
         previous in {"/", "\\"}
         or following in {"/", "\\"}
-        or unicodedata.category(previous).startswith("C")
-        or unicodedata.category(following).startswith("C")
+        or previous.isspace()
+        or following.isspace()
+        or unicodedata.category(previous).startswith(("C", "Z"))
+        or unicodedata.category(following).startswith(("C", "Z"))
     )
 
 

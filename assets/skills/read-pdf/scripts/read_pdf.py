@@ -121,8 +121,10 @@ def unsafe_source_character(value: str, index: int) -> bool:
     return (
         previous in {"/", "\\"}
         or following in {"/", "\\"}
-        or unicodedata.category(previous).startswith("C")
-        or unicodedata.category(following).startswith("C")
+        or previous.isspace()
+        or following.isspace()
+        or unicodedata.category(previous).startswith(("C", "Z"))
+        or unicodedata.category(following).startswith(("C", "Z"))
     )
 
 
@@ -321,41 +323,142 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
     """把有意义的矢量内容合并为一个页级视觉占位。
 
     单个标题条、平行分隔线、无填充页框和微小装饰不足以让页面降级；
-    复杂路径、多个填充图形、至少三个二维框，或水平与垂直线组成的网格则交由视觉分析。
+    复杂路径、多个填充图形、至少三个二维框，或带内部分隔的网格则交由视觉分析。
+    判断基于绘制原语的几何关系，不依赖 PyMuPDF 如何把原语分组为 drawing。
     """
     page_area = max(float(page.rect.width * page.rect.height), 1.0)
     complex_regions: List[Tuple[float, float, float, float]] = []
     filled_regions: List[Tuple[float, float, float, float]] = []
     box_regions: List[Tuple[float, float, float, float]] = []
-    horizontal_lines: List[Tuple[float, float, float, float]] = []
-    vertical_lines: List[Tuple[float, float, float, float]] = []
+    horizontal_lines: Dict[
+        Tuple[float, float, float, float], Tuple[float, float, float, float]
+    ] = {}
+    vertical_lines: Dict[
+        Tuple[float, float, float, float], Tuple[float, float, float, float]
+    ] = {}
+    seen_lines = set()
 
-    for drawing in page.get_drawings():
-        rectangle = drawing.get("rect")
-        if rectangle is None:
-            continue
-        region = (
+    def rect_region(rectangle: Any) -> Tuple[float, float, float, float]:
+        return (
             float(rectangle.x0),
             float(rectangle.y0),
             float(rectangle.x1),
             float(rectangle.y1),
         )
-        width = max(region[2] - region[0], 0.0)
-        height = max(region[3] - region[1], 0.0)
-        area_ratio = width * height / page_area
+
+    def area_ratio(region: Tuple[float, float, float, float]) -> float:
+        return (
+            max(region[2] - region[0], 0.0)
+            * max(region[3] - region[1], 0.0)
+            / page_area
+        )
+
+    def line_key(
+        x0: float, y0: float, x1: float, y1: float
+    ) -> Tuple[float, float, float, float]:
+        endpoints = sorted(
+            ((round(x0, 3), round(y0, 3)), (round(x1, 3), round(y1, 3)))
+        )
+        return endpoints[0] + endpoints[1]
+
+    for drawing in page.get_drawings():
+        rectangle = drawing.get("rect")
+        if rectangle is None:
+            continue
+        region = rect_region(rectangle)
+        drawing_area_ratio = area_ratio(region)
         items = drawing.get("items", [])
-        item_count = len(items) if isinstance(items, (list, tuple)) else 0
-        if 0.001 <= area_ratio <= 0.75:
-            if item_count >= 3:
-                complex_regions.append(region)
-            elif drawing.get("fill") is not None:
-                filled_regions.append(region)
-            elif width >= 4 and height >= 4:
-                box_regions.append(region)
-        if height <= 2 and width >= 24:
-            horizontal_lines.append(region)
-        elif width <= 2 and height >= 24:
-            vertical_lines.append(region)
+        if not isinstance(items, (list, tuple)):
+            items = []
+        drawing_has_fill = drawing.get("fill") is not None
+        rectangle_items = 0
+        unique_line_count = 0
+        diagonal_line_count = 0
+        has_complex_primitive = False
+
+        for item in items:
+            if not isinstance(item, (list, tuple)) or not item:
+                has_complex_primitive = True
+                continue
+            kind = item[0]
+            if kind == "re" and len(item) >= 2:
+                rectangle_items += 1
+                item_region = rect_region(item[1])
+                width = max(item_region[2] - item_region[0], 0.0)
+                height = max(item_region[3] - item_region[1], 0.0)
+                if 0.001 <= area_ratio(item_region) <= 0.75 and width >= 4 and height >= 4:
+                    if drawing_has_fill:
+                        filled_regions.append(item_region)
+                    else:
+                        box_regions.append(item_region)
+                continue
+            if kind != "l" or len(item) < 3:
+                has_complex_primitive = True
+                continue
+
+            start = item[1]
+            end = item[2]
+            x0, y0 = float(start.x), float(start.y)
+            x1, y1 = float(end.x), float(end.y)
+            key = line_key(x0, y0, x1, y1)
+            if key in seen_lines:
+                continue
+            seen_lines.add(key)
+            unique_line_count += 1
+            item_region = (min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1))
+            width = item_region[2] - item_region[0]
+            height = item_region[3] - item_region[1]
+            if height <= 2 and width >= 24:
+                horizontal_lines[key] = item_region
+            elif width <= 2 and height >= 24:
+                vertical_lines[key] = item_region
+            else:
+                diagonal_line_count += 1
+
+        if 0.001 <= drawing_area_ratio <= 0.75 and (
+            has_complex_primitive
+            or (diagonal_line_count > 0 and unique_line_count >= 3)
+            or (drawing_has_fill and rectangle_items == 0)
+        ):
+            complex_regions.append(region)
+
+    horizontal_regions = list(horizontal_lines.values())
+    vertical_regions = list(vertical_lines.values())
+    grid_regions: List[Tuple[float, float, float, float]] = []
+    if len(horizontal_regions) >= 2 and len(vertical_regions) >= 2:
+        all_line_regions = horizontal_regions + vertical_regions
+        aggregate = (
+            min(region[0] for region in all_line_regions),
+            min(region[1] for region in all_line_regions),
+            max(region[2] for region in all_line_regions),
+            max(region[3] for region in all_line_regions),
+        )
+        horizontal_positions = {
+            round((region[1] + region[3]) / 2, 2) for region in horizontal_regions
+        }
+        vertical_positions = {
+            round((region[0] + region[2]) / 2, 2) for region in vertical_regions
+        }
+        tolerance = 2.0
+        spanning_horizontal = [
+            region
+            for region in horizontal_regions
+            if region[0] <= aggregate[0] + tolerance
+            and region[2] >= aggregate[2] - tolerance
+        ]
+        spanning_vertical = [
+            region
+            for region in vertical_regions
+            if region[1] <= aggregate[1] + tolerance
+            and region[3] >= aggregate[3] - tolerance
+        ]
+        if (
+            0.005 <= area_ratio(aggregate) <= 0.75
+            and (len(horizontal_positions) >= 3 or len(vertical_positions) >= 3)
+            and len(spanning_horizontal) >= 2
+            and len(spanning_vertical) >= 2
+        ):
+            grid_regions = all_line_regions
 
     if complex_regions:
         selected_regions = complex_regions
@@ -363,8 +466,8 @@ def vector_visual_anchor(page: fitz.Page) -> Optional[Tuple[float, float]]:
         selected_regions = filled_regions
     elif len(box_regions) >= 3:
         selected_regions = box_regions
-    elif len(horizontal_lines) >= 2 and len(vertical_lines) >= 2:
-        selected_regions = horizontal_lines + vertical_lines
+    elif grid_regions:
+        selected_regions = grid_regions
     else:
         selected_regions = []
 

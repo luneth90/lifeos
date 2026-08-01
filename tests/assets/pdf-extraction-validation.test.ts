@@ -245,6 +245,10 @@ describe('PDF 提取包完整性校验 CLI', () => {
 		'\u202e/Users/alice/book.pdf',
 		'\u200d/Users/alice/book.pdf',
 		'books/\u200dprivate.pdf',
+		'70_资源/a\u200d b.pdf',
+		'70_资源/a \u200db.pdf',
+		'70_资源/a\u200c b.pdf',
+		'70_资源/a \u200cb.pdf',
 	])('拒绝使用 Unicode 格式控制字符隐藏的 source.path：%s', (sourcePath) => {
 		const value = completePackage();
 		value.source.path = sourcePath;
@@ -257,7 +261,7 @@ describe('PDF 提取包完整性校验 CLI', () => {
 		});
 	});
 
-	it.each(['70_资源/👩‍💻.pdf', '70_资源/\ue000.pdf'])(
+	it.each(['70_资源/👩‍💻.pdf', '70_资源/a\u200cb.pdf', '70_资源/\ue000.pdf'])(
 		'接受不会隐藏路径的 Unicode source.path：%s',
 		(sourcePath) => {
 			const value = completePackage();

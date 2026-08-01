@@ -179,10 +179,48 @@ describe('read_pdf.py 提取包', () => {
 		generatedPaths.push(join(output.rendered_images[0].path, '..'));
 	});
 
+	it('将含内部横纵分隔线的无填充网格标记为待视觉补充', () => {
+		const fixture = createFixtures();
+		const result = runScript([fixture.unfilledVectorPdf, '2']);
+		expect(result.status, result.stderr).toBe(0);
+		const outputPath = result.stdout.match(/已输出 JSON：(.*)/)?.[1]?.trim();
+		expect(outputPath).toBeTruthy();
+		generatedPaths.push(outputPath as string);
+		const output = JSON.parse(readFileSync(outputPath as string, 'utf-8')) as {
+			pages: Array<{ status: string; blocks: Array<{ kind: string }> }>;
+			rendered_images: Array<{ page: number; path: string }>;
+		};
+
+		expect(output.pages[0].status).toBe('partial');
+		expect(output.pages[0].blocks.filter((block) => block.kind === 'image')).toHaveLength(1);
+		expect(output.rendered_images.map((image) => image.page)).toEqual([2]);
+		expect(existsSync(output.rendered_images[0].path)).toBe(true);
+		generatedPaths.push(join(output.rendered_images[0].path, '..'));
+	});
+
 	it('不把普通分隔线和页框误判为待补充的矢量图表', () => {
 		const fixture = createFixtures();
 		const outputPath = join(fixture.workspace, 'decorative-vector-result.json');
 		const result = runScript([fixture.decorativeVectorPdf, '1', '--output', outputPath]);
+		expect(result.status, result.stderr).toBe(0);
+		generatedPaths.push(outputPath);
+		const output = JSON.parse(readFileSync(outputPath, 'utf-8')) as {
+			pages: Array<{ status: string; blocks: Array<{ kind: string }> }>;
+			rendered_images?: Array<{ page: number; path: string }>;
+		};
+
+		expect(output.pages[0].status).toBe('complete');
+		expect(output.pages[0].blocks.map((block) => block.kind)).toEqual(['text']);
+		expect(output).not.toHaveProperty('rendered_images');
+	});
+
+	it.each([
+		['同一路径内的平行装饰线', 2],
+		['由四条独立边线组成的页框', 3],
+	])('不把%s误判为待补充的矢量图表', (_description, page) => {
+		const fixture = createFixtures();
+		const outputPath = join(fixture.workspace, `decorative-vector-page-${page}.json`);
+		const result = runScript([fixture.decorativeVectorPdf, String(page), '--output', outputPath]);
 		expect(result.status, result.stderr).toBe(0);
 		generatedPaths.push(outputPath);
 		const output = JSON.parse(readFileSync(outputPath, 'utf-8')) as {
@@ -246,7 +284,7 @@ describe('read_pdf.py 提取包', () => {
 		expect(JSON.stringify(output)).not.toContain(fixture.workspace);
 	});
 
-	it.each(['70_资源/👩‍💻.pdf', '70_资源/\ue000.pdf'])(
+	it.each(['70_资源/👩‍💻.pdf', '70_资源/a\u200cb.pdf', '70_资源/\ue000.pdf'])(
 		'支持不会隐藏路径的 Unicode source-label：%s',
 		(sourceLabel) => {
 			const fixture = createFixtures();
@@ -285,6 +323,10 @@ describe('read_pdf.py 提取包', () => {
 		'\u202e/Users/alice/leak.pdf',
 		'\u200d/Users/alice/leak.pdf',
 		'books/\u200dleak.pdf',
+		'70_资源/a\u200d b.pdf',
+		'70_资源/a \u200db.pdf',
+		'70_资源/a\u200c b.pdf',
+		'70_资源/a \u200cb.pdf',
 	])('拒绝不安全的 source-label：%s', (sourceLabel) => {
 		const fixture = createFixtures();
 		const result = runScript([
