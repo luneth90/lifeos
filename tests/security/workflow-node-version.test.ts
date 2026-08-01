@@ -8,6 +8,16 @@ interface PackageJson {
 	};
 }
 
+interface WorkflowStep {
+	name?: string;
+	uses?: string;
+	run?: string;
+	with?: {
+		'node-version'?: number | string;
+		'python-version'?: number | string;
+	};
+}
+
 interface CiWorkflow {
 	jobs?: {
 		test?: {
@@ -16,6 +26,7 @@ interface CiWorkflow {
 					'node-version'?: Array<number | string>;
 				};
 			};
+			steps?: WorkflowStep[];
 		};
 	};
 }
@@ -23,12 +34,7 @@ interface CiWorkflow {
 interface ReleaseWorkflow {
 	jobs?: {
 		release?: {
-			steps?: Array<{
-				name?: string;
-				with?: {
-					'node-version'?: number | string;
-				};
-			}>;
+			steps?: WorkflowStep[];
 		};
 	};
 }
@@ -70,6 +76,20 @@ function isVersionAtLeast(actualVersion: string, minimumVersion: string): boolea
 	return true;
 }
 
+function expectPythonTestEnvironment(steps: WorkflowStep[], verificationCommand: string): void {
+	const setupIndex = steps.findIndex((step) => step.uses === 'actions/setup-python@v5');
+	const installIndex = steps.findIndex(
+		(step) =>
+			step.run?.trim() === 'python -m pip install --disable-pip-version-check PyMuPDF==1.26.5',
+	);
+	const verificationIndex = steps.findIndex((step) => step.run?.trim() === verificationCommand);
+
+	expect(setupIndex).toBeGreaterThanOrEqual(0);
+	expect(steps[setupIndex]?.with?.['python-version']).toBe('3.12');
+	expect(installIndex).toBeGreaterThan(setupIndex);
+	expect(verificationIndex).toBeGreaterThan(installIndex);
+}
+
 describe('GitHub workflow Node.js versions', () => {
 	it('CI matrix only uses versions supported by package.json engines.node', () => {
 		const minimumVersion = getMinimumNodeVersion();
@@ -93,5 +113,21 @@ describe('GitHub workflow Node.js versions', () => {
 		expect(isVersionAtLeast(String(setupNodeStep?.with?.['node-version']), minimumVersion)).toBe(
 			true,
 		);
+	});
+});
+
+describe('GitHub 工作流 Python 测试环境', () => {
+	it('CI 在测试前安装固定版本的 Python 与 PyMuPDF', () => {
+		const workflow = readYaml<CiWorkflow>('.github/workflows/ci.yml');
+		const steps = workflow.jobs?.test?.steps ?? [];
+
+		expectPythonTestEnvironment(steps, 'npm test');
+	});
+
+	it('Release 在发布验证前安装固定版本的 Python 与 PyMuPDF', () => {
+		const workflow = readYaml<ReleaseWorkflow>('.github/workflows/release.yml');
+		const steps = workflow.jobs?.release?.steps ?? [];
+
+		expectPythonTestEnvironment(steps, 'npm run release:verify');
 	});
 });
