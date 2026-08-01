@@ -76,19 +76,18 @@ Path: `{research directory}/Domain/Topic/Topic_Map.canvas`
 
 Path: `{research directory}/Domain/Topic/examples/`
 
+The Execution Agent write set includes only the research report, visualization, and example artifacts declared
+in the confirmed plan; it must not write to `{diary directory}` or create files absent from expected artifacts.
+
 ## Step 7: Preserve Source Status (Critical)
 
 Do not change any source draft or plan status. Record `claim`, `source`, `published_at`, `fetched_at`, and access result for every source in the source ledger. On partial source failure, retain errors, keep the report `status: draft`, and return for Orchestrator acceptance.
 
-## Step 8: Update Today's Diary
-
-If `{diary directory}/YYYY-MM-DD.md` exists, append a brief research summary. Skip this step if the diary file does not exist.
-
-## Step 9: Return Execution Manifest (Critical)
+## Step 8: Return Execution Manifest (Critical)
 
 Return a manifest conforming to `Execution_Manifest_Schema.json` with `contract_version`, `run_id`, `phase`, `plan_revision`, `confirmed_hash`, `inputs`, `artifacts`, `status_mutations`, `validation`, and `errors`. Only the Orchestrator may commit source and plan statuses after independent validation and per-file notification.
 
-## Step 10: Research Completeness Validation
+## Step 9: Research Completeness Validation
 
 Reread the research report and confirm every required template placeholder is replaced, the report covers the
 approved plan, and the frontmatter is complete. On failure, keep `status: draft` and report the gap; update to

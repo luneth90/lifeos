@@ -76,22 +76,21 @@ parent_skill: research
 
 路径：`{研究目录}/Domain/Topic/examples/`
 
+Execution Agent 的可写集合仅包含已确认计划中的研究报告、可视化和示例 artifacts；不得写入
+`{日记目录}`，也不得创建未列入 expected artifacts 的文件。
+
 ## 步骤七：保留来源状态（关键）
 
 不得修改任何来源草稿或计划状态。逐条写入来源台账：`claim`、`source`、`published_at`、`fetched_at`、
 访问结果。部分来源失败时保留 errors，报告保持 `status: draft`，返回给 Orchestrator 验收。
 
-## 步骤八：更新今日日记
-
-若 `{日记目录}/YYYY-MM-DD.md` 存在，追加简短研究摘要。若日记文件不存在则跳过此步骤。
-
-## 步骤九：返回执行清单（关键）
+## 步骤八：返回执行清单（关键）
 
 返回符合 `Execution_Manifest_Schema.json` 的 manifest，其中包含 `contract_version`、`run_id`、`phase`、
 `plan_revision`、`confirmed_hash`、`inputs`、`artifacts`、`status_mutations`、`validation`、`errors`。只有
 Orchestrator 独立验收并逐文件通知后才可提交来源与计划状态。
 
-## 步骤十：研究完整性校验
+## 步骤九：研究完整性校验
 
 回读研究报告，确认模板的全部必填占位符均已替换、报告内容满足计划范围且 Frontmatter 完整。未通过时
 保持 `status: draft` 并报告缺口；通过后才更新为 `status: complete`。

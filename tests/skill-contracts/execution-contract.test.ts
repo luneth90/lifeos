@@ -219,6 +219,27 @@ describe('阶段二执行契约', () => {
 		}
 	});
 
+	it('研究 Execution 只写已确认 artifacts，不越界更新今日日记', () => {
+		const contracts = [
+			{
+				path: 'assets/skills/research/references/execution-agent-prompt.zh.md',
+				forbidden: /更新今日日记/,
+				boundary: /可写集合仅包含已确认计划中的[\s\S]*artifacts[\s\S]*不得写入[\s\S]*日记目录/,
+			},
+			{
+				path: 'assets/skills/research/references/execution-agent-prompt.en.md',
+				forbidden: /Update Today's Diary/i,
+				boundary:
+					/write set includes only[\s\S]*artifacts[\s\S]*must not write[\s\S]*diary directory/i,
+			},
+		];
+		for (const { path, forbidden, boundary } of contracts) {
+			const content = read(path);
+			expect(content, path).not.toMatch(forbidden);
+			expect(content, path).toMatch(boundary);
+		}
+	});
+
 	it('脚本型技能通过 execute_command 解析 Python 3', () => {
 		for (const path of [
 			'assets/skills/read-pdf/SKILL.zh.md',
