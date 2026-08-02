@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/lifeos"><img src="https://img.shields.io/npm/v/lifeos" alt="npm version" align="middle" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/luneth90/lifeos" alt="MIT License" align="middle" /></a>
-  <a href="./README.en.md">English</a> | 中文
+  <sub><a href="./README.en.md">English</a> | 中文</sub>
 </p>
 
 LifeOS 帮助你将碎片灵感发展为结构化知识，并真正掌握它，从随手捕获的想法，到头脑风暴与深度研究，到体系化的项目规划与知识笔记，再到间隔复习与掌握度追踪。目标不只是建立知识库，而是帮你理解、内化和驾驭复杂知识。
