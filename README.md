@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<a href="https://www.npmjs.com/package/lifeos"><img src="https://img.shields.io/npm/v/lifeos" alt="npm version" align="middle" /></a>
+  <a href="https://www.npmjs.com/package/lifeos"><img src="https://img.shields.io/npm/v/lifeos" alt="npm version" align="middle" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/luneth90/lifeos" alt="MIT License" align="middle" /></a>
   <sub><a href="./README.en.md">English</a> | 中文</sub>
 </p>
