@@ -9,9 +9,9 @@
       .logo { fill: #A5B4FC; }
     }
   </style>
-  <text class="logo">
-    <tspan x="8" y="26">╦  ╦╔═╗╔═╗╔═╗╔═╗</tspan>
-    <tspan x="8" y="50">║  ║╠╣ ║╣ ║ ║╚═╗</tspan>
-    <tspan x="8" y="74">╩═╝╩╚  ╚═╝╚═╝╚═╝</tspan>
+  <text class="logo" text-anchor="middle">
+    <tspan x="134" y="26">╦  ╦╔═╗╔═╗╔═╗╔═╗</tspan>
+    <tspan x="134" y="50">║  ║╠╣ ║╣ ║ ║╚═╗</tspan>
+    <tspan x="134" y="74">╩═╝╩╚  ╚═╝╚═╝╚═╝</tspan>
   </text>
 </svg>
