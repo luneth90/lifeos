@@ -1,7 +1,7 @@
 ---
 name: translate
 description: '翻译英文 PDF 章节时使用；生成中文对照阅读笔记并回填学习项目进度。'
-version: 2.2.1
+version: 2.2.2
 dependencies:
   templates:
     - path: "{系统目录}/{模板子目录}/Translation_Template.md"
