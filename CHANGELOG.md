@@ -1,5 +1,14 @@
 # 更新日志
 
+## 2.2.6 (2026-08-02)
+
+### 修复
+
+- Archive 技能中间产物收敛：候选 JSON 明确写入平台系统临时目录（`TMPDIR`/`TEMP`/`TMP`，macOS/Linux `/tmp/`、Windows `%TEMP%\`），禁止写入 Vault 与工作目录；正式执行（含 dry-run 后未执行）完成即清理，防止临时产物累积膨胀
+- read-pdf 脚本默认输出改为 `tempfile.gettempdir()` 解析的平台临时目录，修复 Windows 上默认路径落到盘符根 `\tmp\` 的问题
+- read-pdf 技能明确临时提取包（JSON 与自动渲染目录 `*-images-*`）为工作流中间产物：下游读取完成后必须删除；显式 `--output` 到 Vault 内路径则按输出包引用保留
+- translate 技能补充消费侧清理约定：临时提取包在全部视觉识别与翻译产出后删除；`initial_image_blocks` 仅存于对话工作区，自身不新增落盘中间产物
+
 ## 2.2.5 (2026-08-02)
 
 ### 修复
