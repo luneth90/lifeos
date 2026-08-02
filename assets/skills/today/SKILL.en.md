@@ -128,6 +128,7 @@ Before interacting, read `_shared/client-capabilities.md` and use the `ask_user`
 
 2. **Populate diary content:**
    - **To-do items**: Write the `<!-- BEGIN AUTO:tasks -->` to `<!-- END AUTO:tasks -->` managed block; use nearest deadline → yesterday's carryover → user-selected active projects → other candidates, and include only user-selected items
+     - Each automatic task's `task_id` is written as a trailing HTML comment **at the end of the task line, after all wikilinks**: `- [ ] task text [[link|display]] <!-- task_id: xxx -->`. Placing it before a wikilink breaks link parsing in Obsidian reading view, rendering `[[...]]` as raw text
      - If there are review files with `status: pending` (user received questions but hasn't answered), prioritize the reminder: `📝 Complete review answers: [[Review_YYYY-MM-DD]] ([[chapter note name]])`
      - If there are notes pending review (only `status: review`), list each as `/revise [[note name]]` in to-dos
    - **Log**: Leave empty for the user
@@ -241,7 +242,7 @@ Use `{system directory}/{templates subdirectory}/Daily_Template.md` as the base 
 
 ## Rerunnable Diary Contract
 
-Read `_shared/operation-safety.md`. The same day and the same normalized `selected-items` reuse the same `run_id`. A change to `selected-items` changes the canonical input and requires a new `run_id`, but it must still `merge` into the same diary path; update only `BEGIN AUTO` / `END AUTO` managed regions. Every automatic task carries a stable `task_id` derived from normalized source object and action, and is updated by `task_id` rather than appended, so a repeat run cannot duplicate tasks or related projects.
+Read `_shared/operation-safety.md`. The same day and the same normalized `selected-items` reuse the same `run_id`. A change to `selected-items` changes the canonical input and requires a new `run_id`, but it must still `merge` into the same diary path; update only `BEGIN AUTO` / `END AUTO` managed regions. Every automatic task carries a stable `task_id` derived from normalized source object and action, written as a trailing HTML comment at the end of the task line (after all wikilinks), and is updated by `task_id` rather than appended, so a repeat run cannot duplicate tasks or related projects.
 
 <!-- operation-safety-v1 -->
 ```yaml

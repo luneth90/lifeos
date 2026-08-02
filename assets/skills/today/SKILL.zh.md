@@ -129,6 +129,7 @@ memory_context(
 
 2. **填充日记内容：**
    - **待办事项**：写入 `<!-- BEGIN AUTO:tasks -->` 到 `<!-- END AUTO:tasks -->` 托管区块；按“临近截止 → 昨日遗留 → 用户选中的活跃项目 → 其他”排序，且仅写用户选中项
+     - 每条自动任务携带的 `task_id` 以行尾 HTML 注释写入，**必须放在任务行末尾、所有 wikilink 之后**：`- [ ] 任务内容 [[链接|显示名]] <!-- task_id: xxx -->`。置于 wikilink 之前会阻断 Obsidian 阅读视图的链接解析，导致 `[[...]]` 以原文渲染
      - 若有 `status: pending` 的复习文件（用户已收到题目但未作答），优先提醒：`📝 完成复习作答: [[复习_YYYY-MM-DD]]（[[章节笔记名]]）`
      - 若有待复习笔记（仅 `status: review`），每条以 `/revise [[笔记名]]` 形式列入待办
    - **日志**：留空给用户
@@ -242,7 +243,7 @@ memory_notify(contract_version=2, file_path="{日记目录}/YYYY-MM-DD.md")
 
 ## 可重跑日记契约
 
-先读取 `_shared/operation-safety.md`。同一天且规范化后的 `selected-items` 相同时复用同一 `run_id`。`selected-items` 变化表示规范化输入变化，必须生成新 `run_id`，但仍以 `merge` 更新同一日记路径；只更新 `BEGIN AUTO` / `END AUTO` 托管区块。每条自动任务必须携带稳定 `task_id`（来自规范化的来源对象与动作），按 `task_id` 更新而非追加，故重复运行不得复制任务或相关项目。
+先读取 `_shared/operation-safety.md`。同一天且规范化后的 `selected-items` 相同时复用同一 `run_id`。`selected-items` 变化表示规范化输入变化，必须生成新 `run_id`，但仍以 `merge` 更新同一日记路径；只更新 `BEGIN AUTO` / `END AUTO` 托管区块。每条自动任务必须携带稳定 `task_id`（来自规范化的来源对象与动作），以行尾 HTML 注释形式写在任务行末尾（wikilink 之后），按 `task_id` 更新而非追加，故重复运行不得复制任务或相关项目。
 
 <!-- operation-safety-v1 -->
 ```yaml
