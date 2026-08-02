@@ -518,7 +518,16 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 						report.conflicts.push({ path: targetMain, reason: 'main_file_missing' });
 						continue;
 					}
-					const content = readFileSync(targetMainAbs, 'utf8');
+					let content: string;
+					try {
+						content = readFileSync(targetMainAbs, 'utf8');
+					} catch (error) {
+						report.conflicts.push({
+							path: targetMain,
+							reason: `read_failed:${(error as Error).message}`,
+						});
+						continue;
+					}
 					const issue = validateMainFile(candidate, targetMain, content, options.archiveDate);
 					if (issue) {
 						report.conflicts.push(issue);
@@ -566,7 +575,16 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 						report.conflicts.push({ path: targetMain, reason: 'main_file_missing' });
 						continue;
 					}
-					const content = readFileSync(targetMainAbs, 'utf8');
+					let content: string;
+					try {
+						content = readFileSync(targetMainAbs, 'utf8');
+					} catch (error) {
+						report.conflicts.push({
+							path: targetMain,
+							reason: `read_failed:${(error as Error).message}`,
+						});
+						continue;
+					}
 					const issue = validateMainFile(candidate, targetMain, content, options.archiveDate);
 					if (issue) {
 						report.conflicts.push(issue);
@@ -613,12 +631,17 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 				continue;
 			}
 			const mainAbs = join(options.vaultRoot, mainPath);
-			const issue = validateMainFile(
-				candidate,
-				mainPath,
-				readFileSync(mainAbs, 'utf8'),
-				options.archiveDate,
-			);
+			let content: string;
+			try {
+				content = readFileSync(mainAbs, 'utf8');
+			} catch (error) {
+				report.conflicts.push({
+					path: mainPath,
+					reason: `read_failed:${(error as Error).message}`,
+				});
+				continue;
+			}
+			const issue = validateMainFile(candidate, mainPath, content, options.archiveDate);
 			if (issue) {
 				report.conflicts.push(issue);
 				continue;

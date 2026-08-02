@@ -12,7 +12,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runArchive, type MoveRunner } from '../../src/services/archive.js';
+import { runArchive, type ArchiveReport, type MoveRunner } from '../../src/services/archive.js';
 
 function makeTmp() {
 	const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-svc-'));
@@ -787,6 +787,131 @@ describe('runArchive', () => {
 			).not.toContain('archived:');
 			expect(existsSync(join(root, '20_项目/P/z.md'))).toBe(true);
 		} finally {
+			cleanup();
+		}
+	});
+
+	it('重跑时目标主文件不可读转为冲突报告（already_moved 分支）', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '00_草稿/idea.md', draftNote('idea'));
+			const candidate = {
+				type: 'draft' as const,
+				source: '00_草稿/idea.md',
+				target: '90_系统/归档/草稿/2026/08/idea.md',
+				main_file: '00_草稿/idea.md',
+			};
+			runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			const targetAbs = join(root, candidate.target);
+			chmodSync(targetAbs, 0o000);
+			let rerun: ArchiveReport;
+			try {
+				expect(() => {
+					rerun = runArchive({
+						vaultRoot: root,
+						archiveDate: '2026-08-02',
+						candidates: [candidate],
+						moveRunner: fakeMove(root),
+					});
+				}).not.toThrow();
+				expect(rerun!.conflicts).toEqual([
+					{ path: candidate.target, reason: expect.stringMatching(/^read_failed:/) },
+				]);
+				expect(existsSync(join(root, '00_草稿/idea.md'))).toBe(false);
+			} finally {
+				chmodSync(targetAbs, 0o644);
+			}
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('预检时源主文件不可读转为冲突报告（常规预检分支）', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '00_草稿/idea.md', draftNote('idea'));
+			const candidate = {
+				type: 'draft' as const,
+				source: '00_草稿/idea.md',
+				target: '90_系统/归档/草稿/2026/08/idea.md',
+				main_file: '00_草稿/idea.md',
+			};
+			const sourceAbs = join(root, '00_草稿/idea.md');
+			chmodSync(sourceAbs, 0o000);
+			let report: ArchiveReport;
+			try {
+				expect(() => {
+					report = runArchive({
+						vaultRoot: root,
+						archiveDate: '2026-08-02',
+						candidates: [candidate],
+						moveRunner: fakeMove(root),
+					});
+				}).not.toThrow();
+				expect(report!.conflicts).toEqual([
+					{ path: candidate.source, reason: expect.stringMatching(/^read_failed:/) },
+				]);
+				expect(report!.moved).toEqual([]);
+			} finally {
+				chmodSync(sourceAbs, 0o644);
+			}
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('空源目录续跑时目标主文件不可读转为冲突报告（续跑分支）', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '20_项目/P/z.md', '# z');
+			const candidate = {
+				type: 'project' as const,
+				source: '20_项目/P',
+				target: '90_系统/归档/项目/2026/P',
+				main_file: '20_项目/P/P.md',
+				project_id: 'p',
+			};
+			// 首次归档制造「源目录残留为空目录」的现场
+			let moves = 0;
+			const runner: MoveRunner = (source, target) => {
+				renameSync(join(root, source), join(root, target));
+				moves++;
+				if (moves === 2) chmodSync(join(root, '20_项目'), 0o555);
+				return { ok: true };
+			};
+			runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: runner,
+			});
+			const targetMainAbs = join(root, candidate.target, 'P.md');
+			chmodSync(targetMainAbs, 0o000);
+			chmodSync(join(root, '20_项目'), 0o755);
+			let report: ArchiveReport;
+			try {
+				expect(() => {
+					report = runArchive({
+						vaultRoot: root,
+						archiveDate: '2026-08-02',
+						candidates: [candidate],
+						moveRunner: fakeMove(root),
+					});
+				}).not.toThrow();
+				expect(report!.conflicts).toEqual([
+					{ path: `${candidate.target}/P.md`, reason: expect.stringMatching(/^read_failed:/) },
+				]);
+			} finally {
+				chmodSync(targetMainAbs, 0o644);
+			}
+		} finally {
+			chmodSync(join(root, '20_项目'), 0o755);
 			cleanup();
 		}
 	});
