@@ -4,6 +4,7 @@ import {
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
+	readdirSync,
 	renameSync,
 	rmSync,
 	symlinkSync,
@@ -524,26 +525,34 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('移动后的 archived 写入失败会报告，修复后重跑可补写元数据', () => {
+	it('移动后的 archived 写入失败会报告（原子写路径），修复后重跑可补写元数据', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '00_草稿/idea.md', draftNote('idea'));
-			chmodSync(join(root, '00_草稿/idea.md'), 0o444);
 			const candidate = {
 				type: 'draft' as const,
 				source: '00_草稿/idea.md',
 				target: '90_系统/归档/草稿/2026/08/idea.md',
 				main_file: '00_草稿/idea.md',
 			};
+			// 移动完成后把目标目录设为只读，使临时文件写入失败
+			const runner: MoveRunner = (source, target) => {
+				renameSync(join(root, source), join(root, target));
+				chmodSync(join(root, dirname(target)), 0o555);
+				return { ok: true };
+			};
 			const first = runArchive({
 				vaultRoot: root,
 				archiveDate: '2026-08-02',
 				candidates: [candidate],
-				moveRunner: fakeMove(root),
+				moveRunner: runner,
 			});
 			expect(first.failed[0]?.reason).toMatch(/^write_failed:/);
-			const target = join(root, candidate.target);
-			chmodSync(target, 0o644);
+			// 失败后目标目录无临时文件残留，原目标文件未被截断
+			expect(readdirSync(join(root, dirname(candidate.target)))).toEqual(['idea.md']);
+			expect(readFileSync(join(root, candidate.target), 'utf8')).toContain('# idea');
+			const targetDir = join(root, dirname(candidate.target));
+			chmodSync(targetDir, 0o755);
 
 			const rerun = runArchive({
 				vaultRoot: root,
@@ -553,7 +562,9 @@ describe('runArchive', () => {
 			});
 			expect(rerun.failed).toEqual([]);
 			expect(rerun.skipped).toEqual([{ path: candidate.source, reason: 'already_moved' }]);
-			expect(readFileSync(target, 'utf8')).toContain('archived: "2026-08-02"');
+			expect(readFileSync(join(root, candidate.target), 'utf8')).toContain(
+				'archived: "2026-08-02"',
+			);
 		} finally {
 			cleanup();
 		}
@@ -1027,6 +1038,285 @@ describe('runArchive', () => {
 			});
 			expect(report.conflicts).toEqual([conflict]);
 			expect(report.moved).toEqual([]);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('重跑时目标主文件为符号链接则拒绝，不越界写入（already_moved 分支）', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '00_草稿/idea.md', draftNote('idea'));
+			const candidate = {
+				type: 'draft' as const,
+				source: '00_草稿/idea.md',
+				target: '90_系统/归档/草稿/2026/08/idea.md',
+				main_file: '00_草稿/idea.md',
+			};
+			runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			const outside = join(root, 'outside.md');
+			writeFileSync(outside, draftNote('idea'), 'utf8');
+			rmSync(join(root, candidate.target));
+			symlinkSync(outside, join(root, candidate.target));
+			const rerun = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(rerun.conflicts).toEqual([
+				{ path: candidate.target, reason: 'target_is_symlink' },
+			]);
+			expect(readFileSync(outside, 'utf8')).not.toContain('archived:');
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('空源目录续跑时目标主文件为符号链接则拒绝（续跑分支）', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '20_项目/P/z.md', '# z');
+			const candidate = {
+				type: 'project' as const,
+				source: '20_项目/P',
+				target: '90_系统/归档/项目/2026/P',
+				main_file: '20_项目/P/P.md',
+				project_id: 'p',
+			};
+			// 制造「源目录残留为空目录」的现场（父目录只读）
+			let moves = 0;
+			const runner: MoveRunner = (source, target) => {
+				renameSync(join(root, source), join(root, target));
+				moves++;
+				if (moves === 2) chmodSync(join(root, '20_项目'), 0o555);
+				return { ok: true };
+			};
+			runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: runner,
+			});
+			const outside = join(root, 'outside.md');
+			writeFileSync(outside, `---\ntype: project\nstatus: done\nid: p\n---\n`, 'utf8');
+			rmSync(join(root, candidate.target, 'P.md'));
+			symlinkSync(outside, join(root, candidate.target, 'P.md'));
+			chmodSync(join(root, '20_项目'), 0o755);
+			const rerun = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(rerun.conflicts).toEqual([
+				{ path: `${candidate.target}/P.md`, reason: 'target_is_symlink' },
+			]);
+			expect(readFileSync(outside, 'utf8')).not.toContain('archived:');
+		} finally {
+			chmodSync(join(root, '20_项目'), 0o755);
+			cleanup();
+		}
+	});
+
+	it('部分移动现场目标主文件为符号链接则拒绝（常规预检分支）', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '20_项目/P/z.md', '# z');
+			const candidate = {
+				type: 'project' as const,
+				source: '20_项目/P',
+				target: '90_系统/归档/项目/2026/P',
+				main_file: '20_项目/P/P.md',
+				project_id: 'p',
+			};
+			// 部分移动现场：P.md 已到目标、z.md 残留在源
+			runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root, (rel) => rel.endsWith('/z.md')),
+			});
+			const outside = join(root, 'outside.md');
+			writeFileSync(outside, `---\ntype: project\nstatus: done\nid: p\n---\n`, 'utf8');
+			rmSync(join(root, candidate.target, 'P.md'));
+			symlinkSync(outside, join(root, candidate.target, 'P.md'));
+			const rerun = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(rerun.conflicts).toEqual([
+				{ path: `${candidate.target}/P.md`, reason: 'target_is_symlink' },
+			]);
+			expect(readFileSync(outside, 'utf8')).not.toContain('archived:');
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('dry-run 重跑续跑现场不删除空源目录、不补写元数据', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '20_项目/P/z.md', '# z');
+			const candidate = {
+				type: 'project' as const,
+				source: '20_项目/P',
+				target: '90_系统/归档/项目/2026/P',
+				main_file: '20_项目/P/P.md',
+				project_id: 'p',
+			};
+			// 制造「源目录残留为空目录」的现场（父目录只读）
+			let moves = 0;
+			const runner: MoveRunner = (source, target) => {
+				renameSync(join(root, source), join(root, target));
+				moves++;
+				if (moves === 2) chmodSync(join(root, '20_项目'), 0o555);
+				return { ok: true };
+			};
+			runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: runner,
+			});
+			chmodSync(join(root, '20_项目'), 0o755);
+			const dry = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				dryRun: true,
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(dry.skipped).toEqual([{ path: '20_项目/P', reason: 'already_moved' }]);
+			expect(dry.updated).toEqual([]);
+			expect(existsSync(join(root, '20_项目/P'))).toBe(true);
+		} finally {
+			chmodSync(join(root, '20_项目'), 0o755);
+			cleanup();
+		}
+	});
+
+	it('续跑清理延迟到全部预检通过后执行，后续候选冲突时不产生副作用', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '20_项目/P/z.md', '# z');
+			const resumeCandidate = {
+				type: 'project' as const,
+				source: '20_项目/P',
+				target: '90_系统/归档/项目/2026/P',
+				main_file: '20_项目/P/P.md',
+				project_id: 'p',
+			};
+			let moves = 0;
+			const runner: MoveRunner = (source, target) => {
+				renameSync(join(root, source), join(root, target));
+				moves++;
+				if (moves === 2) chmodSync(join(root, '20_项目'), 0o555);
+				return { ok: true };
+			};
+			runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [resumeCandidate],
+				moveRunner: runner,
+			});
+			chmodSync(join(root, '20_项目'), 0o755);
+			write(root, '00_草稿/pending.md', draftNote('pending', 'pending'));
+			const rerun = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					resumeCandidate,
+					{
+						type: 'draft',
+						source: '00_草稿/pending.md',
+						target: '90_系统/归档/草稿/2026/08/pending.md',
+						main_file: '00_草稿/pending.md',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(rerun.conflicts).toEqual([
+				{ path: '00_草稿/pending.md', reason: 'status_not_done:pending' },
+			]);
+			expect(existsSync(join(root, '20_项目/P'))).toBe(true);
+		} finally {
+			chmodSync(join(root, '20_项目'), 0o755);
+			cleanup();
+		}
+	});
+
+	it('源目录含不可读子目录时转为冲突报告，不抛异常', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '20_项目/P/机密/sub.md', '# sub');
+			chmodSync(join(root, '20_项目/P/机密'), 0o000);
+			let report: ArchiveReport;
+			try {
+				expect(() => {
+					report = runArchive({
+						vaultRoot: root,
+						archiveDate: '2026-08-02',
+						candidates: [
+							{
+								type: 'project',
+								source: '20_项目/P',
+								target: '90_系统/归档/项目/2026/P',
+								main_file: '20_项目/P/P.md',
+								project_id: 'p',
+							},
+						],
+						moveRunner: fakeMove(root),
+					});
+				}).not.toThrow();
+				expect(report!.conflicts).toEqual([
+					{
+						path: '20_项目/P/机密',
+						reason: expect.stringMatching(/^source_scan_failed:/),
+					},
+				]);
+				expect(report!.moved).toEqual([]);
+			} finally {
+				chmodSync(join(root, '20_项目/P/机密'), 0o755);
+			}
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('dry-run 报告预计写入 archived 的主文件', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '00_草稿/idea.md', draftNote('idea'));
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				dryRun: true,
+				candidates: [
+					{
+						type: 'draft',
+						source: '00_草稿/idea.md',
+						target: '90_系统/归档/草稿/2026/08/idea.md',
+						main_file: '00_草稿/idea.md',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.updated).toEqual(['90_系统/归档/草稿/2026/08/idea.md']);
+			expect(existsSync(join(root, '00_草稿/idea.md'))).toBe(true);
+			expect(existsSync(join(root, '90_系统/归档/草稿/2026/08/idea.md'))).toBe(false);
 		} finally {
 			cleanup();
 		}

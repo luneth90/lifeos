@@ -7,6 +7,8 @@ import {
 	mkdirSync,
 	readFileSync,
 	readdirSync,
+	renameSync,
+	rmSync,
 	rmdirSync,
 	writeFileSync,
 } from 'node:fs';
@@ -128,6 +130,15 @@ interface PreparedCandidate {
 interface MetadataRepair {
 	target: string;
 	targetAbs: string;
+}
+
+/** 空源目录续跑候选：预检只读校验通过，清理与元数据补写延迟到全部预检通过后执行 */
+interface PendingResume {
+	candidate: ArchiveCandidate;
+	sourceAbs: string;
+	targetMain: string;
+	targetMainAbs: string;
+	needsRepair: boolean;
 }
 
 interface ArchivePaths {
@@ -278,6 +289,15 @@ function validateMainFile(
 	return null;
 }
 
+/** 校验既有主文件节点：不存在 → missing；符号链接 → symlink；普通节点 → ok */
+function checkMainNode(abs: string): 'missing' | 'symlink' | 'ok' {
+	try {
+		return lstatSync(abs).isSymbolicLink() ? 'symlink' : 'ok';
+	} catch {
+		return 'missing';
+	}
+}
+
 /** 把 main_file 的源前缀替换为目标前缀 */
 function relocatedPath(source: string, target: string, path: string): string {
 	if (path === source) return target;
@@ -332,21 +352,27 @@ function isEmptyTreeExceptDirs(directory: string): boolean {
 	}
 }
 
-/** 在目录树中查找符号链接或特殊条目，返回相对路径名；未找到或扫描异常返回 null */
-function findUnsupportedEntry(directory: string): string | null {
+type SourceScanResult =
+	| { status: 'clean' }
+	| { status: 'unsupported'; entry: string }
+	| { status: 'error'; path: string; error: string };
+
+/** 扫描目录树：clean=仅普通文件与目录；unsupported=发现符号链接/特殊条目；error=读取失败 */
+function scanSourceTree(directory: string, base = ''): SourceScanResult {
 	try {
 		for (const entry of readdirSync(directory, { withFileTypes: true })) {
+			const rel = base ? `${base}/${entry.name}` : entry.name;
 			if (entry.isDirectory()) {
-				const found = findUnsupportedEntry(join(directory, entry.name));
-				if (found) return found;
+				const sub = scanSourceTree(join(directory, entry.name), rel);
+				if (sub.status !== 'clean') return sub;
 			} else if (!entry.isFile()) {
-				return entry.name;
+				return { status: 'unsupported', entry: rel };
 			}
 		}
-	} catch {
-		return null;
+		return { status: 'clean' };
+	} catch (error) {
+		return { status: 'error', path: base, error: (error as Error).message };
 	}
-	return null;
 }
 
 function moveFile(item: PreparedCandidate, move: MoveRunner, report: ArchiveReport): boolean {
@@ -408,7 +434,7 @@ function moveDirectory(item: PreparedCandidate, move: MoveRunner, report: Archiv
 	return true;
 }
 
-/** 幂等写入 archived 字段（保留 status: done；已有同值日期则跳过）；dry-run 不做任何文件操作 */
+/** 幂等写入 archived 字段（保留 status: done；已有同值日期则跳过）；dry-run 只报告预计写入，不做任何文件操作 */
 type WriteArchivedResult = 'changed' | 'unchanged' | 'failed';
 
 function writeArchived(
@@ -416,7 +442,8 @@ function writeArchived(
 	archiveDate: string,
 	report: ArchiveReport,
 ): WriteArchivedResult {
-	if (report.dryRun) return 'unchanged';
+	// dry-run 且目标尚未创建（移动未发生）：必然将写入 archived
+	if (report.dryRun && !existsSync(targetAbs)) return 'changed';
 	let content: string;
 	try {
 		content = readFileSync(targetAbs, 'utf8');
@@ -437,14 +464,23 @@ function writeArchived(
 		});
 		return 'failed';
 	}
+	if (report.dryRun) return 'changed';
 	const insertPos = frontmatter.insertPos ?? 0;
+	const tmpAbs = `${targetAbs}.lifeos-tmp-${process.pid}-${Date.now()}`;
 	try {
+		// 同目录临时文件 + 原子替换，避免覆盖写中断导致原笔记截断
 		writeFileSync(
-			targetAbs,
+			tmpAbs,
 			`${content.slice(0, insertPos)}archived: "${archiveDate}"\n${content.slice(insertPos)}`,
 		);
+		renameSync(tmpAbs, targetAbs);
 		return 'changed';
 	} catch (error) {
+		try {
+			rmSync(tmpAbs, { force: true });
+		} catch {
+			// 清理失败不掩盖原始错误
+		}
 		report.failed.push({ path: targetAbs, reason: `write_failed:${(error as Error).message}` });
 		return 'failed';
 	}
@@ -493,6 +529,7 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 	// 2. 预检全部候选
 	const prepared: PreparedCandidate[] = [];
 	const repairs: MetadataRepair[] = [];
+	const pendingResumes: PendingResume[] = [];
 	for (const candidate of options.candidates) {
 		const pathIssue = validateCandidatePath(config, candidate, options.archiveDate);
 		if (pathIssue) {
@@ -513,8 +550,13 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 					const mainFile = candidate.main_file as string;
 					const targetMain = relocatedPath(candidate.source, candidate.target, mainFile);
 					const targetMainAbs = join(options.vaultRoot, targetMain);
-					if (!existsSync(targetMainAbs)) {
+					const node = checkMainNode(targetMainAbs);
+					if (node === 'missing') {
 						report.conflicts.push({ path: targetMain, reason: 'main_file_missing' });
+						continue;
+					}
+					if (node === 'symlink') {
+						report.conflicts.push({ path: targetMain, reason: 'target_is_symlink' });
 						continue;
 					}
 					let content: string;
@@ -547,16 +589,23 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 			continue;
 		}
 		if (sourceStat.isDirectory()) {
-			// 预检拒绝源树内的符号链接与特殊条目，避免被 collectFiles 忽略后残留
-			const unsupported = findUnsupportedEntry(sourceAbs);
-			if (unsupported) {
+			// 预检拒绝源树内的符号链接与特殊条目，避免被 collectFiles 忽略后残留；读取失败转为冲突
+			const scan = scanSourceTree(sourceAbs);
+			if (scan.status === 'error') {
 				report.conflicts.push({
-					path: `${candidate.source}/${unsupported}`,
+					path: scan.path ? `${candidate.source}/${scan.path}` : candidate.source,
+					reason: `source_scan_failed:${scan.error}`,
+				});
+				continue;
+			}
+			if (scan.status === 'unsupported') {
+				report.conflicts.push({
+					path: `${candidate.source}/${scan.entry}`,
 					reason: 'source_contains_symlink',
 				});
 				continue;
 			}
-			// 空源目录续跑：文件全部移动成功但清理失败后的现场
+			// 空源目录续跑：文件全部移动成功但清理失败后的现场（预检只读校验，副作用延迟执行）
 			if (collectFiles(sourceAbs).length === 0) {
 				if (!existsSync(targetAbs)) {
 					report.failed.push({ path: candidate.source, reason: 'empty_directory' });
@@ -566,12 +615,20 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 					report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
 					continue;
 				}
+				let needsRepair = false;
+				let targetMain = '';
+				let targetMainAbs = '';
 				if (candidate.type !== 'diary') {
 					const mainFile = candidate.main_file as string;
-					const targetMain = relocatedPath(candidate.source, candidate.target, mainFile);
-					const targetMainAbs = join(options.vaultRoot, targetMain);
-					if (!existsSync(targetMainAbs)) {
+					targetMain = relocatedPath(candidate.source, candidate.target, mainFile);
+					targetMainAbs = join(options.vaultRoot, targetMain);
+					const node = checkMainNode(targetMainAbs);
+					if (node === 'missing') {
 						report.conflicts.push({ path: targetMain, reason: 'main_file_missing' });
+						continue;
+					}
+					if (node === 'symlink') {
+						report.conflicts.push({ path: targetMain, reason: 'target_is_symlink' });
 						continue;
 					}
 					let content: string;
@@ -589,20 +646,9 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 						report.conflicts.push(issue);
 						continue;
 					}
-					if (parseFrontmatter(content).archived === undefined) {
-						repairs.push({ target: targetMain, targetAbs: targetMainAbs });
-					}
+					needsRepair = parseFrontmatter(content).archived === undefined;
 				}
-				try {
-					removeEmptyDirs(sourceAbs);
-				} catch (error) {
-					report.failed.push({
-						path: candidate.source,
-						reason: `cleanup_failed:${(error as Error).message}`,
-					});
-					if (!isEmptyTreeExceptDirs(sourceAbs)) continue;
-				}
-				report.skipped.push({ path: candidate.source, reason: 'already_moved' });
+				pendingResumes.push({ candidate, sourceAbs, targetMain, targetMainAbs, needsRepair });
 				continue;
 			}
 		}
@@ -630,6 +676,15 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 				continue;
 			}
 			const mainAbs = join(options.vaultRoot, mainPath);
+			const mainNode = checkMainNode(mainAbs);
+			if (mainNode === 'missing') {
+				report.conflicts.push({ path: mainPath, reason: 'main_file_missing' });
+				continue;
+			}
+			if (mainNode === 'symlink') {
+				report.conflicts.push({ path: mainPath, reason: 'target_is_symlink' });
+				continue;
+			}
 			let content: string;
 			try {
 				content = readFileSync(mainAbs, 'utf8');
@@ -675,6 +730,30 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 	}
 
 	if (report.conflicts.length > 0) return report;
+
+	// 2.5 续跑候选：全部预检通过后统一执行清理与元数据补写；dry-run 只列计划，不产生副作用
+	if (report.dryRun) {
+		for (const resume of pendingResumes) {
+			report.skipped.push({ path: resume.candidate.source, reason: 'already_moved' });
+		}
+	} else {
+		for (const resume of pendingResumes) {
+			try {
+				removeEmptyDirs(resume.sourceAbs);
+			} catch (error) {
+				report.failed.push({
+					path: resume.candidate.source,
+					reason: `cleanup_failed:${(error as Error).message}`,
+				});
+				// 仅当源树确认仅剩空目录时清理失败不阻断；无法确认或有残留则保持失败
+				if (!isEmptyTreeExceptDirs(resume.sourceAbs)) continue;
+			}
+			if (resume.needsRepair) {
+				repairs.push({ target: resume.targetMain, targetAbs: resume.targetMainAbs });
+			}
+			report.skipped.push({ path: resume.candidate.source, reason: 'already_moved' });
+		}
+	}
 
 	// 3. 创建目标父目录（obsidian move 要求目标父目录已存在）；dry-run 不产生任何副作用，跳过
 	if (!report.dryRun) {

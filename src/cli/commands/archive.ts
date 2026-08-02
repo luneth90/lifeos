@@ -83,19 +83,20 @@ export default function archiveCommand(
 			((filePath: string, previousFilePath?: string) => {
 				memoryNotify({ contractVersion: 2, vaultRoot, filePath, previousFilePath });
 			});
-		const notifiedTargets = new Set<string>();
+		// 按「已尝试目标」去重：移动通知失败后不再降级重发补写通知，保留源路径语义供人工恢复
+		const attemptedTargets = new Set<string>();
 		for (const move of report.moved) {
 			if (!move.to.endsWith('.md')) continue;
+			attemptedTargets.add(move.to);
 			try {
 				notify(move.to, move.from);
-				notifiedTargets.add(move.to);
 				notifyApplied = true;
 			} catch (error) {
 				report.failed.push({ path: move.to, reason: `notify_failed:${(error as Error).message}` });
 			}
 		}
 		for (const path of report.updated) {
-			if (!path.endsWith('.md') || notifiedTargets.has(path)) continue;
+			if (!path.endsWith('.md') || attemptedTargets.has(path)) continue;
 			try {
 				notify(path, undefined);
 				notifyApplied = true;

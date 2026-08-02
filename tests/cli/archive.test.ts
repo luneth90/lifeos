@@ -151,7 +151,6 @@ describe('lifeos archive 命令', () => {
 		try {
 			await initCommand([root, '--lang', 'zh', '--no-mcp']);
 			write(root, '00_草稿/idea.md', `---\ntype: draft\nstatus: done\n---\n# idea\n`);
-			chmodSync(join(root, '00_草稿/idea.md'), 0o444);
 			const candidatesFile = join(root, 'candidates.json');
 			write(
 				root,
@@ -166,12 +165,18 @@ describe('lifeos archive 命令', () => {
 				]),
 			);
 			const notify = vi.fn();
+			// 移动完成后把目标目录设为只读，使 archived 写入失败
+			const runner: MoveRunner = (source, target) => {
+				renameSync(join(root, source), join(root, target));
+				chmodSync(join(root, dirname(target)), 0o555);
+				return { ok: true };
+			};
 			archiveCommand([root, '--candidates', candidatesFile, '--date', '2026-08-02'], {
-				moveRunner: fakeMove(root),
+				moveRunner: runner,
 				notify,
 			});
-			const target = join(root, '90_系统/归档/草稿/2026/08/idea.md');
-			chmodSync(target, 0o644);
+			const targetDir = join(root, '90_系统/归档/草稿/2026/08');
+			chmodSync(targetDir, 0o755);
 			notify.mockClear();
 
 			const result = archiveCommand(
@@ -180,6 +185,44 @@ describe('lifeos archive 命令', () => {
 			);
 			expect(result.failed).toBe(0);
 			expect(notify).toHaveBeenCalledWith('90_系统/归档/草稿/2026/08/idea.md', undefined);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('移动通知失败后补写循环不重复通知同一目标', async () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			await initCommand([root, '--lang', 'zh', '--no-mcp']);
+			write(root, '00_草稿/idea.md', `---\ntype: draft\nstatus: done\n---\n# idea\n`);
+			const candidatesFile = join(root, 'candidates.json');
+			write(
+				root,
+				'candidates.json',
+				JSON.stringify([
+					{
+						type: 'draft',
+						source: '00_草稿/idea.md',
+						target: '90_系统/归档/草稿/2026/08/idea.md',
+						main_file: '00_草稿/idea.md',
+					},
+				]),
+			);
+			const notify = vi.fn(() => {
+				throw new Error('notify down');
+			});
+			const result = archiveCommand(
+				[root, '--candidates', candidatesFile, '--date', '2026-08-02'],
+				{ moveRunner: fakeMove(root), notify },
+			);
+			// 同一路径只尝试一次移动通知（携带源路径），updated 循环不重复降级通知
+			expect(notify).toHaveBeenCalledTimes(1);
+			expect(notify).toHaveBeenCalledWith(
+				'90_系统/归档/草稿/2026/08/idea.md',
+				'00_草稿/idea.md',
+			);
+			expect(result.failed).toBe(1);
+			expect(result.report.failed[0]?.reason).toMatch(/^notify_failed:/);
 		} finally {
 			cleanup();
 		}
