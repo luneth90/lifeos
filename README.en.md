@@ -1,8 +1,8 @@
 # LifeOS
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/lifeos"><img src="https://img.shields.io/npm/v/lifeos" alt="npm version" style="vertical-align: middle" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/luneth90/lifeos" alt="MIT License" style="vertical-align: middle" /></a>
+  <a href="https://www.npmjs.com/package/lifeos"><img src="https://img.shields.io/npm/v/lifeos" alt="npm version" align="middle" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/luneth90/lifeos" alt="MIT License" align="middle" /></a>
   <a href="./README.md">中文</a> | [English](./README.en.md)
 </p>
 
