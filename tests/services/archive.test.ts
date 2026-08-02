@@ -1385,6 +1385,78 @@ describe('runArchive', () => {
 		}
 	});
 
+	it('源已不存在且目标根为符号链接时拒绝，不读取或写入外部目录', () => {
+		const { root, cleanup } = makeTmp();
+		const outside = mkdtempSync(join(tmpdir(), 'lifeos-outside-'));
+		try {
+			write(outside, 'P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			mkdirSync(join(root, '90_系统/归档/项目/2026'), { recursive: true });
+			symlinkSync(outside, join(root, '90_系统/归档/项目/2026/P'));
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'project',
+						source: '20_项目/P',
+						target: '90_系统/归档/项目/2026/P',
+						main_file: '20_项目/P/P.md',
+						project_id: 'p',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([
+				{
+					path: '90_系统/归档/项目/2026/P',
+					reason: 'target_contains_symlink',
+				},
+			]);
+			expect(report.updated).toEqual([]);
+		} finally {
+			cleanup();
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
+	it('部分目标树含符号链接时拒绝，不向外部目录移动文件', () => {
+		const { root, cleanup } = makeTmp();
+		const outside = mkdtempSync(join(tmpdir(), 'lifeos-outside-'));
+		try {
+			write(root, '20_项目/P/assets/x.md', '# x');
+			write(
+				root,
+				'90_系统/归档/项目/2026/P/P.md',
+				`---\ntype: project\nstatus: done\nid: p\n---\n`,
+			);
+			symlinkSync(outside, join(root, '90_系统/归档/项目/2026/P/assets'));
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'project',
+						source: '20_项目/P',
+						target: '90_系统/归档/项目/2026/P',
+						main_file: '20_项目/P/P.md',
+						project_id: 'p',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([
+				{
+					path: '90_系统/归档/项目/2026/P/assets',
+					reason: 'target_contains_symlink',
+				},
+			]);
+			expect(readdirSync(outside)).toEqual([]);
+		} finally {
+			cleanup();
+			rmSync(outside, { recursive: true, force: true });
+		}
+	});
+
 	it('临时文件被预置软链接劫持时排他创建失败，不覆盖外部文件', () => {
 		const { root, cleanup } = makeTmp();
 		try {

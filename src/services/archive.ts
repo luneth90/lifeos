@@ -375,18 +375,18 @@ function isEmptyTreeExceptDirs(directory: string): boolean {
 	}
 }
 
-type SourceScanResult =
+type DirectoryScanResult =
 	| { status: 'clean' }
 	| { status: 'unsupported'; entry: string }
 	| { status: 'error'; path: string; error: string };
 
 /** 扫描目录树：clean=仅普通文件与目录；unsupported=发现符号链接/特殊条目；error=读取失败 */
-function scanSourceTree(directory: string, base = ''): SourceScanResult {
+function scanDirectoryTree(directory: string, base = ''): DirectoryScanResult {
 	try {
 		for (const entry of readdirSync(directory, { withFileTypes: true })) {
 			const rel = base ? `${base}/${entry.name}` : entry.name;
 			if (entry.isDirectory()) {
-				const sub = scanSourceTree(join(directory, entry.name), rel);
+				const sub = scanDirectoryTree(join(directory, entry.name), rel);
 				if (sub.status !== 'clean') return sub;
 			} else if (!entry.isFile()) {
 				return { status: 'unsupported', entry: rel };
@@ -588,8 +588,50 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 		} catch {
 			sourceStat = null;
 		}
+		const targetExists = existsSync(targetAbs);
+		const targetIsDirectoryCandidate = sourceStat?.isDirectory() ?? candidate.type === 'project';
+		if (targetExists && targetIsDirectoryCandidate) {
+			let targetStat: ReturnType<typeof lstatSync>;
+			try {
+				targetStat = lstatSync(targetAbs);
+			} catch (error) {
+				report.conflicts.push({
+					path: candidate.target,
+					reason: `target_scan_failed:${(error as Error).message}`,
+				});
+				continue;
+			}
+			if (targetStat.isSymbolicLink()) {
+				report.conflicts.push({
+					path: candidate.target,
+					reason: 'target_contains_symlink',
+				});
+				continue;
+			}
+			if (!targetStat.isDirectory() && !targetStat.isFile()) {
+				report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
+				continue;
+			}
+			if (targetStat.isDirectory()) {
+				const scan = scanDirectoryTree(targetAbs);
+				if (scan.status === 'error') {
+					report.conflicts.push({
+						path: candidate.target,
+						reason: `target_scan_failed:${scan.error}`,
+					});
+					continue;
+				}
+				if (scan.status === 'unsupported') {
+					report.conflicts.push({
+						path: `${candidate.target}/${scan.entry}`,
+						reason: 'target_contains_symlink',
+					});
+					continue;
+				}
+			}
+		}
 		if (!sourceStat) {
-			if (existsSync(targetAbs)) {
+			if (targetExists) {
 				if (candidate.type !== 'diary') {
 					const mainFile = candidate.main_file as string;
 					const targetMain = relocatedPath(candidate.source, candidate.target, mainFile);
@@ -634,7 +676,7 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 		}
 		if (sourceStat.isDirectory()) {
 			// 预检拒绝源树内的符号链接与特殊条目，避免被 collectFiles 忽略后残留；读取失败转为冲突
-			const scan = scanSourceTree(sourceAbs);
+			const scan = scanDirectoryTree(sourceAbs);
 			if (scan.status === 'error') {
 				report.conflicts.push({
 					path: scan.path ? `${candidate.source}/${scan.path}` : candidate.source,
@@ -696,7 +738,6 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 				continue;
 			}
 		}
-		const targetExists = existsSync(targetAbs);
 		let needsArchived = false;
 		if (targetExists && !sourceStat.isDirectory()) {
 			report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
