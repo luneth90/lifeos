@@ -2,10 +2,10 @@
 
 import { isAbsolute, relative, resolve } from 'node:path';
 import type Database from 'better-sqlite3';
-import type { VaultConfig } from '../config.js';
+import { type VaultConfig, getOrCreateVaultConfig } from '../config.js';
 import type { MemoryScope } from '../types.js';
 import type { IndexImpact, IndexResult } from '../utils/vault-indexer.js';
-import { indexFiles } from '../utils/vault-indexer.js';
+import { indexFiles, shouldIndex } from '../utils/vault-indexer.js';
 
 export interface NotifyFileChangedResult {
 	action: 'indexed' | 'unchanged' | 'removed' | 'skipped' | 'error';
@@ -111,13 +111,18 @@ function notifyFileMoved(
 	const oldPath = vaultRelativePath(vaultRoot, previousFilePath);
 	const newPath = vaultRelativePath(vaultRoot, filePath);
 	const move = db.transaction(() => {
-		const indexed = indexFiles(db, vaultRoot, [oldPath, newPath], config);
+		const cfg = config ?? getOrCreateVaultConfig(vaultRoot);
+		const indexed = indexFiles(db, vaultRoot, [oldPath, newPath], cfg);
+		const targetShouldIndex = shouldIndex(newPath, cfg);
+		const result = indexed.results.find((candidate) => candidate.filePath === newPath);
 		const current = db
 			.prepare('SELECT entity_id FROM vault_index WHERE file_path = ?')
 			.get(newPath) as { entity_id: string | null } | undefined;
-		if (!current) throw new Error(`移动后的文件未进入索引：${newPath}`);
+		if (targetShouldIndex && !current) {
+			throw new Error(`移动后的文件未进入索引：${newPath}`);
+		}
 		let newScopeKey = newPath;
-		if (current.entity_id) {
+		if (current?.entity_id) {
 			const count = (
 				db
 					.prepare('SELECT COUNT(*) AS count FROM vault_index WHERE entity_id = ?')
@@ -126,9 +131,8 @@ function notifyFileMoved(
 			if (count === 1) newScopeKey = current.entity_id;
 		}
 		migrateMovedFileReferences(db, oldPath, newPath, newScopeKey, indexed.impact);
-		const result = indexed.results.find((candidate) => candidate.filePath === newPath);
 		return {
-			action: result?.status ?? 'indexed',
+			action: result?.status ?? (targetShouldIndex ? 'indexed' : 'skipped'),
 			filePath: newPath,
 			previousFilePath: oldPath,
 			impact: indexed.impact,
