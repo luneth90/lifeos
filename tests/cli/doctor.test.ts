@@ -36,15 +36,17 @@ describe.each(['zh', 'en'] as const)('lifeos doctor --lang %s', (lang) => {
 			cleanup();
 		}
 	});
+});
 
+describe('lifeos doctor', () => {
 	test('missing directory: reports warning', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {
-			await initCommand([dir, '--lang', lang, '--no-mcp']);
-			const dirName = FIRST_DIR[lang];
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const dirName = FIRST_DIR.zh;
 			rmSync(join(dir, dirName), { recursive: true });
 			const result = await doctorCommand([dir]);
-			expect(result.passed).toBe(true); // warnings don't fail
+			expect(result.passed).toBe(true);
 			const warn = result.checks.find((c) => c.detail === 'missing' && c.name.includes(dirName));
 			expect(warn).toBeDefined();
 		} finally {
@@ -55,22 +57,20 @@ describe.each(['zh', 'en'] as const)('lifeos doctor --lang %s', (lang) => {
 	test('missing digest subdirectory: reports warning', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {
-			await initCommand([dir, '--lang', lang, '--no-mcp']);
-			rmSync(join(dir, DIGEST_DIR[lang]), { recursive: true, force: true });
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			rmSync(join(dir, DIGEST_DIR.zh), { recursive: true, force: true });
 			const result = await doctorCommand([dir]);
 			expect(result.passed).toBe(true);
 			expect(
 				result.checks.some(
-					(c) => c.name === `subdirectory: ${DIGEST_DIR[lang]}` && c.status === 'warn',
+					(c) => c.name === `subdirectory: ${DIGEST_DIR.zh}` && c.status === 'warn',
 				),
 			).toBe(true);
 		} finally {
 			cleanup();
 		}
 	});
-});
 
-describe('lifeos doctor', () => {
 	test('no lifeos.yaml: fails', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {

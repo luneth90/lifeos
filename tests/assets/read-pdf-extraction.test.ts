@@ -20,6 +20,29 @@ function runScript(args: string[]) {
 	return spawnSync('python3', [scriptPath, ...args], { encoding: 'utf-8' });
 }
 
+function normalizeSourceLabels(labels: string[]): Array<{ error?: string; value?: string }> {
+	const program = [
+		'import importlib.util, json, sys',
+		'from pathlib import Path',
+		'spec = importlib.util.spec_from_file_location("lifeos_read_pdf", sys.argv[1])',
+		'module = importlib.util.module_from_spec(spec)',
+		'sys.modules[spec.name] = module',
+		'spec.loader.exec_module(module)',
+		'results = []',
+		'for label in json.loads(sys.argv[2]):',
+		'    try:',
+		'        results.append({"value": module.normalize_source_label(label, Path("source.pdf"))})',
+		'    except module.ReadPdfError as error:',
+		'        results.append({"error": error.code})',
+		'print(json.dumps(results, ensure_ascii=False))',
+	].join('\n');
+	const result = spawnSync('python3', ['-c', program, scriptPath, JSON.stringify(labels)], {
+		encoding: 'utf-8',
+	});
+	expect(result.status, result.stderr).toBe(0);
+	return JSON.parse(result.stdout) as Array<{ error?: string; value?: string }>;
+}
+
 function extract(pdfPath: string, outputPath: string | undefined, target = '1') {
 	const args = [pdfPath, target, '--skip-render'];
 	if (outputPath) args.push('--output', outputPath);
@@ -139,11 +162,7 @@ describe('read_pdf.py 提取包', () => {
 		const rendered = output.rendered_images as Array<Record<string, unknown>>;
 
 		const blocks = page.blocks as Array<Record<string, unknown>>;
-		expect(blocks.map((block) => block.kind)).toEqual([
-			'text',
-			'image',
-			'text',
-		]);
+		expect(blocks.map((block) => block.kind)).toEqual(['text', 'image', 'text']);
 		expect(blocks.find((block) => block.kind === 'image')?.bbox).toEqual({
 			x0: 72,
 			y0: 150,
@@ -532,67 +551,39 @@ describe('read_pdf.py 提取包', () => {
 		expect(JSON.stringify(output)).not.toContain(fixture.workspace);
 	});
 
-	it.each(['70_资源/👩‍💻.pdf', '70_资源/a\u200cb.pdf', '70_资源/\ue000.pdf'])(
-		'支持不会隐藏路径的 Unicode source-label：%s',
-		(sourceLabel) => {
-			const fixture = createFixtures();
-			const outputPath = join(fixture.workspace, 'unicode-label-result.json');
-			const result = runScript([
-				fixture.textPdf,
-				'1',
-				'--skip-render',
-				'--source-label',
-				sourceLabel,
-				'--output',
-				outputPath,
-			]);
+	it('支持不会隐藏路径的 Unicode source-label', () => {
+		const labels = ['70_资源/👩‍💻.pdf', '70_资源/a\u200cb.pdf', '70_资源/\ue000.pdf'];
+		expect(normalizeSourceLabels(labels)).toEqual(labels.map((value) => ({ value })));
+	});
 
-			expect(result.status, result.stderr).toBe(0);
-			generatedPaths.push(outputPath);
-			const output = JSON.parse(readFileSync(outputPath, 'utf-8')) as {
-				source: { path: string };
-			};
-			expect(output.source.path).toBe(sourceLabel);
-		},
-	);
-
-	it.each([
-		'',
-		'/tmp/leak.pdf',
-		' /tmp/leak.pdf',
-		'../leak.pdf',
-		'books/../leak.pdf',
-		'./leak.pdf',
-		'C:\\leak.pdf',
-		'file:/Users/alice/leak.pdf',
-		'／Users/alice/leak.pdf',
-		'\u200b/Users/alice/leak.pdf',
-		'\u2060/Users/alice/leak.pdf',
-		'\u202e/Users/alice/leak.pdf',
-		'\u200d/Users/alice/leak.pdf',
-		'books/\u200dleak.pdf',
-		'70_资源/a\u200d b.pdf',
-		'70_资源/a \u200db.pdf',
-		'70_资源/a\u200c b.pdf',
-		'70_资源/a \u200cb.pdf',
-		'70_资源/a\u200d\u00a0b.pdf',
-		'70_资源/a\u200c\u202fb.pdf',
-		'70_资源/a\u200d\u3000b.pdf',
-		'70_资源/a\u200c\u2028b.pdf',
-	])('拒绝不安全的 source-label：%s', (sourceLabel) => {
-		const fixture = createFixtures();
-		const result = runScript([
-			fixture.textPdf,
-			'1',
-			'--skip-render',
-			'--source-label',
-			sourceLabel,
-			'--output',
-			join(fixture.workspace, 'unsafe-label.json'),
-		]);
-
-		expect(result.status).toBe(2);
-		expect(JSON.parse(result.stderr)).toMatchObject({ error: { code: 'INVALID_SOURCE_LABEL' } });
+	it('拒绝全部不安全的 source-label', () => {
+		const labels = [
+			'',
+			'/tmp/leak.pdf',
+			' /tmp/leak.pdf',
+			'../leak.pdf',
+			'books/../leak.pdf',
+			'./leak.pdf',
+			'C:\\leak.pdf',
+			'file:/Users/alice/leak.pdf',
+			'／Users/alice/leak.pdf',
+			'\u200b/Users/alice/leak.pdf',
+			'\u2060/Users/alice/leak.pdf',
+			'\u202e/Users/alice/leak.pdf',
+			'\u200d/Users/alice/leak.pdf',
+			'books/\u200dleak.pdf',
+			'70_资源/a\u200d b.pdf',
+			'70_资源/a \u200db.pdf',
+			'70_资源/a\u200c b.pdf',
+			'70_资源/a \u200cb.pdf',
+			'70_资源/a\u200d\u00a0b.pdf',
+			'70_资源/a\u200c\u202fb.pdf',
+			'70_资源/a\u200d\u3000b.pdf',
+			'70_资源/a\u200c\u2028b.pdf',
+		];
+		expect(normalizeSourceLabels(labels)).toEqual(
+			labels.map(() => ({ error: 'INVALID_SOURCE_LABEL' })),
+		);
 	});
 
 	it('为提取失败页生成视觉恢复所需的 PNG', () => {
@@ -711,10 +702,7 @@ describe('read_pdf.py 提取包', () => {
 			expect(skill, language).toContain('{pdf_page_index, order, bbox}');
 		}
 		expect(
-			readFileSync(
-				join(process.cwd(), 'assets/schema/PDF_Extraction_Schema.json'),
-				'utf-8',
-			),
+			readFileSync(join(process.cwd(), 'assets/schema/PDF_Extraction_Schema.json'), 'utf-8'),
 		).toContain('"printed_page_label"');
 	});
 

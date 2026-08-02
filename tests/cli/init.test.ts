@@ -71,17 +71,16 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 	let cleanup: () => void;
 	const d = DIRS[lang];
 
-	beforeEach(() => {
+	beforeAll(async () => {
 		({ dir, cleanup } = makeTmpDir());
+		await init([dir, '--lang', lang]);
 	});
 
-	afterEach(() => {
+	afterAll(() => {
 		cleanup();
 	});
 
-	test('creates full directory structure', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('creates full directory structure', () => {
 		// Top-level directories
 		for (const name of d.topLevel) {
 			expect(existsSync(join(dir, name))).toBe(true);
@@ -102,9 +101,7 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		}
 	});
 
-	test('generates lifeos.yaml with correct language', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('generates lifeos.yaml with correct language', () => {
 		const yamlPath = join(dir, 'lifeos.yaml');
 		expect(existsSync(yamlPath)).toBe(true);
 
@@ -142,9 +139,7 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(versions.assets).toBe(VERSION);
 	});
 
-	test('为 Antigravity 生成项目级 MCP 配置', async () => {
-		await init([dir, '--lang', lang]);
-
+	test('为 Antigravity 生成项目级 MCP 配置', () => {
 		const config = JSON.parse(
 			readFileSync(join(dir, '.agents', 'mcp_config.json'), 'utf-8'),
 		) as Record<string, unknown>;
@@ -158,9 +153,7 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		});
 	});
 
-	test('写入 opened 的最终 V2/V4 fresh-install 收据', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('写入 opened 的最终 V2/V4 fresh-install 收据', () => {
 		const receipt = JSON.parse(
 			readFileSync(join(dir, d.system, d.memory, 'runtime-receipt.json'), 'utf-8'),
 		) as Record<string, unknown>;
@@ -175,9 +168,7 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(receipt).not.toHaveProperty('scope_mode');
 	});
 
-	test('records managed asset hashes in lifeos.yaml', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('records managed asset hashes in lifeos.yaml', () => {
 		const config = parseYaml(readFileSync(join(dir, 'lifeos.yaml'), 'utf-8')) as {
 			managed_assets?: Record<string, { version?: string; sha256?: string }>;
 		};
@@ -195,26 +186,20 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		});
 	});
 
-	test('copies templates to system directory', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('copies templates to system directory', () => {
 		const templatesDir = join(dir, d.system, d.templates);
 		expect(existsSync(templatesDir)).toBe(true);
 		expect(existsSync(join(templatesDir, 'Daily_Template.md'))).toBe(true);
 		expect(existsSync(join(templatesDir, 'Project_Template.md'))).toBe(true);
 	});
 
-	test('copies schema to system directory', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('copies schema to system directory', () => {
 		const schemaDir = join(dir, d.system, d.schema);
 		expect(existsSync(schemaDir)).toBe(true);
 		expect(existsSync(join(schemaDir, 'Frontmatter_Schema.md'))).toBe(true);
 	});
 
-	test('copies skills with language switching', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('copies skills with language switching', () => {
 		const skillsDir = join(dir, '.agents', 'skills');
 		expect(existsSync(skillsDir)).toBe(true);
 
@@ -223,9 +208,7 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(existsSync(join(skillsDir, 'research'))).toBe(true);
 	});
 
-	test('copies CLAUDE.md to vault root', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('copies CLAUDE.md to vault root', () => {
 		const claudePath = join(dir, 'CLAUDE.md');
 		expect(existsSync(claudePath)).toBe(true);
 
@@ -233,9 +216,7 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(content.length).toBeGreaterThan(0);
 	});
 
-	test('copies AGENTS.md to vault root', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('copies AGENTS.md to vault root', () => {
 		const agentsPath = join(dir, 'AGENTS.md');
 		expect(existsSync(agentsPath)).toBe(true);
 
@@ -243,16 +224,12 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		expect(content.length).toBeGreaterThan(0);
 	});
 
-	test('does not create .gitignore', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('does not create .gitignore', () => {
 		const gitignorePath = join(dir, '.gitignore');
 		expect(existsSync(gitignorePath)).toBe(false);
 	});
 
-	test('does not initialize a git repository', async () => {
-		await init([dir, '--lang', lang, '--no-mcp']);
-
+	test('does not initialize a git repository', () => {
 		expect(existsSync(join(dir, '.git'))).toBe(false);
 	});
 });

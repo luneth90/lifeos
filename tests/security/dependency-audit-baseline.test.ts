@@ -17,6 +17,7 @@ const minimumSafeVersions: Record<string, string> = {
 	'fast-uri': '3.1.4',
 	hono: '4.12.27',
 	postcss: '8.5.18',
+	'path-to-regexp': '8.4.0',
 	qs: '6.15.2',
 	vite: '7.3.5',
 	vitest: '3.2.6',

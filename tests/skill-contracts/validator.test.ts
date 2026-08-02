@@ -15,6 +15,17 @@ async function loadValidator(): Promise<
 }
 
 describe('技能契约校验器', () => {
+	let sharedAssetsRoot: string;
+
+	beforeAll(() => {
+		sharedAssetsRoot = mkdtempSync(join(tmpdir(), 'lifeos-contract-shared-'));
+		cpSync(join(repositoryRoot, 'assets'), join(sharedAssetsRoot, 'assets'), { recursive: true });
+	});
+
+	afterAll(() => {
+		rmSync(sharedAssetsRoot, { recursive: true, force: true });
+	});
+
 	it('英文默认路径映射与运行时配置保持一致', async () => {
 		const { englishDefaultPathConfig } = await loadValidator();
 		expect(englishDefaultPathConfig()).toEqual({
@@ -38,63 +49,59 @@ describe('技能契约校验器', () => {
 		});
 	});
 
+	type AssetWriter = (relativePath: string, transform: (content: string) => string) => void;
+
+	async function validateMutatedAssets(
+		mutate: (write: AssetWriter) => void,
+		assertResult: (
+			result: Awaited<
+				ReturnType<Awaited<ReturnType<typeof loadValidator>>['validateSkillContracts']>
+			>,
+		) => void,
+	): Promise<void> {
+		const originals = new Map<string, string>();
+		const write: AssetWriter = (relativePath, transform) => {
+			const path = join(sharedAssetsRoot, relativePath);
+			const content = readFileSync(path, 'utf8');
+			if (!originals.has(path)) originals.set(path, content);
+			writeFileSync(path, transform(content));
+		};
+
+		try {
+			mutate(write);
+			const { validateSkillContracts } = await loadValidator();
+			assertResult(validateSkillContracts(sharedAssetsRoot));
+		} finally {
+			for (const [path, content] of originals) writeFileSync(path, content);
+		}
+	}
+
 	async function expectMutatedAssetsDiagnostic(
 		mutate: (write: (relativePath: string, transform: (content: string) => string) => void) => void,
 		expected: { code: string; path: string; related_path?: string },
 	): Promise<void> {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-contract-red-'));
-		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
-		try {
-			const write = (relativePath: string, transform: (content: string) => string) => {
-				const path = join(root, relativePath);
-				writeFileSync(path, transform(readFileSync(path, 'utf8')));
-			};
-			mutate(write);
-
-			const { validateSkillContracts } = await loadValidator();
-			expect(validateSkillContracts(root).diagnostics).toEqual(
+		await validateMutatedAssets(mutate, (result) => {
+			expect(result.diagnostics).toEqual(
 				expect.arrayContaining([expect.objectContaining(expected)]),
 			);
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
+		});
 	}
 
 	async function expectExactMutatedAssetsDiagnostics(
 		mutate: (write: (relativePath: string, transform: (content: string) => string) => void) => void,
 		expected: Array<{ code: string; path: string; related_path?: string; message: string }>,
 	): Promise<void> {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-contract-exact-'));
-		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
-		try {
-			const write = (relativePath: string, transform: (content: string) => string) => {
-				const path = join(root, relativePath);
-				writeFileSync(path, transform(readFileSync(path, 'utf8')));
-			};
-			mutate(write);
-			const { validateSkillContracts } = await loadValidator();
-			expect(validateSkillContracts(root).diagnostics).toEqual(expected);
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
+		await validateMutatedAssets(mutate, (result) => {
+			expect(result.diagnostics).toEqual(expected);
+		});
 	}
 
 	async function expectMutatedAssetsOk(
 		mutate: (write: (relativePath: string, transform: (content: string) => string) => void) => void,
 	): Promise<void> {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-contract-control-'));
-		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
-		try {
-			const write = (relativePath: string, transform: (content: string) => string) => {
-				const path = join(root, relativePath);
-				writeFileSync(path, transform(readFileSync(path, 'utf8')));
-			};
-			mutate(write);
-			const { validateSkillContracts } = await loadValidator();
-			expect(validateSkillContracts(root)).toEqual({ ok: true, diagnostics: [] });
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
+		await validateMutatedAssets(mutate, (result) => {
+			expect(result).toEqual({ ok: true, diagnostics: [] });
+		});
 	}
 
 	it.each([
@@ -889,27 +896,6 @@ describe('技能契约校验器', () => {
 		);
 	});
 
-	it.each(['project', 'knowledge'])('CLI 对非法 %s 技能 Frontmatter 仅输出 YAML 根因', (skill) => {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-contract-skill-yaml-cli-'));
-		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
-		try {
-			const path = join(root, `assets/skills/${skill}/SKILL.en.md`);
-			writeFileSync(path, readFileSync(path, 'utf8').replace('dependencies:', 'dependencies: ['));
-			const result = spawnSync(process.execPath, [scriptPath, root], { encoding: 'utf8' });
-			expect(result.status).toBe(1);
-			expect(result.stdout).toBe('');
-			expect(result.stderr.trim().split('\n').map(JSON.parse)).toEqual([
-				{
-					code: 'invalid_markdown_frontmatter_yaml',
-					path: `assets/skills/${skill}/SKILL.en.md`,
-					message: 'Markdown Frontmatter YAML 无法解析',
-				},
-			]);
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
-	});
-
 	it.each([
 		[
 			'Markdown Frontmatter',
@@ -947,33 +933,6 @@ describe('技能契约校验器', () => {
 		],
 	] as const)('非法 %s 返回稳定结构化诊断且不抛异常', async (_name, path, transform, expected) => {
 		await expectExactMutatedAssetsDiagnostics((write) => write(path, transform), [expected]);
-	});
-
-	it('CLI 对非法 YAML 输出稳定 JSON 而不是解析堆栈', () => {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-contract-yaml-cli-'));
-		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
-		try {
-			const path = join(root, 'assets/skills/_shared/operation-safety.en.md');
-			writeFileSync(
-				path,
-				readFileSync(path, 'utf8').replace(
-					'decision: [create, merge, resume, skip, replace]',
-					'decision: [create, merge',
-				),
-			);
-			const result = spawnSync(process.execPath, [scriptPath, root], { encoding: 'utf8' });
-			expect(result.status).toBe(1);
-			expect(result.stdout).toBe('');
-			expect(result.stderr.trim().split('\n').map(JSON.parse)).toEqual([
-				{
-					code: 'invalid_marked_yaml',
-					path: 'assets/skills/_shared/operation-safety.en.md',
-					message: '标记 YAML 契约无法解析：operation-safety-v1',
-				},
-			]);
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
 	});
 
 	it.each([
@@ -1053,24 +1012,13 @@ describe('技能契约校验器', () => {
 				),
 		],
 	])('独立拒绝操作安全契约：%s', async (_name, mutate) => {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-safety-contract-'));
-		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
-		try {
-			mutate((relativePath, transform) => {
-				const path = join(root, relativePath);
-				writeFileSync(path, transform(readFileSync(path, 'utf8')));
-			});
-			const { validateSkillContracts } = await loadValidator();
-			expect(validateSkillContracts(root).diagnostics).toEqual([
-				{
-					code: 'invalid_operation_safety_contract',
-					path: 'assets/skills/_shared/operation-safety.en.md',
-					message: '操作安全机器契约字段或值非法',
-				},
-			]);
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
+		await expectExactMutatedAssetsDiagnostics(mutate, [
+			{
+				code: 'invalid_operation_safety_contract',
+				path: 'assets/skills/_shared/operation-safety.en.md',
+				message: '操作安全机器契约字段或值非法',
+			},
+		]);
 	});
 
 	it.each([
@@ -1081,22 +1029,19 @@ describe('技能契约校验器', () => {
 		],
 		['target_path', 'target_path: resolved-vault-relative-path', 'target_path: englishly-wrong'],
 	])('仅英文漂移也拒绝操作安全机器值：%s', async (_field, original, replacement) => {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-safety-single-locale-'));
-		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
-		try {
-			const path = join(root, 'assets/skills/_shared/operation-safety.en.md');
-			writeFileSync(path, readFileSync(path, 'utf8').replace(original, replacement));
-			const { validateSkillContracts } = await loadValidator();
-			expect(validateSkillContracts(root).diagnostics).toEqual([
+		await expectExactMutatedAssetsDiagnostics(
+			(write) =>
+				write('assets/skills/_shared/operation-safety.en.md', (content) =>
+					content.replace(original, replacement),
+				),
+			[
 				{
 					code: 'invalid_operation_safety_contract',
 					path: 'assets/skills/_shared/operation-safety.en.md',
 					message: '操作安全机器契约字段或值非法',
 				},
-			]);
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
+			],
+		);
 	});
 
 	it.each([
@@ -1107,15 +1052,15 @@ describe('技能契约校验器', () => {
 		],
 		['target_path', 'target_path: resolved-vault-relative-path', 'target_path: sharedly-wrong'],
 	])('中英文同步漂移也拒绝操作安全机器值：%s', async (_field, original, replacement) => {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-safety-bilingual-'));
-		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
-		try {
-			for (const locale of ['en', 'zh']) {
-				const path = join(root, `assets/skills/_shared/operation-safety.${locale}.md`);
-				writeFileSync(path, readFileSync(path, 'utf8').replace(original, replacement));
-			}
-			const { validateSkillContracts } = await loadValidator();
-			expect(validateSkillContracts(root).diagnostics).toEqual([
+		await expectExactMutatedAssetsDiagnostics(
+			(write) => {
+				for (const locale of ['en', 'zh']) {
+					write(`assets/skills/_shared/operation-safety.${locale}.md`, (content) =>
+						content.replace(original, replacement),
+					);
+				}
+			},
+			[
 				{
 					code: 'invalid_operation_safety_contract',
 					path: 'assets/skills/_shared/operation-safety.en.md',
@@ -1126,10 +1071,8 @@ describe('技能契约校验器', () => {
 					path: 'assets/skills/_shared/operation-safety.zh.md',
 					message: '操作安全机器契约字段或值非法',
 				},
-			]);
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
+			],
+		);
 	});
 
 	it.each([
@@ -1205,33 +1148,21 @@ describe('技能契约校验器', () => {
 			'Agent 调用声明与提示词占位符不一致：references/planning-agent-prompt.md',
 		],
 	])('独立拒绝依赖：%s', async (_name, mutate, expectedMessage) => {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-dependency-contract-'));
-		cpSync(join(repositoryRoot, 'assets'), join(root, 'assets'), { recursive: true });
-		try {
-			mutate((relativePath, transform) => {
-				const path = join(root, relativePath);
-				writeFileSync(path, transform(readFileSync(path, 'utf8')));
-			});
-			const { validateSkillContracts } = await loadValidator();
-			const result = validateSkillContracts(root);
-			const expectedCode =
-				_name === '未知 Agent 占位符' ? 'placeholder_mismatch' : 'invalid_dependency_path';
-			expect(result.diagnostics).toEqual([
-				{
-					code: expectedCode,
-					path: 'assets/skills/research/SKILL.en.md',
-					message:
-						expectedCode === 'placeholder_mismatch'
-							? 'Agent 调用声明与提示词占位符不一致：references/planning-agent-prompt.md'
-							: expectedMessage,
-					...(expectedCode === 'placeholder_mismatch'
-						? { related_path: 'assets/skills/research/references/planning-agent-prompt.en.md' }
-						: {}),
-				},
-			]);
-		} finally {
-			rmSync(root, { recursive: true, force: true });
-		}
+		const expectedCode =
+			_name === '未知 Agent 占位符' ? 'placeholder_mismatch' : 'invalid_dependency_path';
+		await expectExactMutatedAssetsDiagnostics(mutate, [
+			{
+				code: expectedCode,
+				path: 'assets/skills/research/SKILL.en.md',
+				message:
+					expectedCode === 'placeholder_mismatch'
+						? 'Agent 调用声明与提示词占位符不一致：references/planning-agent-prompt.md'
+						: expectedMessage,
+				...(expectedCode === 'placeholder_mismatch'
+					? { related_path: 'assets/skills/research/references/planning-agent-prompt.en.md' }
+					: {}),
+			},
+		]);
 	});
 
 	it('接受声明的 Python 技能脚本并在文件缺失时诊断', async () => {

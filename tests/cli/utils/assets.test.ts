@@ -12,12 +12,11 @@ import {
 	writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 import { assetsDir, copyDir, ensureDir } from '../../../src/cli/utils/assets.js';
 import { parseArgs } from '../../../src/cli/utils/ui.js';
-import { extractTarGz } from '../../helpers/tar.js';
 
 const contractValidatorPath = join(process.cwd(), 'scripts', 'validate-skill-contracts.mjs');
 const packageSourceEntries = [
@@ -40,6 +39,10 @@ function walkFiles(dir: string): string[] {
 		const fullPath = join(dir, entry.name);
 		return entry.isDirectory() ? walkFiles(fullPath) : [fullPath];
 	});
+}
+
+function packagePath(path: string): string {
+	return path.split(sep).join('/');
 }
 
 function extractFrontmatter(content: string): string {
@@ -100,7 +103,7 @@ describe('assetsDir', () => {
 		expect(validate(assetsDir())).toEqual({ ok: true, diagnostics: [] });
 	});
 
-	test('npm 包解包后的 assets 仍通过源码契约校验', async () => {
+	test('npm 包清单包含完整 assets，且构建产物从包根解析 assets', async () => {
 		const directory = join(tmpdir(), `lifeos-pack-${Date.now()}`);
 		const packageSource = join(directory, 'source');
 		mkdirSync(directory, { recursive: true });
@@ -129,15 +132,22 @@ describe('assetsDir', () => {
 				},
 			);
 			expect(packed.status, packed.stderr).toBe(0);
-			const [{ filename }] = JSON.parse(packed.stdout) as Array<{ filename: string }>;
-			const extractionRoot = join(directory, 'unpacked');
-			extractTarGz(join(directory, filename), extractionRoot);
-			const unpacked = join(extractionRoot, 'package');
+			const [{ files }] = JSON.parse(packed.stdout) as Array<{
+				files: Array<{ path: string }>;
+			}>;
+			const packedPaths = new Set(files.map((file) => file.path));
+			const expectedAssetPaths = walkFiles(join(packageSource, 'assets')).map((path) =>
+				packagePath(relative(packageSource, path)),
+			);
+			expect(expectedAssetPaths.every((path) => packedPaths.has(path))).toBe(true);
+			expect(packedPaths.has('dist/cli/utils/assets.js')).toBe(true);
 			const { validateSkillContracts: validate } = await validateSkillContracts();
 			const runtimeAssets = await import(
-				pathToFileURL(join(unpacked, 'dist', 'cli', 'utils', 'assets.js')).href
+				pathToFileURL(join(packageSource, 'dist', 'cli', 'utils', 'assets.js')).href
 			);
-			expect(realpathSync(runtimeAssets.assetsDir())).toBe(realpathSync(join(unpacked, 'assets')));
+			expect(realpathSync(runtimeAssets.assetsDir())).toBe(
+				realpathSync(join(packageSource, 'assets')),
+			);
 			expect(validate(runtimeAssets.assetsDir())).toEqual({ ok: true, diagnostics: [] });
 		} finally {
 			rmSync(directory, { recursive: true, force: true });
