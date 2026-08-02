@@ -60,19 +60,38 @@ function addAffectedScope(impact: IndexImpact, scope: MemoryScope): void {
 
 function migrateMovedFileReferences(
 	db: Database.Database,
+	oldScopeKeys: string[],
 	oldPath: string,
 	newPath: string,
 	newScopeKey: string,
 	impact: IndexImpact,
 ): void {
 	const now = new Date().toISOString();
-	if (oldPath !== newScopeKey) {
+	const sourceKeys = [...new Set(oldScopeKeys)];
+	const allKeys = [...new Set([...sourceKeys, newScopeKey])];
+	const placeholders = allKeys.map(() => '?').join(', ');
+	const conflict = db
+		.prepare(`
+			SELECT slot_key
+			FROM memory_items
+			WHERE scope_type = 'file' AND scope_key IN (${placeholders})
+			GROUP BY slot_key
+			HAVING COUNT(*) > 1
+			LIMIT 1
+		`)
+		.get(...allKeys) as { slot_key: string } | undefined;
+	if (conflict) {
+		throw new Error(`移动后的文件记忆作用域冲突：file:${newScopeKey}/${conflict.slot_key}`);
+	}
+	const migratingKeys = sourceKeys.filter((key) => key !== newScopeKey);
+	if (migratingKeys.length > 0) {
+		const migratingPlaceholders = migratingKeys.map(() => '?').join(', ');
 		db.prepare(`
 			UPDATE memory_items SET scope_key = ?, updated_at = ?
-			WHERE scope_type = 'file' AND scope_key = ?
-		`).run(newScopeKey, now, oldPath);
+			WHERE scope_type = 'file' AND scope_key IN (${migratingPlaceholders})
+		`).run(newScopeKey, now, ...migratingKeys);
 	}
-	addAffectedScope(impact, { type: 'file', key: oldPath });
+	for (const key of sourceKeys) addAffectedScope(impact, { type: 'file', key });
 	addAffectedScope(impact, { type: 'file', key: newScopeKey });
 
 	const rows = db
@@ -112,14 +131,31 @@ function notifyFileMoved(
 	const newPath = vaultRelativePath(vaultRoot, filePath);
 	const move = db.transaction(() => {
 		const cfg = config ?? getOrCreateVaultConfig(vaultRoot);
+		const previous = db
+			.prepare('SELECT entity_id FROM vault_index WHERE file_path = ?')
+			.get(oldPath) as { entity_id: string | null } | undefined;
+		const oldScopeKeys = [oldPath];
+		if (previous?.entity_id) {
+			const count = (
+				db
+					.prepare('SELECT COUNT(*) AS count FROM vault_index WHERE entity_id = ?')
+					.get(previous.entity_id) as { count: number }
+			).count;
+			if (count === 1) oldScopeKeys.push(previous.entity_id);
+		}
 		const indexed = indexFiles(db, vaultRoot, [oldPath, newPath], cfg);
 		const targetShouldIndex = shouldIndex(newPath, cfg);
 		const result = indexed.results.find((candidate) => candidate.filePath === newPath);
 		const current = db
 			.prepare('SELECT entity_id FROM vault_index WHERE file_path = ?')
 			.get(newPath) as { entity_id: string | null } | undefined;
-		if (targetShouldIndex && !current) {
+		const targetIndexedSuccessfully =
+			result?.status === 'indexed' || result?.status === 'unchanged';
+		if (targetShouldIndex && (!current || !targetIndexedSuccessfully)) {
 			throw new Error(`移动后的文件未进入索引：${newPath}`);
+		}
+		if (!targetShouldIndex && current) {
+			throw new Error(`移动后的排除文件仍在索引：${newPath}`);
 		}
 		let newScopeKey = newPath;
 		if (current?.entity_id) {
@@ -130,7 +166,7 @@ function notifyFileMoved(
 			).count;
 			if (count === 1) newScopeKey = current.entity_id;
 		}
-		migrateMovedFileReferences(db, oldPath, newPath, newScopeKey, indexed.impact);
+		migrateMovedFileReferences(db, oldScopeKeys, oldPath, newPath, newScopeKey, indexed.impact);
 		return {
 			action: result?.status ?? (targetShouldIndex ? 'indexed' : 'skipped'),
 			filePath: newPath,

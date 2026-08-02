@@ -205,6 +205,17 @@ describe('最终协议文档门禁', () => {
 		for (const testCase of cases) {
 			const content = read(testCase.path);
 			for (const check of testCase.checks) expect(content).toMatch(check);
+			const markers = testCase.path.endsWith('.zh.md')
+				? ['不得据此判定', 'obsidian version', '复测成功后', '只有沙盒外复测仍失败']
+				: [
+						'must not be treated as proof',
+						'obsidian version',
+						'If those probes succeed',
+						'Only when the outside-sandbox probes also fail',
+					];
+			const positions = markers.map((marker) => content.indexOf(marker));
+			expect(positions.every((position) => position >= 0)).toBe(true);
+			expect(positions).toEqual([...positions].sort((left, right) => left - right));
 		}
 	});
 
@@ -253,9 +264,7 @@ describe('最终协议文档门禁', () => {
 			expect(content, `${contract.path} 缺少回滚命令`).toMatch(
 				/lifeos upgrade \/absolute\/path\/to\/my-vault \\\n\s+--restore \/absolute\/path\/to\/\.lifeos-cutovers\/[^\n]+\/journal\.json/,
 			);
-			expect(content, `${contract.path} 缺少完整 Vault 覆盖警告`).toMatch(
-				contract.wholeVault,
-			);
+			expect(content, `${contract.path} 缺少完整 Vault 覆盖警告`).toMatch(contract.wholeVault);
 			for (const internalDetail of [
 				'v4-scope-map.json',
 				'--scope-map',

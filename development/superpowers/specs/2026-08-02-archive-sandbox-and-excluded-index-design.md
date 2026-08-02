@@ -103,22 +103,33 @@ LifeOS `/archive` 优先使用官方 Obsidian CLI 执行移动，以便由
 
 ### 移动到排除目录的通知语义
 
-修改 `src/services/capture.ts`。`notifyFileMoved` 在同一数据库事务中解析实际 Vault 配置，并
-分别判断旧路径与新路径是否应进入索引。
+修改 `src/services/capture.ts`、`src/utils/vault-indexer.ts` 与
+`src/services/scope-resolver.ts`。`notifyFileMoved` 在同一数据库事务中解析实际 Vault 配置，
+并分别判断旧路径与新路径是否应进入索引。
 
 对于目标路径：
 
 - 若 `shouldIndex(newPath, config)` 为 `true`，继续要求目标存在于 `vault_index`；缺失仍返回
   error，保持失败关闭。
 - 若 `shouldIndex(newPath, config)` 为 `false`，允许目标不出现在 `vault_index`。`indexFiles`
-  仍处理旧路径删除和目标路径 `skipped: excluded by scan rules`，然后继续迁移记忆路径。
+  处理旧路径删除和目标路径 `skipped: excluded by scan rules`；若目标存在陈旧
+  `vault_index` / `scan_state` 行，也必须同时删除，然后继续迁移记忆路径。
+
+在调用 `indexFiles` 前保存来源文件的规范身份。来源 `entity_id` 在索引中唯一时，路径型
+scope 与该唯一 ID scope 都属于待迁移身份；`entity_id` 重复时仍只迁移来源路径，禁止猜测。
 
 目标被排除时使用新路径本身作为 `newScopeKey`；目标进入索引且拥有唯一 `entity_id` 时，
 继续沿用实体 ID 作为 `newScopeKey`。两种情况都调用 `migrateMovedFileReferences`，同步：
 
 - `scope_type = 'file'` 且 key 为旧路径的记忆；
+- `scope_type = 'file'` 且 key 为来源唯一 `entity_id` 的记忆；
 - 所有 `memory_items.related_files` 数组中的旧路径；
 - 影响作用域集合。
+
+多个来源身份合并到目标身份前，必须检查 `(scope_type, scope_key, slot_key)` 冲突；存在同
+slot 冲突时整个通知事务失败并回滚索引变化，不得覆盖任一记忆。归档路径退出索引后，只有
+目标文件真实存在且该路径已有 active 记忆时，scope resolver 才允许显式解析该路径；这使
+迁移后的历史记忆仍可读取，同时不允许为任意排除文件凭空新建 file scope。
 
 为保持公共返回类型兼容，不新增 `action` 枚举。移动到排除目录时返回目标对应的
 `action: 'skipped'` 和 `reason: 'excluded by scan rules'`，同时携带 `previousFilePath` 与实际
@@ -152,7 +163,10 @@ Schema。修改中英文 Archive 契约，明确其确认条件按目标配置�
 - 沙盒内首次探测失败：只视为环境不确定，不向用户报告 Obsidian 已关闭。
 - 沙盒外探测失败：进入既有 CLI 不可用分支，不执行任何移动。
 - 目标属于可索引目录但未进入索引：保持 `memory_notify` error。
+- 目标属于可索引目录但本次索引结果为读取失败、跳过或移除：即使存在陈旧索引行也保持
+  `memory_notify` error。
 - 目标属于排除目录：返回正常 `skipped`，继续路径迁移与排除状态确认。
+- 记忆身份合并存在同 slot 冲突：通知事务失败并回滚数据库变更。
 - 目标路径存在冲突、源路径缺失或移动后状态不一致：继续由归档事务失败关闭。
 - 任一通知、确认或元数据步骤失败：保留原 manifest 与恢复动作，不继续其他候选。
 
@@ -165,9 +179,13 @@ Schema。修改中英文 Archive 契约，明确其确认条件按目标配置�
 - 已索引计划移动到 `90_系统/归档/计划/` 后，返回 `skipped` 与
   `excluded by scan rules`，不返回 error。
 - 旧路径从 `vault_index` 删除，归档路径不进入 `vault_index`。
-- 路径型 file scope 与其他记忆的 `related_files` 被迁移到归档路径。
+- 路径型及来源唯一 `entity_id` file scope 与其他记忆的 `related_files` 被迁移到归档路径。
+- 迁移后的归档路径 scope 可显式解析；没有既有 active 记忆的排除文件不能借此新建 scope。
+- 排除目标已有陈旧索引与扫描状态时会被清除。
 - 活跃目录之间移动仍索引新路径并优先使用唯一 `entity_id`。
 - 可索引目标因无效 frontmatter 未进入索引时仍返回 error。
+- 可索引目标本次读取失败时不会接受陈旧索引行。
+- 重复 `entity_id` 继续使用路径身份，记忆不会错误合并。
 
 ### 技能与全局规则契约测试
 

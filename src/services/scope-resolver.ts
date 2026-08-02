@@ -1,6 +1,9 @@
+import { existsSync, lstatSync } from 'node:fs';
+import { isAbsolute, resolve, win32 } from 'node:path';
 import type Database from 'better-sqlite3';
 import type { VaultConfig } from '../config.js';
 import type { MemoryScope, ScopeType } from '../types.js';
+import { assertVaultPathSafe } from '../utils/safe-path.js';
 
 const SCOPE_TYPES = new Set<ScopeType>([
 	'global',
@@ -62,6 +65,31 @@ function resolveToolAlias(config: VaultConfig | undefined, key: string): string[
 		.sort();
 }
 
+function resolveExistingVaultFile(
+	db: Database.Database,
+	config: VaultConfig | undefined,
+	key: string,
+): MemoryScope | null {
+	const vaultRoot = config?.vaultRoot;
+	const scope = { type: 'file', key } as const;
+	if (!vaultRoot || !hasMemoryScope(db, scope)) return null;
+	const portable = key.replaceAll('\\', '/');
+	if (
+		isAbsolute(key) ||
+		win32.isAbsolute(key) ||
+		portable.startsWith('/') ||
+		portable.split('/').some((component) => component === '.' || component === '..')
+	) {
+		return null;
+	}
+	try {
+		const candidate = assertVaultPathSafe(vaultRoot, resolve(vaultRoot, portable));
+		return existsSync(candidate) && lstatSync(candidate).isFile() ? scope : null;
+	} catch {
+		return null;
+	}
+}
+
 export function resolveMemoryScopes(
 	db: Database.Database,
 	scopes: MemoryScope[],
@@ -108,7 +136,12 @@ export function resolveMemoryScopes(
 				const byId = db
 					.prepare('SELECT file_path FROM vault_index WHERE entity_id = ?')
 					.all(scope.key) as Array<{ file_path: string }>;
-				canonical = byId.length === 1 ? scope : null;
+				canonical =
+					byId.length === 1
+						? scope
+						: byId.length === 0
+							? resolveExistingVaultFile(db, options.config, scope.key)
+							: null;
 				unresolvedReason = byId.length > 1 ? 'duplicate_file_entity_id' : 'unknown_file';
 			}
 		} else if (scope.type === 'repository') {

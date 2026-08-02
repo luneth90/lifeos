@@ -395,11 +395,12 @@ function indexOne(
 	const relPath = normalizeRelative(vaultRoot, filePath);
 	const before = selectIndexedRow(db, relPath);
 	if (!shouldIndex(relPath, config)) {
+		if (before) removeIndexEntry(db, relPath);
 		return {
 			result: { status: 'skipped', filePath: relPath, reason: 'excluded by scan rules' },
 			before,
-			after: before,
-			changed: false,
+			after: null,
+			changed: before !== null,
 		};
 	}
 	const absolutePath = join(vaultRoot, relPath);

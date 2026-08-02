@@ -552,6 +552,17 @@ describe('阶段五幂等与归档契约', () => {
 					: /all Obsidian CLI commands[^.\n]*current run/i,
 			);
 			expect(content).toMatch(/type:\s*["']?tool["']?[\s\S]*key:\s*["']?obsidian/);
+			const sandboxFlow = isChinese
+				? ['不得立即请求降级', '沙盒外重试', '复测成功后', '只有沙盒外复测仍失败']
+				: [
+						'do not request a fallback yet',
+						'outside the sandbox',
+						'If they succeed',
+						'Only when the outside-sandbox probes also fail',
+					];
+			const positions = sandboxFlow.map((marker) => content.indexOf(marker));
+			expect(positions.every((position) => position >= 0)).toBe(true);
+			expect(positions).toEqual([...positions].sort((left, right) => left - right));
 			expect(content).toContain('excluded by scan rules');
 			expect(content).toContain('createVaultDirectoryGuard');
 			expect(content).toContain('ensureVaultDirectory');

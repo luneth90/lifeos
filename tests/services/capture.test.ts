@@ -2,10 +2,11 @@ import { mkdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { _resetDefaultInstance } from '../../src/config.js';
+import { VaultConfig, _resetDefaultInstance, getOrCreateVaultConfig } from '../../src/config.js';
 import { initDb } from '../../src/db/schema.js';
 import { notifyFileChanged, notifyFilesChanged } from '../../src/services/capture.js';
 import { upsertMemoryItem } from '../../src/services/memory-items.js';
+import { resolveMemoryScopes } from '../../src/services/scope-resolver.js';
 import { createTempVault, createTestDb, writeTestNote } from '../setup.js';
 import type { TempVault } from '../setup.js';
 
@@ -119,7 +120,7 @@ describe('V4 文件变更通知', () => {
 		expect(db.prepare('SELECT * FROM vault_index').all()).toEqual([]);
 	});
 
-	it('移动到系统归档目录时移除旧索引并迁移路径记忆', () => {
+	it('移动到系统归档目录时移除旧索引并迁移真实规范化文件记忆', () => {
 		const source = '10_日记/2026-07-01.md';
 		const target = '90_系统/归档/日记/2026/07/2026-07-01.md';
 		writeTestNote(vault.root, source, {
@@ -128,11 +129,18 @@ describe('V4 文件变更通知', () => {
 			type: 'note',
 		});
 		notifyFileChanged(db, vault.root, source);
+		const config = getOrCreateVaultConfig(vault.root);
+		const sourceScope = resolveMemoryScopes(db, [{ type: 'file', key: source }], {
+			config,
+			allowCreate: true,
+		}).resolvedScopes[0];
+		expect(sourceScope).toEqual({ type: 'file', key: 'daily-2026-07-01' });
+		if (!sourceScope) throw new Error('测试前置失败：来源文件作用域未解析');
 		upsertMemoryItem(db, {
 			slotKey: 'file:daily-path',
 			content: '关联旧日记路径',
 			itemKind: 'fact',
-			scope: { type: 'file', key: source },
+			scope: sourceScope,
 			relatedFiles: [source],
 		});
 		mkdirSync(join(vault.root, '90_系统/归档/日记/2026/07'), { recursive: true });
@@ -156,6 +164,74 @@ describe('V4 文件变更通知', () => {
 			.get() as { scope_key: string; related_files: string };
 		expect(memory.scope_key).toBe(target);
 		expect(JSON.parse(memory.related_files)).toEqual([target]);
+		expect(
+			resolveMemoryScopes(db, [{ type: 'file', key: target }], { config }).resolvedScopes,
+		).toEqual([{ type: 'file', key: target }]);
+	});
+
+	it('排除目录中的普通文件没有既有记忆时仍不能新建文件作用域', () => {
+		const target = '90_系统/归档/日记/2026/07/2026-07-04.md';
+		writeTestNote(vault.root, target, {
+			id: 'daily-2026-07-04',
+			title: '2026-07-04',
+			type: 'note',
+		});
+		const resolution = resolveMemoryScopes(db, [{ type: 'file', key: target }], {
+			config: getOrCreateVaultConfig(vault.root),
+			allowCreate: true,
+		});
+
+		expect(resolution.resolvedScopes).toEqual([]);
+		expect(resolution.unresolvedScopes).toEqual([
+			{ scope: { type: 'file', key: target }, reason: 'unknown_file' },
+		]);
+	});
+
+	it('排除目标存在陈旧索引与扫描状态时一并清除', () => {
+		const source = '10_日记/2026-07-02.md';
+		const target = '90_系统/归档/日记/2026/07/2026-07-02.md';
+		const permissiveConfig = new VaultConfig(vault.root, {
+			memory: {
+				scan_prefixes: [
+					'drafts',
+					'diary',
+					'projects',
+					'research',
+					'knowledge',
+					'outputs',
+					'plans',
+					'resources',
+					'reflection',
+					'system',
+				],
+				excluded_prefixes: [],
+			},
+		});
+		writeTestNote(vault.root, target, {
+			id: 'stale-archive-target',
+			title: '陈旧归档目标',
+			type: 'note',
+		});
+		expect(notifyFileChanged(db, vault.root, target, undefined, permissiveConfig).action).toBe(
+			'indexed',
+		);
+		unlinkSync(join(vault.root, target));
+		writeTestNote(vault.root, source, {
+			id: 'daily-2026-07-02',
+			title: '2026-07-02',
+			type: 'note',
+		});
+		notifyFileChanged(db, vault.root, source);
+		renameSync(join(vault.root, source), join(vault.root, target));
+
+		const result = notifyFileChanged(db, vault.root, target, source);
+
+		expect(result).toMatchObject({
+			action: 'skipped',
+			reason: 'excluded by scan rules',
+		});
+		expect(db.prepare('SELECT 1 FROM vault_index WHERE file_path = ?').get(target)).toBeUndefined();
+		expect(db.prepare('SELECT 1 FROM scan_state WHERE file_path = ?').get(target)).toBeUndefined();
 	});
 
 	it('可索引目录之间移动时索引新路径并将文件作用域规范化为唯一 ID', () => {
@@ -213,6 +289,102 @@ describe('V4 文件变更通知', () => {
 
 		expect(result.action).toBe('error');
 		expect(result.reason).toContain('移动后的文件未进入索引');
+	});
+
+	it('可索引目标本次读取失败时不接受陈旧索引行', () => {
+		const source = '40_知识/读取失败来源.md';
+		const target = '40_知识/读取失败目标.md';
+		writeTestNote(vault.root, source, {
+			id: 'note-read-source',
+			title: '读取失败来源',
+			type: 'knowledge',
+			status: 'review',
+		});
+		writeTestNote(vault.root, target, {
+			id: 'note-stale-target',
+			title: '读取失败目标',
+			type: 'knowledge',
+			status: 'review',
+		});
+		notifyFileChanged(db, vault.root, source);
+		notifyFileChanged(db, vault.root, target);
+		unlinkSync(join(vault.root, source));
+		unlinkSync(join(vault.root, target));
+		mkdirSync(join(vault.root, target));
+
+		const result = notifyFileChanged(db, vault.root, target, source);
+
+		expect(result.action).toBe('error');
+		expect(result.reason).toContain('移动后的文件未进入索引');
+	});
+
+	it('重复实体 ID 的活跃目录移动继续使用路径文件作用域', () => {
+		const source = '40_知识/重复来源.md';
+		const sibling = '40_知识/重复同伴.md';
+		const target = '40_知识/重复目标.md';
+		for (const path of [source, sibling]) {
+			writeTestNote(vault.root, path, {
+				id: 'duplicate-note-id',
+				title: path,
+				type: 'knowledge',
+				status: 'review',
+			});
+			notifyFileChanged(db, vault.root, path);
+		}
+		const config = getOrCreateVaultConfig(vault.root);
+		const sourceScope = resolveMemoryScopes(db, [{ type: 'file', key: source }], {
+			config,
+		}).resolvedScopes[0];
+		expect(sourceScope).toEqual({ type: 'file', key: source });
+		if (!sourceScope) throw new Error('测试前置失败：重复 ID 来源作用域未解析');
+		upsertMemoryItem(db, {
+			slotKey: 'file:duplicate-path',
+			content: '重复 ID 来源记忆',
+			itemKind: 'fact',
+			scope: sourceScope,
+			relatedFiles: [source],
+		});
+		renameSync(join(vault.root, source), join(vault.root, target));
+
+		const result = notifyFileChanged(db, vault.root, target, source);
+
+		expect(result.action).toBe('indexed');
+		expect(
+			db
+				.prepare(
+					"SELECT scope_key, related_files FROM memory_items WHERE slot_key = 'file:duplicate-path'",
+				)
+				.get(),
+		).toEqual({ scope_key: target, related_files: JSON.stringify([target]) });
+	});
+
+	it('文件作用域合并出现同 slot 冲突时失败关闭并回滚索引', () => {
+		const source = '10_日记/2026-07-03.md';
+		const target = '90_系统/归档/日记/2026/07/2026-07-03.md';
+		writeTestNote(vault.root, source, {
+			id: 'daily-2026-07-03',
+			title: '2026-07-03',
+			type: 'note',
+		});
+		notifyFileChanged(db, vault.root, source);
+		for (const scopeKey of ['daily-2026-07-03', target]) {
+			upsertMemoryItem(db, {
+				slotKey: 'file:conflict',
+				content: `作用域 ${scopeKey}`,
+				itemKind: 'fact',
+				scope: { type: 'file', key: scopeKey },
+			});
+		}
+		mkdirSync(join(vault.root, '90_系统/归档/日记/2026/07'), { recursive: true });
+		renameSync(join(vault.root, source), join(vault.root, target));
+
+		const result = notifyFileChanged(db, vault.root, target, source);
+
+		expect(result.action).toBe('error');
+		expect(result.reason).toContain('移动后的文件记忆作用域冲突');
+		expect(db.prepare('SELECT file_path FROM vault_index ORDER BY file_path').all()).toEqual([
+			{ file_path: source },
+		]);
 	});
 
 	it('越界路径转换为结构化 error，不把异常传播给调用方', () => {
