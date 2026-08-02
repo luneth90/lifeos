@@ -1561,6 +1561,53 @@ describe('runArchive', () => {
 		}
 	});
 
+	it('目录候选创建嵌套目标目录失败时上报，并继续处理后续候选项', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/assets/sub/x.md', '# x');
+			write(
+				root,
+				'90_系统/归档/项目/2026/P/P.md',
+				`---\ntype: project\nstatus: done\nid: p\narchived: "2026-08-02"\n---\n`,
+			);
+			write(root, '90_系统/归档/项目/2026/P/assets', '阻塞目录创建');
+			write(root, '00_草稿/ok.md', draftNote('ok'));
+			let report: ArchiveReport;
+			expect(() => {
+				report = runArchive({
+					vaultRoot: root,
+					archiveDate: '2026-08-02',
+					candidates: [
+						{
+							type: 'project',
+							source: '20_项目/P',
+							target: '90_系统/归档/项目/2026/P',
+							main_file: '20_项目/P/P.md',
+							project_id: 'p',
+						},
+						{
+							type: 'draft',
+							source: '00_草稿/ok.md',
+							target: '90_系统/归档/草稿/2026/08/ok.md',
+							main_file: '00_草稿/ok.md',
+						},
+					],
+					moveRunner: fakeMove(root),
+				});
+			}).not.toThrow();
+			expect(report!.failed).toEqual([
+				{
+					path: '20_项目/P/assets/sub/x.md',
+					reason: expect.stringMatching(/^target_dir_create_failed:/),
+				},
+			]);
+			expect(existsSync(join(root, '20_项目/P/assets/sub/x.md'))).toBe(true);
+			expect(existsSync(join(root, '90_系统/归档/草稿/2026/08/ok.md'))).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
 	it('archived 原子写入保留原文件权限', () => {
 		const { root, cleanup } = makeTmp();
 		try {

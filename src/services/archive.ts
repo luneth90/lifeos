@@ -442,7 +442,15 @@ function moveDirectory(item: PreparedCandidate, move: MoveRunner, report: Archiv
 			: files;
 	for (const rel of orderedFiles) {
 		const targetAbs = join(item.targetAbs, rel);
-		mkdirSync(dirname(targetAbs), { recursive: true });
+		try {
+			mkdirSync(dirname(targetAbs), { recursive: true });
+		} catch (error) {
+			report.failed.push({
+				path: `${candidate.source}/${rel}`,
+				reason: `target_dir_create_failed:${(error as Error).message}`,
+			});
+			return false;
+		}
 		const result = move(`${candidate.source}/${rel}`, `${candidate.target}/${rel}`);
 		if (!result.ok) {
 			report.failed.push({
@@ -622,9 +630,13 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 					continue;
 				}
 				if (scan.status === 'unsupported') {
+					const entryPath = `${candidate.target}/${scan.entry}`;
+					const targetMain = candidate.main_file
+						? relocatedPath(candidate.source, candidate.target, candidate.main_file)
+						: null;
 					report.conflicts.push({
-						path: `${candidate.target}/${scan.entry}`,
-						reason: 'target_contains_symlink',
+						path: entryPath,
+						reason: entryPath === targetMain ? 'target_is_symlink' : 'target_contains_symlink',
 					});
 					continue;
 				}
