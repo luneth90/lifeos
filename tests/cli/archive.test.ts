@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -60,14 +69,11 @@ describe('lifeos archive 命令', () => {
 			expect(result.failed).toBe(0);
 			expect(result.moved).toBe(1);
 			expect(result.notifyApplied).toBe(true);
-			expect(notify).toHaveBeenCalledWith(
-				'90_系统/归档/草稿/2026/08/idea.md',
-				'00_草稿/idea.md',
-			);
+			expect(notify).toHaveBeenCalledWith('90_系统/归档/草稿/2026/08/idea.md', '00_草稿/idea.md');
 			expect(existsSync(join(root, '00_草稿/idea.md'))).toBe(false);
-			expect(
-				readFileSync(join(root, '90_系统/归档/草稿/2026/08/idea.md'), 'utf8'),
-			).toContain('archived: "2026-08-02"');
+			expect(readFileSync(join(root, '90_系统/归档/草稿/2026/08/idea.md'), 'utf8')).toContain(
+				'archived: "2026-08-02"',
+			);
 		} finally {
 			cleanup();
 		}
@@ -135,6 +141,45 @@ describe('lifeos archive 命令', () => {
 			expect(result.notifyApplied).toBe(false);
 			expect(notify).not.toHaveBeenCalled();
 			expect(existsSync(join(root, '00_草稿/idea.md'))).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('已移动文件补写 archived 后重新通知记忆索引', async () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			await initCommand([root, '--lang', 'zh', '--no-mcp']);
+			write(root, '00_草稿/idea.md', `---\ntype: draft\nstatus: done\n---\n# idea\n`);
+			chmodSync(join(root, '00_草稿/idea.md'), 0o444);
+			const candidatesFile = join(root, 'candidates.json');
+			write(
+				root,
+				'candidates.json',
+				JSON.stringify([
+					{
+						type: 'draft',
+						source: '00_草稿/idea.md',
+						target: '90_系统/归档/草稿/2026/08/idea.md',
+						main_file: '00_草稿/idea.md',
+					},
+				]),
+			);
+			const notify = vi.fn();
+			archiveCommand([root, '--candidates', candidatesFile, '--date', '2026-08-02'], {
+				moveRunner: fakeMove(root),
+				notify,
+			});
+			const target = join(root, '90_系统/归档/草稿/2026/08/idea.md');
+			chmodSync(target, 0o644);
+			notify.mockClear();
+
+			const result = archiveCommand(
+				[root, '--candidates', candidatesFile, '--date', '2026-08-02'],
+				{ moveRunner: fakeMove(root), notify },
+			);
+			expect(result.failed).toBe(0);
+			expect(notify).toHaveBeenCalledWith('90_系统/归档/草稿/2026/08/idea.md', undefined);
 		} finally {
 			cleanup();
 		}

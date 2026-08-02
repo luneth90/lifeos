@@ -30,7 +30,7 @@ Do not pass unresolved scopes, and never expand an empty scope list into a full-
 
 ## Obsidian CLI Execution Environment (Required)
 
-Archive uses the `lifeos archive` command, which internally calls `obsidian move` to update vault-wide wikilinks. Incrementally load the tool scope before the first probe or move:
+Archive uses the `lifeos archive` command, which explicitly binds the Vault corresponding to `<vault-root>` and calls `obsidian move` for every file so vault-wide wikilinks are updated. Incrementally load the tool scope before the first probe or move:
 
 ```text
 memory_context(
@@ -131,15 +131,17 @@ cat candidates.json | lifeos archive <vault-root> --date 2026-08-02
 ```
 
 Command semantics (idempotent, safe to rerun):
-- Any candidate conflict (missing source, occupied target, main file not done, etc.) stops the whole run without moving anything, exit code 2
-- Source missing with target present → `skipped(already_moved)`, treated as already done
+- The command validates source directories, archive targets, entity shapes, diary retention, and Vault-relative paths against `lifeos.yaml`; an invalid candidate stops the whole run
+- Any candidate conflict (missing source, mismatched target identity, main file not done, etc.) stops the whole run without moving anything, exit code 2
+- Source missing with a target whose identity, status, and project ID validate → `skipped(already_moved)`; a missing `archived` field is repaired idempotently
+- A partially moved folder project resumes with the same candidate when the target main-file identity matches or the target directory is empty; duplicate relative paths on both sides stop safely
 - A failing candidate does not interrupt others; failures are recorded in the report, exit code 1
 - `archived: "YYYY-MM-DD"` is written to the main file frontmatter by the command, preserving `status: done`; same-date values are skipped idempotently
-- Moved `.md` files are notified to the memory index automatically (`memory_notify`)
+- Moved `.md` files and main files whose metadata is repaired are notified to the memory index automatically (`memory_notify`)
 
 ## Step 4: Completion report
 
-Report from the command's JSON output (`moved` / `skipped` / `failed` / `conflicts`):
+Report from the command's JSON output (`moved` / `updated` / `skipped` / `failed` / `conflicts`):
 
 - If `failed` or `conflicts` is non-empty, list every failing item with its reason and a manual recovery suggestion (e.g., resolve the target conflict and rerun with the same candidates)
 - After a project (`type: project`) archives successfully, call `memory_forget` to clean its project-scoped memory:
@@ -153,8 +155,9 @@ Report from the command's JSON output (`moved` / `skipped` / `failed` / `conflic
 
 - **Only processed drafts** — never archive `status: pending` drafts
 - **Only completed plans** — only `status: done` plans may be archived; never `status: active`
+- **Only wholly completed projects** — keep `status: frozen` projects in place; never archive folder-project sub-files independently
 - **Only diaries older than 7 days** — `{diary directory}/` always keeps the last 7 days (including today)
-- **Never delete** — move only; `lifeos archive` internally uses `obsidian move` to update vault-wide wikilinks; bare `mv` is forbidden
+- **Never delete** — move only; `lifeos archive` uses `obsidian move` for every file so vault-wide wikilinks are updated; bare `mv` is forbidden
 - **Conflicts stop everything** — any candidate conflict blocks all moves; fix and rerun
 - **Idempotent reruns** — already-archived entries rerun as `skipped(already_moved)`, no duplicate moves or writes
 
@@ -166,7 +169,7 @@ Report from the command's JSON output (`moved` / `skipped` / `failed` / `conflic
 - **Diary filename not matching `YYYY-MM-DD.md`:** skip and explain in the summary
 - **Folder project with mixed states:** judge by the main file frontmatter; skip the whole folder and explain in the report
 - **Large project with resources:** keep related resources in `{resources directory}/`, list them in the report, do not auto-move
-- **Move failure:** report the `failed` item with its reason; moved files stay at the target; fix and rerun (idempotent)
+- **Move failure:** report the `failed` item with its reason; moved files stay at the target; fix the cause and resume with the same candidates
 
 # Archive Layout
 
@@ -208,6 +211,6 @@ Report from the command's JSON output (`moved` / `skipped` / `failed` / `conflic
 After archiving:
 
 1. Run `/archive` weekly or monthly to keep the vault tidy
-2. Check paused projects: reactivate or archive
+2. Check paused projects: reactivate them, or confirm completion and set them to `done` before archiving
 3. Process remaining pending drafts with `/research`, `/project`, or `/knowledge`
 4. Continue or review `active` plans; archive them when done

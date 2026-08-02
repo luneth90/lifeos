@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -90,7 +99,11 @@ describe('runArchive', () => {
 	it('归档文件夹项目：整体移动目录并给主文件写 archived', () => {
 		const { root, cleanup } = makeTmp();
 		try {
-			write(root, '20_项目/Demo/Demo.md', `---\ntype: project\nstatus: done\nid: demo\n---\n# Demo\n`);
+			write(
+				root,
+				'20_项目/Demo/Demo.md',
+				`---\ntype: project\nstatus: done\nid: demo\n---\n# Demo\n`,
+			);
 			write(root, '20_项目/Demo/文档/guide.md', '# Guide');
 			write(root, '20_项目/Demo/assets/logo.png', 'png');
 			const report = runArchive({
@@ -125,6 +138,114 @@ describe('runArchive', () => {
 		}
 	});
 
+	it('拒绝逃出 Vault 的候选路径', () => {
+		const { root, cleanup } = makeTmp();
+		const outside = `${root}-outside.md`;
+		try {
+			writeFileSync(outside, '# outside', 'utf8');
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'diary',
+						source: `../${outside.slice(outside.lastIndexOf('/') + 1)}`,
+						target: '90_系统/归档/日记/2026/07/outside.md',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([
+				{
+					path: `../${outside.slice(outside.lastIndexOf('/') + 1)}`,
+					reason: 'source_outside_vault',
+				},
+			]);
+			expect(existsSync(outside)).toBe(true);
+		} finally {
+			rmSync(outside, { force: true });
+			cleanup();
+		}
+	});
+
+	it('拒绝把非日记目录中的文件伪装成日记', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/Active.md', `---\ntype: project\nstatus: active\nid: active\n---\n`);
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'diary',
+						source: '20_项目/Active.md',
+						target: '90_系统/归档/日记/2026/07/2026-07-01.md',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([
+				{ path: '20_项目/Active.md', reason: 'invalid_source_location:diary' },
+			]);
+			expect(existsSync(join(root, '20_项目/Active.md'))).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('拒绝把文件夹项目的 done 子文件单独归档', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/App/App.md', `---\ntype: project\nstatus: active\nid: app\n---\n`);
+			write(root, '20_项目/App/版本/V1.md', `---\ntype: project\nstatus: done\nid: app-v1\n---\n`);
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'project',
+						source: '20_项目/App/版本/V1.md',
+						target: '90_系统/归档/项目/2026/V1.md',
+						main_file: '20_项目/App/版本/V1.md',
+						project_id: 'app-v1',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([
+				{ path: '20_项目/App/版本/V1.md', reason: 'invalid_source_location:project' },
+			]);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('project_id 必须与主文件稳定 id 一致', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/Demo.md', `---\ntype: project\nstatus: done\nid: demo\n---\n`);
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'project',
+						source: '20_项目/Demo.md',
+						target: '90_系统/归档/项目/2026/Demo.md',
+						main_file: '20_项目/Demo.md',
+						project_id: 'another-project',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([
+				{ path: '20_项目/Demo.md', reason: 'project_id_mismatch:demo' },
+			]);
+		} finally {
+			cleanup();
+		}
+	});
+
 	it('目标冲突时整体停止，不移动任何内容', () => {
 		const { root, cleanup } = makeTmp();
 		try {
@@ -135,8 +256,18 @@ describe('runArchive', () => {
 				vaultRoot: root,
 				archiveDate: '2026-08-02',
 				candidates: [
-					{ type: 'draft', source: '00_草稿/a.md', target: '90_系统/归档/草稿/2026/08/a.md', main_file: '00_草稿/a.md' },
-					{ type: 'draft', source: '00_草稿/b.md', target: '90_系统/归档/草稿/2026/08/b.md', main_file: '00_草稿/b.md' },
+					{
+						type: 'draft',
+						source: '00_草稿/a.md',
+						target: '90_系统/归档/草稿/2026/08/a.md',
+						main_file: '00_草稿/a.md',
+					},
+					{
+						type: 'draft',
+						source: '00_草稿/b.md',
+						target: '90_系统/归档/草稿/2026/08/b.md',
+						main_file: '00_草稿/b.md',
+					},
 				],
 				moveRunner: fakeMove(root),
 			});
@@ -159,8 +290,19 @@ describe('runArchive', () => {
 				vaultRoot: root,
 				archiveDate: '2026-08-02',
 				candidates: [
-					{ type: 'draft', source: '00_草稿/pending.md', target: '90_系统/归档/草稿/2026/08/pending.md', main_file: '00_草稿/pending.md' },
-					{ type: 'project', source: '20_项目/X.md', target: '90_系统/归档/项目/2026/X.md', main_file: '20_项目/X.md', project_id: 'x' },
+					{
+						type: 'draft',
+						source: '00_草稿/pending.md',
+						target: '90_系统/归档/草稿/2026/08/pending.md',
+						main_file: '00_草稿/pending.md',
+					},
+					{
+						type: 'project',
+						source: '20_项目/X.md',
+						target: '90_系统/归档/项目/2026/X.md',
+						main_file: '20_项目/X.md',
+						project_id: 'x',
+					},
 				],
 				moveRunner: fakeMove(root),
 			});
@@ -182,7 +324,11 @@ describe('runArchive', () => {
 				vaultRoot: root,
 				archiveDate: '2026-08-02',
 				candidates: [
-					{ type: 'diary', source: '10_日记/2026-07-01.md', target: '90_系统/归档/日记/2026/07/2026-07-01.md' },
+					{
+						type: 'diary',
+						source: '10_日记/2026-07-01.md',
+						target: '90_系统/归档/日记/2026/07/2026-07-01.md',
+					},
 				],
 				moveRunner: fakeMove(root),
 			});
@@ -204,7 +350,12 @@ describe('runArchive', () => {
 				archiveDate: '2026-08-02',
 				dryRun: true,
 				candidates: [
-					{ type: 'draft', source: '00_草稿/idea.md', target: '90_系统/归档/草稿/2026/08/idea.md', main_file: '00_草稿/idea.md' },
+					{
+						type: 'draft',
+						source: '00_草稿/idea.md',
+						target: '90_系统/归档/草稿/2026/08/idea.md',
+						main_file: '00_草稿/idea.md',
+					},
 				],
 				moveRunner: fakeMove(root),
 			});
@@ -262,8 +413,18 @@ describe('runArchive', () => {
 				vaultRoot: root,
 				archiveDate: '2026-08-02',
 				candidates: [
-					{ type: 'draft', source: '00_草稿/a.md', target: '90_系统/归档/草稿/2026/08/a.md', main_file: '00_草稿/a.md' },
-					{ type: 'draft', source: '00_草稿/b.md', target: '90_系统/归档/草稿/2026/08/b.md', main_file: '00_草稿/b.md' },
+					{
+						type: 'draft',
+						source: '00_草稿/a.md',
+						target: '90_系统/归档/草稿/2026/08/a.md',
+						main_file: '00_草稿/a.md',
+					},
+					{
+						type: 'draft',
+						source: '00_草稿/b.md',
+						target: '90_系统/归档/草稿/2026/08/b.md',
+						main_file: '00_草稿/b.md',
+					},
 				],
 				moveRunner: fakeMove(root, (rel) => rel.includes('a.md')),
 			});
@@ -279,6 +440,147 @@ describe('runArchive', () => {
 		}
 	});
 
+	it('文件夹项目部分移动失败后可用同一候选幂等续跑', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '20_项目/P/z.md', '# z');
+			const candidate = {
+				type: 'project' as const,
+				source: '20_项目/P',
+				target: '90_系统/归档/项目/2026/P',
+				main_file: '20_项目/P/P.md',
+				project_id: 'p',
+			};
+			const first = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root, (rel) => rel.endsWith('/z.md')),
+			});
+			expect(first.failed).toEqual([
+				{ path: '20_项目/P/z.md', reason: 'injected failure: 20_项目/P/z.md' },
+			]);
+			expect(existsSync(join(root, '90_系统/归档/项目/2026/P/P.md'))).toBe(true);
+			expect(existsSync(join(root, '20_项目/P/z.md'))).toBe(true);
+
+			const rerun = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(rerun.conflicts).toEqual([]);
+			expect(rerun.failed).toEqual([]);
+			expect(existsSync(join(root, '20_项目/P'))).toBe(false);
+			expect(existsSync(join(root, '90_系统/归档/项目/2026/P/z.md'))).toBe(true);
+			expect(readFileSync(join(root, '90_系统/归档/项目/2026/P/P.md'), 'utf8')).toContain(
+				'archived: "2026-08-02"',
+			);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('文件夹项目的非 Markdown 资源也通过 moveRunner 移动', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '20_项目/P/assets/logo.png', 'png');
+			const calls: string[] = [];
+			const runner: MoveRunner = (source, target) => {
+				calls.push(`${source} -> ${target}`);
+				renameSync(join(root, source), join(root, target));
+				return { ok: true };
+			};
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'project',
+						source: '20_项目/P',
+						target: '90_系统/归档/项目/2026/P',
+						main_file: '20_项目/P/P.md',
+						project_id: 'p',
+					},
+				],
+				moveRunner: runner,
+			});
+			expect(report.failed).toEqual([]);
+			expect(calls).toContain(
+				'20_项目/P/assets/logo.png -> 90_系统/归档/项目/2026/P/assets/logo.png',
+			);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('移动后的 archived 写入失败会报告，修复后重跑可补写元数据', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '00_草稿/idea.md', draftNote('idea'));
+			chmodSync(join(root, '00_草稿/idea.md'), 0o444);
+			const candidate = {
+				type: 'draft' as const,
+				source: '00_草稿/idea.md',
+				target: '90_系统/归档/草稿/2026/08/idea.md',
+				main_file: '00_草稿/idea.md',
+			};
+			const first = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(first.failed[0]?.reason).toMatch(/^write_failed:/);
+			const target = join(root, candidate.target);
+			chmodSync(target, 0o644);
+
+			const rerun = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(rerun.failed).toEqual([]);
+			expect(rerun.skipped).toEqual([{ path: candidate.source, reason: 'already_moved' }]);
+			expect(readFileSync(target, 'utf8')).toContain('archived: "2026-08-02"');
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('archived 日期冲突在移动前整体停止', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(
+				root,
+				'00_草稿/idea.md',
+				`---\ntype: draft\nstatus: done\narchived: "2026-07-01"\n---\n# idea\n`,
+			);
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'draft',
+						source: '00_草稿/idea.md',
+						target: '90_系统/归档/草稿/2026/08/idea.md',
+						main_file: '00_草稿/idea.md',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([
+				{ path: '00_草稿/idea.md', reason: 'archived_date_conflict:2026-07-01' },
+			]);
+			expect(existsSync(join(root, '00_草稿/idea.md'))).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
 	it('archived 已存在同值日期时幂等跳过，异值时报错', () => {
 		const { root, cleanup } = makeTmp();
 		try {
@@ -287,7 +589,12 @@ describe('runArchive', () => {
 				vaultRoot: root,
 				archiveDate: '2026-08-02',
 				candidates: [
-					{ type: 'draft', source: '00_草稿/idea.md', target: '90_系统/归档/草稿/2026/08/idea.md', main_file: '00_草稿/idea.md' },
+					{
+						type: 'draft',
+						source: '00_草稿/idea.md',
+						target: '90_系统/归档/草稿/2026/08/idea.md',
+						main_file: '00_草稿/idea.md',
+					},
 				],
 				moveRunner: fakeMove(root),
 			});
@@ -295,21 +602,40 @@ describe('runArchive', () => {
 				vaultRoot: root,
 				archiveDate: '2026-08-02',
 				candidates: [
-					{ type: 'draft', source: '00_草稿/idea.md', target: '90_系统/归档/草稿/2026/08/idea.md', main_file: '00_草稿/idea.md' },
+					{
+						type: 'draft',
+						source: '00_草稿/idea.md',
+						target: '90_系统/归档/草稿/2026/08/idea.md',
+						main_file: '00_草稿/idea.md',
+					},
 				],
 				moveRunner: fakeMove(root),
 			});
 			expect(rerunSame.skipped).toHaveLength(1);
 			// 已归档文件若再次出现于候选（源恢复场景），日期冲突时失败
 			write(root, '00_草稿/idea.md', draftNote('idea'));
-			write(root, '90_系统/归档/草稿/2026/08/idea.md', `---\ntype: draft\nstatus: done\narchived: "2026-07-01"\n---\n# idea\n`);
+			write(
+				root,
+				'90_系统/归档/草稿/2026/08/idea.md',
+				`---\ntype: draft\nstatus: done\narchived: "2026-07-01"\n---\n# idea\n`,
+			);
 			write(root, '00_草稿/idea2.md', draftNote('idea2'));
 			const conflict = runArchive({
 				vaultRoot: root,
 				archiveDate: '2026-08-02',
 				candidates: [
-					{ type: 'draft', source: '00_草稿/idea.md', target: '90_系统/归档/草稿/2026/08/idea.md', main_file: '00_草稿/idea.md' },
-					{ type: 'draft', source: '00_草稿/idea2.md', target: '90_系统/归档/草稿/2026/08/idea2.md', main_file: '00_草稿/idea2.md' },
+					{
+						type: 'draft',
+						source: '00_草稿/idea.md',
+						target: '90_系统/归档/草稿/2026/08/idea.md',
+						main_file: '00_草稿/idea.md',
+					},
+					{
+						type: 'draft',
+						source: '00_草稿/idea2.md',
+						target: '90_系统/归档/草稿/2026/08/idea2.md',
+						main_file: '00_草稿/idea2.md',
+					},
 				],
 				moveRunner: fakeMove(root),
 			});

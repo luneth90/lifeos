@@ -17,7 +17,7 @@ pending ──/research,/project,/knowledge──→ done ──/archive──�
 
 - /archive only archives drafts with status `done`.
 - /archive never archives `pending` drafts.
-- After the move transaction completes, the archive metadata transaction is required. It only appends `archived: "YYYY-MM-DD"`, preserves `status: done`, and completes file notification and index confirmation. Archival is complete only after both transactions complete.
+- After `lifeos archive` moves the file, it appends `archived: "YYYY-MM-DD"`, preserves `status: done`, and notifies the memory index. Archival is complete only when the move, metadata write, and notification all finish without failure.
 
 ## Knowledge Note Lifecycle
 
@@ -56,7 +56,7 @@ active ⇄ frozen ──→ done ──/archive──→ keep done
 - User manually sets frontmatter `status: frozen` to freeze, changes back to `status: active` to unfreeze
 - Knowledge notes linked to a frozen project (via `project` field) are hidden from the review list
 - A frozen project can transition directly to `done` or be unfrozen back to `active`
-- When archiving a `done` project, the archive metadata transaction is required after the move transaction; it only appends `archived: "YYYY-MM-DD"` and preserves `status: done`.
+- /archive only archives a project whose overall status is `done`. After `lifeos archive` finishes moving it, the command appends `archived: "YYYY-MM-DD"` and preserves `status: done`. Folder-project sub-files are never archived independently.
 
 ## Plan Lifecycle
 
@@ -78,7 +78,7 @@ pending ──confirmation──→ active ──execution completes──→ do
 
 - /project and /research must write `type: plan` and `status: pending` when creating a plan file
 - /project and /research only update the plan status to `done` after execution; they do not move the plan file directly
-- /archive only archives plans with `status: done`; after the move transaction, the required archive metadata transaction appends `archived: "YYYY-MM-DD"` and preserves `status: done`
+- /archive only archives plans with `status: done`; after `lifeos archive` finishes moving one, the command appends `archived: "YYYY-MM-DD"` and preserves `status: done`
 
 ## Research Lifecycle
 

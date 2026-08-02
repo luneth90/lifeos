@@ -30,7 +30,7 @@ memory_context(
 
 ## Obsidian CLI 执行环境（必须）
 
-归档使用 `lifeos archive` 命令，该命令内部调用 `obsidian move` 更新全库 wikilink。在首次探测或移动前增量调用：
+归档使用 `lifeos archive` 命令，该命令显式绑定 `<vault-root>` 对应的 Vault，并对每个文件调用 `obsidian move` 更新全库 wikilink。在首次探测或移动前增量调用：
 
 ```text
 memory_context(
@@ -131,15 +131,17 @@ cat candidates.json | lifeos archive <vault-root> --date 2026-08-02
 ```
 
 命令语义（幂等，可安全重跑）：
-- 任一候选冲突（源缺失、目标已存在、主文件非 done 等）→ 整体停止，不移动任何内容，退出码 2
-- 源缺失且目标已存在 → `skipped(already_moved)`，视为已完成
+- 命令按 `lifeos.yaml` 校验源目录、归档目标、文件形状、日记保留窗口和 Vault 内相对路径；非法候选整体停止
+- 任一候选冲突（源缺失、目标身份不符、主文件非 done 等）→ 整体停止，不移动任何内容，退出码 2
+- 源缺失且目标身份、状态与项目 ID 校验通过 → `skipped(already_moved)`；若缺少 `archived`，命令会幂等补写
+- 文件夹项目部分移动后，可在目标主文件身份吻合或目标目录为空时用相同候选续跑；同一相对路径两端都存在时安全停止
 - 单候选失败不中断其他候选，失败项写入报告，退出码 1
 - `archived: "YYYY-MM-DD"` 由命令写入主文件 frontmatter，保留 `status: done`；同值日期幂等跳过
-- 移动的 `.md` 文件由命令自动通知记忆索引（`memory_notify`）
+- 移动的 `.md` 文件和补写元数据的主文件由命令自动通知记忆索引（`memory_notify`）
 
 ## 步骤四：完成报告
 
-按命令输出的 JSON 报告（`moved` / `skipped` / `failed` / `conflicts`）汇报：
+按命令输出的 JSON 报告（`moved` / `updated` / `skipped` / `failed` / `conflicts`）汇报：
 
 - `failed` 或 `conflicts` 非空时，列出全部失败项与原因，并给出人工处理建议（如解决目标冲突后以相同候选重跑）
 - 归档项目（`type: project`）全部成功后，调用 `memory_forget` 清理项目作用域记忆：
@@ -153,8 +155,9 @@ cat candidates.json | lifeos archive <vault-root> --date 2026-08-02
 
 - **只归档已处理的草稿** — `status: pending` 的草稿绝不归档
 - **只归档已完成的计划** — `status: done` 的计划才可归档，`status: active` 绝不归档
+- **只归档整体完成的项目** — `status: frozen` 的项目保留原位；文件夹项目的子文件不单独归档
 - **只归档超出最近 7 天的日记** — `{日记目录}/` 始终保留最近 7 天（含今天）的日记
-- **永不删除** — 只移动，不销毁内容；`lifeos archive` 内部使用 `obsidian move` 自动更新全库 wikilink，禁止裸 `mv`
+- **永不删除** — 只移动，不销毁内容；`lifeos archive` 对所有文件使用 `obsidian move` 自动更新全库 wikilink，禁止裸 `mv`
 - **冲突整体停止** — 任一候选冲突时不移动任何内容，修复后重跑
 - **幂等重跑** — 已归档条目重跑时记为 `skipped(already_moved)`，不会重复移动或重复写入
 
@@ -166,7 +169,7 @@ cat candidates.json | lifeos archive <vault-root> --date 2026-08-02
 - **日记文件名不符合 `YYYY-MM-DD.md`：** 跳过该文件并在汇总中说明，避免误归档非标准文件
 - **文件夹项目含混合状态：** 以主文件 frontmatter 为准，跳过整个文件夹并在完成报告中说明
 - **大型项目含资源：** 关联资源保留在 `{资源目录}/`，在完成报告中列出，不自动移动或清理
-- **文件移动失败：** 报告 `failed` 项与原因；已移动文件保留在目标位置，修复原因后重跑（幂等）
+- **文件移动失败：** 报告 `failed` 项与原因；已移动文件保留在目标位置，修复原因后以相同候选续跑
 
 # 归档结构
 
@@ -208,6 +211,6 @@ cat candidates.json | lifeos archive <vault-root> --date 2026-08-02
 归档完成后建议：
 
 1. 定期（每周/每月）执行 `/archive` 保持库整洁
-2. 检查暂停中的项目，考虑重新激活或归档
+2. 检查暂停中的项目：重新激活，或确认完成后先改为 `done` 再归档
 3. 用 `/research`、`/project` 或 `/knowledge` 处理仍在 pending 的草稿
 4. 对于仍为 `active` 的计划，继续执行或复查；完成后再运行 `/archive`

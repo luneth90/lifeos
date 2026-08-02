@@ -7,11 +7,11 @@ import {
 	mkdirSync,
 	readFileSync,
 	readdirSync,
-	renameSync,
 	rmdirSync,
 	writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve, win32 } from 'node:path';
+import { resolveConfig } from '../config.js';
 
 export type ArchiveEntityType = 'project' | 'draft' | 'plan' | 'diary';
 
@@ -41,6 +41,7 @@ export interface ArchiveReport {
 	dryRun: boolean;
 	archiveDate: string;
 	moved: ArchiveMove[];
+	updated: string[];
 	skipped: ArchiveIssue[];
 	failed: ArchiveIssue[];
 	conflicts: ArchiveIssue[];
@@ -61,12 +62,15 @@ export interface RunArchiveOptions {
 const ENTITY_TYPES: ReadonlySet<string> = new Set(['project', 'draft', 'plan', 'diary']);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
-/** 默认移动执行器：调用 obsidian move（自动更新全库 wikilink）。路径为 Vault 相对路径。 */
-function defaultMoveRunner(): MoveRunner {
+/** 默认移动执行器：显式绑定 Vault 后调用 obsidian move。路径为 Vault 相对路径。 */
+function defaultMoveRunner(vaultRoot: string): MoveRunner {
+	const vaultName = basename(resolve(vaultRoot));
 	return (source, target) => {
-		const result = spawnSync('obsidian', ['move', `path=${source}`, `to=${target}`], {
-			encoding: 'utf8',
-		});
+		const result = spawnSync(
+			'obsidian',
+			[`vault=${vaultName}`, 'move', `path=${source}`, `to=${target}`],
+			{ encoding: 'utf8' },
+		);
 		const output = `${result.stdout ?? ''}${result.stderr ?? ''}`;
 		if (result.status !== 0 || !/^Moved:/m.test(output)) {
 			return { ok: false, error: output.trim().slice(0, 200) || 'obsidian move failed' };
@@ -78,6 +82,7 @@ function defaultMoveRunner(): MoveRunner {
 interface Frontmatter {
 	type?: string;
 	status?: string;
+	id?: string;
 	archived?: string;
 	parsed: boolean;
 	/** archived 行的插入位置（frontmatter 结束标记前） */
@@ -94,7 +99,7 @@ function parseFrontmatter(content: string): Frontmatter {
 		const kv = line.match(/^([A-Za-z_][\w-]*):\s*(.*)$/);
 		if (!kv) continue;
 		const key = kv[1];
-		if (!['type', 'status', 'archived'].includes(key)) continue;
+		if (!['type', 'status', 'id', 'archived'].includes(key)) continue;
 		let value = kv[2].trim();
 		if (
 			(value.startsWith('"') && value.endsWith('"')) ||
@@ -106,6 +111,7 @@ function parseFrontmatter(content: string): Frontmatter {
 	}
 	result.type = values.type;
 	result.status = values.status;
+	result.id = values.id;
 	result.archived = values.archived;
 	const endMarker = match[0].lastIndexOf('\n---');
 	result.insertPos = (match.index ?? 0) + endMarker + 1;
@@ -117,6 +123,160 @@ interface PreparedCandidate {
 	sourceAbs: string;
 	targetAbs: string;
 	isDirectory: boolean;
+}
+
+interface MetadataRepair {
+	target: string;
+	targetAbs: string;
+}
+
+interface ArchivePaths {
+	sourceRoot: string;
+	targetRoot: string;
+}
+
+function candidatePaths(vaultRoot: string, type: ArchiveEntityType): ArchivePaths {
+	const config = resolveConfig(vaultRoot).rawConfig;
+	const sourceRoots: Record<ArchiveEntityType, string> = {
+		project: config.directories.projects,
+		draft: config.directories.drafts,
+		plan: config.directories.plans,
+		diary: config.directories.diary,
+	};
+	const archive = config.subdirectories.system.archive;
+	const targetLeaves: Record<ArchiveEntityType, string> = {
+		project: archive.projects,
+		draft: archive.drafts,
+		plan: archive.plans,
+		diary: archive.diary,
+	};
+	return {
+		sourceRoot: sourceRoots[type],
+		targetRoot: `${config.directories.system}/${targetLeaves[type]}`,
+	};
+}
+
+function unsafeRelativePath(path: string): boolean {
+	if (!path || path.includes('\0') || path.includes('\\')) return true;
+	if (isAbsolute(path) || win32.isAbsolute(path)) return true;
+	const parts = path.split('/');
+	return parts.some((part) => !part || part === '.' || part === '..');
+}
+
+function dateParts(value: string): { year: string; month: string; time: number } | null {
+	if (!DATE_PATTERN.test(value)) return null;
+	const [year, month, day] = value.split('-').map(Number);
+	const time = Date.UTC(year, month - 1, day);
+	const date = new Date(time);
+	if (
+		date.getUTCFullYear() !== year ||
+		date.getUTCMonth() + 1 !== month ||
+		date.getUTCDate() !== day
+	) {
+		return null;
+	}
+	return { year: String(year).padStart(4, '0'), month: String(month).padStart(2, '0'), time };
+}
+
+function validateCandidatePath(
+	vaultRoot: string,
+	candidate: ArchiveCandidate,
+	archiveDate: string,
+): ArchiveIssue | null {
+	for (const [field, value] of [
+		['source', candidate.source],
+		['target', candidate.target],
+		['main_file', candidate.main_file],
+	] as const) {
+		if (value !== undefined && unsafeRelativePath(value)) {
+			return { path: value, reason: `${field}_outside_vault` };
+		}
+	}
+
+	const { sourceRoot, targetRoot } = candidatePaths(vaultRoot, candidate.type);
+	if (dirname(candidate.source) !== sourceRoot) {
+		return { path: candidate.source, reason: `invalid_source_location:${candidate.type}` };
+	}
+	if (candidate.type !== 'project' && !candidate.source.endsWith('.md')) {
+		return { path: candidate.source, reason: `invalid_source_shape:${candidate.type}` };
+	}
+	if (candidate.type !== 'diary') {
+		const mainFile = candidate.main_file;
+		if (!mainFile) return { path: candidate.source, reason: 'main_file_missing' };
+		if (candidate.source.endsWith('.md')) {
+			if (mainFile !== candidate.source) {
+				return { path: mainFile, reason: 'main_file_outside_source' };
+			}
+		} else if (!mainFile.startsWith(`${candidate.source}/`)) {
+			return { path: mainFile, reason: 'main_file_outside_source' };
+		}
+	}
+
+	const targetRelative = relative(targetRoot, candidate.target).replace(/\\/g, '/');
+	const targetParts = targetRelative.split('/');
+	const sourceName = basename(candidate.source);
+	if (candidate.type === 'project') {
+		if (
+			targetParts.length !== 2 ||
+			!/^\d{4}$/.test(targetParts[0]) ||
+			targetParts[1] !== sourceName
+		) {
+			return { path: candidate.target, reason: 'invalid_target_location:project' };
+		}
+	} else if (candidate.type === 'draft') {
+		const archived = dateParts(archiveDate);
+		if (
+			!archived ||
+			targetParts.length !== 3 ||
+			targetParts[0] !== archived.year ||
+			targetParts[1] !== archived.month ||
+			targetParts[2] !== sourceName
+		) {
+			return { path: candidate.target, reason: 'invalid_target_location:draft' };
+		}
+	} else if (candidate.type === 'plan') {
+		if (targetParts.length !== 1 || targetParts[0] !== sourceName) {
+			return { path: candidate.target, reason: 'invalid_target_location:plan' };
+		}
+	} else {
+		const diaryName = sourceName.match(/^(\d{4})-(\d{2})-(\d{2})\.md$/);
+		const diaryDate = diaryName ? dateParts(diaryName[0].slice(0, -3)) : null;
+		const archived = dateParts(archiveDate);
+		if (!diaryName || !diaryDate || !archived || diaryDate.time >= archived.time - 6 * 86_400_000) {
+			return { path: candidate.source, reason: 'diary_inside_retention_window' };
+		}
+		if (
+			targetParts.length !== 3 ||
+			targetParts[0] !== diaryName[1] ||
+			targetParts[1] !== diaryName[2] ||
+			targetParts[2] !== sourceName
+		) {
+			return { path: candidate.target, reason: 'invalid_target_location:diary' };
+		}
+	}
+	return null;
+}
+
+function validateMainFile(
+	candidate: ArchiveCandidate,
+	mainPath: string,
+	content: string,
+	archiveDate: string,
+): ArchiveIssue | null {
+	const frontmatter = parseFrontmatter(content);
+	if (frontmatter.type !== candidate.type) {
+		return { path: mainPath, reason: `type_mismatch:${frontmatter.type ?? 'none'}` };
+	}
+	if (frontmatter.status !== 'done') {
+		return { path: mainPath, reason: `status_not_done:${frontmatter.status ?? 'none'}` };
+	}
+	if (candidate.type === 'project' && frontmatter.id !== candidate.project_id) {
+		return { path: mainPath, reason: `project_id_mismatch:${frontmatter.id ?? 'none'}` };
+	}
+	if (frontmatter.archived !== undefined && frontmatter.archived !== archiveDate) {
+		return { path: mainPath, reason: `archived_date_conflict:${frontmatter.archived}` };
+	}
+	return null;
 }
 
 /** 把 main_file 的源前缀替换为目标前缀 */
@@ -163,22 +323,10 @@ function moveFile(item: PreparedCandidate, move: MoveRunner, report: ArchiveRepo
 		report.moved.push({ from: candidate.source, to: candidate.target });
 		return true;
 	}
-	if (candidate.source.endsWith('.md')) {
-		const result = move(candidate.source, candidate.target);
-		if (!result.ok) {
-			report.failed.push({ path: candidate.source, reason: result.error ?? 'move_failed' });
-			return false;
-		}
-	} else {
-		try {
-			renameSync(item.sourceAbs, item.targetAbs);
-		} catch (error) {
-			report.failed.push({
-				path: candidate.source,
-				reason: `rename_failed:${(error as Error).message}`,
-			});
-			return false;
-		}
+	const result = move(candidate.source, candidate.target);
+	if (!result.ok) {
+		report.failed.push({ path: candidate.source, reason: result.error ?? 'move_failed' });
+		return false;
 	}
 	report.moved.push({ from: candidate.source, to: candidate.target });
 	return true;
@@ -198,28 +346,21 @@ function moveDirectory(item: PreparedCandidate, move: MoveRunner, report: Archiv
 		report.moved.push({ from: candidate.source, to: candidate.target });
 		return true;
 	}
-	for (const rel of files) {
+	const mainRel = candidate.main_file?.slice(candidate.source.length + 1);
+	const orderedFiles =
+		mainRel && files.includes(mainRel)
+			? [mainRel, ...files.filter((file) => file !== mainRel)]
+			: files;
+	for (const rel of orderedFiles) {
 		const targetAbs = join(item.targetAbs, rel);
 		mkdirSync(dirname(targetAbs), { recursive: true });
-		if (rel.endsWith('.md')) {
-			const result = move(`${candidate.source}/${rel}`, `${candidate.target}/${rel}`);
-			if (!result.ok) {
-				report.failed.push({
-					path: `${candidate.source}/${rel}`,
-					reason: result.error ?? 'move_failed',
-				});
-				return false;
-			}
-		} else {
-			try {
-				renameSync(join(item.sourceAbs, rel), targetAbs);
-			} catch (error) {
-				report.failed.push({
-					path: `${candidate.source}/${rel}`,
-					reason: `rename_failed:${(error as Error).message}`,
-				});
-				return false;
-			}
+		const result = move(`${candidate.source}/${rel}`, `${candidate.target}/${rel}`);
+		if (!result.ok) {
+			report.failed.push({
+				path: `${candidate.source}/${rel}`,
+				reason: result.error ?? 'move_failed',
+			});
+			return false;
 		}
 		report.moved.push({ from: `${candidate.source}/${rel}`, to: `${candidate.target}/${rel}` });
 	}
@@ -236,33 +377,45 @@ function moveDirectory(item: PreparedCandidate, move: MoveRunner, report: Archiv
 }
 
 /** 幂等写入 archived 字段（保留 status: done；已有同值日期则跳过）；dry-run 不做任何文件操作 */
-function writeArchived(targetAbs: string, archiveDate: string, report: ArchiveReport): void {
-	if (report.dryRun) return;
+type WriteArchivedResult = 'changed' | 'unchanged' | 'failed';
+
+function writeArchived(
+	targetAbs: string,
+	archiveDate: string,
+	report: ArchiveReport,
+): WriteArchivedResult {
+	if (report.dryRun) return 'unchanged';
 	let content: string;
 	try {
 		content = readFileSync(targetAbs, 'utf8');
 	} catch (error) {
 		report.failed.push({ path: targetAbs, reason: `read_failed:${(error as Error).message}` });
-		return;
+		return 'failed';
 	}
 	const frontmatter = parseFrontmatter(content);
 	if (!frontmatter.parsed) {
 		report.failed.push({ path: targetAbs, reason: 'frontmatter_missing' });
-		return;
+		return 'failed';
 	}
 	if (frontmatter.archived !== undefined) {
-		if (frontmatter.archived === archiveDate) return;
+		if (frontmatter.archived === archiveDate) return 'unchanged';
 		report.failed.push({
 			path: targetAbs,
 			reason: `archived_date_conflict:${frontmatter.archived}`,
 		});
-		return;
+		return 'failed';
 	}
 	const insertPos = frontmatter.insertPos ?? 0;
-	writeFileSync(
-		targetAbs,
-		`${content.slice(0, insertPos)}archived: "${archiveDate}"\n${content.slice(insertPos)}`,
-	);
+	try {
+		writeFileSync(
+			targetAbs,
+			`${content.slice(0, insertPos)}archived: "${archiveDate}"\n${content.slice(insertPos)}`,
+		);
+		return 'changed';
+	} catch (error) {
+		report.failed.push({ path: targetAbs, reason: `write_failed:${(error as Error).message}` });
+		return 'failed';
+	}
 }
 
 /**
@@ -275,13 +428,14 @@ function writeArchived(targetAbs: string, archiveDate: string, report: ArchiveRe
  * - dryRun 只预检与列计划，不产生任何副作用
  */
 export function runArchive(options: RunArchiveOptions): ArchiveReport {
-	if (!DATE_PATTERN.test(options.archiveDate)) {
+	if (!dateParts(options.archiveDate)) {
 		throw new Error(`无效归档日期: ${options.archiveDate}（应为 YYYY-MM-DD）`);
 	}
 	const report: ArchiveReport = {
 		dryRun: Boolean(options.dryRun),
 		archiveDate: options.archiveDate,
 		moved: [],
+		updated: [],
 		skipped: [],
 		failed: [],
 		conflicts: [],
@@ -305,7 +459,13 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 
 	// 2. 预检全部候选
 	const prepared: PreparedCandidate[] = [];
+	const repairs: MetadataRepair[] = [];
 	for (const candidate of options.candidates) {
+		const pathIssue = validateCandidatePath(options.vaultRoot, candidate, options.archiveDate);
+		if (pathIssue) {
+			report.conflicts.push(pathIssue);
+			continue;
+		}
 		const sourceAbs = join(options.vaultRoot, candidate.source);
 		const targetAbs = join(options.vaultRoot, candidate.target);
 		let sourceStat = null;
@@ -316,6 +476,24 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 		}
 		if (!sourceStat) {
 			if (existsSync(targetAbs)) {
+				if (candidate.type !== 'diary') {
+					const mainFile = candidate.main_file as string;
+					const targetMain = relocatedPath(candidate.source, candidate.target, mainFile);
+					const targetMainAbs = join(options.vaultRoot, targetMain);
+					if (!existsSync(targetMainAbs)) {
+						report.conflicts.push({ path: targetMain, reason: 'main_file_missing' });
+						continue;
+					}
+					const content = readFileSync(targetMainAbs, 'utf8');
+					const issue = validateMainFile(candidate, targetMain, content, options.archiveDate);
+					if (issue) {
+						report.conflicts.push(issue);
+						continue;
+					}
+					if (parseFrontmatter(content).archived === undefined) {
+						repairs.push({ target: targetMain, targetAbs: targetMainAbs });
+					}
+				}
 				report.skipped.push({ path: candidate.source, reason: 'already_moved' });
 			} else {
 				report.conflicts.push({ path: candidate.source, reason: 'source_missing' });
@@ -326,7 +504,8 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 			report.conflicts.push({ path: candidate.source, reason: 'source_is_symlink' });
 			continue;
 		}
-		if (existsSync(targetAbs)) {
+		const targetExists = existsSync(targetAbs);
+		if (targetExists && !sourceStat.isDirectory()) {
 			report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
 			continue;
 		}
@@ -336,23 +515,51 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 				// 结构校验已保证存在；此处仅用于类型收窄
 				continue;
 			}
-			const mainAbs = join(options.vaultRoot, mainFile);
-			if (!existsSync(mainAbs)) {
+			const targetMain = relocatedPath(candidate.source, candidate.target, mainFile);
+			const sourceMainAbs = join(options.vaultRoot, mainFile);
+			const targetMainAbs = join(options.vaultRoot, targetMain);
+			const mainPath = existsSync(sourceMainAbs)
+				? mainFile
+				: existsSync(targetMainAbs)
+					? targetMain
+					: null;
+			if (!mainPath) {
 				report.conflicts.push({ path: mainFile, reason: 'main_file_missing' });
 				continue;
 			}
-			const frontmatter = parseFrontmatter(readFileSync(mainAbs, 'utf8'));
-			if (frontmatter.type !== candidate.type) {
-				report.conflicts.push({
-					path: mainFile,
-					reason: `type_mismatch:${frontmatter.type ?? 'none'}`,
-				});
+			const mainAbs = join(options.vaultRoot, mainPath);
+			const issue = validateMainFile(
+				candidate,
+				mainPath,
+				readFileSync(mainAbs, 'utf8'),
+				options.archiveDate,
+			);
+			if (issue) {
+				report.conflicts.push(issue);
 				continue;
 			}
-			if (frontmatter.status !== 'done') {
+		}
+		if (targetExists) {
+			if (!sourceStat.isDirectory() || !lstatSync(targetAbs).isDirectory()) {
+				report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
+				continue;
+			}
+			const targetFiles = collectFiles(targetAbs);
+			const targetMain = candidate.main_file
+				? relocatedPath(candidate.source, candidate.target, candidate.main_file)
+				: null;
+			if (
+				targetFiles.length > 0 &&
+				(!targetMain || !existsSync(join(options.vaultRoot, targetMain)))
+			) {
+				report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
+				continue;
+			}
+			const collision = collectFiles(sourceAbs).find((file) => existsSync(join(targetAbs, file)));
+			if (collision) {
 				report.conflicts.push({
-					path: mainFile,
-					reason: `status_not_done:${frontmatter.status ?? 'none'}`,
+					path: `${candidate.target}/${collision}`,
+					reason: 'partial_file_collision',
 				});
 				continue;
 			}
@@ -374,7 +581,7 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 	}
 
 	// 4. 移动
-	const move = options.moveRunner ?? defaultMoveRunner();
+	const move = options.moveRunner ?? defaultMoveRunner(options.vaultRoot);
 	const movedSources = new Set<string>();
 	for (const item of prepared) {
 		const ok = item.isDirectory ? moveDirectory(item, move, report) : moveFile(item, move, report);
@@ -387,7 +594,16 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 		const mainFile = item.candidate.main_file;
 		if (!mainFile) continue;
 		const targetMain = relocatedPath(item.candidate.source, item.candidate.target, mainFile);
-		writeArchived(join(options.vaultRoot, targetMain), options.archiveDate, report);
+		if (
+			writeArchived(join(options.vaultRoot, targetMain), options.archiveDate, report) === 'changed'
+		) {
+			report.updated.push(targetMain);
+		}
+	}
+	for (const repair of repairs) {
+		if (writeArchived(repair.targetAbs, options.archiveDate, report) === 'changed') {
+			report.updated.push(repair.target);
+		}
 	}
 
 	return report;

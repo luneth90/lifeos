@@ -16,13 +16,14 @@ import { parseArgs } from '../utils/ui.js';
 
 export interface ArchiveDeps {
 	moveRunner?: MoveRunner;
-	notify?: (filePath: string, previousFilePath: string) => void;
+	notify?: (filePath: string, previousFilePath?: string) => void;
 }
 
 export interface ArchiveCommandResult {
 	dryRun: boolean;
 	archiveDate: string;
 	moved: number;
+	updated: number;
 	skipped: number;
 	failed: number;
 	conflicts: number;
@@ -79,16 +80,27 @@ export default function archiveCommand(
 	if (!dryRun && !skipNotify && report.conflicts.length === 0) {
 		const notify =
 			deps.notify ??
-			((filePath: string, previousFilePath: string) => {
+			((filePath: string, previousFilePath?: string) => {
 				memoryNotify({ contractVersion: 2, vaultRoot, filePath, previousFilePath });
 			});
+		const notifiedTargets = new Set<string>();
 		for (const move of report.moved) {
 			if (!move.to.endsWith('.md')) continue;
 			try {
 				notify(move.to, move.from);
+				notifiedTargets.add(move.to);
 				notifyApplied = true;
 			} catch (error) {
 				report.failed.push({ path: move.to, reason: `notify_failed:${(error as Error).message}` });
+			}
+		}
+		for (const path of report.updated) {
+			if (!path.endsWith('.md') || notifiedTargets.has(path)) continue;
+			try {
+				notify(path, undefined);
+				notifyApplied = true;
+			} catch (error) {
+				report.failed.push({ path, reason: `notify_failed:${(error as Error).message}` });
 			}
 		}
 	}
@@ -97,6 +109,7 @@ export default function archiveCommand(
 		dryRun,
 		archiveDate,
 		moved: report.moved.length,
+		updated: report.updated.length,
 		skipped: report.skipped.length,
 		failed: report.failed.length,
 		conflicts: report.conflicts.length,
