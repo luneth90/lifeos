@@ -17,6 +17,10 @@ export async function run(args: string[]): Promise<void> {
 			await (await import('./commands/rename.js')).default(args.slice(1));
 			return;
 		}
+		case 'archive': {
+			await (await import('./commands/archive.js')).default(args.slice(1));
+			return;
+		}
 		case 'rules': {
 			await (await import('./commands/rules.js')).default(args.slice(1));
 			return;
@@ -44,6 +48,13 @@ Usage:
   lifeos doctor [path]         Check vault health
   lifeos rename [path]         Rename a vault directory
   lifeos rules <cmd> [path]    List, audit, classify, archive or restore memory
+  lifeos archive [path] [opts] Archive done projects/drafts/plans and old diaries
+
+Options (archive):
+  --candidates <file>  候选清单 JSON 文件（缺省从 stdin 读取）
+  --date <YYYY-MM-DD>  归档日期（缺省今天）
+  --dry-run            只预检并列出计划，不移动、不写入
+  --skip-notify        不通知记忆索引（默认通知）
 
 Options (init / upgrade):
   --lang, -l <zh|en>   Language preset (default: auto-detect / from config)

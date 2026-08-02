@@ -295,181 +295,8 @@ function isValidOperationSafetyContract(contract) {
 	);
 }
 
-function isValidArchiveTransactionContract(contract) {
-	return (
-		contract?.adapter === 'scripts/archive_transaction.mjs' &&
-		sameValue(contract.external_callbacks, [
-			'persist_manifest',
-			'verify_manifest_receipt',
-			'move_with_link_update',
-			'memory_notify',
-			'confirm_index',
-			'memory_forget',
-		]) &&
-		sameValue(contract.transaction_steps, [
-			'preflight_all',
-			'create_target_parents',
-			'freeze_inventory',
-			'persist_manifest',
-			'persist_move_intent',
-			'revalidate_inventory',
-			'create_fresh_move_guards',
-			'move_once',
-			'advance_move_guards',
-			'record_file_moves',
-			'persist_move_receipt',
-			'memory_notify_each',
-			'confirm_index_each',
-			'memory_forget_project',
-		]) &&
-		sameValue(contract.directory_creation, {
-			create_guard: 'createVaultDirectoryGuard',
-			ensure: 'ensureVaultDirectory',
-			recursive_mkdir: 'forbidden',
-		}) &&
-		sameValue(contract.inventory, {
-			freeze_before_move: 'all_candidate_files',
-			revalidate_after_each_persist: true,
-			subitem_names: 'nfc_exact_no_control_windows_safe',
-			entity_shapes: 'project_file_or_nonempty_directory_others_file_only',
-			directory_move: 'once',
-			manifest_moves: 'per_file_source_target',
-		}) &&
-		sameValue(contract.move_guards, {
-			intent_persisted_before_revalidation: true,
-			fresh_after_intent_persist: true,
-			last_revalidate_adjacent_to_call: true,
-			source: { before: 'existing', after: 'missing' },
-			target: { before: 'missing', after: 'existing' },
-			advance: 'advanceVaultPathGuard',
-		}) &&
-		sameValue(contract.persistence, {
-			manifest_contract_version: 2,
-			persist_callback: 'persist_manifest',
-			verify_callback: 'verify_manifest_receipt',
-			envelope_keys: ['manifest', 'persistence_receipt', 'persistence_state'],
-			receipt_required_for_resume: true,
-			unauthenticated_resume: 'fail_closed_manual_recovery',
-			schema: 'recursive_exact_keys_and_derived_ids',
-		}) &&
-		sameValue(contract.vault_binding, {
-			identity_fields: ['realpath', 'root_dev', 'root_ino'],
-			frozen_for_run: true,
-			manifest: 'required',
-			candidate_move_intent: 'explicit',
-			derived_keys: ['candidate_key', 'move_id', 'idempotency_key'],
-			persistence_payloads: 'explicit',
-			resume: 'exact_match_before_receipt_verification',
-			revalidate_at: [
-				'before_external_await',
-				'after_external_await',
-				'before_guard_create_or_refresh',
-				'before_complete_return',
-			],
-			all_external_callbacks: true,
-			changed_root: 'fail_closed_manual_recovery',
-		}) &&
-		sameValue(contract.untrusted_resume, {
-			trust_checks: ['schema', 'vault_identity', 'receipt'],
-			persist_manifest: 'forbidden',
-			side_effect_callbacks: 'forbidden',
-			result: 'local_failed_unverified_null_receipt',
-		}) &&
-		sameValue(contract.terminal_revalidation, {
-			after_callbacks: ['move_with_link_update', 'memory_notify', 'confirm_index', 'memory_forget'],
-			after_receipt_persist: 'advanced_target_guards_and_inventory',
-			after_complete_persist: 'advanced_target_guards_and_inventory',
-			before_complete_return: 'synchronous',
-			await_after_final_revalidation: 'forbidden',
-		}) &&
-		sameValue(contract.effects, {
-			intent_before_side_effect: 'persisted',
-			receipt_after_side_effect: 'persisted',
-			resume: 'trusted_receipt_or_same_idempotency_key_replay',
-			malformed_result: 'stop_and_record',
-		}) &&
-		sameValue(contract.notify, {
-			contract_version: 2,
-			file_path: '<new-vault-relative-path>',
-			previous_file_path: '<old-vault-relative-path>',
-		}) &&
-		sameValue(contract.forget, {
-			scope_type: 'project',
-			allowed_after: 'all_project_files_confirmed',
-			forbidden_entity_types: ['draft', 'plan', 'diary'],
-			forbidden_when: ['move_failed', 'notify_failed', 'index_unconfirmed'],
-		}) &&
-		sameValue(contract.manifest_updates, {
-			candidate: 'candidates',
-			inventory: 'inventories',
-			move_state: 'candidate_states',
-			move: 'moves',
-			collision: 'collisions',
-			intent: 'intents',
-			move_receipt: 'move_receipts',
-			memory_notify: 'notified',
-			confirm_index: 'confirmed',
-			memory_forget: 'forgotten',
-			failure: 'errors',
-		}) &&
-		sameValue(contract.resume, {
-			required_match: ['run_id', 'candidates', 'inventories', 'derived_ids', 'receipt'],
-			moved_state: 'source_missing_target_existing',
-			source_restored: 'reject',
-			skip_confirmed_files: 'trusted_receipt_only',
-			external_idempotency_key: 'required',
-		}) &&
-		sameValue(contract.stop_semantics, {
-			any_failure: 'stop_entire_run',
-			resume: 'same_run_id_same_authenticated_envelope',
-			continue_other_candidates: false,
-		}) &&
-		sameValue(contract.guarantees, {
-			exactly_once: false,
-			atomic_cross_system: false,
-			last_revalidate_to_syscall_atomic: false,
-		}) &&
-		sameValue(contract.post_transaction_writes, {
-			current_run: 'forbidden',
-			archived_frontmatter: 'required_metadata_transaction',
-			diary_log: 'not_part_of_archive',
-		}) &&
-		sameValue(contract.metadata_transaction, {
-			adapter: 'scripts/archive_metadata_transaction.mjs',
-			required_after: 'move_transaction_complete',
-			run_id: 'stable(archive-metadata, parent-run-id, archive-date, derived-target-paths)',
-			parent_trust: 'verify_completed_move_envelope_receipt',
-			target_derivation: 'exactly_one_matching_frontmatter_per_non_diary_candidate',
-			eligible_entity_types: ['project', 'draft', 'plan'],
-			preserved_status: 'done',
-			mutation: { field: 'archived', value: 'YYYY-MM-DD' },
-			external_callbacks: [
-				'persist_manifest',
-				'verify_manifest_receipt',
-				'write_archived_frontmatter',
-				'memory_notify',
-				'confirm_index',
-			],
-			transaction_steps: [
-				'verify_parent_receipt',
-				'derive_metadata_targets',
-				'persist_manifest',
-				'persist_write_intent',
-				'write_archived_frontmatter',
-				'persist_write_receipt',
-				'memory_notify_each',
-				'confirm_index_each',
-			],
-			completion_gate: 'move_and_metadata_transactions_complete',
-			recovery: 'same_run_id_same_authenticated_envelope',
-			guarantees: {
-				exactly_once: false,
-				atomic_with_move_transaction: false,
-			},
-		}) &&
-		contract.bare_mv === 'forbidden'
-	);
-}
+
+
 
 function sameCapabilityContract(left, right, path = '') {
 	if (path.endsWith('.purpose') || path.endsWith('.fallback'))
@@ -1342,6 +1169,43 @@ export function validateSkillContracts(root) {
 			if (!existsSync(path)) continue;
 			const { frontmatter, body, frontmatter_state: state } = markdown(path);
 			if (state === 'invalid_yaml') continue;
+			// Archive 使用简化命令契约（lifeos archive），不再要求 operation-safety 事务协议
+			if (skill === 'archive') {
+				const archiveOperation = markedYaml(path, 'archive-targets-v1');
+				const archiveContract = archiveOperation.value;
+				if (
+					archiveOperation.invalid ||
+					!archiveContract ||
+					!isRecord(archiveContract.target_paths) ||
+					!hasExactKeys(archiveContract.target_paths, ARCHIVE_TARGET_KEYS) ||
+					Object.hasOwn(archiveContract, 'target_path')
+				) {
+					add(
+						'invalid_archive_target_map',
+						assetPath(path),
+						'Archive 必须完整声明 project-file、project-directory、draft、plan、diary 目标映射',
+					);
+					continue;
+				}
+				const expected = expectedArchiveContract(locale);
+				const archiveMappings = declaredPathPlaceholders(body);
+				for (const key of ARCHIVE_TARGET_KEYS) {
+					const group = expected.target_mapping_groups[key];
+					if (
+						archiveContract.target_paths[key] !== expected.target_paths[key] ||
+						!body.includes(`\`${expected.documented_paths[key]}\``) ||
+						archiveMappings.get(expected.system) !== 'directories.system' ||
+						archiveMappings.get(expected.placeholders[group]) !== expected.mapping_keys[group]
+					) {
+						add(
+							'operation_target_mismatch',
+							assetPath(path),
+							`Archive 机器目标或正文规则与权威归档路径不一致：${key}`,
+						);
+					}
+				}
+				continue;
+			}
 			const protocols = frontmatter?.dependencies?.protocols ?? [];
 			if (!protocols.length)
 				add(
@@ -1361,67 +1225,6 @@ export function validateSkillContracts(root) {
 					'修改型技能必须结构化引用 operation-safety-v1',
 				);
 			if (!operation || operationResult.invalid) continue;
-			if (
-				operation.contract_version !== 1 ||
-				operation.operation !== skill ||
-				typeof operation.run_id !== 'string' ||
-				!operation.run_id.startsWith(`stable(${skill},`) ||
-				!sameValue(operation.decision, ['create', 'merge', 'resume', 'skip', 'replace'])
-			) {
-				add(
-					'invalid_skill_operation_contract',
-					assetPath(path),
-					'技能级操作契约的版本、操作名、run_id 或 decision 非法',
-				);
-			}
-			if (skill === 'archive') {
-				if (
-					!isRecord(operation.target_paths) ||
-					!hasExactKeys(operation.target_paths, ARCHIVE_TARGET_KEYS) ||
-					Object.hasOwn(operation, 'target_path')
-				) {
-					add(
-						'invalid_archive_target_map',
-						assetPath(path),
-						'Archive 必须完整声明 project-file、project-directory、draft、plan、diary 目标映射',
-					);
-					continue;
-				}
-				const expected = expectedArchiveContract(locale);
-				const scriptDependencies = frontmatter?.dependencies?.scripts ?? [];
-				if (
-					!isValidArchiveTransactionContract(operation) ||
-					!scriptDependencies.some(
-						(dependency) => dependency?.path === 'scripts/archive_transaction.mjs',
-					) ||
-					!scriptDependencies.some(
-						(dependency) => dependency?.path === 'scripts/archive_metadata_transaction.mjs',
-					)
-				) {
-					add(
-						'invalid_archive_transaction_contract',
-						assetPath(path),
-						'Archive 发布事务、manifest 或 resume 机器字段非法',
-					);
-				}
-				const mappings = declaredPathPlaceholders(body);
-				const documentedBody = body.split('<!-- operation-safety-v1 -->')[0];
-				for (const key of ARCHIVE_TARGET_KEYS) {
-					const group = expected.target_mapping_groups[key];
-					if (
-						operation.target_paths[key] !== expected.target_paths[key] ||
-						!documentedBody.includes(`\`${expected.documented_paths[key]}\``) ||
-						mappings.get(expected.system) !== 'directories.system' ||
-						mappings.get(expected.placeholders[group]) !== expected.mapping_keys[group]
-					) {
-						add(
-							'operation_target_mismatch',
-							assetPath(path),
-							`Archive 机器目标或正文规则与权威归档路径不一致：${key}`,
-						);
-					}
-				}
-			}
 			if (EXTENDED_WRITE_SKILLS.has(skill) && !isValidExtendedWriteContract(operation)) {
 				add(
 					'invalid_skill_operation_contract',

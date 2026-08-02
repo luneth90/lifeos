@@ -1,5 +1,15 @@
 # 更新日志
 
+## 2.3.0 (2026-08-02)
+
+### 重构：Archive 技能从发布事务收敛为单一命令
+
+- 新增 `lifeos archive` 命令（`src/services/archive.ts` + `src/cli/commands/archive.ts`）：预检全部候选 → `obsidian move` 移动并自动更新 wikilink → 幂等写入 `archived` 日期 → 自动 `memory_notify`；冲突整体停止（退出码 2），单候选失败不中断（退出码 1），幂等重跑
+- 删除发布事务脚本 `archive_transaction.mjs` / `archive_metadata_transaction.mjs`（约 2700 行）及对应测试；归档不再依赖 operation-safety 协议、受信 manifest、路径 guard 与 resume 恢复机制
+- 重写 `assets/skills/archive/SKILL.zh.md` / `SKILL.en.md`（约 480 行压缩至约 160 行）：保留扫描规则、权威归档路径（target_paths）与边界情况，执行方式改为调用 `lifeos archive`
+- `scripts/validate-skill-contracts.mjs`：Archive 改用 `archive-targets-v1` 简化契约校验（目标映射 + 正文权威路径 + 逻辑占位符声明），移除事务契约诊断
+- 同步更新 skill-contracts 与 assets 测试，全套 923 个测试通过
+
 ## 2.2.2 (2026-08-02)
 
 ### 修复

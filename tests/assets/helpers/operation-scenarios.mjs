@@ -16,7 +16,6 @@ import {
 	createVaultPathGuard,
 	revalidateVaultPathGuard,
 } from '../../../assets/skills/_shared/scripts/path_safety.mjs';
-import { runArchiveTransaction } from '../../../assets/skills/archive/scripts/archive_transaction.mjs';
 
 function stableRunId(skill, input) {
 	const hash = createHash('sha256')
@@ -130,104 +129,6 @@ function executeDigest(root) {
 	return result;
 }
 
-async function executeArchive(root) {
-	const input = {
-		candidates: [
-			{
-				source_path: '20_Projects/Demo',
-				target_path: '90_System/Archive/Projects/2026/Demo',
-				entity_type: 'project',
-				project_id: 'demo-project',
-			},
-		],
-		archive_date: '2026-07-31',
-	};
-	const runId = stableRunId('archive', input);
-	const source = '20_Projects/Demo';
-	const target = '90_System/Archive/Projects/2026/Demo';
-	mkdirSync(join(root, source, 'docs'), { recursive: true });
-	writeFileSync(join(root, source, 'Demo.md'), 'project', 'utf8');
-	writeFileSync(join(root, source, 'docs', 'Guide.md'), 'guide', 'utf8');
-	const moveCalls = [];
-	const notifyCalls = [];
-	const confirmCalls = [];
-	const forgetCalls = [];
-	const trustedStore = createTrustedManifestStore();
-	const adapters = {
-		persist_manifest: trustedStore.persist_manifest,
-		verify_manifest_receipt: trustedStore.verify_manifest_receipt,
-		move_with_link_update(payload) {
-			moveCalls.push(structuredClone(payload));
-			renameSync(
-				join(payload.vault_root, ...payload.source_path.split('/')),
-				join(payload.vault_root, ...payload.target_path.split('/')),
-			);
-			return { ok: true, receipt: `move:${payload.idempotency_key}` };
-		},
-		async memory_notify(payload) {
-			notifyCalls.push(structuredClone(payload));
-			return { ok: true, receipt: `notify:${payload.idempotency_key}` };
-		},
-		async confirm_index(payload) {
-			confirmCalls.push(structuredClone(payload));
-			return {
-				ok: true,
-				confirmed: true,
-				receipt: `confirm:${payload.idempotency_key}`,
-			};
-		},
-		async memory_forget(payload) {
-			forgetCalls.push(structuredClone(payload));
-			return { ok: true, receipt: `forget:${payload.idempotency_key}` };
-		},
-	};
-	const first = await runArchiveTransaction({
-		vault_root: root,
-		run_id: runId,
-		candidates: input.candidates,
-		adapters,
-	});
-	const second = await runArchiveTransaction({
-		vault_root: root,
-		run_id: runId,
-		candidates: input.candidates,
-		manifest: first,
-		adapters,
-	});
-	writeManifest(root, 'archive', second);
-	const firstManifest = first.manifest;
-	const secondManifest = second.manifest;
-	return {
-		input,
-		runs: [
-			{
-				attempt: 1,
-				run_id: runId,
-				target_path: target,
-				decision: 'create',
-				status: firstManifest.status,
-				manifest: firstManifest,
-				envelope: first,
-			},
-			{
-				attempt: 2,
-				run_id: runId,
-				target_path: target,
-				decision: 'resume',
-				status: secondManifest.status,
-				manifest: secondManifest,
-				envelope: second,
-			},
-		],
-		manifest: secondManifest,
-		envelope: second,
-		move_calls: moveCalls,
-		notify_calls: notifyCalls,
-		confirm_calls: confirmCalls,
-		forget_calls: forgetCalls,
-	};
-}
-
 function walk(root, current = root) {
 	return readdirSync(current, { withFileTypes: true })
 		.flatMap((entry) => {
@@ -279,7 +180,6 @@ export async function runOperationScenarioSuite(root) {
 			status: 'pending',
 			artifact: { questions: [{ knowledge_point_id: 'kp-1', source_refs: ['Chapter-1#p1'] }] },
 		}),
-		archive: await executeArchive(root),
 	};
 	return {
 		context: 'protocol-adapter-fixture',

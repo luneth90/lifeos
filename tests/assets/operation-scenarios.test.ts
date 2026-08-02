@@ -24,7 +24,6 @@ describe('阶段五可执行协议场景', () => {
 			'research',
 			'translate',
 			'revise',
-			'archive',
 		]);
 		for (const [name, expectedDecisions] of Object.entries({
 			today: ['create', 'merge'],
@@ -32,7 +31,6 @@ describe('阶段五可执行协议场景', () => {
 			research: ['create', 'resume'],
 			translate: ['create', 'resume'],
 			revise: ['create', 'resume'],
-			archive: ['create', 'resume'],
 		})) {
 			const runs = result.scenarios[name].runs;
 			expect(runs).toHaveLength(2);
@@ -47,8 +45,6 @@ describe('阶段五可执行协议场景', () => {
 				'30_Research/agent-memory.md',
 				'70_Resources/Translations/Book/Chapter-1.md',
 				'40_Knowledge/Notes/Book/Chapter-1/revise.md',
-				'90_System/Archive/Projects/2026/Demo/Demo.md',
-				'90_System/Archive/Projects/2026/Demo/docs/Guide.md',
 			]),
 		);
 	});
@@ -82,24 +78,5 @@ describe('阶段五可执行协议场景', () => {
 			status: 'partial',
 			run_id: digest.runs[0].run_id,
 		});
-	});
-
-	it('Archive 使用发布事务适配器整体移动目录并在 resume 时去重', async () => {
-		const root = mkdtempSync(join(tmpdir(), 'lifeos-operation-fixture-'));
-		const result = await executeFixture(root);
-		const archive = result.scenarios.archive;
-		expect(archive.manifest.status).toBe('complete');
-		expect(archive.move_calls).toHaveLength(1);
-		expect(archive.manifest.moves).toHaveLength(2);
-		expect(archive.notify_calls).toHaveLength(2);
-		expect(archive.confirm_calls).toHaveLength(2);
-		expect(archive.forget_calls).toHaveLength(1);
-		expect(archive.manifest.errors).toEqual([]);
-		expect(readFileSync(join(root, '90_System/Archive/Projects/2026/Demo/Demo.md'), 'utf8')).toBe(
-			'project',
-		);
-		expect(
-			readFileSync(join(root, '90_System/Archive/Projects/2026/Demo/docs/Guide.md'), 'utf8'),
-		).toBe('guide');
 	});
 });

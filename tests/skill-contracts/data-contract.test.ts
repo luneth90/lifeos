@@ -107,9 +107,9 @@ describe('阶段一数据契约', () => {
 		for (const path of ['assets/skills/archive/SKILL.zh.md', 'assets/skills/archive/SKILL.en.md']) {
 			const content = read(path);
 			expect(content, path).not.toMatch(/status:\s*archived/);
-			expect(content, path).toContain('archived_frontmatter: required_metadata_transaction');
-			expect(content, path).toContain('completion_gate: move_and_metadata_transactions_complete');
-			expect(content, path).toContain('current_run: forbidden');
+			expect(content, path).toContain('archived: "YYYY-MM-DD"');
+			expect(content, path).toContain('lifeos archive');
+			expect(content, path).toContain('skipped(already_moved)');
 		}
 	});
 
