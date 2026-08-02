@@ -1419,6 +1419,49 @@ describe('runArchive', () => {
 		}
 	});
 
+	it('目标根为悬空符号链接时作为冲突停止整批移动', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '00_草稿/ok.md', draftNote('ok'));
+			mkdirSync(join(root, '90_系统/归档/项目/2026'), { recursive: true });
+			symlinkSync(
+				join(root, '不存在的目标'),
+				join(root, '90_系统/归档/项目/2026/P'),
+			);
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'project',
+						source: '20_项目/P',
+						target: '90_系统/归档/项目/2026/P',
+						main_file: '20_项目/P/P.md',
+						project_id: 'p',
+					},
+					{
+						type: 'draft',
+						source: '00_草稿/ok.md',
+						target: '90_系统/归档/草稿/2026/08/ok.md',
+						main_file: '00_草稿/ok.md',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([
+				{
+					path: '90_系统/归档/项目/2026/P',
+					reason: 'target_contains_symlink',
+				},
+			]);
+			expect(existsSync(join(root, '00_草稿/ok.md'))).toBe(true);
+			expect(existsSync(join(root, '90_系统/归档/草稿/2026/08/ok.md'))).toBe(false);
+		} finally {
+			cleanup();
+		}
+	});
+
 	it('部分目标树含符号链接时拒绝，不向外部目录移动文件', () => {
 		const { root, cleanup } = makeTmp();
 		const outside = mkdtempSync(join(tmpdir(), 'lifeos-outside-'));

@@ -596,19 +596,21 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 		} catch {
 			sourceStat = null;
 		}
-		const targetExists = existsSync(targetAbs);
-		const targetIsDirectoryCandidate = sourceStat?.isDirectory() ?? candidate.type === 'project';
-		if (targetExists && targetIsDirectoryCandidate) {
-			let targetStat: ReturnType<typeof lstatSync>;
-			try {
-				targetStat = lstatSync(targetAbs);
-			} catch (error) {
+		let targetStat: ReturnType<typeof lstatSync> | null = null;
+		try {
+			targetStat = lstatSync(targetAbs);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
 				report.conflicts.push({
 					path: candidate.target,
 					reason: `target_scan_failed:${(error as Error).message}`,
 				});
 				continue;
 			}
+		}
+		const targetExists = targetStat !== null;
+		const targetIsDirectoryCandidate = sourceStat?.isDirectory() ?? candidate.type === 'project';
+		if (targetStat && targetIsDirectoryCandidate) {
 			if (targetStat.isSymbolicLink()) {
 				report.conflicts.push({
 					path: candidate.target,
