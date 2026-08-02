@@ -12,7 +12,7 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runArchive, type ArchiveReport, type MoveRunner } from '../../src/services/archive.js';
+import { runArchive, type ArchiveCandidate, type ArchiveReport, type MoveRunner } from '../../src/services/archive.js';
 
 function makeTmp() {
 	const root = mkdtempSync(join(tmpdir(), 'lifeos-archive-svc-'));
@@ -919,6 +919,206 @@ describe('runArchive', () => {
 			}
 		} finally {
 			chmodSync(join(root, '20_项目'), 0o755);
+			cleanup();
+		}
+	});
+
+	const safetyCases: Array<{
+		name: string;
+		candidate: ArchiveCandidate;
+		conflict: { path: string; reason: string };
+	}> = [
+		{
+			name: 'project 目标年份非法',
+			candidate: {
+				type: 'project',
+				source: '20_项目/Demo.md',
+				target: '90_系统/归档/项目/20XX/Demo.md',
+				main_file: '20_项目/Demo.md',
+				project_id: 'demo',
+			},
+			conflict: { path: '90_系统/归档/项目/20XX/Demo.md', reason: 'invalid_target_location:project' },
+		},
+		{
+			name: 'project 目标名称与源不符',
+			candidate: {
+				type: 'project',
+				source: '20_项目/Demo.md',
+				target: '90_系统/归档/项目/2026/Other.md',
+				main_file: '20_项目/Demo.md',
+				project_id: 'demo',
+			},
+			conflict: { path: '90_系统/归档/项目/2026/Other.md', reason: 'invalid_target_location:project' },
+		},
+		{
+			name: 'draft 目标年月与归档日期不符',
+			candidate: {
+				type: 'draft',
+				source: '00_草稿/x.md',
+				target: '90_系统/归档/草稿/2026/09/x.md',
+				main_file: '00_草稿/x.md',
+			},
+			conflict: { path: '90_系统/归档/草稿/2026/09/x.md', reason: 'invalid_target_location:draft' },
+		},
+		{
+			name: 'plan 目标带子目录',
+			candidate: {
+				type: 'plan',
+				source: '60_计划/x.md',
+				target: '90_系统/归档/计划/子/x.md',
+				main_file: '60_计划/x.md',
+			},
+			conflict: { path: '90_系统/归档/计划/子/x.md', reason: 'invalid_target_location:plan' },
+		},
+		{
+			name: 'diary 目标年月与日记名不符',
+			candidate: {
+				type: 'diary',
+				source: '10_日记/2026-07-01.md',
+				target: '90_系统/归档/日记/2026/08/2026-07-01.md',
+			},
+			conflict: {
+				path: '90_系统/归档/日记/2026/08/2026-07-01.md',
+				reason: 'invalid_target_location:diary',
+			},
+		},
+		{
+			name: 'draft 源非 .md',
+			candidate: {
+				type: 'draft',
+				source: '00_草稿/note.txt',
+				target: '90_系统/归档/草稿/2026/08/note.txt',
+				main_file: '00_草稿/note.txt',
+			},
+			conflict: { path: '00_草稿/note.txt', reason: 'invalid_source_shape:draft' },
+		},
+		{
+			name: '单文件项目 main_file 与 source 不一致',
+			candidate: {
+				type: 'project',
+				source: '20_项目/Demo.md',
+				target: '90_系统/归档/项目/2026/Demo.md',
+				main_file: '20_项目/Other.md',
+				project_id: 'demo',
+			},
+			conflict: { path: '20_项目/Other.md', reason: 'main_file_outside_source' },
+		},
+		{
+			name: '文件夹项目 main_file 不在 source 下',
+			candidate: {
+				type: 'project',
+				source: '20_项目/Demo',
+				target: '90_系统/归档/项目/2026/Demo',
+				main_file: '20_项目/Other.md',
+				project_id: 'demo',
+			},
+			conflict: { path: '20_项目/Other.md', reason: 'main_file_outside_source' },
+		},
+	];
+
+	it.each(safetyCases)('安全校验拒绝：$name', ({ candidate, conflict }) => {
+		const { root, cleanup } = makeTmp();
+		try {
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([conflict]);
+			expect(report.moved).toEqual([]);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('日历非法日期 2026-02-30 被 dateParts 拒绝（回归断言）', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			expect(() =>
+				runArchive({
+					vaultRoot: root,
+					archiveDate: '2026-02-30',
+					candidates: [],
+				}),
+			).toThrow(/无效归档日期/);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('diary 源缺失且目标已存在时 skipped(already_moved)，无 updated 与 repair', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '10_日记/2026-07-01.md', '# 2026-07-01');
+			const candidate = {
+				type: 'diary' as const,
+				source: '10_日记/2026-07-01.md',
+				target: '90_系统/归档/日记/2026/07/2026-07-01.md',
+			};
+			runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			const rerun = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(rerun.skipped).toEqual([
+				{ path: '10_日记/2026-07-01.md', reason: 'already_moved' },
+			]);
+			expect(rerun.updated).toEqual([]);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('自定义 lifeos.yaml 目录映射驱动源位置校验与归档', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			const yaml = readFileSync('assets/lifeos.yaml', 'utf8').replace(
+				'drafts: "00_草稿"',
+				'drafts: "01_收件箱"',
+			);
+			writeFileSync(join(root, 'lifeos.yaml'), yaml, 'utf8');
+			const candidate = {
+				type: 'draft' as const,
+				source: '00_草稿/x.md',
+				target: '90_系统/归档/草稿/2026/08/x.md',
+				main_file: '00_草稿/x.md',
+			};
+			const rejected = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(rejected.conflicts).toEqual([
+				{ path: '00_草稿/x.md', reason: 'invalid_source_location:draft' },
+			]);
+			write(root, '01_收件箱/x.md', draftNote('x'));
+			const accepted = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						...candidate,
+						source: '01_收件箱/x.md',
+						main_file: '01_收件箱/x.md',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(accepted.conflicts).toEqual([]);
+			expect(accepted.failed).toEqual([]);
+			expect(accepted.moved).toEqual([
+				{ from: '01_收件箱/x.md', to: '90_系统/归档/草稿/2026/08/x.md' },
+			]);
+		} finally {
 			cleanup();
 		}
 	});

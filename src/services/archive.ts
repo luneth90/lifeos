@@ -11,7 +11,7 @@ import {
 	writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, win32 } from 'node:path';
-import { resolveConfig } from '../config.js';
+import { type LifeOSConfig, resolveConfig } from '../config.js';
 
 export type ArchiveEntityType = 'project' | 'draft' | 'plan' | 'diary';
 
@@ -135,8 +135,7 @@ interface ArchivePaths {
 	targetRoot: string;
 }
 
-function candidatePaths(vaultRoot: string, type: ArchiveEntityType): ArchivePaths {
-	const config = resolveConfig(vaultRoot).rawConfig;
+function candidatePaths(config: LifeOSConfig, type: ArchiveEntityType): ArchivePaths {
 	const sourceRoots: Record<ArchiveEntityType, string> = {
 		project: config.directories.projects,
 		draft: config.directories.drafts,
@@ -179,7 +178,7 @@ function dateParts(value: string): { year: string; month: string; time: number }
 }
 
 function validateCandidatePath(
-	vaultRoot: string,
+	config: LifeOSConfig,
 	candidate: ArchiveCandidate,
 	archiveDate: string,
 ): ArchiveIssue | null {
@@ -193,7 +192,7 @@ function validateCandidatePath(
 		}
 	}
 
-	const { sourceRoot, targetRoot } = candidatePaths(vaultRoot, candidate.type);
+	const { sourceRoot, targetRoot } = candidatePaths(config, candidate.type);
 	if (dirname(candidate.source) !== sourceRoot) {
 		return { path: candidate.source, reason: `invalid_source_location:${candidate.type}` };
 	}
@@ -464,6 +463,7 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 	if (!dateParts(options.archiveDate)) {
 		throw new Error(`无效归档日期: ${options.archiveDate}（应为 YYYY-MM-DD）`);
 	}
+	const config = resolveConfig(options.vaultRoot).rawConfig;
 	const report: ArchiveReport = {
 		dryRun: Boolean(options.dryRun),
 		archiveDate: options.archiveDate,
@@ -494,7 +494,7 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 	const prepared: PreparedCandidate[] = [];
 	const repairs: MetadataRepair[] = [];
 	for (const candidate of options.candidates) {
-		const pathIssue = validateCandidatePath(options.vaultRoot, candidate, options.archiveDate);
+		const pathIssue = validateCandidatePath(config, candidate, options.archiveDate);
 		if (pathIssue) {
 			report.conflicts.push(pathIssue);
 			continue;
