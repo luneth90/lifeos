@@ -596,21 +596,26 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 		} catch {
 			sourceStat = null;
 		}
-		let targetStat: ReturnType<typeof lstatSync> | null = null;
-		try {
-			targetStat = lstatSync(targetAbs);
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-				report.conflicts.push({
-					path: candidate.target,
-					reason: `target_scan_failed:${(error as Error).message}`,
-				});
-				continue;
-			}
-		}
-		const targetExists = targetStat !== null;
 		const targetIsDirectoryCandidate = sourceStat?.isDirectory() ?? candidate.type === 'project';
-		if (targetStat && targetIsDirectoryCandidate) {
+		let targetStat: ReturnType<typeof lstatSync> | null = null;
+		let targetExists: boolean;
+		if (targetIsDirectoryCandidate) {
+			try {
+				targetStat = lstatSync(targetAbs);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+					report.conflicts.push({
+						path: candidate.target,
+						reason: `target_scan_failed:${(error as Error).message}`,
+					});
+					continue;
+				}
+			}
+			targetExists = targetStat !== null;
+		} else {
+			targetExists = existsSync(targetAbs);
+		}
+		if (targetStat) {
 			if (targetStat.isSymbolicLink()) {
 				report.conflicts.push({
 					path: candidate.target,

@@ -1604,6 +1604,45 @@ describe('runArchive', () => {
 		}
 	});
 
+	it('单文件目标父路径被普通文件阻塞时只失败当前候选项', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '00_草稿/idea.md', draftNote('idea'));
+			write(root, '60_计划/ok.md', `---\ntype: plan\nstatus: done\n---\n# ok\n`);
+			write(root, '90_系统/归档/草稿/2026', '阻塞目标父目录');
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'draft',
+						source: '00_草稿/idea.md',
+						target: '90_系统/归档/草稿/2026/08/idea.md',
+						main_file: '00_草稿/idea.md',
+					},
+					{
+						type: 'plan',
+						source: '60_计划/ok.md',
+						target: '90_系统/归档/计划/ok.md',
+						main_file: '60_计划/ok.md',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([]);
+			expect(report.failed).toEqual([
+				{
+					path: '90_系统/归档/草稿/2026/08/idea.md',
+					reason: expect.stringMatching(/^target_dir_create_failed:/),
+				},
+			]);
+			expect(existsSync(join(root, '00_草稿/idea.md'))).toBe(true);
+			expect(existsSync(join(root, '90_系统/归档/计划/ok.md'))).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
 	it('目录候选创建嵌套目标目录失败时上报，并继续处理后续候选项', () => {
 		const { root, cleanup } = makeTmp();
 		try {
