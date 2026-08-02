@@ -220,7 +220,7 @@ for page in package["pages"]:
 
 只有第二次校验退出 0 才能交给下游；`complete` 页必须 `coverage: 1`、`errors: []` 且不含 `image` block。
 
-输出路径：`/tmp/read-pdf-<timestamp>.json`
+输出路径：平台临时目录下的 `read-pdf-<timestamp>.json`（未传 `--output` 时，由 Python `tempfile.gettempdir()` 解析：macOS/Linux 为 `/tmp/`，Windows 为 `%TEMP%\`）。该文件及自动创建的渲染目录（`read-pdf-<stem>-images-*`）是**本次工作流的临时产物**：下游技能读取完成后，必须删除该 JSON 与对应的 `*-images-*` 渲染目录，防止临时目录累积膨胀；若为长期使用而显式传 `--output` 到 Vault 内路径，则渲染目录按输出包引用保留，不清理。
 
 # 输出规范
 

@@ -90,6 +90,8 @@ Invoke `/read-pdf` to extract the specified chapter's text:
 ```
 
 Resolve the interpreter through `execute_command`: use Python 3 recorded during initialization first, then try `python3`, and on Windows try `py -3`. Explicitly fail when only Python 2 exists or no interpreter resolves; never treat `python` as the only command.
+
+If the extraction package is a transient output (by default in the platform temp directory, resolved via Python `tempfile.gettempdir()`: `/tmp/` on macOS/Linux, `%TEMP%\` on Windows), delete the JSON and its matching `*-images-*` render directory after all visual recognition and translation output are finished (i.e. while wrapping up Step 5); translate itself never writes persistent intermediates — `initial_image_blocks` lives only in the current conversation workspace. If `/read-pdf` explicitly wrote the package to a path inside the Vault, do not clean it up.
 The translation note begins at `status: draft` and changes state only after both the semantic gate below and final file validation pass.
 
 Do not reorder the following sequence:

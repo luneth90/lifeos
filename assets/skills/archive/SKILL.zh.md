@@ -84,6 +84,8 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 ## 步骤二：组装候选 JSON
 
+候选 JSON 写入**平台系统临时目录**（按 `TMPDIR`/`TEMP`/`TMP` 环境变量解析；macOS 如 `/var/folders/.../T/`，Linux 如 `/tmp/`，Windows 如 `%TEMP%\`），具体子目录按当前执行工具的临时目录约定（如 opencode、Claude Code、Codex 等各有约定，示例：`/var/folders/.../T/opencode/candidates.json`），禁止写入 Vault 内部或工作目录——它是命令输入管道用的中间产物，不属于 Vault 内容，执行完成后必须清理（见步骤三）。
+
 按以下权威路径组装候选 `target`（`main_file` 是项目/草稿/计划的主文件，位于 `source` 下；`project_id` 取主文件 frontmatter 的稳定 `id`）：
 
 - 单文件项目：`{系统目录}/{归档项目子目录}/YYYY/ProjectName.md`
@@ -138,6 +140,14 @@ cat candidates.json | lifeos archive <vault-root> --date 2026-08-02
 - 单候选失败不中断其他候选，失败项写入报告，退出码 1
 - `archived: "YYYY-MM-DD"` 由命令写入主文件 frontmatter，保留 `status: done`；同值日期幂等跳过
 - 移动的 `.md` 文件和补写元数据的主文件由命令自动通知记忆索引（`memory_notify`）
+
+正式执行完成后，删除候选临时文件，防止中间产物累积膨胀：
+
+```bash
+rm -f <候选 JSON 临时文件路径>
+```
+
+无论归档结果如何（全部成功、部分失败或整体停止），该临时文件都已无用，必须清理；dry-run 预检后若未正式执行，同样清理。清理只针对候选 JSON 本身，不影响已归档内容。
 
 ## 步骤四：完成报告
 

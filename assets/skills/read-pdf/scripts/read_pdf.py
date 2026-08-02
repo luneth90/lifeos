@@ -62,7 +62,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        help="输出 JSON 路径；默认写入 /tmp/read-pdf-时间戳.json",
+        help="输出 JSON 路径；默认写入平台临时目录（tempfile.gettempdir()）",
     )
     parser.add_argument(
         "--source-label",
@@ -318,7 +318,7 @@ def build_output_path(raw_output: Optional[str], source_hash: str) -> Path:
             output_path = (Path.cwd() / output_path).resolve()
     else:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-        output_path = Path(f"/tmp/read-pdf-{timestamp}-{source_hash[:8]}.json")
+        output_path = Path(tempfile.gettempdir()) / f"read-pdf-{timestamp}-{source_hash[:8]}.json"
     output_path.parent.mkdir(parents=True, exist_ok=True)
     return output_path
 

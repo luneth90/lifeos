@@ -219,7 +219,7 @@ After writing the visual merge, run the same validator again:
 
 Hand the package downstream only when the second validation exits 0. A `complete` page has `coverage: 1`, `errors: []`, and no `image` block.
 
-Output path: `/tmp/read-pdf-<timestamp>.json`
+Output path: `read-pdf-<timestamp>.json` in the platform temp directory (when `--output` is not given; resolved via Python `tempfile.gettempdir()`: `/tmp/` on macOS/Linux, `%TEMP%\` on Windows). This file and the auto-created render directory (`read-pdf-<stem>-images-*`) are **transient artifacts of the current workflow**: after downstream skills have consumed the package, the agent must delete the JSON and its matching `*-images-*` render directory to prevent accumulation in the temp directory; when `--output` explicitly targets a path inside the Vault for long-term use, keep the render directory as referenced by the output package.
 
 # Output Specifications
 

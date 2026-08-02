@@ -89,6 +89,8 @@ memory_context(
 <已解析的 Python 3 解释器> .agents/skills/read-pdf/scripts/read_pdf.py <PDF路径> <页码范围或章节名>
 ```
 
+若提取包为临时输出（默认在平台临时目录，`tempfile.gettempdir()` 解析，macOS/Linux 为 `/tmp/`、Windows 为 `%TEMP%\`），在**完成全部视觉识别与翻译产出后**（即步骤五收尾时），删除该 JSON 及对应的 `*-images-*` 渲染目录；translate 自身不新增落盘中间产物，`initial_image_blocks` 仅存于本次对话工作区。若提取包由 `/read-pdf` 显式输出到 Vault 内路径，则不清理。
+
 通过 `execute_command` 解析解释器：优先使用初始化阶段已记录的 Python 3，其次尝试 `python3`，Windows
 再尝试 `py -3`。只有 Python 2 或无法解析时明确失败；不得把 `python` 当作唯一命令。
 翻译笔记从 `status: draft` 开始，只有下述语义门禁和最终文件校验都通过后才转换状态。

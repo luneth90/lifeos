@@ -84,6 +84,8 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 ## Step 2: Assemble the candidate JSON
 
+Write the candidate JSON to the **platform system temp directory** (resolve via the `TMPDIR`/`TEMP`/`TMP` environment variables; e.g. `/var/folders/.../T/` on macOS, `/tmp/` on Linux, `%TEMP%\` on Windows); the concrete subdirectory follows the executing tool's own temp convention (opencode, Claude Code, Codex, etc. each have their own; e.g. `/var/folders/.../T/opencode/candidates.json`), never inside the Vault or the working directory — it is a transient intermediate for piping into the command, not Vault content, and must be cleaned up after execution (see Step 3).
+
 Assemble candidate `target` against the following authoritative paths (`main_file` is the primary file of the project/draft/plan, under `source`; `project_id` comes from the stable `id` in the main file frontmatter):
 
 - Single-file project: `{system directory}/{archived projects subdirectory}/YYYY/ProjectName.md`
@@ -138,6 +140,14 @@ Command semantics (idempotent, safe to rerun):
 - A failing candidate does not interrupt others; failures are recorded in the report, exit code 1
 - `archived: "YYYY-MM-DD"` is written to the main file frontmatter by the command, preserving `status: done`; same-date values are skipped idempotently
 - Moved `.md` files and main files whose metadata is repaired are notified to the memory index automatically (`memory_notify`)
+
+After the formal execution completes, delete the candidate temp file to prevent intermediate files from accumulating:
+
+```bash
+rm -f <candidate JSON temp file path>
+```
+
+The temp file is useless regardless of the outcome (all succeeded, partial failures, or stopped entirely) and must be cleaned up; likewise clean it up after a dry-run pre-check if no formal execution follows. Cleanup only targets the candidate JSON itself and never touches archived content.
 
 ## Step 4: Completion report
 
