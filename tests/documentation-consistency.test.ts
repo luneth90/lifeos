@@ -185,6 +185,29 @@ describe('最终协议文档门禁', () => {
 		}
 	});
 
+	it('Vault 全局规则要求 Obsidian CLI 在沙盒误报后执行沙盒外复测', () => {
+		const cases = [
+			{
+				path: 'assets/lifeos-rules.zh.md',
+				checks: [/沙盒外/, /obsidian version/, /obsidian vaults verbose/, /不得[^。\n]*未运行/],
+			},
+			{
+				path: 'assets/lifeos-rules.en.md',
+				checks: [
+					/outside the sandbox/i,
+					/obsidian version/,
+					/obsidian vaults verbose/,
+					/must not[^.\n]*not running/i,
+				],
+			},
+		] as const;
+
+		for (const testCase of cases) {
+			const content = read(testCase.path);
+			for (const check of testCase.checks) expect(content).toMatch(check);
+		}
+	});
+
 	it('升级文档只允许 V1/V2/V3 到 V4 的离线 cutover', () => {
 		for (const path of ['docs/memory-contract-v2.md', ...PROTOCOL_DOCS.slice(2)]) {
 			const content = read(path);

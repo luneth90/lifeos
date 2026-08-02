@@ -539,9 +539,20 @@ describe('阶段五幂等与归档契约', () => {
 	it('Archive 文档不再含裸移动或提前清理的冲突步骤', () => {
 		for (const path of ['assets/skills/archive/SKILL.zh.md', 'assets/skills/archive/SKILL.en.md']) {
 			const content = read(path);
+			const isChinese = path.endsWith('.zh.md');
 			expect(content).not.toMatch(/回退到系统\s*`mv`|fall back to system\s*`mv`/i);
 			expect(content).not.toMatch(/memory_notify\(previous_file_path=/);
 			expect(content).not.toContain('mkdir -p');
+			expect(content).toContain('obsidian version');
+			expect(content).toContain('obsidian vaults verbose');
+			expect(content).toMatch(/沙盒外|outside the sandbox/i);
+			expect(content).toMatch(
+				isChinese
+					? /本次[^。\n]*全部[^。\n]*Obsidian CLI/
+					: /all Obsidian CLI commands[^.\n]*current run/i,
+			);
+			expect(content).toMatch(/type:\s*["']?tool["']?[\s\S]*key:\s*["']?obsidian/);
+			expect(content).toContain('excluded by scan rules');
 			expect(content).toContain('createVaultDirectoryGuard');
 			expect(content).toContain('ensureVaultDirectory');
 			expect(content).toContain('scripts/archive_transaction.mjs');

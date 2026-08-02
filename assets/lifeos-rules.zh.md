@@ -62,6 +62,8 @@ Vault 目录布局定义在根目录 `lifeos.yaml` 中。默认映射：
 
 若 Vault 已配置对应的官方 Obsidian CLI 工具，优先使用；未安装时，回退到平台原生文件操作工具。
 
+若客户端运行在沙盒环境，首次执行 Obsidian CLI 报告无法找到或连接 Obsidian 时，不得据此判定 CLI 未安装或应用未运行。必须先在沙盒外执行只读的 `obsidian version` 与 `obsidian vaults verbose` 复测；复测成功后，本次任务中的全部 Obsidian CLI 命令均在沙盒外执行。只有沙盒外复测仍失败时，才按对应技能的 CLI 不可用降级协议处理。
+
 ### Frontmatter 规范
 
 创建/修改任何笔记前，必须先读取 `[[Frontmatter_Schema]]` 并严格遵守。模板与规范冲突时以规范为准。

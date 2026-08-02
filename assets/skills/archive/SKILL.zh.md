@@ -30,6 +30,22 @@ memory_context(
 ```
 
 未知作用域不要传入；空作用域不得扩大为全量读取。全局规则已由 bootstrap 注入，不要重复请求。
+
+## Obsidian CLI 执行环境（必须）
+
+归档确定使用 Obsidian CLI 后，在首次探测或移动前增量调用：
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "tool", key: "obsidian"}],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+随后执行只读的 `obsidian version` 与 `obsidian vaults verbose` 探测。若沙盒内返回无法找到或连接 Obsidian、无法读取进程或本地通信端点等环境性错误，不得据此判定 Obsidian 未运行，也不得立即请求降级；必须在沙盒外重试同一组只读命令。复测成功后，本次 Archive run 的全部 Obsidian CLI 命令均在沙盒外执行。只有沙盒外复测仍失败时，才进入本技能既有的 CLI 不可用降级分支。
+
 > [!config]
 > 本技能中的路径引用使用逻辑名（如 `{项目目录}`）。
 > Orchestrator 从 `lifeos.yaml` 解析实际路径后注入上下文。
@@ -140,7 +156,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 
 2. **使用 Obsidian CLI 移动文件（自动更新 wikilink）：**
    - **优先使用 `obsidian move`** — 内部调用 `app.fileManager.renameFile()`，自动更新全库 wikilink 引用
-   - 前提：Obsidian 必须正在运行
+   - 前提：按“Obsidian CLI 执行环境”完成只读探测并固定本次 run 的执行环境
    - 命令格式：
      ```
      # 单文件
@@ -176,7 +192,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
    - 调用 `scripts/archive_transaction.mjs` 的 `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })`。`adapters` 必须提供 `persist_manifest`、`verify_manifest_receipt`、`move_with_link_update`、`memory_notify`、`confirm_index` 与 `memory_forget`；每个回调只接受严格成功结构，并为副作用返回受信回执。
    1. `persist_manifest` 必须把完整 manifest 与当前 Vault 身份写入调用者不可伪造的受信存储并返回 persistence receipt。Vault 身份由 run 开始时冻结的 root `realpath`、`dev` 与 `ino` 组成，并显式进入 manifest、candidate、move、intent、派生 ID/idempotency key 及持久化/认证 payload。每个外部等待前后、创建或刷新任何 guard 前以及返回 complete 前，都重新捕获当前 root 并与冻结身份精确匹配。恢复时还必须在调用 `verify_manifest_receipt` 前完成匹配；Vault 被移动、替换或重建时禁止继续持久化、创建新 guard、自动恢复或执行后续副作用。
    2. 每个副作用都先把 intent 持久化。move intent 持久化后重新计算冻结 inventory，再创建全新的 source/target guards；最后一次 guard 复核与 `move_with_link_update` 调用之间不得插入持久化、等待或其他回调。移动后保留 `advanceVaultPathGuard` 返回的新 guards，并持久化逐文件 `moves` 与 move receipt。
-   3. 每次持久化或外部等待返回后，立即重新验证所有已推进目标的 guard 和当前 target inventory；`memory_notify`、`confirm_index`、`memory_forget`、每次成功回执持久化及最终 complete 持久化都适用。回调成功回执持久化后才能跳过；否则只能使用同一 `idempotency_key` 安全重放或失败关闭。返回 complete 前再执行一次同步复核，此后不得继续等待或调用外部能力。
+   3. 每次持久化或外部等待返回后，立即重新验证所有已推进目标的 guard 和当前 target inventory；`memory_notify`、`confirm_index`、`memory_forget`、每次成功回执持久化及最终 complete 持久化都适用。回调成功回执持久化后才能跳过；否则只能使用同一 `idempotency_key` 安全重放或失败关闭。返回 complete 前再执行一次同步复核，此后不得继续等待或调用外部能力。对于位于系统归档目录的目标，`memory_notify` 返回 `skipped / excluded by scan rules` 表示按配置成功退出活跃索引；此时 `confirm_index` 必须确认旧路径不在索引、目标文件存在且目标路径不在 `vault_index`，不得要求归档目标进入索引。
    4. 只有同一项目全部候选的全部文件都持有确认回执后，才调用一次 `memory_forget`。空项目不能借由空集合自动通过；草稿、计划和日记不得调用 `memory_forget`。
    5. 草稿、计划与日记候选只能是普通文件；项目可以是普通文件，或包含至少一个可确认普通文件的非空目录。目录子项必须保持原始 NFC，并拒绝控制字符、Windows 非法字符、保留名、符号链接与非普通文件。
    6. 任一步骤失败都停止整个 run，不再处理其他候选。恢复必须使用相同 `run_id`、原候选和同一份已认证 envelope；source 被恢复、候选图交叉、路径、派生 ID、inventory 或 receipt 不一致时拒绝自动恢复。Schema、Vault 身份与 receipt 校验属于未受信阶段：失败时只返回本地 `failed`、`unverified`、空 receipt 和人工恢复指引，禁止调用持久化或任何业务副作用，且不得覆盖受信存储的最后一个合法恢复点。若 `confirm_index` 或 `memory_forget` 已发生后发现目标漂移，必须明确记录对应副作用并禁止返回 complete。
@@ -184,7 +200,7 @@ memory_query(contract_version=2, query="", filters={"type":"plan","status":"done
 4. **运行必需的归档元数据事务：**
    - 移动事务返回经认证的 `complete` envelope 后，立即调用 `scripts/archive_metadata_transaction.mjs` 的 `runArchiveMetadataTransaction({ vault_root, run_id, archive_date, move_envelope, manifest, adapters })`。元数据事务必须使用区别于移动事务的新 `run_id`；`adapters` 必须提供 `persist_manifest`、`verify_manifest_receipt`、`write_archived_frontmatter`、`memory_notify` 与 `confirm_index`
    - 元数据事务先验证父移动 envelope 的回执，只从父 manifest 的逐文件 `moves` 派生目标。每个 `project`、`draft`、`plan` 候选必须且只能找到一个 `type` 匹配、`status: done` 的主文件；日记不写 `archived` 字段。零个或多个匹配都失败关闭，不执行任何元数据写入
-   - 每个目标先持久化写入 intent，再由 `write_archived_frontmatter` 以 `before_sha256` 比较交换写入 `archived: "YYYY-MM-DD"`，保留 `status: done`；写入回执持久化后，逐文件执行 `memory_notify` 和 `confirm_index` 并分别持久化回执
+   - 每个目标先持久化写入 intent，再由 `write_archived_frontmatter` 以 `before_sha256` 比较交换写入 `archived: "YYYY-MM-DD"`，保留 `status: done`；写入回执持久化后，逐文件执行 `memory_notify` 和 `confirm_index` 并分别持久化回执。系统归档目标继续使用 `skipped / excluded by scan rules` 作为预期通知结果，并确认目标文件存在且未进入 `vault_index`
    - 元数据步骤失败时，移动事务的结果保持不变；使用同一元数据 `run_id` 和已认证 envelope 恢复，已持久化的写入、通知或确认回执才可跳过。禁止重新运行或伪装回滚已经完成的移动事务
    - 本次 Archive run 禁止在两个事务之外直接改写归档目标 frontmatter 或今日日记。日记记录不属于 Archive 写集，也不作为归档完成条件
    - 只有移动事务与元数据事务都返回 `complete`，本次 Archive 工作流才可报告完成；任一 `project`、`draft`、`plan` 的 `archived` 写入、通知或索引确认缺失时必须报告部分完成及恢复动作

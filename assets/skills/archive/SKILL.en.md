@@ -30,6 +30,22 @@ memory_context(
 ```
 
 Do not pass unresolved scopes, and never expand an empty scope list into a full-memory read. Global rules were already injected by bootstrap.
+
+## Obsidian CLI Execution Environment (Required)
+
+After Archive selects the Obsidian CLI, incrementally load its tool scope before the first probe or move:
+
+```text
+memory_context(
+  contract_version=2,
+  scopes=[{type: "tool", key: "obsidian"}],
+  include_global=false,
+  include_related_files=true
+)
+```
+
+Then run the read-only `obsidian version` and `obsidian vaults verbose` probes. If the sandbox reports that Obsidian cannot be found or reached, cannot inspect processes, or cannot access the local communication endpoint, do not conclude that Obsidian is not running and do not request a fallback yet. Retry the same read-only probes outside the sandbox. If they succeed, run all Obsidian CLI commands for the current run outside the sandbox. Only when the outside-sandbox probes also fail may this skill enter its existing CLI-unavailable fallback branch.
+
 > [!config]
 > Path references in this skill use logical names (e.g., `{projects directory}`).
 > The Orchestrator resolves actual paths from `lifeos.yaml` and injects them into the context.
@@ -140,7 +156,7 @@ After scanning, process every eligible item in the execution list by default:
 
 2. **Use Obsidian CLI to move files (auto-updates wikilinks):**
    - **Prefer `obsidian move`** — internally calls `app.fileManager.renameFile()`, auto-updating all wikilink references vault-wide
-   - Requires Obsidian to be running
+   - Prerequisite: complete the read-only probes under “Obsidian CLI Execution Environment” and freeze the execution environment for this run
    - Command format:
      ```
      # Single file
@@ -176,7 +192,7 @@ After scanning, process every eligible item in the execution list by default:
    - Call `runArchiveTransaction({ vault_root, run_id, candidates, manifest, adapters })` from `scripts/archive_transaction.mjs`. `adapters` must provide `persist_manifest`, `verify_manifest_receipt`, `move_with_link_update`, `memory_notify`, `confirm_index`, and `memory_forget`. Every callback accepts only a strict success shape and returns a trusted receipt for a side effect.
    1. `persist_manifest` must write the complete manifest and current Vault identity to a trusted store the caller cannot forge and return a persistence receipt. Vault identity comprises the root `realpath`, `dev`, and `ino` frozen when the run starts, and is explicit in the manifest, candidates, moves, intents, derived IDs/idempotency keys, and persistence/authentication payloads. Recapture and exactly compare the current root with that frozen identity before and after every external wait, before creating or refreshing any guard, and before returning complete. Resume also performs the comparison before calling `verify_manifest_receipt`. Moving, replacing, or recreating the Vault forbids later persistence, new guard creation, automatic resume, and subsequent side effects.
    2. Persist an intent before every side effect. After persisting a move intent, recompute the frozen inventory and create fresh source and target guards. Nothing asynchronous, no persistence, and no other callback may occur between the last guard revalidation and invoking `move_with_link_update`. Retain the new guards returned by `advanceVaultPathGuard`, then persist per-file `moves` and the move receipt.
-   3. Immediately after every persistence call or external wait returns, revalidate every advanced target guard and current target inventory. This includes `memory_notify`, `confirm_index`, `memory_forget`, every successful receipt persistence, and final complete persistence. A step may be skipped only when its successful trusted receipt was persisted; otherwise replay safely with the same `idempotency_key` or fail closed. Perform one final synchronous revalidation immediately before returning complete, with no later wait or external call.
+   3. Immediately after every persistence call or external wait returns, revalidate every advanced target guard and current target inventory. This includes `memory_notify`, `confirm_index`, `memory_forget`, every successful receipt persistence, and final complete persistence. A step may be skipped only when its successful trusted receipt was persisted; otherwise replay safely with the same `idempotency_key` or fail closed. Perform one final synchronous revalidation immediately before returning complete, with no later wait or external call. For targets inside the system archive directory, `memory_notify` returning `skipped / excluded by scan rules` means the file correctly left the active index. In that case, `confirm_index` must confirm that the old path is absent from the index, the target file exists, and the target path is absent from `vault_index`; it must not require an archive target to be indexed.
    4. Call `memory_forget` once only after every file from every candidate for the same project has a confirmation receipt. An empty project cannot pass vacuously. Never call `memory_forget` for drafts, plans, or diaries.
    5. Draft, plan, and diary candidates must be regular files. A project can be a regular file or a non-empty directory containing at least one confirmable regular file. Every raw directory entry must already be NFC and must reject controls, Windows-invalid characters, reserved names, symlinks, and non-regular files.
    6. Any failure stops the entire run; do not process another candidate. Resume only with the same `run_id`, original candidates, and the same authenticated envelope. Reject automatic resume when a source reappears or when the candidate graph, path, derived ID, inventory, or receipt differs. Schema, Vault identity, and receipt validation are untrusted stages: failure returns only a local `failed`, `unverified`, null-receipt result with manual-recovery guidance, calls neither persistence nor business side effects, and never overwrites the trusted store's last valid recovery point. If target drift is found after `confirm_index` or `memory_forget` has occurred, explicitly record the corresponding applied effect and never return complete.
@@ -184,7 +200,7 @@ After scanning, process every eligible item in the execution list by default:
 4. **Run the required archive metadata transaction:**
    - After the move transaction returns an authenticated `complete` envelope, immediately call `runArchiveMetadataTransaction({ vault_root, run_id, archive_date, move_envelope, manifest, adapters })` from `scripts/archive_metadata_transaction.mjs`. The metadata transaction uses a new `run_id` distinct from the move transaction. Its `adapters` must provide `persist_manifest`, `verify_manifest_receipt`, `write_archived_frontmatter`, `memory_notify`, and `confirm_index`
    - The metadata transaction first verifies the parent move-envelope receipt and derives targets only from the parent manifest's per-file `moves`. Every `project`, `draft`, and `plan` candidate must have exactly one main file whose `type` matches and whose `status` is `done`; diary entries do not receive an `archived` field. Zero or multiple matches fail closed before any metadata write
-   - Persist a write intent for each target, then have `write_archived_frontmatter` compare-and-swap against `before_sha256`, add `archived: "YYYY-MM-DD"`, and preserve `status: done`. After persisting the write receipt, run and persist per-file `memory_notify` and `confirm_index` receipts
+   - Persist a write intent for each target, then have `write_archived_frontmatter` compare-and-swap against `before_sha256`, add `archived: "YYYY-MM-DD"`, and preserve `status: done`. After persisting the write receipt, run and persist per-file `memory_notify` and `confirm_index` receipts. System archive targets continue to expect `skipped / excluded by scan rules`, with the target file present and absent from `vault_index`
    - A metadata failure leaves the completed move transaction unchanged. Resume with the same metadata `run_id` and authenticated envelope; only persisted write, notification, or confirmation receipts may skip work. Never rerun or pretend to roll back the completed move transaction
    - This Archive run must not rewrite archived-target frontmatter or today's diary outside these two transactions. A diary log is outside the Archive write set and is not an archival completion condition
    - Only when both the move transaction and metadata transaction return `complete` may this Archive workflow report completion. A missing `archived` write, notification, or index confirmation for any `project`, `draft`, or `plan` must be reported as partial completion with recovery instructions

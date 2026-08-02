@@ -62,6 +62,8 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 
 If the Vault has the corresponding official Obsidian CLI tools configured, prefer using them; if not installed, fall back to the platform's native file tools.
 
+When the client runs in a sandbox, an initial Obsidian CLI error saying that Obsidian cannot be found or reached must not be treated as proof that the CLI is missing or that Obsidian is not running. First retry the read-only `obsidian version` and `obsidian vaults verbose` probes outside the sandbox. If those probes succeed, run all Obsidian CLI commands for the current task outside the sandbox. Only when the outside-sandbox probes also fail may the task follow its CLI-unavailable fallback protocol.
+
 ### Frontmatter Schema
 
 Before creating/modifying any note, must first read `[[Frontmatter_Schema]]` and strictly follow it. When templates conflict with the schema, the schema takes precedence.
