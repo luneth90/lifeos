@@ -314,24 +314,31 @@ def build_error(module: str, source: str, message: str) -> dict[str, str]:
 
 
 def ensure_dependencies() -> None:
-    """Install feedparser and requests on demand."""
+    """Install feedparser and requests on demand.
+
+    Supports both PEP 668 externally-managed environments and legacy
+    interpreters (e.g. macOS CommandLineTools Python 3.9) whose pip does
+    not understand ``--break-system-packages``.  Try ``--user`` first,
+    then plain, then ``--break-system-packages``.
+    """
     try:
         import feedparser  # noqa: F401
         import requests  # noqa: F401
     except ImportError:
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "feedparser",
-                "requests",
-                "--break-system-packages",
-                "-q",
-            ],
-            check=True,
-        )
+        base = [sys.executable, "-m", "pip", "install", "feedparser", "requests", "-q"]
+        attempts = [
+            [*base, "--user"],
+            base,
+            [*base, "--break-system-packages"],
+        ]
+        last_error: Exception | None = None
+        for cmd in attempts:
+            try:
+                subprocess.run(cmd, check=True)
+                return
+            except subprocess.CalledProcessError as exc:
+                last_error = exc
+        raise RuntimeError(f"自动安装依赖失败（feedparser/requests）：{last_error}")
 
 
 def fetch_rss(feeds: list[dict[str, str]], cutoff: datetime, language: str) -> list[dict[str, str]]:
