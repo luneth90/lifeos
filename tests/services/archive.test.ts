@@ -6,6 +6,7 @@ import {
 	readFileSync,
 	renameSync,
 	rmSync,
+	symlinkSync,
 	writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -656,6 +657,135 @@ describe('runArchive', () => {
 					candidates: [],
 				}),
 			).toThrow(/无效归档日期/);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('清理失败（源树仅剩空目录）不阻断元数据，恢复权限后空源目录续跑闭环', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(
+				root,
+				'20_项目/Demo/Demo.md',
+				`---\ntype: project\nstatus: done\nid: demo\n---\n# Demo\n`,
+			);
+			write(root, '20_项目/Demo/文档/guide.md', '# Guide');
+			write(root, '20_项目/Demo/assets/logo.png', 'png');
+			const candidate = {
+				type: 'project' as const,
+				source: '20_项目/Demo',
+				target: '90_系统/归档/项目/2026/Demo',
+				main_file: '20_项目/Demo/Demo.md',
+				project_id: 'demo',
+			};
+			// 最后一次移动后把源目录的父目录设为只读，使 removeEmptyDirs 最后一步 rmdirSync 失败
+			let moves = 0;
+			const runner: MoveRunner = (source, target) => {
+				renameSync(join(root, source), join(root, target));
+				moves++;
+				if (moves === 3) chmodSync(join(root, '20_项目'), 0o555);
+				return { ok: true };
+			};
+			const first = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: runner,
+			});
+			expect(first.failed[0]?.reason).toMatch(/^cleanup_failed:/);
+			expect(first.updated).toEqual(['90_系统/归档/项目/2026/Demo/Demo.md']);
+			expect(
+				readFileSync(join(root, '90_系统/归档/项目/2026/Demo/Demo.md'), 'utf8'),
+			).toContain('archived: "2026-08-02"');
+			expect(existsSync(join(root, '20_项目/Demo'))).toBe(true);
+			chmodSync(join(root, '20_项目'), 0o755);
+
+			const rerun = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [candidate],
+				moveRunner: fakeMove(root),
+			});
+			expect(rerun.conflicts).toEqual([]);
+			expect(rerun.failed).toEqual([]);
+			expect(rerun.updated).toEqual([]);
+			expect(rerun.skipped).toEqual([{ path: '20_项目/Demo', reason: 'already_moved' }]);
+			expect(existsSync(join(root, '20_项目/Demo'))).toBe(false);
+			expect(
+				readFileSync(join(root, '90_系统/归档/项目/2026/Demo/Demo.md'), 'utf8'),
+			).toContain('archived: "2026-08-02"');
+		} finally {
+			chmodSync(join(root, '20_项目'), 0o755);
+			cleanup();
+		}
+	});
+
+	it('预检拒绝文件夹项目内的符号链接', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(
+				root,
+				'20_项目/Demo/Demo.md',
+				`---\ntype: project\nstatus: done\nid: demo\n---\n# Demo\n`,
+			);
+			writeFileSync(join(root, 'outside.md'), '# outside', 'utf8');
+			symlinkSync(join(root, 'outside.md'), join(root, '20_项目/Demo/链接'));
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'project',
+						source: '20_项目/Demo',
+						target: '90_系统/归档/项目/2026/Demo',
+						main_file: '20_项目/Demo/Demo.md',
+						project_id: 'demo',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.conflicts).toEqual([
+				{ path: '20_项目/Demo/链接', reason: 'source_contains_symlink' },
+			]);
+			expect(report.moved).toEqual([]);
+			expect(existsSync(join(root, '20_项目/Demo/Demo.md'))).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
+	it('清理失败且仍有普通文件残留时失败关闭，不写 archived', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
+			write(root, '20_项目/P/z.md', '# z');
+			// 对非主文件假装移动成功但不实际移动，制造「源目录仍有内容」的清理失败
+			const runner: MoveRunner = (source, target) => {
+				if (source.endsWith('/z.md')) return { ok: true };
+				renameSync(join(root, source), join(root, target));
+				return { ok: true };
+			};
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				candidates: [
+					{
+						type: 'project',
+						source: '20_项目/P',
+						target: '90_系统/归档/项目/2026/P',
+						main_file: '20_项目/P/P.md',
+						project_id: 'p',
+					},
+				],
+				moveRunner: runner,
+			});
+			expect(report.failed[0]?.reason).toMatch(/^cleanup_failed:/);
+			expect(report.updated).toEqual([]);
+			expect(
+				readFileSync(join(root, '90_系统/归档/项目/2026/P/P.md'), 'utf8'),
+			).not.toContain('archived:');
+			expect(existsSync(join(root, '20_项目/P/z.md'))).toBe(true);
 		} finally {
 			cleanup();
 		}

@@ -317,6 +317,39 @@ function removeEmptyDirs(directory: string): void {
 	rmdirSync(directory);
 }
 
+/** 源目录树是否仅剩空目录（无普通文件、符号链接或特殊条目）；扫描异常失败关闭返回 false */
+function isEmptyTreeExceptDirs(directory: string): boolean {
+	try {
+		for (const entry of readdirSync(directory, { withFileTypes: true })) {
+			if (entry.isDirectory()) {
+				if (!isEmptyTreeExceptDirs(join(directory, entry.name))) return false;
+			} else {
+				return false;
+			}
+		}
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** 在目录树中查找符号链接或特殊条目，返回相对路径名；未找到或扫描异常返回 null */
+function findUnsupportedEntry(directory: string): string | null {
+	try {
+		for (const entry of readdirSync(directory, { withFileTypes: true })) {
+			if (entry.isDirectory()) {
+				const found = findUnsupportedEntry(join(directory, entry.name));
+				if (found) return found;
+			} else if (!entry.isFile()) {
+				return entry.name;
+			}
+		}
+	} catch {
+		return null;
+	}
+	return null;
+}
+
 function moveFile(item: PreparedCandidate, move: MoveRunner, report: ArchiveReport): boolean {
 	const { candidate } = item;
 	if (report.dryRun) {
@@ -371,7 +404,8 @@ function moveDirectory(item: PreparedCandidate, move: MoveRunner, report: Archiv
 			path: candidate.source,
 			reason: `cleanup_failed:${(error as Error).message}`,
 		});
-		return false;
+		// 仅当源树确认仅剩空目录时清理失败不阻断元数据；无法确认或有残留则保持失败
+		if (!isEmptyTreeExceptDirs(item.sourceAbs)) return false;
 	}
 	return true;
 }
@@ -503,6 +537,57 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 		if (sourceStat.isSymbolicLink()) {
 			report.conflicts.push({ path: candidate.source, reason: 'source_is_symlink' });
 			continue;
+		}
+		if (sourceStat.isDirectory()) {
+			// 预检拒绝源树内的符号链接与特殊条目，避免被 collectFiles 忽略后残留
+			const unsupported = findUnsupportedEntry(sourceAbs);
+			if (unsupported) {
+				report.conflicts.push({
+					path: `${candidate.source}/${unsupported}`,
+					reason: 'source_contains_symlink',
+				});
+				continue;
+			}
+			// 空源目录续跑：文件全部移动成功但清理失败后的现场
+			if (collectFiles(sourceAbs).length === 0) {
+				if (!existsSync(targetAbs)) {
+					report.failed.push({ path: candidate.source, reason: 'empty_directory' });
+					continue;
+				}
+				if (!lstatSync(targetAbs).isDirectory()) {
+					report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
+					continue;
+				}
+				if (candidate.type !== 'diary') {
+					const mainFile = candidate.main_file as string;
+					const targetMain = relocatedPath(candidate.source, candidate.target, mainFile);
+					const targetMainAbs = join(options.vaultRoot, targetMain);
+					if (!existsSync(targetMainAbs)) {
+						report.conflicts.push({ path: targetMain, reason: 'main_file_missing' });
+						continue;
+					}
+					const content = readFileSync(targetMainAbs, 'utf8');
+					const issue = validateMainFile(candidate, targetMain, content, options.archiveDate);
+					if (issue) {
+						report.conflicts.push(issue);
+						continue;
+					}
+					if (parseFrontmatter(content).archived === undefined) {
+						repairs.push({ target: targetMain, targetAbs: targetMainAbs });
+					}
+				}
+				try {
+					removeEmptyDirs(sourceAbs);
+				} catch (error) {
+					report.failed.push({
+						path: candidate.source,
+						reason: `cleanup_failed:${(error as Error).message}`,
+					});
+					if (!isEmptyTreeExceptDirs(sourceAbs)) continue;
+				}
+				report.skipped.push({ path: candidate.source, reason: 'already_moved' });
+				continue;
+			}
 		}
 		const targetExists = existsSync(targetAbs);
 		if (targetExists && !sourceStat.isDirectory()) {
