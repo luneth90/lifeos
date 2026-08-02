@@ -396,6 +396,13 @@ describe('runArchive', () => {
 			});
 			expect(report.dryRun).toBe(true);
 			expect(report.conflicts).toEqual([]);
+			// moved 只含文件条目，不含目录自身条目（与真实执行语义一致）
+			expect(report.moved).toEqual([
+				{
+					from: '20_项目/GTS学习/路线.md',
+					to: '90_系统/归档/项目/2026/GTS学习/路线.md',
+				},
+			]);
 			// 目标目录及其父链均不应被创建，重跑正式执行不会 target_collision
 			expect(existsSync(join(root, '90_系统/归档/项目/2026/GTS学习'))).toBe(false);
 			expect(existsSync(join(root, '90_系统/归档/项目/2026'))).toBe(false);

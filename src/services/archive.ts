@@ -376,7 +376,6 @@ function moveDirectory(item: PreparedCandidate, move: MoveRunner, report: Archiv
 		for (const rel of files) {
 			report.moved.push({ from: `${candidate.source}/${rel}`, to: `${candidate.target}/${rel}` });
 		}
-		report.moved.push({ from: candidate.source, to: candidate.target });
 		return true;
 	}
 	const mainRel = candidate.main_file?.slice(candidate.source.length + 1);
