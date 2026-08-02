@@ -1,6 +1,7 @@
 // 归档核心服务：预检 → 移动（obsidian move 自动更新 wikilink）→ archived 字段 → 报告
 // 设计原则：确定性操作、幂等重跑、失败输出清单，不引入事务/恢复协议。
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import {
 	existsSync,
 	lstatSync,
@@ -10,6 +11,7 @@ import {
 	renameSync,
 	rmSync,
 	rmdirSync,
+	statSync,
 	writeFileSync,
 } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, win32 } from 'node:path';
@@ -125,6 +127,8 @@ interface PreparedCandidate {
 	sourceAbs: string;
 	targetAbs: string;
 	isDirectory: boolean;
+	/** 预检期判定的主文件是否缺失 archived（dry-run 报告依据） */
+	needsArchived: boolean;
 }
 
 interface MetadataRepair {
@@ -298,6 +302,25 @@ function checkMainNode(abs: string): 'missing' | 'symlink' | 'ok' {
 	}
 }
 
+/**
+ * 逐级检查 Vault 相对路径的已有祖先组件（不含最终节点，最终节点由 checkMainNode 校验），
+ * 返回第一个符号链接组件（Vault 相对路径）；中途遇到不存在的组件即停止（后续组件由本命令
+ * 创建，不构成越界）。
+ */
+function findSymlinkAncestor(vaultRoot: string, relPath: string): string | null {
+	const parts = relPath.split('/');
+	let current = vaultRoot;
+	for (let i = 0; i < parts.length - 1; i++) {
+		current = join(current, parts[i]);
+		try {
+			if (lstatSync(current).isSymbolicLink()) return relative(vaultRoot, current);
+		} catch {
+			return null;
+		}
+	}
+	return null;
+}
+
 /** 把 main_file 的源前缀替换为目标前缀 */
 function relocatedPath(source: string, target: string, path: string): string {
 	if (path === source) return target;
@@ -392,7 +415,16 @@ function moveFile(item: PreparedCandidate, move: MoveRunner, report: ArchiveRepo
 
 function moveDirectory(item: PreparedCandidate, move: MoveRunner, report: ArchiveReport): boolean {
 	const { candidate } = item;
-	const files = collectFiles(item.sourceAbs);
+	let files: string[];
+	try {
+		files = collectFiles(item.sourceAbs);
+	} catch (error) {
+		report.failed.push({
+			path: candidate.source,
+			reason: `source_scan_failed:${(error as Error).message}`,
+		});
+		return false;
+	}
 	if (files.length === 0) {
 		report.failed.push({ path: candidate.source, reason: 'empty_directory' });
 		return false;
@@ -466,12 +498,15 @@ function writeArchived(
 	}
 	if (report.dryRun) return 'changed';
 	const insertPos = frontmatter.insertPos ?? 0;
-	const tmpAbs = `${targetAbs}.lifeos-tmp-${process.pid}-${Date.now()}`;
+	// 随机临时名 + 排他创建，避免被预置软链接劫持；继承原文件权限，避免替换后放宽可读范围
+	const tmpAbs = `${targetAbs}.lifeos-tmp-${randomBytes(8).toString('hex')}`;
 	try {
 		// 同目录临时文件 + 原子替换，避免覆盖写中断导致原笔记截断
+		const mode = statSync(targetAbs).mode & 0o777;
 		writeFileSync(
 			tmpAbs,
 			`${content.slice(0, insertPos)}archived: "${archiveDate}"\n${content.slice(insertPos)}`,
+			{ flag: 'wx', mode },
 		);
 		renameSync(tmpAbs, targetAbs);
 		return 'changed';
@@ -527,13 +562,22 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 	}
 
 	// 2. 预检全部候选
-	const prepared: PreparedCandidate[] = [];
+	let prepared: PreparedCandidate[] = [];
 	const repairs: MetadataRepair[] = [];
 	const pendingResumes: PendingResume[] = [];
 	for (const candidate of options.candidates) {
 		const pathIssue = validateCandidatePath(config, candidate, options.archiveDate);
 		if (pathIssue) {
 			report.conflicts.push(pathIssue);
+			continue;
+		}
+		// 逐级拒绝 source / target / main_file 的符号链接祖先，防止经软链接越界 Vault
+		const ancestorIssue = [candidate.source, candidate.target, candidate.main_file]
+			.filter((rel): rel is string => rel !== undefined)
+			.map((rel) => findSymlinkAncestor(options.vaultRoot, rel))
+			.find((symlink) => symlink !== null);
+		if (ancestorIssue) {
+			report.conflicts.push({ path: ancestorIssue, reason: 'ancestor_is_symlink' });
 			continue;
 		}
 		const sourceAbs = join(options.vaultRoot, candidate.source);
@@ -653,6 +697,7 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 			}
 		}
 		const targetExists = existsSync(targetAbs);
+		let needsArchived = false;
 		if (targetExists && !sourceStat.isDirectory()) {
 			report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
 			continue;
@@ -700,13 +745,23 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 				report.conflicts.push(issue);
 				continue;
 			}
+			needsArchived = parseFrontmatter(content).archived === undefined;
 		}
 		if (targetExists) {
 			if (!sourceStat.isDirectory() || !lstatSync(targetAbs).isDirectory()) {
 				report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
 				continue;
 			}
-			const targetFiles = collectFiles(targetAbs);
+			let targetFiles: string[];
+			try {
+				targetFiles = collectFiles(targetAbs);
+			} catch (error) {
+				report.conflicts.push({
+					path: candidate.target,
+					reason: `target_scan_failed:${(error as Error).message}`,
+				});
+				continue;
+			}
 			const targetMain = candidate.main_file
 				? relocatedPath(candidate.source, candidate.target, candidate.main_file)
 				: null;
@@ -717,7 +772,17 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 				report.conflicts.push({ path: candidate.target, reason: 'target_collision' });
 				continue;
 			}
-			const collision = collectFiles(sourceAbs).find((file) => existsSync(join(targetAbs, file)));
+			let sourceFiles: string[];
+			try {
+				sourceFiles = collectFiles(sourceAbs);
+			} catch (error) {
+				report.conflicts.push({
+					path: candidate.source,
+					reason: `source_scan_failed:${(error as Error).message}`,
+				});
+				continue;
+			}
+			const collision = sourceFiles.find((file) => existsSync(join(targetAbs, file)));
 			if (collision) {
 				report.conflicts.push({
 					path: `${candidate.target}/${collision}`,
@@ -726,7 +791,13 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 				continue;
 			}
 		}
-		prepared.push({ candidate, sourceAbs, targetAbs, isDirectory: sourceStat.isDirectory() });
+		prepared.push({
+			candidate,
+			sourceAbs,
+			targetAbs,
+			isDirectory: sourceStat.isDirectory(),
+			needsArchived,
+		});
 	}
 
 	if (report.conflicts.length > 0) return report;
@@ -734,6 +805,7 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 	// 2.5 续跑候选：全部预检通过后统一执行清理与元数据补写；dry-run 只列计划，不产生副作用
 	if (report.dryRun) {
 		for (const resume of pendingResumes) {
+			if (resume.needsRepair) report.updated.push(resume.targetMain);
 			report.skipped.push({ path: resume.candidate.source, reason: 'already_moved' });
 		}
 	} else {
@@ -757,12 +829,24 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 
 	// 3. 创建目标父目录（obsidian move 要求目标父目录已存在）；dry-run 不产生任何副作用，跳过
 	if (!report.dryRun) {
+		const mkdirFailed = new Set<PreparedCandidate>();
 		for (const item of prepared) {
-			if (item.isDirectory) {
-				mkdirSync(item.targetAbs, { recursive: true });
-			} else {
-				mkdirSync(dirname(item.targetAbs), { recursive: true });
+			try {
+				if (item.isDirectory) {
+					mkdirSync(item.targetAbs, { recursive: true });
+				} else {
+					mkdirSync(dirname(item.targetAbs), { recursive: true });
+				}
+			} catch (error) {
+				report.failed.push({
+					path: item.candidate.target,
+					reason: `target_dir_create_failed:${(error as Error).message}`,
+				});
+				mkdirFailed.add(item);
 			}
+		}
+		if (mkdirFailed.size > 0) {
+			prepared = prepared.filter((item) => !mkdirFailed.has(item));
 		}
 	}
 
@@ -780,6 +864,11 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 		const mainFile = item.candidate.main_file;
 		if (!mainFile) continue;
 		const targetMain = relocatedPath(item.candidate.source, item.candidate.target, mainFile);
+		if (report.dryRun) {
+			// 以预检期判定的 needsArchived 报告预计更新，与正式执行语义一致
+			if (item.needsArchived) report.updated.push(targetMain);
+			continue;
+		}
 		if (
 			writeArchived(join(options.vaultRoot, targetMain), options.archiveDate, report) === 'changed'
 		) {

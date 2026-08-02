@@ -16,6 +16,10 @@
 - `archived` 元数据改为同目录临时文件加原子替换，失败时清理临时文件，避免覆盖写中断截断笔记
 - 记忆索引通知按「已尝试目标」去重：移动通知失败后不再降级重发补写通知，保留源路径语义
 - dry-run 报告预计写入 `archived` 的主文件，预览与正式执行一致
+- 逐级拒绝 source / target / main_file 的符号链接祖先（`ancestor_is_symlink`），防止经软链接越界 Vault 移动与写入
+- `archived` 临时文件改用随机名加排他创建（`wx`），不可被预置软链接劫持；创建时继承原文件权限，替换后不改变可读范围
+- 目标目录树读取失败转为冲突报告（`target_scan_failed`），目标目录创建失败转为 `failed`（`target_dir_create_failed`），执行期二次源扫描同样结构化报告，CLI 不再裸抛中断 JSON 输出
+- dry-run 依据预检判定的 `needsArchived` 报告预计更新：源已含同值 `archived` 不误报，空源续跑现场按 `needsRepair` 报告预计补写
 - 同步更新 Archive 与共享生命周期中英文文档，移除已删除事务脚本的残留语义
 
 ## 2.2.4 (2026-08-02)
