@@ -144,6 +144,9 @@ Command semantics (idempotent, safe to rerun):
 Report from the command's JSON output (`moved` / `updated` / `skipped` / `failed` / `conflicts`):
 
 - If `failed` or `conflicts` is non-empty, list every failing item with its reason and a manual recovery suggestion (e.g., resolve the target conflict and rerun with the same candidates)
+- `notify_failed` (memory index notification failure): fix the underlying cause and rerun; if the rerun's `updated` no longer contains that path (the `archived` field is already written, so the repair is not triggered), send one `memory_notify` manually using the path from the failure report, with the parameters chosen by the failure source:
+  - Metadata-repair notification (`updated` loop, the notification after writing `archived`) → `memory_notify(contract_version=2, file_path="<target-path>")`
+  - Move notification (`moved` loop, the notification after moving files) → include the original path: `memory_notify(contract_version=2, file_path="<target-path>", previous_file_path="<source-path>")`
 - After a project (`type: project`) archives successfully, call `memory_forget` to clean its project-scoped memory:
   ```
   memory_forget(contract_version=2, scope={type: "project", key: "<project_id>"}, reason="项目归档清理")

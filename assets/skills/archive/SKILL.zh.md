@@ -144,6 +144,13 @@ cat candidates.json | lifeos archive <vault-root> --date 2026-08-02
 按命令输出的 JSON 报告（`moved` / `updated` / `skipped` / `failed` / `conflicts`）汇报：
 
 - `failed` 或 `conflicts` 非空时，列出全部失败项与原因，并给出人工处理建议（如解决目标冲突后以相同候选重跑）
+- `notify_failed`（记忆索引通知失败）：修复底层原因后重跑；若重跑报告的 `updated` 不含该
+  路径（`archived` 已写入故不再补写），按失败报告中的路径手工补一次 `memory_notify`，参数
+  按失败来源区分：
+  - 补写通知失败（`updated` 循环，补写 `archived` 后的通知）→
+    `memory_notify(contract_version=2, file_path="<目标路径>")`
+  - 移动通知失败（`moved` 循环，文件移动后的通知）→ 携带原路径：
+    `memory_notify(contract_version=2, file_path="<目标路径>", previous_file_path="<源路径>")`
 - 归档项目（`type: project`）全部成功后，调用 `memory_forget` 清理项目作用域记忆：
   ```
   memory_forget(contract_version=2, scope={type: "project", key: "<project_id>"}, reason="项目归档清理")

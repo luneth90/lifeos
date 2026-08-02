@@ -161,4 +161,20 @@ describe('公开协议文档门禁', () => {
 			expect(read(path), `${path} 缺少最终知识状态链`).toContain(finalChain);
 		}
 	});
+
+	it('Archive 技能文档包含完整的 notify_failed 人工恢复指引', () => {
+		const cases = [
+			{
+				path: 'assets/skills/archive/SKILL.zh.md',
+				check: /`?notify_failed`?\（记忆索引通知失败）[\s\S]{0,1200}补写通知失败[\s\S]{0,400}memory_notify\(contract_version=2, file_path="<目标路径>"\)[\s\S]{0,600}移动通知失败[\s\S]{0,400}previous_file_path="<源路径>"/,
+			},
+			{
+				path: 'assets/skills/archive/SKILL.en.md',
+				check: /`?notify_failed`? \(memory index notification failure\)[\s\S]{0,1200}metadata-repair notification[\s\S]{0,400}memory_notify\(contract_version=2, file_path="<target-path>"\)[\s\S]{0,600}move notification[\s\S]{0,400}previous_file_path="<source-path>"/i,
+			},
+		] as const;
+		for (const item of cases) {
+			expect(read(item.path), `${item.path} 缺少完整恢复指引`).toMatch(item.check);
+		}
+	});
 });
