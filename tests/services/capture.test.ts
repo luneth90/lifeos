@@ -234,6 +234,29 @@ describe('V4 文件变更通知', () => {
 		expect(db.prepare('SELECT 1 FROM scan_state WHERE file_path = ?').get(target)).toBeUndefined();
 	});
 
+	it('排除目标仅残留孤立扫描状态时仍会清除', () => {
+		const target = '90_系统/归档/日记/2026/07/2026-07-05.md';
+		writeTestNote(vault.root, target, {
+			id: 'daily-2026-07-05',
+			title: '2026-07-05',
+			type: 'note',
+		});
+		db.prepare(`
+			INSERT INTO scan_state(
+				file_path, last_seen_hash, last_seen_mtime, last_seen_size, last_indexed_at
+			) VALUES (?, ?, ?, ?, ?)
+		`).run(target, 'stale-hash', 1, 1, new Date(0).toISOString());
+		expect(db.prepare('SELECT 1 FROM vault_index WHERE file_path = ?').get(target)).toBeUndefined();
+
+		const result = notifyFileChanged(db, vault.root, target);
+
+		expect(result).toMatchObject({
+			action: 'skipped',
+			reason: 'excluded by scan rules',
+		});
+		expect(db.prepare('SELECT 1 FROM scan_state WHERE file_path = ?').get(target)).toBeUndefined();
+	});
+
 	it('可索引目录之间移动时索引新路径并将文件作用域规范化为唯一 ID', () => {
 		const source = '40_知识/旧名.md';
 		const target = '40_知识/新名.md';

@@ -395,7 +395,7 @@ function indexOne(
 	const relPath = normalizeRelative(vaultRoot, filePath);
 	const before = selectIndexedRow(db, relPath);
 	if (!shouldIndex(relPath, config)) {
-		if (before) removeIndexEntry(db, relPath);
+		removeIndexEntry(db, relPath);
 		return {
 			result: { status: 'skipped', filePath: relPath, reason: 'excluded by scan rules' },
 			before,
