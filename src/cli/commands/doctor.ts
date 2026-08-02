@@ -357,7 +357,7 @@ function checkDbHealth(
 			db
 				.prepare(`
 					SELECT COUNT(*) AS count FROM memory_items m
-					WHERE m.scope_type = 'project'
+					WHERE m.scope_type = 'project' AND m.status = 'active'
 					  AND NOT EXISTS (
 						SELECT 1 FROM vault_index v
 						WHERE v.type = 'project' AND v.entity_id = m.scope_key
@@ -369,7 +369,7 @@ function checkDbHealth(
 			db
 				.prepare(`
 					SELECT COUNT(*) AS count FROM memory_items m
-					WHERE m.scope_type = 'file'
+					WHERE m.scope_type = 'file' AND m.status = 'active'
 					  AND NOT EXISTS (
 						SELECT 1 FROM vault_index v
 						WHERE v.entity_id = m.scope_key OR v.file_path = m.scope_key
@@ -380,7 +380,9 @@ function checkDbHealth(
 		const repositoryIds = new Set(Object.keys(config.memory.repository_bindings));
 		const repositoryOrphans = (
 			db
-				.prepare("SELECT DISTINCT scope_key FROM memory_items WHERE scope_type = 'repository'")
+				.prepare(
+					"SELECT DISTINCT scope_key FROM memory_items WHERE scope_type = 'repository' AND status = 'active'",
+				)
 				.all() as Array<{ scope_key: string }>
 		).filter((row) => !repositoryIds.has(row.scope_key)).length;
 		const orphanCount = projectOrphans + fileOrphans + repositoryOrphans;

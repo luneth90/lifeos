@@ -347,7 +347,57 @@ describe('lifeos doctor', () => {
 		},
 	);
 
-	test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async () => {
+	test('已归档记忆不算孤儿作用域，孤儿只统计活跃记忆', async () => {
+	const { dir, cleanup } = makeTmpDir();
+	let db: Database.Database | undefined;
+	try {
+		await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+		const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
+		db = new Database(dbPath);
+		initDb(db);
+		const now = new Date().toISOString();
+		// 已归档（archived）的项目/文件记忆：作用域无对应实体，但不应计入孤儿
+		const insertArchived = (slotKey: string, scopeKey: string) =>
+			db!
+				.prepare(`
+					INSERT INTO memory_items(
+						slot_key, content, item_kind, scope_type, scope_key, priority,
+						enforcement, source, related_files, manual_flag, status,
+						created_at, updated_at, expires_at, archived_at, archive_reason
+					) VALUES (?, '已归档', 'decision', ?, ?, 50, 'soft',
+						'correction', '[]', 0, 'archived', ?, ?, NULL, ?, 'test')
+				`)
+				.run(slotKey, 'project', scopeKey, now, now, now);
+		insertArchived('p:archived-1', 'gone-project-a');
+		insertArchived('p:archived-2', 'gone-project-b');
+		db!.prepare(`
+				INSERT INTO memory_items(
+					slot_key, content, item_kind, scope_type, scope_key, priority,
+					enforcement, source, related_files, manual_flag, status,
+					created_at, updated_at, expires_at, archived_at, archive_reason
+				) VALUES ('f:archived', '已归档', 'decision', 'file', 'gone-file.md', 50, 'soft',
+					'correction', '[]', 0, 'archived', ?, ?, NULL, ?, 'test')
+			`)
+			.run(now, now, now);
+		// 活跃但无实体的记忆：仍应计入孤儿
+		upsertMemoryItem(db, {
+			slotKey: 'p:active-orphan',
+			content: '活跃孤儿',
+			itemKind: 'decision',
+			scope: { type: 'project', key: 'ghost-project' },
+		});
+		let result = await doctorCommand([dir]);
+		const scopes = result.checks.find((check) => check.name === 'memory scopes');
+		expect(scopes?.status).toBe('fail');
+		expect(scopes?.detail).toBe('1 orphan');
+		expect(result.passed).toBe(false);
+	} finally {
+		db?.close();
+		cleanup();
+	}
+});
+
+test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		let db: Database.Database | undefined;
 		try {
