@@ -219,6 +219,40 @@ describe('runArchive', () => {
 		}
 	});
 
+	it('dry-run 不创建任何目标目录（含文件夹项目）', () => {
+		const { root, cleanup } = makeTmp();
+		try {
+			write(
+				root,
+				'20_项目/GTS学习/路线.md',
+				`---\ntitle: "路线"\ntype: project\nstatus: done\nid: gts-learning\n---\n\n# 路线\n`,
+			);
+			const report = runArchive({
+				vaultRoot: root,
+				archiveDate: '2026-08-02',
+				dryRun: true,
+				candidates: [
+					{
+						type: 'project',
+						source: '20_项目/GTS学习',
+						target: '90_系统/归档/项目/2026/GTS学习',
+						main_file: '20_项目/GTS学习/路线.md',
+						project_id: 'gts-learning',
+					},
+				],
+				moveRunner: fakeMove(root),
+			});
+			expect(report.dryRun).toBe(true);
+			expect(report.conflicts).toEqual([]);
+			// 目标目录及其父链均不应被创建，重跑正式执行不会 target_collision
+			expect(existsSync(join(root, '90_系统/归档/项目/2026/GTS学习'))).toBe(false);
+			expect(existsSync(join(root, '90_系统/归档/项目/2026'))).toBe(false);
+			expect(existsSync(join(root, '20_项目/GTS学习/路线.md'))).toBe(true);
+		} finally {
+			cleanup();
+		}
+	});
+
 	it('单候选失败不中断其他候选，失败项写入报告', () => {
 		const { root, cleanup } = makeTmp();
 		try {

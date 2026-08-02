@@ -362,12 +362,14 @@ export function runArchive(options: RunArchiveOptions): ArchiveReport {
 
 	if (report.conflicts.length > 0) return report;
 
-	// 3. 创建目标父目录（obsidian move 要求目标父目录已存在）
-	for (const item of prepared) {
-		if (item.isDirectory) {
-			mkdirSync(item.targetAbs, { recursive: true });
-		} else {
-			mkdirSync(dirname(item.targetAbs), { recursive: true });
+	// 3. 创建目标父目录（obsidian move 要求目标父目录已存在）；dry-run 不产生任何副作用，跳过
+	if (!report.dryRun) {
+		for (const item of prepared) {
+			if (item.isDirectory) {
+				mkdirSync(item.targetAbs, { recursive: true });
+			} else {
+				mkdirSync(dirname(item.targetAbs), { recursive: true });
+			}
 		}
 	}
 
