@@ -138,6 +138,7 @@ memory_bootstrap
 | **Codex** CLI / Desktop | `.codex/config.toml` | macOS CLI / Desktop、Windows Desktop 已验证 |
 | **OpenCode** CLI / Desktop | `opencode.json` | macOS CLI / Desktop、Windows Desktop 已验证 |
 | **Grok Build** | `.mcp.json`（兼容加载 Claude Code 格式） | macOS 已验证 |
+| **OMP (Oh My Pi)** CLI | `.mcp.json`（兼容加载 Claude Code 格式） | macOS 已验证 |
 | **Antigravity** CLI | `.agents/mcp_config.json` | 项目级 MCP 自动注册已支持；平台组合尚未验证 |
 
 在 Vault 目录下启动任一已支持的客户端即可使用全部技能。其他平台或客户端组合尚未验证。
@@ -232,19 +233,6 @@ lifeos --version                                          # 查看版本
 - **Test:** Vitest
 - **Lint:** Biome
 - **Vault:** Obsidian（纯 Markdown + Frontmatter）
-
-## 里程碑
-
-- ✅ LifeOS 1.0 版本已初步可用
-- ✅ CLI 支持目录自定义
-- ✅ CLI upgrade 支持 V1/V2/V3 → V4 离线原子升级与失败恢复
-- ✅ 记忆系统支持全局、技能、项目、仓库、工具和文件 scope
-- ✅ CLI 支持为 Antigravity CLI 自动注册项目级 MCP 配置
-- ✅ 已完成 macOS（Claude Code CLI、Codex CLI/Desktop、OpenCode CLI/Desktop、Grok Build）与 Windows（Codex Desktop、OpenCode Desktop）的验证
-- ✅ `/digest` 技能已支持中英双语信息周报与多来源论文抓取
-- ☐ 强化记忆系统精准性
-- ☐ 支持自定义技能
-- ☐ 支持自定义工作流
 
 ## 开发
 

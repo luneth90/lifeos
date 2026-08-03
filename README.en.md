@@ -121,6 +121,7 @@ Compared with a memory model that mixes cross-directory content and global conve
 | **Codex** CLI / Desktop | `.codex/config.toml` | Verified on macOS CLI / Desktop and Windows Desktop |
 | **OpenCode** CLI / Desktop | `opencode.json` | Verified on macOS CLI / Desktop and Windows Desktop |
 | **Grok Build** | `.mcp.json` (loads Claude Code format for compatibility) | Verified on macOS |
+| **OMP (Oh My Pi)** CLI | `.mcp.json` (loads Claude Code format for compatibility) | Verified on macOS |
 | **Antigravity** CLI | `.agents/mcp_config.json` | Project-level MCP auto-registration supported; platform combinations not yet verified |
 
 Launch any supported client in the vault directory to use all skills. Other platforms or client combinations have not been validated yet.
@@ -212,17 +213,6 @@ Create a `.md` file in your vault's Prompts directory (`{system directory}/Promp
 - **Segmentation:** @node-rs/jieba (Chinese tokenization)
 - **Protocol:** MCP (Model Context Protocol)
 - **Vault:** Obsidian (plain Markdown + Frontmatter)
-
-## Milestones
-
-- ✅ LifeOS 1.0 is now basically usable
-- ✅ The CLI supports directory customization
-- ✅ The CLI `upgrade` command supports offline atomic cutover, automatic recovery, and explicit rollback
-- ✅ Verified on macOS (Claude Code CLI, Codex CLI/Desktop, OpenCode CLI/Desktop, Grok Build) and Windows (Codex Desktop, OpenCode Desktop)
-- ✅ The `/digest` skill supports multilingual weekly digests with multi-source paper fetching
-- ☐ Improve memory-system precision
-- ☐ Support custom skills
-- ☐ Support custom workflows
 
 ## Development
 
