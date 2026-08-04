@@ -54,7 +54,7 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	const { positionals, flags } = parseArgs(args, {});
 	const targetPath = resolve(positionals[0] ?? '.');
 	const compactDb = flags['compact-db'] === true;
-	const reindex = flags['reindex'] === true;
+	const reindex = flags.reindex === true;
 	const result: DoctorResult = { passed: true, checks: [] };
 
 	function check(name: string, status: 'pass' | 'warn' | 'fail', detail?: string) {
@@ -380,11 +380,7 @@ function checkDbHealth(
 					? undefined
 					: 'vault_index and vault_fts row counts differ — FTS index may be out of sync',
 			);
-			check(
-				'database memory_items size',
-				miCount > 1000 ? 'warn' : 'pass',
-				`${miCount} rows`,
-			);
+			check('database memory_items size', miCount > 1000 ? 'warn' : 'pass', `${miCount} rows`);
 		} catch {
 			check('database rows', 'fail', 'query failed');
 		}

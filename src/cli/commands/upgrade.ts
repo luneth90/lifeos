@@ -48,6 +48,8 @@ import {
 	canonicalVaultLocation,
 	canonicalVaultRoot,
 } from '../../utils/safe-path.js';
+import { loadCustomDictIfPresent } from '../../utils/segmenter.js';
+import { fullScan } from '../../utils/vault-indexer.js';
 import {
 	type ProjectIdPlan,
 	applyProjectIdPlan,
@@ -84,9 +86,7 @@ import {
 	retainOnlyCutoverBundle,
 } from '../utils/cutover.js';
 import { isManagedAssetRecord } from '../utils/managed-assets.js';
-import { loadCustomDictIfPresent } from '../../utils/segmenter.js';
 import { syncVault } from '../utils/sync-vault.js';
-import { fullScan } from '../../utils/vault-indexer.js';
 import { bold, green, log, parseArgs } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 import type { WriteSetTarget } from '../utils/write-set-backup.js';
