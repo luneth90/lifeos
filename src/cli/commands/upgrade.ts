@@ -1344,6 +1344,18 @@ export default async function upgrade(
 		transactionOpen = false;
 		db.close();
 		db = undefined;
+		// Reclaim physical space once per upgrade. VACUUM cannot run inside a
+		// transaction, so use a fresh writable connection after commit.
+		// Enabling incremental auto_vacuum first makes the rebuilt file use
+		// incremental vacuum going forward, so runtime maintenance only needs
+		// PRAGMA incremental_vacuum afterwards.
+		const compactDb = new Database(dbPath, { fileMustExist: true });
+		try {
+			compactDb.pragma('auto_vacuum = INCREMENTAL');
+			compactDb.exec('VACUUM');
+		} finally {
+			compactDb.close();
+		}
 		advanceCutover(journalPath, journal, 'db_committed');
 		// scope map 只服务于一次性迁移。成功提交数据库后清理整个临时目录；
 		// 后续验证失败时，外层 cutover 仍会从精确写集备份恢复它。

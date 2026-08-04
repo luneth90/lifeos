@@ -154,6 +154,7 @@ export default async function init(args: string[]): Promise<void> {
 	);
 	const db = new Database(dbPath);
 	try {
+		db.pragma('auto_vacuum = INCREMENTAL');
 		db.pragma('journal_mode = WAL');
 		db.pragma('foreign_keys = ON');
 		initDb(db);

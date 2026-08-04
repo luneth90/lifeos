@@ -566,6 +566,7 @@ export function fullScan(
 	const owned = typeof dbOrPath === 'string';
 	const db = owned ? new Database(dbOrPath) : dbOrPath;
 	if (owned) {
+		db.pragma('auto_vacuum = INCREMENTAL');
 		db.pragma('journal_mode = WAL');
 		initDb(db);
 	}

@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { refreshTaskboard, refreshUserprofile } from '../active-docs/index.js';
 import { type VaultConfig, resolveConfig } from '../config.js';
+import { runDbMaintenance } from '../db/index.js';
 import { initDb } from '../db/schema.js';
 import type { StartupMaintenanceResult, StartupResult } from '../types.js';
 import { loadCustomDict } from '../utils/segmenter.js';
@@ -92,6 +93,7 @@ export function runStartupMaintenance(
 	const scan = fullScan(vaultRoot, db, config);
 	const taskboard = refreshTaskboard(db, vaultRoot, { config });
 	const userprofile = refreshUserprofile(db, vaultRoot, { config });
+	runDbMaintenance(db);
 	return {
 		vaultStats: {
 			totalFiles: countRows(db, 'vault_index'),

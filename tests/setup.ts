@@ -116,6 +116,7 @@ managed_assets: {}
  */
 export function createTestDb(dbPath: string): Database.Database {
 	const db = new Database(dbPath);
+	db.pragma('auto_vacuum = INCREMENTAL');
 	db.pragma('journal_mode = WAL');
 	return db;
 }

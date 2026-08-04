@@ -1,6 +1,38 @@
 import Database from 'better-sqlite3';
 
 /**
+ * Reclaim physical space and compact the FTS index for a database.
+ *
+ * Runs, in order: PRAGMA incremental_vacuum (reclaims the entire freelist),
+ * the FTS5 'optimize' command (merges fragmented segments), and
+ * PRAGMA wal_checkpoint(TRUNCATE) (flushes the WAL and truncates it to zero
+ * bytes). Returns the freelist page count before/after and whether the WAL
+ * file was truncated.
+ */
+export function runDbMaintenance(db: Database.Database): {
+	freelistBefore: number;
+	freelistAfter: number;
+	walTruncated: boolean;
+} {
+	const freelistBefore = db.pragma('freelist_count', { simple: true }) as number;
+	db.pragma('incremental_vacuum');
+	db.prepare("INSERT INTO vault_fts(vault_fts) VALUES('optimize')").run();
+	const checkpoint = db.pragma('wal_checkpoint(TRUNCATE)') as Array<{
+		busy: number;
+		log: number;
+		checkpointed: number;
+	}>;
+	const freelistAfter = db.pragma('freelist_count', { simple: true }) as number;
+	// With TRUNCATE mode, a non-busy checkpoint guarantees the WAL file was
+	// truncated to zero bytes.
+	return {
+		freelistBefore,
+		freelistAfter,
+		walTruncated: checkpoint[0] !== undefined && checkpoint[0].busy === 0,
+	};
+}
+
+/**
  * Execute a function with a temporary database connection that auto-closes.
  */
 export function withDb<T>(dbPath: string, fn: (db: Database.Database) => T): T {
