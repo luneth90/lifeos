@@ -107,7 +107,9 @@ function matchedFields(query: string, row: VaultSelectRow): string[] {
 }
 
 /**
- * Score a result based on match source and matched fields.
+ * Compute a coarse display score based on match source and matched fields.
+ * The score is for display purposes only and never participates in result
+ * ordering; FTS result order is determined entirely by the SQL bm25() ranking.
  */
 function scoreResult(matchSource: MatchSource, fields: string[]): number {
 	const base = BASE_SCORES[matchSource] ?? 100;
@@ -255,7 +257,10 @@ export function queryVaultIndex(
 				params.push(...filterParams);
 			}
 
-			sql += ' ORDER BY vi.modified_at DESC LIMIT ?';
+			// Rank by bm25 relevance (weights per column order file_path, title,
+			// summary, search_hints, tags: 0, 4, 3, 10, 2). The first operand must be
+			// the real table name vault_fts, not the join alias.
+			sql += ' ORDER BY bm25(vault_fts, 0, 4, 3, 10, 2) LIMIT ?';
 			params.push(limit * 2); // Over-fetch for reranking
 
 			ftsRows = queryAll<VaultSelectRow>(db, sql, ...params);

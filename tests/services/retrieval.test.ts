@@ -143,6 +143,58 @@ describe('queryVaultIndex', () => {
 		expect(paths).toContain('40_知识/quaternion.md');
 	});
 
+	it('bm25 ranks a search_hints match above a summary-only match (CJK)', () => {
+		insertVaultNote(db, {
+			filePath: '40_知识/group-theory.md',
+			title: '群论笔记',
+			summary: '群论是研究对称性的数学分支',
+			searchHints: '群论 对称性 抽象代数',
+			modifiedAt: '2025-01-01T00:00:00Z',
+		});
+		// B only contains the query term in summary and is newer than A.
+		// The space after the term keeps it a standalone unicode61 token so B
+		// enters the FTS ranking and only a bm25 (search_hints=10 vs summary=3)
+		// ordering can put A first.
+		insertVaultNote(db, {
+			filePath: '40_知识/group-notes.md',
+			title: '笔记整理',
+			summary: '群论 相关内容的整理与心得',
+			modifiedAt: '2026-01-01T00:00:00Z',
+		});
+
+		const { results } = queryVaultIndex(db, '群论', null, 10);
+		expect(results.length).toBeGreaterThanOrEqual(2);
+		const paths = results.map((r) => r.filePath);
+		expect(paths.indexOf('40_知识/group-theory.md')).toBeLessThan(
+			paths.indexOf('40_知识/group-notes.md'),
+		);
+	});
+
+	it('bm25 ranks a search_hints match above a summary-only match regardless of modified_at', () => {
+		insertVaultNote(db, {
+			filePath: '40_知识/entanglement.md',
+			title: 'Physics Primer',
+			summary: 'A course about particle physics',
+			searchHints: 'quantum entanglement superposition',
+			modifiedAt: '2025-01-01T00:00:00Z',
+		});
+		// B only contains the query term in summary and is newer than A.
+		insertVaultNote(db, {
+			filePath: '40_知识/entanglement-notes.md',
+			title: 'Lecture Notes',
+			summary: 'Class notes about quantum entanglement experiments',
+			searchHints: 'physics experiments',
+			modifiedAt: '2026-01-01T00:00:00Z',
+		});
+
+		const { results } = queryVaultIndex(db, 'quantum', null, 10);
+		expect(results.length).toBeGreaterThanOrEqual(2);
+		const paths = results.map((r) => r.filePath);
+		expect(paths.indexOf('40_知识/entanglement.md')).toBeLessThan(
+			paths.indexOf('40_知识/entanglement-notes.md'),
+		);
+	});
+
 	it('returns empty array for no match', () => {
 		insertVaultNote(db, {
 			filePath: '40_知识/note.md',
