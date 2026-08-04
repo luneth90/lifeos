@@ -34,6 +34,24 @@ function loadsJsonList(value: string | null | undefined): string[] {
 }
 
 /**
+ * Normalize base search hints into a token list.
+ *
+ * buildSearchTokens returns a space-separated token string (not JSON), so
+ * accept three forms: a string array, a JSON array string (legacy persisted
+ * form), or a whitespace-separated token string.
+ */
+function loadBaseHints(value: string | string[] | null | undefined): string[] {
+	if (value == null) return [];
+	if (Array.isArray(value)) return value.map(String);
+	try {
+		const parsed = JSON.parse(value);
+		return Array.isArray(parsed) ? parsed.map(String) : [];
+	} catch {
+		return value.split(/\s+/).filter(Boolean);
+	}
+}
+
+/**
  * Generate enhanced search term tokens for a vault record.
  */
 export function generateEnhancedSearchTerms(input: EnhanceInput): string[] {
@@ -79,7 +97,7 @@ export function mergeSearchHints(
 ): string {
 	const merged: string[] = [];
 	const seen = new Set<string>();
-	for (const term of [...loadsJsonList(baseHints as string), ...extraTerms.filter(Boolean)]) {
+	for (const term of [...loadBaseHints(baseHints), ...extraTerms.filter(Boolean)]) {
 		const normalized = term.trim();
 		if (!normalized || seen.has(normalized)) continue;
 		seen.add(normalized);

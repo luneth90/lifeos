@@ -229,8 +229,10 @@ ${longBody}`;
 	it('indexes body words beyond the 500-char summary into search_hints', () => {
 		// The search-only body slice (4000 chars) feeds search_hints while the
 		// persisted summary stays at 500 chars, so a word past the summary
-		// cutoff must still be retrievable via search_hints.
-		const filler = 'A'.repeat(700);
+		// cutoff must still be retrievable via search_hints. The word sits on
+		// the third line (beyond the two summary lines enhanced terms use),
+		// so only the 4000-char search body path can cover it.
+		const filler = ['A'.repeat(600), 'B'.repeat(50), 'C'.repeat(49)].join('\n');
 		const content = `---
 title: test
 ---
