@@ -10,8 +10,8 @@ import {
 	describeGlobalHardSafety,
 	inspectGlobalHardSafety,
 } from '../../services/global-hard-safety.js';
-import { estimateTokens } from '../../utils/shared.js';
 import { loadCustomDictIfPresent } from '../../utils/segmenter.js';
+import { estimateTokens } from '../../utils/shared.js';
 import { fullScan } from '../../utils/vault-indexer.js';
 import { assetsDir } from '../utils/assets.js';
 import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
@@ -645,11 +645,7 @@ function runDatabaseMaintenance(
 			// closed) so the existing index and scan state stay untouched.
 			const dict = loadCustomDictIfPresent(vaultConfig);
 			if (!dict.loaded && dict.error !== undefined) {
-				check(
-					'database reindex',
-					'fail',
-					`custom_dict.txt 加载失败，已中止重建：${dict.error}`,
-				);
+				check('database reindex', 'fail', `custom_dict.txt 加载失败，已中止重建：${dict.error}`);
 				return;
 			}
 			const db = new Database(dbPath);
