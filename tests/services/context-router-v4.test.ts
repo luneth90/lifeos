@@ -187,4 +187,30 @@ describe('V4 context router', () => {
 		expect(result.matchedScopes).toEqual([{ type: 'tool', key: 'obsidian' }]);
 		expect(result.rules.map((item) => item.slotKey)).toEqual(['runtime:cli-outside-sandbox']);
 	});
+
+	it('memory_context 透传 unresolvedScopes 的 candidates', () => {
+		const ambiguousConfig = {
+			repositoryBindings: () => ({}),
+			toolBindings: () => ({
+				'obsidian-a': { commands: ['obsidian'], skills: [] },
+				'obsidian-b': { commands: ['obsidian'], skills: [] },
+			}),
+			contextBudgets: () => DEFAULT_BUDGETS,
+		} as unknown as VaultConfig;
+		const result = buildMemoryContext(
+			db,
+			'/unused',
+			{ scopes: [{ type: 'tool', key: 'obsidian' }] },
+			{ config: ambiguousConfig },
+		);
+		expect(result.text).toBe('');
+		expect(result.effectiveItems).toEqual([]);
+		expect(result.diagnostics.unresolvedScopes).toEqual([
+			{
+				scope: { type: 'tool', key: 'obsidian' },
+				reason: 'ambiguous_tool_alias',
+				candidates: ['obsidian-a', 'obsidian-b'],
+			},
+		]);
+	});
 });

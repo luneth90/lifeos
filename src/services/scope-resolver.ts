@@ -17,6 +17,7 @@ const SCOPE_TYPES = new Set<ScopeType>([
 export interface UnresolvedScope {
 	scope: MemoryScope;
 	reason: string;
+	candidates?: string[];
 }
 
 export interface ScopeResolutionResult {
@@ -108,6 +109,7 @@ export function resolveMemoryScopes(
 		}
 		let canonical: MemoryScope | null = null;
 		let unresolvedReason: string | null = null;
+		let candidates: string[] | null = null;
 		if (scope.type === 'global') {
 			canonical = scope;
 		} else if (scope.type === 'project') {
@@ -158,10 +160,12 @@ export function resolveMemoryScopes(
 				if (aliases.length === 1) {
 					const candidate = { type: 'tool', key: aliases[0] } as const;
 					canonical = options.allowCreate || hasMemoryScope(db, candidate) ? candidate : null;
+					if (!canonical) candidates = aliases;
 				} else if (aliases.length === 0 && options.allowCreate) {
 					canonical = scope;
 				} else {
 					unresolvedReason = aliases.length > 1 ? 'ambiguous_tool_alias' : 'unknown_tool';
+					if (aliases.length > 0) candidates = aliases;
 				}
 			}
 		} else {
@@ -169,7 +173,11 @@ export function resolveMemoryScopes(
 		}
 
 		if (!canonical) {
-			unresolvedScopes.push({ scope, reason: unresolvedReason ?? `unknown_${scope.type}` });
+			unresolvedScopes.push({
+				scope,
+				reason: unresolvedReason ?? `unknown_${scope.type}`,
+				...(candidates ? { candidates } : {}),
+			});
 			continue;
 		}
 		const id = identity(canonical);

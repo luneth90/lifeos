@@ -135,8 +135,38 @@ describe('V4 scope resolver', () => {
 		});
 		expect(result.resolvedScopes).toEqual([]);
 		expect(result.unresolvedScopes).toEqual([
-			{ scope: { type: 'tool', key: 'obsidian' }, reason: 'ambiguous_tool_alias' },
+			{
+				scope: { type: 'tool', key: 'obsidian' },
+				reason: 'ambiguous_tool_alias',
+				candidates: ['obsidian-a', 'obsidian-b'],
+			},
 		]);
+	});
+
+	it('tool 单候选别名未绑定时给出 unknown_tool 与候选', () => {
+		const config = {
+			repositoryBindings: () => ({}),
+			toolBindings: () => ({
+				obsidian: { commands: ['obsidian-cli'], skills: [] },
+			}),
+		} as unknown as VaultConfig;
+		const result = resolveMemoryScopes(db, [{ type: 'tool', key: 'obsidian-cli' }], {
+			config,
+		});
+		expect(result.resolvedScopes).toEqual([]);
+		expect(result.unresolvedScopes).toEqual([
+			{
+				scope: { type: 'tool', key: 'obsidian-cli' },
+				reason: 'unknown_tool',
+				candidates: ['obsidian'],
+			},
+		]);
+	});
+
+	it('非 tool 未绑定 scope 不带 candidates', () => {
+		const result = resolveMemoryScopes(db, [{ type: 'project', key: 'missing-project' }]);
+		expect(result.unresolvedScopes).toHaveLength(1);
+		expect(result.unresolvedScopes[0].candidates).toBeUndefined();
 	});
 
 	it('global 只接受空 key，并对无效 scope 返回诊断而非抛错', () => {

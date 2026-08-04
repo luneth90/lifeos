@@ -261,7 +261,7 @@ export interface ContextRequest {
 }
 
 export interface ContextDiagnostics {
-	unresolvedScopes: Array<{ scope: MemoryScope; reason: string }>;
+	unresolvedScopes: Array<{ scope: MemoryScope; reason: string; candidates?: string[] }>;
 	omittedSlotKeys: string[];
 	oversizedItems: string[];
 	warnings: string[];
