@@ -2,8 +2,16 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/lifeos"><img src="https://img.shields.io/npm/v/lifeos" alt="npm version" align="middle" /></a>
+  <a href="https://www.npmjs.com/package/lifeos"><img src="https://img.shields.io/npm/dm/lifeos" alt="npm downloads" align="middle" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/luneth90/lifeos" alt="MIT License" align="middle" /></a>
-  <sub><a href="./README.md">中文</a> | <a href="./README.en.md">English</a></sub>
+  <a href="https://github.com/luneth90/lifeos/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/luneth90/lifeos/ci.yml?branch=main&label=CI" alt="CI" align="middle" /></a>
+  <a href="https://codecov.io/gh/luneth90/lifeos"><img src="https://img.shields.io/codecov/c/github/luneth90/lifeos" alt="code coverage" align="middle" /></a>
+  <a href="https://github.com/luneth90/lifeos/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/luneth90/lifeos/release.yml?label=Release" alt="Release" align="middle" /></a>
+  <a href="https://github.com/luneth90/lifeos"><img src="https://img.shields.io/github/last-commit/luneth90/lifeos" alt="last commit" align="middle" /></a>
+</p>
+
+<p align="center">
+  <big><a href="./README.md">中文</a> | English</big>
 </p>
 
 LifeOS helps you grow scattered ideas into structured knowledge and truly master it, from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.

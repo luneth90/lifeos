@@ -4,8 +4,16 @@
 
 <p align="center">
   <a href="https://www.npmjs.com/package/lifeos"><img src="https://img.shields.io/npm/v/lifeos" alt="npm version" align="middle" /></a>
+  <a href="https://www.npmjs.com/package/lifeos"><img src="https://img.shields.io/npm/dm/lifeos" alt="npm downloads" align="middle" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/luneth90/lifeos" alt="MIT License" align="middle" /></a>
-  <sub><a href="./README.en.md">English</a> | 中文</sub>
+  <a href="https://github.com/luneth90/lifeos/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/luneth90/lifeos/ci.yml?branch=main&label=CI" alt="CI" align="middle" /></a>
+  <a href="https://codecov.io/gh/luneth90/lifeos"><img src="https://img.shields.io/codecov/c/github/luneth90/lifeos" alt="code coverage" align="middle" /></a>
+  <a href="https://github.com/luneth90/lifeos/actions/workflows/release.yml"><img src="https://img.shields.io/github/actions/workflow/status/luneth90/lifeos/release.yml?label=Release" alt="Release" align="middle" /></a>
+  <a href="https://github.com/luneth90/lifeos"><img src="https://img.shields.io/github/last-commit/luneth90/lifeos" alt="last commit" align="middle" /></a>
+</p>
+
+<p align="center">
+  <big><a href="./README.en.md">English</a> | 中文</big>
 </p>
 
 LifeOS 帮助你将碎片灵感发展为结构化知识，并真正掌握它，从随手捕获的想法，到头脑风暴与深度研究，到体系化的项目规划与知识笔记，再到间隔复习与掌握度追踪。目标不只是建立知识库，而是帮你理解、内化和驾驭复杂知识。
