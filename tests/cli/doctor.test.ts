@@ -582,16 +582,17 @@ test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async
 			expect(seeded.indexed).toBeGreaterThanOrEqual(2);
 			const seededState = countQuery(db, 'SELECT COUNT(*) AS n FROM scan_state');
 			expect(seededState).toBeGreaterThanOrEqual(2);
-
-			// Simulate stale scan state: rows gone, index still serving queries.
-			db.exec('DELETE FROM scan_state');
+			// scan_state stays populated: --reindex must clear it itself. If the
+			// command skipped the DELETE, fullScan would short-circuit on
+			// matching scan state and report unchanged instead of re-indexing.
 			db.close();
 			db = undefined;
 
 			const result = await doctorCommand([dir, '--reindex']);
-			expect(result.checks.find((c) => c.name === 'database reindex')).toMatchObject({
-				status: 'pass',
-			});
+			const reindex = result.checks.find((c) => c.name === 'database reindex');
+			expect(reindex).toMatchObject({ status: 'pass' });
+			expect(reindex?.detail).toContain(`indexed=${seeded.indexed}`);
+			expect(reindex?.detail).toContain('unchanged=0');
 
 			db = new Database(dbPath);
 			const rebuiltState = countQuery(db, 'SELECT COUNT(*) AS n FROM scan_state');
