@@ -170,6 +170,43 @@ describe('queryVaultIndex', () => {
 		);
 	});
 
+	it('single-char CJK query hits search_hints via FTS prefix wildcard, not LIKE fallback', () => {
+		// unicode61 keeps each space-separated hint as one token, so the prefix
+		// query "群"* matches the 群论 token. Without the trailing wildcard
+		// ("群" alone) FTS returns nothing and the record only shows up through
+		// the LIKE fallback, which is tagged like_fallback instead of fts5.
+		insertVaultNote(db, {
+			filePath: '40_知识/group.md',
+			title: '群论笔记',
+			summary: '群论是研究对称性的数学分支',
+			searchHints: '群论 对称性 抽象代数',
+		});
+
+		const { results } = queryVaultIndex(db, '群', null, 10);
+		expect(results.length).toBeGreaterThan(0);
+		const hit = results.find((r) => r.filePath === '40_知识/group.md');
+		expect(hit).toBeDefined();
+		expect(hit?.matchSource).toBe('fts5');
+	});
+
+	it('multi-char CJK query keeps the FTS path with prefix wildcard', () => {
+		// The indexed token 群论导引 only starts with the query term; the
+		// prefix query "群论"* still matches it via FTS. A bare quoted "群论"
+		// requires an exact token and would drop to the LIKE fallback instead.
+		insertVaultNote(db, {
+			filePath: '40_知识/group-theory-guide.md',
+			title: '群论导引',
+			summary: '对称性与抽象代数',
+			searchHints: '群论导引 对称性',
+		});
+
+		const { results } = queryVaultIndex(db, '群论', null, 10);
+		expect(results.length).toBeGreaterThan(0);
+		const hit = results.find((r) => r.filePath === '40_知识/group-theory-guide.md');
+		expect(hit).toBeDefined();
+		expect(hit?.matchSource).toBe('fts5');
+	});
+
 	it('bm25 ranks a search_hints match above a summary-only match regardless of modified_at', () => {
 		insertVaultNote(db, {
 			filePath: '40_知识/entanglement.md',

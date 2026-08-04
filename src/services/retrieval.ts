@@ -51,7 +51,7 @@ const FIELD_SCORES: Record<string, number> = {
 
 /**
  * Build FTS5 query string from a user query.
- * CJK → tokenize then quote each term: "四元数" "群"
+ * CJK → tokenize then prefix-match each term: "四元数"* "群"*
  * English → prefix match: term1* term2*
  */
 function ftsQuery(q: string): string {
@@ -59,7 +59,7 @@ function ftsQuery(q: string): string {
 	if (hasCjk) {
 		const terms = tokenize(q);
 		if (terms.length === 0) return '';
-		return terms.map((t) => `"${t}"`).join(' ');
+		return terms.map((t) => `"${t}"*`).join(' ');
 	}
 	// English: split words, add * prefix suffix
 	const words = q.trim().split(/\s+/).filter(Boolean);
