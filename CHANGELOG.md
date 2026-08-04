@@ -1,5 +1,34 @@
 # 更新日志
 
+## 2.3.0 (2026-08-04)
+
+### 新增
+
+- 记忆数据库（memory.db）维护：启动时执行增量 VACUUM、FTS5 optimize 与 WAL checkpoint 截断（`runDbMaintenance`）；`lifeos upgrade` 在升级事务后对存量库做一次性空间回收
+- 三个建库点（init / vault-indexer / 测试）统一启用 `auto_vacuum = INCREMENTAL`，freelist 空间可被增量回收，不再持续膨胀
+- `lifeos doctor` 新增维护告警：freelist 比例 > 50%、`auto_vacuum` 未启用、`memory_items` 行数 > 1000 均输出 warn
+- `lifeos doctor --compact-db`：独立可写连接执行 `auto_vacuum=INCREMENTAL` + `VACUUM`，输出回收前后页数与 freelist 数
+- `lifeos doctor --reindex`：清空扫描状态后重建 `search_hints` 索引（用于检索逻辑升级后的本地重建）
+- FTS 检索改用 bm25 相关性排序（权重：`search_hints` 10 / `title` 4 / `summary` 3 / `tags` 2 / `file_path` 0），替代原 `modified_at` 时间序
+- `memory_context` 响应的 `unresolvedScopes[].candidates` 可选字段：tool 别名歧义时返回完整候选列表，单候选未绑定（`unknown_tool`）时返回该候选；契约版本保持 2
+- 正文检索覆盖从 summary 前 500 字扩展到 4000 字：`search_hints` 派生词覆盖正文第 3 行之后的内容，`summary` 入库长度与响应体不变；`sectionHeads` 不再截断前 5 个
+- CJK 查询召回：`ftsQuery` 对每个 jieba token 输出 `"<term>"*` 前缀通配，单字与多字一致处理，中文单字查询不再落空
+- `memory_bootstrap` 响应的 `scope_hints` 新增 `available_repositories`：暴露 `lifeos.yaml` 中 `repository_bindings` 全部 key（确定性排序），使新会话可直接携带 repository 作用域查询仓库级记忆；中英文协议文档同步更新
+
+### 修复
+
+- 修复 `mergeSearchHints` 将空格分隔 token 交给 `JSON.parse` 后静默丢弃的问题：`loadBaseHints` 兼容 `string[]`、JSON 数组字符串与空格分隔三种输入，正文 4000 字覆盖与既有 `search_hints` 语义同时成立
+- 修复重建入口（`doctor --reindex` 与 `lifeos upgrade` DB 步骤）未加载 jieba 自定义词典的问题：按启动路径加载 `custom_dict.txt` 后再重建，加载失败时中止重建并保留原扫描状态，避免自定义词条被默认分词覆盖后形成持久性漏检
+- 消除 doctor.ts / upgrade.ts 的基线 biome lint 错误（字面量键、格式化、import 排序），`npm run lint` 恢复全绿
+
+### 测试
+
+- 新增 `tests/db/maintenance.test.ts`（file-based DB：auto_vacuum、freelist 回收、FTS optimize、WAL 截断）
+- doctor 测试覆盖维护告警、`--compact-db`（freelist 比例 < 5%、页数下降 ≥ 80%）、`--reindex`（防守 scan_state 清空语义）、custom_dict 加载与失败保护
+- 检索测试覆盖 bm25 中英文排序（与 `modified_at` 无关）、CJK 前缀通配召回；索引测试覆盖正文 600–4000 字区间词进入 `search_hints`
+- scope-resolver / context-router 测试覆盖 candidates 三态（歧义 / 单候选 / 无候选）与 `memory_context` 透传
+- 全套 991 个测试通过
+
 ## 2.2.7 (2026-08-02)
 
 ### 修复

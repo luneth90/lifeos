@@ -1,7 +1,7 @@
 ---
 name: brainstorm
 description: "Use for immature ideas, divergent thinking, or feasibility exploration; can continue into a project, wiki note, or draft."
-version: 2.2.7
+version: 2.3.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Wiki_Template.md"
