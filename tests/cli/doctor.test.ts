@@ -14,6 +14,15 @@ import { memoryStartup } from '../../src/core.js';
 import { initDb } from '../../src/db/schema.js';
 import { MAX_GLOBAL_HARD_ITEM_PAYLOAD_BYTES } from '../../src/services/global-hard-safety.js';
 import { upsertMemoryItem } from '../../src/services/memory-items.js';
+import { fullScan } from '../../src/utils/vault-indexer.js';
+
+/** Run a `SELECT COUNT(*) AS n` query and return the number. */
+function countQuery(db: Database.Database, sql: string): number {
+	const row = db.prepare(sql).get();
+	return row !== null && typeof row === 'object' && 'n' in row && typeof row.n === 'number'
+		? row.n
+		: 0;
+}
 
 function makeTmpDir() {
 	const dir = mkdtempSync(join(tmpdir(), 'lifeos-doctor-'));
@@ -486,6 +495,112 @@ test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async
 			expect(result.checks.some((c) => c.name === 'database schema' && c.status === 'fail')).toBe(
 				true,
 			);
+		} finally {
+			db?.close();
+			cleanup();
+		}
+	});
+
+	test('freelist/auto_vacuum/memory_items warn; --compact-db reclaims space', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		let db: Database.Database | undefined;
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
+			// Recreate the DB with default settings (auto_vacuum = none) so the
+			// auto_vacuum check warns; the init-created file uses INCREMENTAL.
+			for (const suffix of ['', '-wal', '-shm']) {
+				rmSync(`${dbPath}${suffix}`, { force: true });
+			}
+			db = new Database(dbPath);
+			initDb(db);
+			const now = new Date().toISOString();
+			const insert = db.prepare(`
+					INSERT INTO memory_items(
+						slot_key, content, item_kind, scope_type, scope_key, priority,
+						enforcement, source, related_files, manual_flag, status,
+						created_at, updated_at
+					) VALUES (?, 'bulk', 'fact', 'file', 'bulk.md', 50, 'soft',
+						'preference', '[]', 0, 'active', ?, ?)
+				`);
+			db.transaction((count: number) => {
+				for (let i = 0; i < count; i += 1) insert.run(`bulk:${i}`, now, now);
+			})(100_000);
+
+			let result = await doctorCommand([dir]);
+			expect(
+				result.checks.some(
+					(c) => c.name === 'database auto_vacuum' && c.status === 'warn',
+				),
+			).toBe(true);
+			expect(
+				result.checks.some(
+					(c) => c.name === 'database memory_items size' && c.status === 'warn',
+				),
+			).toBe(true);
+
+			// Deleting every row leaves the pages on the freelist, so the ratio
+			// climbs above 50% until the database is compacted.
+			db.exec('DELETE FROM memory_items');
+			const beforePages = db.pragma('page_count', { simple: true }) as number;
+			db.close();
+			db = undefined;
+
+			result = await doctorCommand([dir]);
+			const freelist = result.checks.find((c) => c.name === 'database freelist');
+			expect(freelist).toMatchObject({ status: 'warn' });
+			expect(freelist?.detail).toMatch(/\d+%\)$/);
+
+			const compactResult = await doctorCommand([dir, '--compact-db']);
+			expect(
+				compactResult.checks.find((c) => c.name === 'database compact'),
+			).toMatchObject({ status: 'pass' });
+
+			db = new Database(dbPath);
+			const afterPages = db.pragma('page_count', { simple: true }) as number;
+			const afterFreelist = db.pragma('freelist_count', { simple: true }) as number;
+			expect(afterFreelist / afterPages).toBeLessThan(0.05);
+			expect(afterPages).toBeLessThanOrEqual(beforePages * 0.2);
+			expect(db.pragma('auto_vacuum', { simple: true })).toBe(2);
+		} finally {
+			db?.close();
+			cleanup();
+		}
+	});
+
+	test('--reindex clears scan_state and rebuilds the index', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		let db: Database.Database | undefined;
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
+			writeFileSync(join(dir, '00_草稿', 'alpha.md'), '---\ntitle: Alpha Note\n---\nAlpha body\n');
+			writeFileSync(join(dir, '00_草稿', 'beta.md'), '---\ntitle: Beta Note\n---\nBeta body\n');
+
+			db = new Database(dbPath);
+			const seeded = fullScan(dir, db);
+			expect(seeded.indexed).toBeGreaterThanOrEqual(2);
+			const seededState = countQuery(db, 'SELECT COUNT(*) AS n FROM scan_state');
+			expect(seededState).toBeGreaterThanOrEqual(2);
+
+			// Simulate stale scan state: rows gone, index still serving queries.
+			db.exec('DELETE FROM scan_state');
+			db.close();
+			db = undefined;
+
+			const result = await doctorCommand([dir, '--reindex']);
+			expect(result.checks.find((c) => c.name === 'database reindex')).toMatchObject({
+				status: 'pass',
+			});
+
+			db = new Database(dbPath);
+			const rebuiltState = countQuery(db, 'SELECT COUNT(*) AS n FROM scan_state');
+			expect(rebuiltState).toBe(seededState);
+			const ftsMatches = countQuery(
+				db,
+				"SELECT COUNT(*) AS n FROM vault_fts WHERE vault_fts MATCH 'alpha'",
+			);
+			expect(ftsMatches).toBeGreaterThan(0);
 		} finally {
 			db?.close();
 			cleanup();

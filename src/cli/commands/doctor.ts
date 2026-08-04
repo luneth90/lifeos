@@ -4,13 +4,14 @@ import { extname, join, relative, resolve } from 'node:path';
 import Database from 'better-sqlite3';
 import { parse as parseYaml } from 'yaml';
 import { ConfigValidationError, resolveConfig } from '../../config.js';
-import type { LifeOSConfig } from '../../config.js';
+import type { LifeOSConfig, VaultConfig } from '../../config.js';
 import { validateRuntimeContract } from '../../runtime-contract.js';
 import {
 	describeGlobalHardSafety,
 	inspectGlobalHardSafety,
 } from '../../services/global-hard-safety.js';
 import { estimateTokens } from '../../utils/shared.js';
+import { fullScan } from '../../utils/vault-indexer.js';
 import { assetsDir } from '../utils/assets.js';
 import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
@@ -49,8 +50,10 @@ export function isNodeVersionSupported(
 }
 
 export default async function doctor(args: string[]): Promise<DoctorResult> {
-	const { positionals } = parseArgs(args, {});
+	const { positionals, flags } = parseArgs(args, {});
 	const targetPath = resolve(positionals[0] ?? '.');
+	const compactDb = flags['compact-db'] === true;
+	const reindex = flags['reindex'] === true;
 	const result: DoctorResult = { passed: true, checks: [] };
 
 	function check(name: string, status: 'pass' | 'warn' | 'fail', detail?: string) {
@@ -77,9 +80,11 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 		return result;
 	}
 
+	let vaultConfig: VaultConfig;
 	let resolvedConfig: LifeOSConfig;
 	try {
-		resolvedConfig = resolveConfig(targetPath).rawConfig;
+		vaultConfig = resolveConfig(targetPath);
+		resolvedConfig = vaultConfig.rawConfig;
 		check('lifeos.yaml', 'pass', 'valid');
 	} catch (e) {
 		check(
@@ -202,6 +207,9 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 
 	// 10. Database health
 	checkDbHealth(targetPath, resolvedConfig, check);
+	if (compactDb || reindex) {
+		runDatabaseMaintenance(targetPath, resolvedConfig, vaultConfig, { compactDb, reindex }, check);
+	}
 	checkGitDatabaseArtifacts(targetPath, resolvedConfig, check);
 
 	printSummary(result);
@@ -302,10 +310,7 @@ function checkDbHealth(
 	config: LifeOSConfig,
 	check: (name: string, status: 'pass' | 'warn' | 'fail', detail?: string) => void,
 ): void {
-	const dbName = config.memory?.db_name ?? 'memory.db';
-	const memorySub = config.subdirectories?.system?.memory ?? '记忆';
-	const systemDir = config.directories?.system ?? '90_系统';
-	const dbPath = join(targetPath, systemDir, memorySub, dbName);
+	const dbPath = memoryDbPath(targetPath, config);
 
 	if (!existsSync(dbPath)) {
 		check('database', 'pass', 'not yet initialized (expected for new vaults)');
@@ -333,6 +338,31 @@ function checkDbHealth(
 			check('database integrity', 'fail', 'pragma failed');
 		}
 
+		// Freelist ratio — a high freelist means deleted pages are not
+		// reclaimed; `lifeos doctor --compact-db` fixes it.
+		try {
+			const pageCount = db.pragma('page_count', { simple: true }) as number;
+			const freelistCount = db.pragma('freelist_count', { simple: true }) as number;
+			const freelistRatio = pageCount > 0 ? freelistCount / pageCount : 0;
+			check(
+				'database freelist',
+				freelistRatio > 0.5 ? 'warn' : 'pass',
+				`${freelistCount}/${pageCount} pages (${Math.round(freelistRatio * 100)}%)`,
+			);
+		} catch {
+			check('database freelist', 'fail', 'pragma failed');
+		}
+
+		// auto_vacuum mode: 0 = none, 1 = full, 2 = incremental. Incremental
+		// lets runtime maintenance reclaim freelist pages without a full VACUUM.
+		try {
+			const autoVacuum = db.pragma('auto_vacuum', { simple: true }) as number;
+			const mode = autoVacuum === 2 ? 'incremental' : autoVacuum === 1 ? 'full' : 'none';
+			check('database auto_vacuum', autoVacuum === 2 ? 'pass' : 'warn', mode);
+		} catch {
+			check('database auto_vacuum', 'fail', 'pragma failed');
+		}
+
 		// Row counts
 		try {
 			const viCount = (db.prepare('SELECT COUNT(*) as n FROM vault_index').get() as { n: number })
@@ -348,6 +378,11 @@ function checkDbHealth(
 				ftsOk
 					? undefined
 					: 'vault_index and vault_fts row counts differ — FTS index may be out of sync',
+			);
+			check(
+				'database memory_items size',
+				miCount > 1000 ? 'warn' : 'pass',
+				`${miCount} rows`,
 			);
 		} catch {
 			check('database rows', 'fail', 'query failed');
@@ -549,6 +584,78 @@ function checkGitDatabaseArtifacts(
 		return;
 	}
 	check('database Git hygiene', 'pass', 'SQLite WAL/SHM 临时文件未被跟踪且已忽略');
+}
+
+function memoryDbPath(targetPath: string, config: LifeOSConfig): string {
+	const dbName = config.memory?.db_name ?? 'memory.db';
+	const memorySub = config.subdirectories?.system?.memory ?? '记忆';
+	const systemDir = config.directories?.system ?? '90_系统';
+	return join(targetPath, systemDir, memorySub, dbName);
+}
+
+/**
+ * Run the maintenance operations requested via CLI flags on a dedicated
+ * writable connection. The health checks above use a readonly connection and
+ * must never write, so any mutation happens here.
+ */
+function runDatabaseMaintenance(
+	targetPath: string,
+	config: LifeOSConfig,
+	vaultConfig: VaultConfig,
+	options: { compactDb: boolean; reindex: boolean },
+	check: (name: string, status: 'pass' | 'warn' | 'fail', detail?: string) => void,
+): void {
+	const dbPath = memoryDbPath(targetPath, config);
+	if (!existsSync(dbPath)) {
+		check('database maintenance', 'warn', 'database not initialized; skipped');
+		return;
+	}
+	if (options.compactDb) {
+		try {
+			const db = new Database(dbPath);
+			try {
+				const beforePages = db.pragma('page_count', { simple: true }) as number;
+				const beforeFreelist = db.pragma('freelist_count', { simple: true }) as number;
+				// Enabling incremental auto_vacuum first makes the rebuilt file
+				// use incremental vacuum going forward, so runtime maintenance
+				// only needs PRAGMA incremental_vacuum afterwards.
+				db.pragma('auto_vacuum = INCREMENTAL');
+				db.exec('VACUUM');
+				const afterPages = db.pragma('page_count', { simple: true }) as number;
+				const afterFreelist = db.pragma('freelist_count', { simple: true }) as number;
+				check(
+					'database compact',
+					'pass',
+					`pages ${beforePages} → ${afterPages}, freelist ${beforeFreelist} → ${afterFreelist}`,
+				);
+			} finally {
+				db.close();
+			}
+		} catch (error) {
+			check('database compact', 'fail', error instanceof Error ? error.message : String(error));
+		}
+	}
+	if (options.reindex) {
+		try {
+			const db = new Database(dbPath);
+			try {
+				// Dropping all scan state forces the full scan to re-index every
+				// file, regenerating search hints with the current logic (a
+				// matching scan state would short-circuit as unchanged).
+				db.exec('DELETE FROM scan_state');
+				const scan = fullScan(targetPath, db, vaultConfig);
+				check(
+					'database reindex',
+					'pass',
+					`scan_state rebuilt; indexed=${scan.indexed} unchanged=${scan.unchanged} removed=${scan.removed}`,
+				);
+			} finally {
+				db.close();
+			}
+		} catch (error) {
+			check('database reindex', 'fail', error instanceof Error ? error.message : String(error));
+		}
+	}
 }
 
 function printSummary(result: DoctorResult) {
