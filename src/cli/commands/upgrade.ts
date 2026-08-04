@@ -84,6 +84,7 @@ import {
 	retainOnlyCutoverBundle,
 } from '../utils/cutover.js';
 import { isManagedAssetRecord } from '../utils/managed-assets.js';
+import { loadCustomDictIfPresent } from '../../utils/segmenter.js';
 import { syncVault } from '../utils/sync-vault.js';
 import { fullScan } from '../../utils/vault-indexer.js';
 import { bold, green, log, parseArgs } from '../utils/ui.js';
@@ -1334,7 +1335,15 @@ export default async function upgrade(
 		}
 		assertSchemaV4(db);
 		// Regenerate search_hints for every row with the current indexing
-		// logic. Dropping all scan state forces the full scan to re-index each
+		// logic. A configured custom dictionary must load before the scan
+		// state is dropped: dropping first and re-scanning with the default
+		// dictionary would silently rewrite every search_hint. A present but
+		// unreadable/invalid dictionary aborts the upgrade (fail closed).
+		const dict = loadCustomDictIfPresent(runtimeConfig);
+		if (!dict.loaded && dict.error !== undefined) {
+			throw new Error(`custom_dict.txt 加载失败，已中止重建：${dict.error}`);
+		}
+		// Dropping all scan state forces the full scan to re-index each
 		// file (a matching scan state would short-circuit as unchanged).
 		db.exec('DELETE FROM scan_state');
 		fullScan(targetPath, db, runtimeConfig);

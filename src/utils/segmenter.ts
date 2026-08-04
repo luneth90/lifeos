@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { Jieba } from '@node-rs/jieba';
 
 // @node-rs/jieba/dict is CJS-only (no ESM exports), so we use createRequire
@@ -32,6 +33,33 @@ function normalizeSearchText(text: string): string {
 export function loadCustomDict(dictPath: string): void {
 	const content = readFileSync(dictPath);
 	jieba.loadDict(content);
+}
+
+export interface CustomDictLoadResult {
+	/** True when the dictionary file existed and loaded successfully. */
+	loaded: boolean;
+	/** Present only when the dictionary file existed but failed to load. */
+	error?: string;
+}
+
+/**
+ * Load a vault's optional custom jieba dictionary, mirroring the startup path
+ * (startup.ts: join(config.subDirPath('system', 'memory'), 'custom_dict.txt')).
+ * A missing dictionary is normal (`loaded: false`, no error); a present but
+ * unreadable/invalid dictionary reports the failure so rebuild entry points
+ * can fail closed instead of re-tokenizing with the default dictionary.
+ */
+export function loadCustomDictIfPresent(config: {
+	subDirPath(parent: string, child: string): string;
+}): CustomDictLoadResult {
+	const dictPath = join(config.subDirPath('system', 'memory'), 'custom_dict.txt');
+	if (!existsSync(dictPath)) return { loaded: false };
+	try {
+		loadCustomDict(dictPath);
+		return { loaded: true };
+	} catch (error) {
+		return { loaded: false, error: error instanceof Error ? error.message : String(error) };
+	}
 }
 
 /**

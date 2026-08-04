@@ -11,6 +11,7 @@ import {
 	inspectGlobalHardSafety,
 } from '../../services/global-hard-safety.js';
 import { estimateTokens } from '../../utils/shared.js';
+import { loadCustomDictIfPresent } from '../../utils/segmenter.js';
 import { fullScan } from '../../utils/vault-indexer.js';
 import { assetsDir } from '../utils/assets.js';
 import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
@@ -637,6 +638,20 @@ function runDatabaseMaintenance(
 	}
 	if (options.reindex) {
 		try {
+			// A configured custom dictionary must be loaded before the scan
+			// state is dropped: dropping first and re-scanning with the default
+			// dictionary would silently rewrite every search_hint. A present
+			// but unreadable/invalid dictionary aborts the rebuild (fail
+			// closed) so the existing index and scan state stay untouched.
+			const dict = loadCustomDictIfPresent(vaultConfig);
+			if (!dict.loaded && dict.error !== undefined) {
+				check(
+					'database reindex',
+					'fail',
+					`custom_dict.txt 加载失败，已中止重建：${dict.error}`,
+				);
+				return;
+			}
 			const db = new Database(dbPath);
 			try {
 				// Dropping all scan state forces the full scan to re-index every

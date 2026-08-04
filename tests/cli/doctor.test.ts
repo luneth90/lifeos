@@ -607,4 +607,96 @@ test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async
 			cleanup();
 		}
 	});
+
+	test('--reindex loads custom_dict.txt before rebuilding search hints', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		let db: Database.Database | undefined;
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
+			// Custom dictionary turns the otherwise default-segmented
+			// 四元数群 (四元 / 数 / 群) into a single token.
+			writeFileSync(
+				join(dir, '90_系统', '记忆', 'custom_dict.txt'),
+				'四元数群 5 n\n',
+				'utf-8',
+			);
+			writeFileSync(
+				join(dir, '00_草稿', 'quat.md'),
+				'---\ntitle: 四元数群笔记\n---\n四元数群 的几何性质\n',
+			);
+
+			db = new Database(dbPath);
+			const seeded = fullScan(dir, db);
+			expect(seeded.indexed).toBeGreaterThanOrEqual(1);
+			db.close();
+			db = undefined;
+
+			const result = await doctorCommand([dir, '--reindex']);
+			const reindex = result.checks.find((c) => c.name === 'database reindex');
+			expect(reindex).toMatchObject({ status: 'pass' });
+
+			db = new Database(dbPath);
+			const row = db
+				.prepare("SELECT search_hints FROM vault_index WHERE file_path LIKE '%quat.md'")
+				.get() as { search_hints: string };
+			const hints: string[] = row.search_hints.startsWith('[')
+				? (JSON.parse(row.search_hints) as string[])
+				: row.search_hints.split(/\s+/);
+			expect(hints).toContain('四元数群');
+		} finally {
+			db?.close();
+			cleanup();
+		}
+	});
+
+	test('--reindex fails closed when custom_dict.txt is corrupted', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		let db: Database.Database | undefined;
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
+			writeFileSync(join(dir, '00_草稿', 'alpha.md'), '---\ntitle: Alpha Note\n---\nAlpha body\n');
+
+			db = new Database(dbPath);
+			const seeded = fullScan(dir, db);
+			expect(seeded.indexed).toBeGreaterThanOrEqual(1);
+			const seededState = countQuery(db, 'SELECT COUNT(*) AS n FROM scan_state');
+			expect(seededState).toBeGreaterThanOrEqual(1);
+			const seededRows = db
+				.prepare(
+					'SELECT file_path, search_hints, indexed_at FROM vault_index ORDER BY file_path',
+				)
+				.all();
+			db.close();
+			db = undefined;
+
+			// Corrupted dictionary (invalid UTF-8): the rebuild must abort
+			// before touching scan_state or the index. If it proceeded, the
+			// seeded rows would be rewritten (indexed_at bumped) and the
+			// check would pass.
+			writeFileSync(
+				join(dir, '90_系统', '记忆', 'custom_dict.txt'),
+				Buffer.from([0xff, 0xfe, 0x80, 0x81]),
+			);
+
+			const result = await doctorCommand([dir, '--reindex']);
+			const reindex = result.checks.find((c) => c.name === 'database reindex');
+			expect(reindex).toMatchObject({ status: 'fail' });
+			expect(reindex?.detail).toMatch(/custom_dict/);
+
+			db = new Database(dbPath);
+			const afterState = countQuery(db, 'SELECT COUNT(*) AS n FROM scan_state');
+			expect(afterState).toBe(seededState);
+			const afterRows = db
+				.prepare(
+					'SELECT file_path, search_hints, indexed_at FROM vault_index ORDER BY file_path',
+				)
+				.all();
+			expect(afterRows).toEqual(seededRows);
+		} finally {
+			db?.close();
+			cleanup();
+		}
+	});
 });

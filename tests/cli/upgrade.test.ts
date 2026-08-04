@@ -383,6 +383,62 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'migrations'))).toBe(false);
 	});
 
+	it('重建阶段加载 custom_dict.txt，自定义词以整词进入 search_hints', async () => {
+		// 默认词典会把 量子纠缠态 切成 量子/纠缠/态；自定义词典使其成为整词。
+		// 词典必须在 DELETE FROM scan_state 之前加载，否则重建会用默认词典
+		// 重写全部 search_hints。
+		writeFileSync(
+			join(fixture.root, '90_系统', '记忆', 'custom_dict.txt'),
+			'量子纠缠态 5 n\n',
+			'utf-8',
+		);
+		writeFileSync(
+			join(fixture.root, '00_草稿', 'entangle.md'),
+			'---\ntitle: 量子纠缠态\n---\n量子纠缠态 的说明\n',
+		);
+
+		await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+
+		const db = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
+		try {
+			const row = db
+				.prepare("SELECT search_hints FROM vault_index WHERE file_path LIKE '%entangle.md'")
+				.get() as { search_hints: string };
+			expect(row).toBeDefined();
+			const hints = JSON.parse(row.search_hints) as string[];
+			expect(hints).toContain('量子纠缠态');
+		} finally {
+			db.close();
+		}
+	});
+
+	it('custom_dict.txt 损坏时中止重建并完整回滚，不得用默认词典重建', async () => {
+		// 损坏（非法 UTF-8）的自定义词典必须在 DELETE FROM scan_state 之前
+		// 中止升级：继续重建会用默认词典重写全部 search_hints。
+		writeFileSync(
+			join(fixture.root, '90_系统', '记忆', 'custom_dict.txt'),
+			Buffer.from([0xff, 0xfe, 0x80, 0x81]),
+		);
+
+		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
+			/custom_dict/,
+		);
+
+		expect(dbVersion(fixture.dbPath)).toBe(3);
+		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(fixture.legacyYaml);
+		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'runtime-receipt.json'))).toBe(false);
+		const journals = findJournals(join(fixture.parent, '.lifeos-cutovers'));
+		expect(journals).toHaveLength(1);
+		for (const journalPath of journals) {
+			expect(JSON.parse(readFileSync(journalPath, 'utf-8'))).toMatchObject({
+				state: 'restored',
+				contract_version: 2,
+				schema_version: 4,
+			});
+		}
+		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
+	});
+
 	it('整包覆盖旧协议和旧客户端配置，但保留用户数据文件', async () => {
 		mkdirSync(join(fixture.root, '.codex'), { recursive: true });
 		writeFileSync(
