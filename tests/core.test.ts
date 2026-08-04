@@ -36,6 +36,7 @@ describe('memoryStartup 最终 V2/V4 契约', () => {
 		expect(result.layer0.snapshotId).toMatch(/^ctx-/);
 		expect(result.scopeHints).toEqual({
 			availableProjects: [],
+			availableRepositories: [],
 			availableSkills: [],
 			availableTools: [],
 			toolBindings: {},

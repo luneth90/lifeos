@@ -141,6 +141,7 @@ describe('公开协议文档门禁', () => {
 			expect(asset.protocol).toMatch(asset.incremental);
 			for (const marker of [
 				'scope_hints.available_tools',
+				'scope_hints.available_repositories',
 				'scope_hints.tool_bindings',
 				'memory.tool_bindings',
 				'ambiguous_tool_alias',

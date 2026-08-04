@@ -71,7 +71,13 @@ export function runStartup(
 	);
 	return {
 		layer0: buildLayer0Context(db, vaultRoot, config.contextBudgets()),
-		scopeHints: { availableProjects, availableSkills, availableTools, toolBindings },
+		scopeHints: {
+			availableProjects,
+			availableRepositories: Object.keys(config.repositoryBindings()).sort(),
+			availableSkills,
+			availableTools,
+			toolBindings,
+		},
 		vaultStats: {
 			totalFiles,
 			updatedSinceLast: 0,

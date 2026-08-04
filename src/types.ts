@@ -194,6 +194,7 @@ export interface StartupResult {
 	layer0: Layer0Context;
 	scopeHints: {
 		availableProjects: string[];
+		availableRepositories: string[];
 		availableSkills: string[];
 		availableTools: string[];
 		toolBindings: ToolBindings;

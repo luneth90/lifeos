@@ -18,7 +18,7 @@ memory_bootstrap
 1. Call `memory_bootstrap` when entering a LifeOS Vault session. It returns global Layer 0 only.
 2. After routing the task, call `memory_context`. An empty scope list returns empty local context; it never loads all memory.
 3. If a skill, project, repository, tool, or file scope is introduced during task execution, incrementally call `memory_context` to load that scope before using the object for the first time; do not assume the initial routing covered objects introduced later.
-4. The `scope_hints.available_tools` and `scope_hints.tool_bindings` fields returned by `memory_bootstrap` are routing metadata only; they do not inject tool rule content into Layer 0.
+4. The `scope_hints.available_tools`, `scope_hints.tool_bindings`, and `scope_hints.available_repositories` fields returned by `memory_bootstrap` are routing metadata only; they do not inject rule content into Layer 0. `available_repositories` lists the full set of repository IDs in the `repository_bindings` whitelist from `lifeos.yaml`.
 5. Call `memory_query` only when note content is needed. It searches Vault files and does not replace scoped rule routing.
 6. Every request except bootstrap must include `contract_version=2`.
 

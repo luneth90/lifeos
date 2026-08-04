@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -75,9 +75,20 @@ describe('V4 启动路径', () => {
 			scope: { type: 'tool', key: 'obsidian' },
 		});
 
+		const yamlPath = join(vault.root, 'lifeos.yaml');
+		writeFileSync(
+			yamlPath,
+			readFileSync(yamlPath, 'utf-8').replace(
+				'repository_bindings: {}',
+				'repository_bindings:\n    zeta-repo:\n      - /Users/example/code/zeta\n    alpha-repo:\n      - /Users/example/code/alpha',
+			),
+			'utf-8',
+		);
+
 		const result = runStartup(db, vault.root);
 		expect(result.scopeHints).toEqual({
 			availableProjects: ['project-algebra'],
+			availableRepositories: ['alpha-repo', 'zeta-repo'],
 			availableSkills: ['translate'],
 			availableTools: ['obsidian'],
 			toolBindings: {

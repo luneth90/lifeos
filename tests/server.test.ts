@@ -26,6 +26,7 @@ function startupResult(text = 'Layer0', snapshotId = 'ctx-test') {
 		},
 		scopeHints: {
 			availableProjects: ['gts'],
+			availableRepositories: [],
 			availableSkills: ['revise'],
 			availableTools: ['obsidian'],
 			toolBindings: {
@@ -128,6 +129,7 @@ describe('server 最终 V2/V4 契约', () => {
 			},
 			scope_hints: {
 				available_projects: ['gts'],
+				available_repositories: [],
 				available_skills: ['revise'],
 				available_tools: ['obsidian'],
 				tool_bindings: {
