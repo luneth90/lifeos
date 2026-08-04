@@ -85,6 +85,7 @@ import {
 } from '../utils/cutover.js';
 import { isManagedAssetRecord } from '../utils/managed-assets.js';
 import { syncVault } from '../utils/sync-vault.js';
+import { fullScan } from '../../utils/vault-indexer.js';
 import { bold, green, log, parseArgs } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 import type { WriteSetTarget } from '../utils/write-set-backup.js';
@@ -1332,6 +1333,11 @@ export default async function upgrade(
 			migratedItems = migration.itemCount;
 		}
 		assertSchemaV4(db);
+		// Regenerate search_hints for every row with the current indexing
+		// logic. Dropping all scan state forces the full scan to re-index each
+		// file (a matching scan state would short-circuit as unchanged).
+		db.exec('DELETE FROM scan_state');
+		fullScan(targetPath, db, runtimeConfig);
 		reindexAndAssertProjectCatalog(db, targetPath, runtimeConfig, appliedProjects.catalog);
 		assertProjectMemoryScopesResolveToCatalog(
 			db,

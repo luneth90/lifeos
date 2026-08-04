@@ -151,14 +151,18 @@ export function parseMarkdown(content: string, fileName: string): ParsedMarkdown
 		[...body.matchAll(/^#{1,6}\s+(.+)$/gm)].map((match) => match[1]?.trim() ?? ''),
 	);
 	const summary = body.slice(0, 500).trim();
+	// Search-only body slice: feeds search_hints generation so body text up to
+	// 4000 chars is retrievable, without growing the persisted summary or the
+	// response payload (buildQueryResult emits the full summary field).
+	const searchBody = body.slice(0, 4000);
 	const tagsArray = JSON.parse(tags) as string[];
-	const baseSearchHints = buildSearchTokens(title, summary, tagsArray, domain);
+	const baseSearchHints = buildSearchTokens(title, searchBody, tagsArray, domain);
 	const enhancedTerms = generateEnhancedSearchTerms({
 		title,
 		type,
 		domain,
 		status,
-		summary,
+		summary: searchBody,
 		aliases,
 		sectionHeads,
 	});

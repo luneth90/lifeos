@@ -226,6 +226,24 @@ ${longBody}`;
 		expect(JSON.parse(result!.backlinks)).toEqual([]);
 	});
 
+	it('indexes body words beyond the 500-char summary into search_hints', () => {
+		// The search-only body slice (4000 chars) feeds search_hints while the
+		// persisted summary stays at 500 chars, so a word past the summary
+		// cutoff must still be retrievable via search_hints.
+		const filler = 'A'.repeat(700);
+		const content = `---
+title: test
+---
+
+${filler} zephyranthes`;
+		const result = parseMarkdown(content, 'test.md');
+		expect(result).not.toBeNull();
+		expect(result!.summary.length).toBeLessThanOrEqual(500);
+		expect(result!.summary).not.toContain('zephyranthes');
+		const hints = JSON.parse(result!.searchHints) as string[];
+		expect(hints).toContain('zephyranthes');
+	});
+
 	it('只把非模板 id 规范化为稳定 entityId', () => {
 		const stable = parseMarkdown('---\nid: "  note-group  "\ntitle: 群论\n---\n内容', '群论.md');
 		const template = parseMarkdown('---\nid: "{{date}}-note"\ntitle: 模板\n---\n内容', '模板.md');

@@ -61,7 +61,7 @@ export function generateEnhancedSearchTerms(input: EnhanceInput): string[] {
 		const statusLabel = STATUS_LABELS[status];
 		if (statusLabel) extras.push(statusLabel);
 	}
-	extras.push(...sectionHeads.slice(0, 5));
+	extras.push(...sectionHeads);
 	extras.push(...summary.split('\n').slice(0, 2));
 
 	return tokenize(extras.filter(Boolean).join(' '));
