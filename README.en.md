@@ -30,21 +30,15 @@ LifeOS is an agent-native knowledge system that runs on top of Obsidian: Obsidia
   <img src="./assets/lifeos-memory.en.svg" alt="LifeOS Memory System" width="720" />
 </p>
 
+### Learning Dashboard
+
+`lifeos init` / `lifeos upgrade` create a `Dashboard.md` at the vault root: mastery KPI cards, a monthly activity heatmap, the knowledge lifecycle and forgetting curve, plus due-review notes and active-project lists. Folder paths are injected from `lifeos.yaml`, so renamed directories stay in sync after the next upgrade; zh/en vaults get the matching language variant.
+
+> **Prerequisite**: the [Dataview](https://github.com/blacksmithgu/obsidian-dataview) plugin with **Enable JavaScript Queries** turned on (off by default): Settings → Community plugins → Dataview gear icon → General group. Without it the four dynamic blocks do not render and only the two Dataview tables remain; do not edit `data.json` directly — a running Obsidian instance overwrites manual changes.
+
 <p align="center">
   <img src="./assets/lifeos-dashboard.png" alt="LifeOS Learning Dashboard" width="720" />
 </p>
-
-### Learning Dashboard
-
-`lifeos init` / `lifeos upgrade` create a `Dashboard.md` learning overview at the vault root: mastery KPI cards, a monthly activity heatmap, the knowledge lifecycle bar, the Ebbinghaus forgetting curve, plus due-review and active-project lists. Folder paths are injected from `lifeos.yaml`, so renamed directories stay in sync after the next upgrade; zh/en vaults receive the matching language variant.
-
-> **Prerequisite**: the [Dataview](https://github.com/blacksmithgu/obsidian-dataview) community plugin is required. The `dataviewjs` dynamic blocks depend on the **Enable JavaScript Queries** toggle, which is off by default. Turn it on inside the Obsidian client:
->
-> 1. Open **Settings** (gear icon, bottom-left) → **Community plugins**
-> 2. Find **Dataview** and click the gear icon on its row to open plugin settings
-> 3. In the **General** group, enable **Enable JavaScript Queries**
->
-> When disabled, the four dynamic blocks (KPI cards, heatmap, lifecycle bar, forgetting curve) do not render; only the two Dataview tables remain. Do not edit the `data.json` file directly — a running Obsidian instance overwrites manual changes on disk.
 
 **Key strengths**
 

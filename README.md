@@ -30,21 +30,15 @@ LifeOS 是一套运行在 Obsidian 之上的 Agent 知识系统：Obsidian 承�
   <img src="./assets/lifeos-memory.svg" alt="LifeOS 记忆系统" width="720" />
 </p>
 
+### 学习状态首页
+
+`lifeos init` / `lifeos upgrade` 会在 Vault 根目录生成 `Dashboard.md`：动态展示掌握率 KPI、当月活动热力图、知识生命周期与遗忘曲线，以及待复习笔记、活跃项目清单。查询目录按 `lifeos.yaml` 注入，重命名目录后升级自动同步；中英文 Vault 分别安装对应语言版本。
+
+> **前置条件**：需 [Dataview](https://github.com/blacksmithgu/obsidian-dataview) 插件并开启 **Enable JavaScript Queries**（默认关闭）：设置（Settings）→ 第三方插件（Community plugins）→ Dataview 齿轮图标 → General 分组勾选。未开启时四个动态区块不渲染，仅剩两个 Dataview 表格；请勿直接编辑 `data.json`，Obsidian 运行时会覆盖。
+
 <p align="center">
   <img src="./assets/lifeos-dashboard.png" alt="LifeOS 学习状态首页" width="720" />
 </p>
-
-### 学习状态首页
-
-`lifeos init` / `lifeos upgrade` 会在 Vault 根目录生成 `Dashboard.md` 学习状态首页：掌握率 KPI 卡片、当月活动热力图、知识生命周期流转、艾宾浩斯遗忘曲线，以及待复习笔记与活跃项目清单。查询目录按 `lifeos.yaml` 配置注入，重命名目录后再次升级会自动同步；中英文 Vault 分别安装对应语言版本。
-
-> **前置条件**：需安装 [Dataview](https://github.com/blacksmithgu/obsidian-dataview) 社区插件。其中 `dataviewjs` 动态区块依赖 **Enable JavaScript Queries** 开关（插件默认关闭），请在 Obsidian 客户端内开启：
->
-> 1. 点击左下角 **设置（Settings）** → 左侧 **第三方插件（Community plugins）**
-> 2. 找到 **Dataview**，点击该行右侧的齿轮图标进入插件设置
-> 3. 在 **General** 分组中勾选 **Enable JavaScript Queries**
->
-> 未开启时，KPI 卡片、热力图、生命周期条与遗忘曲线四个动态区块不会渲染，仅保留「待复习与升阶章节」「活跃项目」两个 Dataview 表格。请勿直接编辑 `data.json` 配置文件，Obsidian 运行时会覆盖磁盘上的手动修改。
 
 **核心优点**
 
