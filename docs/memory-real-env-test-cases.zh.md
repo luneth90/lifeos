@@ -88,7 +88,7 @@ SELECT COUNT(*) FROM memory_items WHERE status='archived';
 ### 3.2 隔离机制
 
 1. **slot_key 前缀**：所有测试写入的 `memory_log` 使用 `test:` 前缀的 `slot_key`（如 `test:lang-rule`、`test:bm25-fact`），与生产 slot_key 命名空间隔离
-2. **专用 scope key**：若需要 project scope，使用不存在的项目 ID `test-phantom-project`，不与真实项目冲突
+2. **project scope 约束**：`memory_log` 对 project scope 做存在性校验（不存在的项目 ID 返回 unknown_project），测试只能写入真实项目；隔离靠 `test:` 前缀 slot_key，清理按 item_id 定向归档，**禁止对真实项目整 scope 批量归档**（会误伤真实记忆）
 3. **即用即清**：每个用例的执行步骤末尾内嵌清理步骤，使用 `memory_forget` 软归档测试数据
 4. **文件操作约束**：测试中不创建、修改或删除任何真实 Vault 文件；需要 notify 测试时使用已存在的文件路径（只读验证）
 
@@ -325,20 +325,20 @@ memory_rules(
 
 - **优先级**：P1
 - **关联维度**：A
-- **场景描述**：bootstrap 已注入 global 规则后，context 默认 `include_global=false` 不重复加载
+- **场景描述**：bootstrap 已注入 global 规则后，context 默认 `include_global=false` 不重复加载。使用已注册技能 `skill:revise` 验证；若改用无活跃记忆的技能（如 ask/today），会得到 `unresolvedScopes(unknown_skill)` 诊断且 global 分支不注入——这是设计行为（技能白名单 = 有活跃记忆条目的技能），用例应使用已注册技能
 - **前置条件**：已执行 bootstrap
 - **执行步骤**：
 
 ```text
 1. memory_context(
      contract_version=2,
-     scopes=[{type: "skill", key: "ask"}],
+     scopes=[{type: "skill", key: "revise"}],
      include_global=false
    )
 2. 检查返回不含 global 规则文本
 3. memory_context(
      contract_version=2,
-     scopes=[{type: "skill", key: "ask"}],
+     scopes=[{type: "skill", key: "revise"}],
      include_global=true
    )
 4. 检查返回包含 global 规则文本
@@ -351,7 +351,7 @@ memory_rules(
   - `include_global=false` 不返回 global → PASS
   - `include_global=true` 返回 global → PASS
 - **数据清理**：无
-- **风险**：无
+- **风险**：若选错技能（无活跃记忆），步骤 4 不注入 global 且返回 unknown_skill 诊断，判定为环境误用而非系统缺陷
 
 ---
 
@@ -408,8 +408,8 @@ memory_forget(
 
 - **优先级**：P0
 - **关联维度**：B
-- **场景描述**：用户在项目中确认一个架构决策
-- **前置条件**：无
+- **场景描述**：用户在项目中确认一个架构决策。project scope 写入有存在性校验，必须使用真实项目 ID（示例 `crypto-agile-policy-aware-nivc`），隔离靠 `test:` 前缀 slot_key
+- **前置条件**：Vault 中存在项目 `crypto-agile-policy-aware-nivc`
 - **执行步骤**：
 
 ```text
@@ -417,14 +417,14 @@ memory_forget(
      contract_version=2,
      slot_key="test:arch-decision",
      content="测试用例：选择 NIVC 方案而非 IVC",
-     scope={type: "project", key: "test-phantom-project"},
+     scope={type: "project", key: "crypto-agile-policy-aware-nivc"},
      item_kind="decision",
      related_files=["20_项目/Agent可信执行密码学栈.md"]
    )
 2. 验证写入成功
 3. memory_context(
      contract_version=2,
-     scopes=[{type: "project", key: "test-phantom-project"}],
+     scopes=[{type: "project", key: "crypto-agile-policy-aware-nivc"}],
      include_global=false,
      include_related_files=true
    )
@@ -447,7 +447,7 @@ memory_forget(
 )
 ```
 
-- **风险**：低
+- **风险**：写入真实项目 scope，清理必须完成（forget 该 item_id），否则 test: 前缀条目残留
 
 ---
 
@@ -1206,54 +1206,56 @@ memory_forget(contract_version=2, item_id=<返回的item_id>, reason="B-05 清�
 
 ---
 
-#### D-09 /archive——归档后项目记忆清理
+#### D-09 /archive——归档后记忆清理与批量归档
 
 - **优先级**：P0
 - **关联维度**：D、F
-- **场景描述**：项目归档后应调用 `memory_forget` 批量归档该项目 scope 下的记忆，且归档后 context 不再召回
-- **前置条件**：无（使用测试幻影项目）
+- **场景描述**：归档应清理记忆：真实项目归档时**逐条** forget 该项目 scope 下的记忆（禁止整 scope 批量归档真实项目，会误伤真实记忆）；`memory_forget` 按 scope 批量归档功能用**无真实记忆的 scope**（示例 `skill:ask`）验证
+- **前置条件**：无
 - **执行步骤**：
 
 ```text
 1. memory_log(
      contract_version=2,
-     slot_key="test:archive-rule",
-     content="测试：归档前的项目规则",
-     scope={type: "project", key: "test-phantom-project"},
+     slot_key="test:batch-archive-1",
+     content="测试：批量归档条目1",
+     scope={type: "skill", key: "ask"},
      item_kind="rule"
    )
 → 记录 item_id
 
-2. memory_context(
+2. memory_log(
      contract_version=2,
-     scopes=[{type: "project", key: "test-phantom-project"}],
-     include_global=false
+     slot_key="test:batch-archive-2",
+     content="测试：批量归档条目2",
+     scope={type: "skill", key: "ask"},
+     item_kind="rule"
    )
-→ 验证可召回该 rule
+→ 记录 item_id
 
 3. memory_forget(
      contract_version=2,
-     scope={type: "project", key: "test-phantom-project"},
+     scope={type: "skill", key: "ask"},
      reason="测试用例 D-09：模拟项目归档"
    )
-→ 批量归档
+→ 批量归档该 scope 全部活跃条目
 
-4. memory_context(
+4. memory_rules(
      contract_version=2,
-     scopes=[{type: "project", key: "test-phantom-project"}],
-     include_global=false
+     scope={type: "skill", key: "ask"},
+     status="active"
    )
-→ 验证不再召回
+→ 验证无活跃条目
 ```
 
 - **预期结果**：
-  - 步骤 2：召回含「归档前的项目规则」
-  - 步骤 3：批量归档成功
-  - 步骤 4：该 scope 无活跃条目
+  - 步骤 3：批量归档成功，返回归档条数 ≥ 2
+  - 步骤 4：该 scope 活跃条目为 0
 - **通过标准**：
-  - 归档前可召回，归档后不可召回 → PASS
+  - 批量归档按 scope 生效 → PASS
+  - 真实项目场景：逐条 forget 后 context 不再召回（见 F-03 单条语义）
 - **数据清理**：步骤 3 已完成清理（归档即清理）
-- **风险**：低
+- **风险**：批量归档 scope 必须确认无真实记忆（用前先 `memory_rules` 审计该 scope 活跃条目）；真实项目禁用整 scope 批量归档
 
 ---
 
@@ -1289,36 +1291,33 @@ memory_forget(contract_version=2, item_id=<返回的item_id>, reason="B-05 清�
 
 - **优先级**：P0
 - **关联维度**：E
-- **场景描述**：模拟 compaction 后新会话启动，仅凭记忆系统恢复项目上下文（规则、决策、画像被正确召回）
+- **场景描述**：模拟 compaction 后新会话启动，仅凭记忆系统恢复项目上下文（规则、决策经 context 召回，画像经 bootstrap 的 `userprofile_summary` 召回，两条路径分离）
 - **前置条件**：Vault 中存在真实项目记忆条目
 - **执行步骤**：
 
 ```text
 1. 在新会话中执行 memory_bootstrap()
-→ 获取 Layer 0（含 TaskBoard 焦点和 available_projects）
+→ 获取 Layer 0（含 TaskBoard 焦点、userprofile_summary 画像摘要和 available_projects）
 
 2. 从 scope_hints.available_projects 中取出活跃项目 ID
 
 3. memory_context(
      contract_version=2,
-     scopes=[
-       {type: "skill", key: "knowledge"},
-       {type: "project", key: "<活跃项目ID>"}
-     ],
+     scopes=[{type: "project", key: "<活跃项目ID>"}],
      include_global=false,
      include_related_files=true
    )
-→ 验证项目规则、决策、画像被召回
+→ 验证项目规则、决策被召回（画像条目不在此返回，见步骤 1）
 
 4. 检查 related_files 是否指向真实存在的文件
 ```
 
 - **预期结果**：
-  - bootstrap 提供足够信息定位项目
-  - context 返回该项目的所有活跃规则、决策、画像
+  - bootstrap 提供足够信息定位项目，`userprofile_summary` 含项目画像摘要
+  - context 返回该项目的活跃规则、决策（画像条目经 bootstrap 注入，不出现于 context 返回中——设计路径，非缺陷）
   - related_files 路径均指向存在的文件
 - **通过标准**：
-  - 最近更新的规则/决策/画像条目均被召回（对照 memory_rules 审计结果抽查）；条目总数不作为硬断言（context 可能受 token 预算省略超长条目） → PASS
+  - 最近更新的规则/决策条目均被 context 召回（对照 memory_rules 审计结果抽查）；画像经 `userprofile_summary` 召回；条目总数不作为硬断言（context 可能受 token 预算省略超长条目） → PASS
 - **数据清理**：无
 - **风险**：无
 
@@ -2026,10 +2025,10 @@ memory_rules(
 → 过滤 slot_key 以 "test:" 开头的条目
 → 预期：0 条
 
-# 审计 test-phantom-project scope 活跃条目
+# 审计 D-09 批量归档 scope 活跃条目（示例：skill:ask）
 memory_rules(
   contract_version=2,
-  scope={type: "project", key: "test-phantom-project"},
+  scope={type: "skill", key: "ask"},
   status="active"
 )
 → 预期：0 条
