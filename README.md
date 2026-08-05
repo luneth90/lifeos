@@ -30,6 +30,13 @@ LifeOS 是一套运行在 Obsidian 之上的 Agent 知识系统：Obsidian 承�
   <img src="./assets/lifeos-memory.svg" alt="LifeOS 记忆系统" width="720" />
 </p>
 
+**核心优点**
+
+- **开箱即用**：初始化一次即获得目录结构、技能、模板与记忆系统，无需自行拼装工具链
+- **纯 Markdown 承载**：知识以标准 Markdown 存储于本地 Vault，Obsidian 原生兼容，无格式锁定
+- **Agent 无关**：Claude Code、Codex、OpenCode、Grok Build 等 6 种客户端开箱即用，切换不丢上下文
+- **记忆沉淀**：规则、决策、画像沉淀在工作空间，跨 Agent、跨会话持续生效
+
 ## 安装与初始化
 
 ```bash

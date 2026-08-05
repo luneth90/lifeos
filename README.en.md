@@ -30,6 +30,13 @@ LifeOS is an agent-native knowledge system that runs on top of Obsidian: Obsidia
   <img src="./assets/lifeos-memory.en.svg" alt="LifeOS Memory System" width="720" />
 </p>
 
+**Key strengths**
+
+- **Zero setup**：initialize once to get directory structure, skills, templates, and the memory system — no need to assemble your own toolchain
+- **Plain Markdown**：knowledge lives as standard Markdown in a local vault, natively compatible with Obsidian, no format lock-in
+- **Agent-agnostic**：six clients including Claude Code, Codex, OpenCode, and Grok Build work out of the box; switching loses no context
+- **Persistent memory**：rules, decisions, and profile accumulate in the workspace and keep working across agents and sessions
+
 ## Installation and Initialization
 
 ```bash
