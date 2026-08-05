@@ -22,6 +22,12 @@ LifeOS helps you grow scattered ideas into structured knowledge and truly master
   <img src="./assets/lifeos-workflow.en.svg" alt="LifeOS Learning Workflow" width="720" />
 </p>
 
+> Seven MCP tools across three paths: the session read chain (bootstrap → context → query), the write chain (log / notify), and a governance side path (rules / forget); writes take effect on the next session via `memory_bootstrap`.
+
+<p align="center">
+  <img src="./assets/lifeos-memory.en.svg" alt="LifeOS Memory System" width="720" />
+</p>
+
 ## Why Build LifeOS?
 
 LifeOS started from a simple goal: package learning workflows, skills, templates, prompts, and a memory system into one complete setup you can use immediately. Instead of assembling your own toolchain from scratch or jumping between disconnected tools, you can initialize once, start working right away, and keep accumulating knowledge, process, and preferences as you go.
@@ -108,12 +114,6 @@ LifeOS provides a set of Agent skills designed around the learning process, conn
 - `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to archiving
 
 ### Memory System
-
-> Seven MCP tools across three paths: the session read chain (bootstrap → context → query), the write chain (log / notify), and a governance side path (rules / forget); writes take effect on the next session via `memory_bootstrap`.
-
-<p align="center">
-  <img src="./assets/lifeos-memory.en.svg" alt="LifeOS Memory System" width="720" />
-</p>
 
 > The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
 

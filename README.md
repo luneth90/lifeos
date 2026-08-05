@@ -24,6 +24,12 @@ LifeOS 帮助你将碎片灵感发展为结构化知识，并真正掌握它，�
   <img src="./assets/lifeos-workflow.svg" alt="LifeOS 学习工作流" width="720" />
 </p>
 
+> 记忆系统：7 个 MCP 工具三路分工（读链路 / 写链路 / 治理），写入跨会话生效。
+
+<p align="center">
+  <img src="./assets/lifeos-memory.svg" alt="LifeOS 记忆系统" width="720" />
+</p>
+
 ## 为什么开发 LifeOS？
 
 LifeOS 的出发点很直接：把学习工作流、技能、模板、提示词和记忆系统整合成一套可以直接落地的完整方案。你不需要自己从零拼装工具链，也不必在不同工具之间来回切换，初始化后即可开箱即用，并在真实使用中持续沉淀知识、流程与偏好。
@@ -110,12 +116,6 @@ LifeOS 提供一组围绕学习过程设计的 Agent 技能，把”输入 -> �
 知识笔记的掌握状态只按 `draft → review → revised → mastered` 向前推进，不允许降级。
 
 ### 记忆系统
-
-> 7 个 MCP 工具分三路：会话读链路（bootstrap → context → query）、写入链路（log / notify）、治理旁路（rules / forget）；写入在下次会话经 `memory_bootstrap` 生效。
-
-<p align="center">
-  <img src="./assets/lifeos-memory.svg" alt="LifeOS 记忆系统" width="720" />
-</p>
 
 LifeOS 当前使用单一最终契约：`contract_version=2` 与 `Schema V4`。MCP 固定暴露 7 个工具，标准调用链如下：
 
