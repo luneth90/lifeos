@@ -1,4 +1,11 @@
-import { copyFileSync, existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import {
+	copyFileSync,
+	existsSync,
+	readFileSync,
+	readdirSync,
+	statSync,
+	writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import type { LifeOSConfig } from '../../config.js';
 import { assetsDir, ensureDir } from './assets.js';
@@ -31,6 +38,13 @@ interface SyncEntry {
 	displayPath: string;
 	/** When true, files without a managedAssets record are treated as unmodified on first encounter. */
 	allowUntracked?: boolean;
+	/** When provided, this content is installed instead of the srcPath file (placeholder injection). */
+	content?: string;
+}
+
+function writeEntryContent(entry: SyncEntry): void {
+	if (entry.content !== undefined) writeFileSync(entry.destPath, entry.content, 'utf-8');
+	else copyFileSync(entry.srcPath, entry.destPath);
 }
 
 function syncAssetFiles(
@@ -50,10 +64,10 @@ function syncAssetFiles(
 
 	for (const entry of entries) {
 		ensureDir(join(entry.destPath, '..'));
-		const incoming = readFileSync(entry.srcPath, 'utf-8');
+		const incoming = entry.content ?? readFileSync(entry.srcPath, 'utf-8');
 
 		if (mode === 'overwrite' || !existsSync(entry.destPath)) {
-			copyFileSync(entry.srcPath, entry.destPath);
+			writeEntryContent(entry);
 			result.updated.push(entry.displayPath);
 			if (nextManagedAssets && managedAssetContext) {
 				nextManagedAssets[entry.displayPath] = buildManagedAssetRecord(
@@ -86,7 +100,7 @@ function syncAssetFiles(
 			nextManagedAssets &&
 			(unmodified || allowBootstrap)
 		) {
-			copyFileSync(entry.srcPath, entry.destPath);
+			writeEntryContent(entry);
 			result.updated.push(entry.displayPath);
 			nextManagedAssets[entry.displayPath] = buildManagedAssetRecord(
 				incoming,
@@ -246,4 +260,57 @@ export function installRules(
 	}));
 
 	return syncAssetFiles(entries, mode, managedAssetContext);
+}
+
+/**
+ * Copy the language-specific Dashboard homepage to the vault root.
+ * Folder placeholders (`{{knowledge_notes}}`, `{{projects}}`, …) are resolved
+ * from lifeos.yaml so the dashboard matches the configured directory layout.
+ * The zh variant is the canonical preview content; en is its translation.
+ * Supports overwrite for init and smart-merge for upgrade.
+ */
+export function installDashboard(
+	targetPath: string,
+	config: LifeOSConfig,
+	mode: InstallMode,
+	managedAssetContext?: ManagedAssetContext,
+): InstallResult {
+	const lang = config.language === 'en' ? 'en' : 'zh';
+	const src = join(assetsDir(), 'dashboard', `dashboard.${lang}.md`);
+	const displayPath = 'Dashboard.md';
+	const destPath = join(targetPath, displayPath);
+	if (!existsSync(src)) return { updated: [], skipped: [], unchanged: [] };
+
+	// Archive root is the common prefix of the per-type archive subpaths (e.g. "归档/项目" -> "归档").
+	const archiveRoot = config.subdirectories.system.archive.projects.split('/')[0];
+	const placeholders: Record<string, string> = {
+		'{{knowledge_notes}}': join(
+			config.directories.knowledge,
+			config.subdirectories.knowledge.notes,
+		),
+		'{{projects}}': config.directories.projects,
+		'{{research}}': config.directories.research,
+		'{{diary}}': config.directories.diary,
+		'{{drafts}}': config.directories.drafts,
+		'{{archive_root}}': join(config.directories.system, archiveRoot),
+	};
+	let content = readFileSync(src, 'utf-8');
+	for (const [placeholder, value] of Object.entries(placeholders)) {
+		content = content.split(placeholder).join(value);
+	}
+
+	return syncAssetFiles(
+		[
+			{
+				srcPath: src,
+				destPath,
+				displayPath,
+				// 首次升级时接管根目录已有的临时/旧版 Dashboard.md（视为未修改）。
+				allowUntracked: true,
+				content,
+			},
+		],
+		mode,
+		managedAssetContext,
+	);
 }

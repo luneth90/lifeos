@@ -116,6 +116,10 @@ LifeOS 提供一组围绕学习过程设计的 Agent 技能，把”输入 -> �
 
 知识笔记的掌握状态只按 `draft → review → revised → mastered` 向前推进，不允许降级。
 
+### 学习状态首页
+
+`lifeos init` / `lifeos upgrade` 会在 Vault 根目录生成 `Dashboard.md` 学习状态首页（需 Obsidian Dataview 插件）：掌握率 KPI 卡片、当月活动热力图、知识生命周期流转、艾宾浩斯遗忘曲线，以及待复习笔记与活跃项目清单。查询目录按 `lifeos.yaml` 配置注入，重命名目录后再次升级会自动同步；中英文 Vault 分别安装对应语言版本。
+
 ### 记忆系统
 
 LifeOS 当前使用单一最终契约：`contract_version=2` 与 `Schema V4`。MCP 固定暴露 7 个工具，标准调用链如下：

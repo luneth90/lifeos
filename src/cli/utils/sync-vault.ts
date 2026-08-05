@@ -7,6 +7,7 @@ import { ensureDir } from './assets.js';
 import {
 	type InstallMode,
 	type InstallResult,
+	installDashboard,
 	installPrompts,
 	installRules,
 	installSchema,
@@ -97,6 +98,16 @@ export async function syncVault(
 	result.unchanged.push(...rulesResult.unchanged);
 	trackManagedPaths(currentManagedPaths, rulesResult);
 	managedAssets = rulesResult.managedAssets ?? managedAssets;
+
+	const dashboardResult = installDashboard(targetPath, config, options.assetMode, {
+		managedAssets,
+		version: options.assetVersion,
+	});
+	result.updated.push(...dashboardResult.updated);
+	result.skipped.push(...dashboardResult.skipped);
+	result.unchanged.push(...dashboardResult.unchanged);
+	trackManagedPaths(currentManagedPaths, dashboardResult);
+	managedAssets = dashboardResult.managedAssets ?? managedAssets;
 
 	if (
 		options.assetMode === 'overwrite' &&

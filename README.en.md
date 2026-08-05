@@ -116,6 +116,10 @@ LifeOS provides a set of Agent skills designed around the learning process, conn
 - `/digest`: subscribe to topic updates and generate structured weekly digests from paper sources, RSS, and web search
 - `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to archiving
 
+### Learning Dashboard
+
+`lifeos init` / `lifeos upgrade` create a `Dashboard.md` learning overview at the vault root (requires the Obsidian Dataview plugin): mastery KPI cards, a monthly activity heatmap, the knowledge lifecycle bar, the Ebbinghaus forgetting curve, plus due-review and active-project lists. Folder paths are injected from `lifeos.yaml`, so renamed directories stay in sync after the next upgrade; zh/en vaults receive the matching language variant.
+
 ### Memory System
 
 > The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.

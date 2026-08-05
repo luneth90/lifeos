@@ -2,12 +2,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+	installDashboard,
 	installPrompts,
 	installSchema,
 	installSkills,
 	installTemplates,
 } from '../../../src/cli/utils/install-assets.js';
-import { ZH_PRESET } from '../../../src/config.js';
+import { EN_PRESET, ZH_PRESET } from '../../../src/config.js';
 
 function makeTmpDir() {
 	const dir = mkdtempSync(join(tmpdir(), 'lifeos-install-assets-'));
@@ -91,6 +92,78 @@ describe('installPrompts', () => {
 
 			expect(result.skipped).toContain('90_系统/提示词/AI_LLMResearch_Prompt.md');
 			expect(readFileSync(promptPath, 'utf-8')).toBe('USER CUSTOMIZED PROMPT');
+		} finally {
+			cleanup();
+		}
+	});
+});
+
+describe('installDashboard', () => {
+	test('copies zh dashboard to vault root', () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			const result = installDashboard(dir, ZH_PRESET, 'overwrite');
+
+			expect(result.updated).toEqual(['Dashboard.md']);
+			expect(result.skipped).toHaveLength(0);
+			expect(result.unchanged).toHaveLength(0);
+
+			const dashboard = readFileSync(join(dir, 'Dashboard.md'), 'utf-8');
+			expect(dashboard).toContain('⚡ 学习状态总览');
+			expect(dashboard).toContain('"40_知识/笔记"');
+			expect(dashboard).toContain('FROM "40_知识/笔记"');
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('installs english dashboard for en preset', () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			const result = installDashboard(dir, EN_PRESET, 'overwrite');
+
+			expect(result.updated).toEqual(['Dashboard.md']);
+
+			const dashboard = readFileSync(join(dir, 'Dashboard.md'), 'utf-8');
+			expect(dashboard).toContain('Learning Status Overview');
+			expect(dashboard).toContain('"40_Knowledge/Notes"');
+			expect(dashboard).toContain('FROM "20_Projects"');
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('smart-merge mode skips user-modified dashboard', () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			installDashboard(dir, ZH_PRESET, 'overwrite');
+
+			const dashboardPath = join(dir, 'Dashboard.md');
+			writeFileSync(dashboardPath, 'USER CUSTOMIZED DASHBOARD', 'utf-8');
+
+			const result = installDashboard(dir, ZH_PRESET, 'smart-merge');
+
+			expect(result.skipped).toContain('Dashboard.md');
+			expect(readFileSync(dashboardPath, 'utf-8')).toBe('USER CUSTOMIZED DASHBOARD');
+		} finally {
+			cleanup();
+		}
+	});
+
+	test('smart-merge adopts untracked preview on first upgrade', () => {
+		const { dir, cleanup } = makeTmpDir();
+		try {
+			// 模拟首次升级：根目录已有临时预览，且 managed_assets 尚无记录
+			writeFileSync(join(dir, 'Dashboard.md'), 'TEMP PREVIEW', 'utf-8');
+
+			const result = installDashboard(dir, ZH_PRESET, 'smart-merge', {
+				managedAssets: {},
+				version: '2.3.0',
+			});
+
+			expect(result.updated).toContain('Dashboard.md');
+			expect(result.managedAssets?.['Dashboard.md']?.version).toBe('2.3.0');
+			expect(readFileSync(join(dir, 'Dashboard.md'), 'utf-8')).toContain('⚡ 学习状态总览');
 		} finally {
 			cleanup();
 		}
