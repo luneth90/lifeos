@@ -18,6 +18,14 @@
 
 LifeOS 是一套运行在 Obsidian 之上的 Agent 知识系统：Obsidian 承载纯 Markdown 知识库（本地、可迁移、零锁定），Agent 提供技能、提示词与 MCP 执行引擎，LifeOS 将两者粘合为完整的「捕获 → 研究 → 学习 → 复习 → 归档」闭环。Agent 工具可以更换，但你的记忆与上下文无需重新开始：规则、决策与偏好沉淀在工作空间中，跨 Agent、跨会话持续生效。
 
+### 学习状态首页
+
+`Dashboard.md` 学习状态首页动态展示掌握率 KPI、当月活动热力图、知识生命周期与遗忘曲线，以及待复习笔记、活跃项目清单。需 [Dataview](https://github.com/blacksmithgu/obsidian-dataview) 插件并开启 **Enable JavaScript Queries**（设置 → 第三方插件 → Dataview 齿轮图标 → General 分组勾选），否则动态区块不渲染，仅剩两个 Dataview 表格。
+
+<p align="center">
+  <img src="./assets/lifeos-dashboard.png" alt="LifeOS 学习状态首页" width="720" />
+</p>
+
 > 学习工作流全流程：灵感 → 研究 → 学习 → 复习 → 归档，记忆系统贯穿全程。
 
 <p align="center">
@@ -28,14 +36,6 @@ LifeOS 是一套运行在 Obsidian 之上的 Agent 知识系统：Obsidian 承�
 
 <p align="center">
   <img src="./assets/lifeos-memory.svg" alt="LifeOS 记忆系统" width="720" />
-</p>
-
-### 学习状态首页
-
-`Dashboard.md` 学习状态首页动态展示掌握率 KPI、当月活动热力图、知识生命周期与遗忘曲线，以及待复习笔记、活跃项目清单。需 [Dataview](https://github.com/blacksmithgu/obsidian-dataview) 插件并开启 **Enable JavaScript Queries**（设置 → 第三方插件 → Dataview 齿轮图标 → General 分组勾选），否则动态区块不渲染，仅剩两个 Dataview 表格。
-
-<p align="center">
-  <img src="./assets/lifeos-dashboard.png" alt="LifeOS 学习状态首页" width="720" />
 </p>
 
 **核心优点**

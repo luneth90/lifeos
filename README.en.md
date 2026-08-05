@@ -18,6 +18,14 @@
 
 LifeOS is an agent-native knowledge system that runs on top of Obsidian: Obsidian hosts a plain-Markdown knowledge base (local, portable, lock-in free), agents provide skills, prompts, and the MCP execution engine, and LifeOS binds them into a complete capture → research → learn → review → archive loop. Agent tools may change, but your memory and context do not have to start over: rules, decisions, and preferences live in your workspace and keep working across agents and sessions.
 
+### Learning Dashboard
+
+`Dashboard.md` is the learning status homepage: mastery KPI cards, a monthly activity heatmap, the knowledge lifecycle and forgetting curve, plus due-review notes and active-project lists. It requires the [Dataview](https://github.com/blacksmithgu/obsidian-dataview) plugin with **Enable JavaScript Queries** enabled (Settings → Community plugins → Dataview gear icon → General group); without it the dynamic blocks do not render and only the two Dataview tables remain.
+
+<p align="center">
+  <img src="./assets/lifeos-dashboard.png" alt="LifeOS Learning Dashboard" width="720" />
+</p>
+
 > Full workflow overview: inspiration → research → learning → review → archive, with the memory system spanning the entire journey.
 
 <p align="center">
@@ -28,14 +36,6 @@ LifeOS is an agent-native knowledge system that runs on top of Obsidian: Obsidia
 
 <p align="center">
   <img src="./assets/lifeos-memory.en.svg" alt="LifeOS Memory System" width="720" />
-</p>
-
-### Learning Dashboard
-
-`Dashboard.md` is the learning status homepage: mastery KPI cards, a monthly activity heatmap, the knowledge lifecycle and forgetting curve, plus due-review notes and active-project lists. It requires the [Dataview](https://github.com/blacksmithgu/obsidian-dataview) plugin with **Enable JavaScript Queries** enabled (Settings → Community plugins → Dataview gear icon → General group); without it the dynamic blocks do not render and only the two Dataview tables remain.
-
-<p align="center">
-  <img src="./assets/lifeos-dashboard.png" alt="LifeOS Learning Dashboard" width="720" />
 </p>
 
 **Key strengths**
