@@ -1,6 +1,6 @@
-flowchart TD
+flowchart LR
     subgraph Input["Input"]
-        Capture["Capture & Daily Planning<br/>/today · /brainstorm · /ask"]
+        Capture["Capture & Daily Planning<br/>/today /brainstorm /ask"]
         Digest["Topic Digest · Weekly Briefing<br/>/digest"]
     end
 
@@ -10,7 +10,7 @@ flowchart TD
     end
 
     subgraph Learn["Knowledge"]
-        Knowledge["Knowledge Building<br/>/knowledge · notes + wiki"]
+        Knowledge["Knowledge Building · Notes & Wiki<br/>/knowledge"]
     end
 
     subgraph Rev["Review"]
@@ -29,6 +29,7 @@ flowchart TD
     Knowledge --> Revise
     Revise --> Archive
 
-    Memory{{"Memory System<br/>memory_* 7 tools · Contract V2<br/>persists across sessions"}}
+    Memory["Memory System · memory_*<br/>Contract V2 · persists across sessions"]
     Knowledge -.-> Memory
     Revise -.-> Memory
+    Memory ~~~ Archive
