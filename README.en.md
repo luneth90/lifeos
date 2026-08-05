@@ -32,9 +32,7 @@ LifeOS is an agent-native knowledge system that runs on top of Obsidian: Obsidia
 
 ### Learning Dashboard
 
-`lifeos init` / `lifeos upgrade` create a `Dashboard.md` at the vault root: mastery KPI cards, a monthly activity heatmap, the knowledge lifecycle and forgetting curve, plus due-review notes and active-project lists. Folder paths are injected from `lifeos.yaml`, so renamed directories stay in sync after the next upgrade; zh/en vaults get the matching language variant.
-
-> **Prerequisite**: the [Dataview](https://github.com/blacksmithgu/obsidian-dataview) plugin with **Enable JavaScript Queries** turned on (off by default): Settings → Community plugins → Dataview gear icon → General group. Without it the four dynamic blocks do not render and only the two Dataview tables remain; do not edit `data.json` directly — a running Obsidian instance overwrites manual changes.
+`Dashboard.md` is the learning status homepage: mastery KPI cards, a monthly activity heatmap, the knowledge lifecycle and forgetting curve, plus due-review notes and active-project lists. It requires the [Dataview](https://github.com/blacksmithgu/obsidian-dataview) plugin with **Enable JavaScript Queries** enabled (Settings → Community plugins → Dataview gear icon → General group); without it the dynamic blocks do not render and only the two Dataview tables remain.
 
 <p align="center">
   <img src="./assets/lifeos-dashboard.png" alt="LifeOS Learning Dashboard" width="720" />

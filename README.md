@@ -32,9 +32,7 @@ LifeOS 是一套运行在 Obsidian 之上的 Agent 知识系统：Obsidian 承�
 
 ### 学习状态首页
 
-`lifeos init` / `lifeos upgrade` 会在 Vault 根目录生成 `Dashboard.md`：动态展示掌握率 KPI、当月活动热力图、知识生命周期与遗忘曲线，以及待复习笔记、活跃项目清单。查询目录按 `lifeos.yaml` 注入，重命名目录后升级自动同步；中英文 Vault 分别安装对应语言版本。
-
-> **前置条件**：需 [Dataview](https://github.com/blacksmithgu/obsidian-dataview) 插件并开启 **Enable JavaScript Queries**（默认关闭）：设置（Settings）→ 第三方插件（Community plugins）→ Dataview 齿轮图标 → General 分组勾选。未开启时四个动态区块不渲染，仅剩两个 Dataview 表格；请勿直接编辑 `data.json`，Obsidian 运行时会覆盖。
+`Dashboard.md` 学习状态首页动态展示掌握率 KPI、当月活动热力图、知识生命周期与遗忘曲线，以及待复习笔记、活跃项目清单。需 [Dataview](https://github.com/blacksmithgu/obsidian-dataview) 插件并开启 **Enable JavaScript Queries**（设置 → 第三方插件 → Dataview 齿轮图标 → General 分组勾选），否则动态区块不渲染，仅剩两个 Dataview 表格。
 
 <p align="center">
   <img src="./assets/lifeos-dashboard.png" alt="LifeOS 学习状态首页" width="720" />
