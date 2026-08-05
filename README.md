@@ -24,6 +24,12 @@ LifeOS 的出发点很直接：把学习工作流、技能、模板、提示词�
 
 Agent 工具可以更换，但你的记忆与上下文无需重新开始：LifeOS 将它们沉淀在工作空间中，让你能够在不同 Agent 工具之间自由迁移，并持续延续已有的知识、偏好与工作进度。
 
+> 学习工作流全流程：灵感 → 研究 → 学习 → 复习 → 归档，记忆系统贯穿全程。
+
+<p align="center">
+  <img src="./assets/lifeos-workflow.svg" alt="LifeOS 学习工作流" width="560" />
+</p>
+
 ## 安装与初始化
 
 ```bash
@@ -70,12 +76,6 @@ lifeos upgrade /absolute/path/to/my-vault \
 回滚会替换整个 Vault；请先保存升级后仍需保留的内容。
 
 ## 核心功能
-
-> 学习工作流全流程：灵感 → 研究 → 学习 → 复习 → 归档，记忆系统贯穿全程。
-
-<p align="center">
-  <img src="./assets/lifeos-workflow.svg" alt="LifeOS 学习工作流" width="720" />
-</p>
 
 ### 目录结构
 

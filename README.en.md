@@ -22,6 +22,12 @@ LifeOS started from a simple goal: package learning workflows, skills, templates
 
 Agent tools may change, but your memory and context do not have to start over: LifeOS keeps them in the workspace, so you can move freely between different Agent tools while carrying forward your knowledge, preferences, and work progress.
 
+> Full workflow overview: inspiration → research → learning → review → archive, with the memory system spanning the entire journey.
+
+<p align="center">
+  <img src="./assets/lifeos-workflow.en.svg" alt="LifeOS Learning Workflow" width="560" />
+</p>
+
 ## Installation and Initialization
 
 ```bash
@@ -70,12 +76,6 @@ lifeos upgrade /absolute/path/to/my-vault \
 Rollback replaces the entire vault. Save any post-upgrade content you still need before running it.
 
 ## Core Features
-
-> Full workflow overview: inspiration → research → learning → review → archive, with the memory system spanning the entire journey.
-
-<p align="center">
-  <img src="./assets/lifeos-workflow.en.svg" alt="LifeOS Learning Workflow" width="720" />
-</p>
 
 ### Directory Structure
 
