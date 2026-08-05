@@ -1,7 +1,7 @@
 ---
 name: read-pdf
 description: "Extract PDF text, figures, formulas, and tables by page range or chapter for use by other LifeOS skills."
-version: 2.3.0
+version: 2.4.0
 dependencies:
   templates: []
   prompts: []

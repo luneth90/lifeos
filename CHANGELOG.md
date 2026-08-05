@@ -1,5 +1,18 @@
 # 更新日志
 
+## 2.4.0 (2026-08-05)
+
+### 新增
+
+- 学习状态首页资产：`lifeos init` / `lifeos upgrade` 在 Vault 根目录生成 `Dashboard.md`（需 Obsidian Dataview 插件），含掌握率 KPI 卡片、当月活动热力图、知识生命周期流转、艾宾浩斯遗忘曲线与待复习/活跃项目清单；中英文 Vault 分别安装对应语言版本
+- Dashboard 查询目录按 `lifeos.yaml` 配置注入（`{{knowledge_notes}}`、`{{projects}}` 等占位符在安装时解析），重命名目录后升级自动同步；首次升级以 smart-merge 接管根目录已有的临时/旧版 `Dashboard.md`（视为未修改）
+- `install-assets` 的 `SyncEntry` 支持注入内容（`content` 字段），供模板化资产安装复用
+
+### 测试
+
+- 新增 `installDashboard` 用例 4 个：zh 安装、en 安装（EN preset 目录映射）、smart-merge 跳过用户修改、首次升级接管 untracked 预览并写入托管记录
+- 全套 995 个测试通过
+
 ## 2.3.0 (2026-08-04)
 
 ### 新增
