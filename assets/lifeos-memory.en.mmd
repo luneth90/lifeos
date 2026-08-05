@@ -1,0 +1,11 @@
+flowchart TD
+    Agent["Agent Session"] --> Bootstrap["memory_bootstrap<br/>Layer 0 · global rules & profile"]
+    Bootstrap --> Route{"Scope Routing<br/>skill / project / repository<br/>tool / file / global"}
+    Route --> Context["memory_context<br/>load scoped rules"]
+    Context --> Query["memory_query<br/>retrieve sources on demand"]
+    Query --> Task["Execute Task"]
+    Task --> Log["memory_log<br/>rules · decisions · facts · profile"]
+    Task --> Notify["memory_notify<br/>sync file changes"]
+    Log -. takes effect next session .-> Bootstrap
+    Route -. governance .-> Rules["memory_rules<br/>audit · diagnose"]
+    Route -. governance .-> Forget["memory_forget<br/>soft-archive items"]

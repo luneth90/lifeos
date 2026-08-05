@@ -1,0 +1,11 @@
+flowchart TD
+    Agent["Agent 会话"] --> Bootstrap["memory_bootstrap<br/>Layer 0 · 全局规则与画像"]
+    Bootstrap --> Route{"作用域路由<br/>skill / project / repository<br/>tool / file / global"}
+    Route --> Context["memory_context<br/>加载局部规则"]
+    Context --> Query["memory_query<br/>按需检索原文"]
+    Query --> Task["执行任务"]
+    Task --> Log["memory_log<br/>规则 · 决策 · 事实 · 画像"]
+    Task --> Notify["memory_notify<br/>文件变更同步"]
+    Log -. 跨会话生效 .-> Bootstrap
+    Route -. 治理 .-> Rules["memory_rules<br/>审计 · 诊断"]
+    Route -. 治理 .-> Forget["memory_forget<br/>软归档条目"]

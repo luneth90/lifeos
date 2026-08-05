@@ -71,6 +71,12 @@ Rollback replaces the entire vault. Save any post-upgrade content you still need
 
 ## Core Features
 
+> Full workflow overview: inspiration → research → learning → review → archive, with the memory system spanning the entire journey.
+
+<p align="center">
+  <img src="./assets/lifeos-workflow.en.svg" alt="LifeOS Learning Workflow" width="720" />
+</p>
+
 ### Directory Structure
 
 A clear directory structure is the foundation of knowledge learning and research. LifeOS organizes 10 top-level directories around the learning process of "inspiration → research → learn → review → archive":
@@ -102,6 +108,12 @@ LifeOS provides a set of Agent skills designed around the learning process, conn
 - `/read-pdf`, `/revise`, `/archive`: move from source extraction, to review and reinforcement, to archiving
 
 ### Memory System
+
+> Seven MCP tools across three paths: the session read chain (bootstrap → context → query), the write chain (log / notify), and a governance side path (rules / forget); writes take effect on the next session via `memory_bootstrap`.
+
+<p align="center">
+  <img src="./assets/lifeos-memory.en.svg" alt="LifeOS Memory System" width="720" />
+</p>
 
 > The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
 

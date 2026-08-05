@@ -71,6 +71,12 @@ lifeos upgrade /absolute/path/to/my-vault \
 
 ## 核心功能
 
+> 学习工作流全流程：灵感 → 研究 → 学习 → 复习 → 归档，记忆系统贯穿全程。
+
+<p align="center">
+  <img src="./assets/lifeos-workflow.svg" alt="LifeOS 学习工作流" width="720" />
+</p>
+
 ### 目录结构
 
 清晰的目录结构是知识学习和研究的基础，LifeOS 围绕「灵感 → 研究 → 学习 → 复习 → 归档」的学习流程设计了 10 个顶层目录：
@@ -104,6 +110,12 @@ LifeOS 提供一组围绕学习过程设计的 Agent 技能，把”输入 -> �
 知识笔记的掌握状态只按 `draft → review → revised → mastered` 向前推进，不允许降级。
 
 ### 记忆系统
+
+> 7 个 MCP 工具分三路：会话读链路（bootstrap → context → query）、写入链路（log / notify）、治理旁路（rules / forget）；写入在下次会话经 `memory_bootstrap` 生效。
+
+<p align="center">
+  <img src="./assets/lifeos-memory.svg" alt="LifeOS 记忆系统" width="720" />
+</p>
 
 LifeOS 当前使用单一最终契约：`contract_version=2` 与 `Schema V4`。MCP 固定暴露 7 个工具，标准调用链如下：
 

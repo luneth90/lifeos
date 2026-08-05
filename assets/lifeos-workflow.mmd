@@ -1,0 +1,34 @@
+flowchart TD
+    subgraph Input["输入层"]
+        Capture["灵感捕获 · 每日规划<br/>/today · /brainstorm · /ask"]
+        Digest["主题订阅 · 信息周报<br/>/digest"]
+    end
+
+    subgraph Deep["深化层"]
+        Research["深度研究<br/>/research"]
+        Project["项目规划<br/>/project"]
+    end
+
+    subgraph Learn["知识层"]
+        Knowledge["知识沉淀<br/>/knowledge · 笔记 + 百科"]
+    end
+
+    subgraph Rev["巩固层"]
+        Revise["间隔复习 · 掌握度追踪<br/>/revise"]
+    end
+
+    subgraph ArchiveL["收尾层"]
+        Archive["定期归档<br/>/archive"]
+    end
+
+    Capture --> Research
+    Capture --> Project
+    Digest --> Research
+    Research --> Knowledge
+    Project --> Knowledge
+    Knowledge --> Revise
+    Revise --> Archive
+
+    Memory{{"记忆系统<br/>memory_* 7 工具 · 契约 V2<br/>跨会话持久"}}
+    Knowledge -.-> Memory
+    Revise -.-> Memory

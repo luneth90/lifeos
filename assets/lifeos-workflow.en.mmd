@@ -1,0 +1,34 @@
+flowchart TD
+    subgraph Input["Input"]
+        Capture["Capture & Daily Planning<br/>/today · /brainstorm · /ask"]
+        Digest["Topic Digest · Weekly Briefing<br/>/digest"]
+    end
+
+    subgraph Deep["Deepening"]
+        Research["Deep Research<br/>/research"]
+        Project["Project Planning<br/>/project"]
+    end
+
+    subgraph Learn["Knowledge"]
+        Knowledge["Knowledge Building<br/>/knowledge · notes + wiki"]
+    end
+
+    subgraph Rev["Review"]
+        Revise["Spaced Review · Mastery Tracking<br/>/revise"]
+    end
+
+    subgraph ArchiveL["Archiving"]
+        Archive["Periodic Archiving<br/>/archive"]
+    end
+
+    Capture --> Research
+    Capture --> Project
+    Digest --> Research
+    Research --> Knowledge
+    Project --> Knowledge
+    Knowledge --> Revise
+    Revise --> Archive
+
+    Memory{{"Memory System<br/>memory_* 7 tools · Contract V2<br/>persists across sessions"}}
+    Knowledge -.-> Memory
+    Revise -.-> Memory
