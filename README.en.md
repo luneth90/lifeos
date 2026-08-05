@@ -16,7 +16,7 @@
   <big><a href="./README.md">中文</a> | English</big>
 </p>
 
-LifeOS helps you grow scattered ideas into structured knowledge and truly master it, from quick captures, to brainstorming and deep research, to systematic project planning and knowledge notes, to spaced review and mastery tracking. The goal is not just building a knowledge base, but helping you understand, internalize, and command complex knowledge.
+LifeOS is an agent-native knowledge system that runs on top of Obsidian: Obsidian hosts a plain-Markdown knowledge base (local, portable, lock-in free), agents provide skills, prompts, and the MCP execution engine, and LifeOS binds them into a complete capture → research → learn → review → archive loop. Agent tools may change, but your memory and context do not have to start over: rules, decisions, and preferences live in your workspace and keep working across agents and sessions.
 
 > Full workflow overview: inspiration → research → learning → review → archive, with the memory system spanning the entire journey.
 
@@ -29,12 +29,6 @@ LifeOS helps you grow scattered ideas into structured knowledge and truly master
 <p align="center">
   <img src="./assets/lifeos-memory.en.svg" alt="LifeOS Memory System" width="720" />
 </p>
-
-## Why Build LifeOS?
-
-LifeOS started from a simple goal: package learning workflows, skills, templates, prompts, and a memory system into one complete setup you can use immediately. Instead of assembling your own toolchain from scratch or jumping between disconnected tools, you can initialize once, start working right away, and keep accumulating knowledge, process, and preferences as you go.
-
-Agent tools may change, but your memory and context do not have to start over: LifeOS keeps them in the workspace, so you can move freely between different Agent tools while carrying forward your knowledge, preferences, and work progress.
 
 ## Installation and Initialization
 
