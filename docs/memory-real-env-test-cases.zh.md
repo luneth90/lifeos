@@ -126,13 +126,13 @@ aliases: []
 | 编号 | 分类 | 绑定测试名 | 预期与当前状态 |
 |---|---|---|---|
 | H-01 | 版本夹具 | `[版本夹具] H-01 数据库使用 INCREMENTAL auto_vacuum` | `auto_vacuum=2` |
-| H-02 | 版本夹具 | `[版本夹具] H-02 freelist 占 page_count 比例低于 5%` | 使用专属临时 Vault，在用例内先制造超过 50% 的 freelist；维护后比例低于 5%，普通通过 |
-| H-03 | 版本夹具 | `[版本夹具] H-03 启动维护后 WAL 小于 1MB` | WAL 小于 1MB |
-| H-04 | 版本夹具 | `[版本夹具] H-04 doctor 的数据库健康指标无告警` | 三项数据库指标为 pass |
+| H-02 | 版本夹具 | `[版本夹具] H-02 等待例行维护终态，并由显式压缩满足 freelist/WAL 验收` | 使用专属临时 Vault 制造碎片；bootstrap 先返回 `pending`，通过维护 Promise 等待 `succeeded` 终态；随后重新制造碎片，只调用 `doctor --compact-db`，验收 freelist 比例低于 5% 且 WAL 为 0 或不存在 |
+| H-03 | 版本夹具 | `[版本夹具] H-03 启动维护后 WAL 小于 1MB` | 例行非截断 checkpoint 后 WAL 小于 1MB |
+| H-04 | 版本夹具 | `[版本夹具] H-04 doctor 的数据库健康指标无告警` | freelist 同时达到 25% 与 64 MiB 才告警；夹具三项数据库指标为 pass |
 | H-05 | 版本夹具 | `[版本夹具] H-05 中文与英文 bm25 场景将目标排入前三` | 同构与 Lagrange 目标位于前三 |
 | H-06 | 版本夹具 | `[版本夹具] H-06 未知工具诊断保留 candidates 数组` | 当前缺少 candidates，以 `it.fails` 保留 |
 | H-07 | 版本夹具 | `[版本夹具] H-07 bootstrap 仓库白名单来自隔离配置` | 精确等于 `learningapp, lifeos` |
-| H-08 | 版本夹具 | `[版本夹具] H-08 FTS5 optimize 后中英文查询均可执行` | 两次查询无 FTS5 错误 |
+| H-08 | 版本夹具 | `[版本夹具] H-08 例行有限 FTS merge 后中英文查询均可执行` | 例行路径不执行完整 optimize；有限 merge 后两次查询无 FTS5 错误 |
 | H-09 | 版本夹具 | `[版本夹具] H-09 正文深处 4000 字窗口内关键词可召回` | 600 至 4000 字范围的唯一术语可召回 |
 
 ## 4. C-06 宿主跨会话证据协议
@@ -159,4 +159,4 @@ npm run typecheck
 npx biome check tests/helpers/memory-real-env-vault.ts tests/e2e/memory-real-env-v2.test.ts
 ```
 
-聚焦命令连续两次必须得到相同统计。D-06 的生产缺陷已修复并改为普通测试；H-06 仍以 `it.fails` 保留，C-06 只有取得宿主日志后才能记录为通过。H-02 还必须使用 `-t H-02` 单独运行，证明结果不依赖前序用例制造碎片。
+真实环境完整命令连续两次必须得到相同统计。D-06 的生产缺陷已修复并改为普通测试；H-06 仍以 `it.fails` 保留，C-06 只有取得宿主日志后才能记录为通过。H-02 还必须使用 `-t H-02` 单独运行，证明结果不依赖前序用例制造碎片；等待必须使用 runtime 暴露的维护 Promise 与有限状态，禁止定时休眠。例行路径只允许 `incremental_vacuum`、有限 FTS merge 与非截断 checkpoint；只有显式 `doctor --compact-db` 执行完整压缩、FTS optimize 与 WAL truncate。

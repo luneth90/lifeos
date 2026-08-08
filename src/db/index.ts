@@ -1,35 +1,92 @@
+import { existsSync, statSync } from 'node:fs';
 import Database from 'better-sqlite3';
+import type { DbMaintenanceMetrics, DbMaintenanceMode, DbMaintenanceReport } from '../types.js';
 
-/**
- * Reclaim physical space and compact the FTS index for a database.
- *
- * Runs, in order: PRAGMA incremental_vacuum (reclaims the entire freelist),
- * the FTS5 'optimize' command (merges fragmented segments), and
- * PRAGMA wal_checkpoint(TRUNCATE) (flushes the WAL and truncates it to zero
- * bytes). Returns the freelist page count before/after and whether the WAL
- * file was truncated.
- */
-export function runDbMaintenance(db: Database.Database): {
-	freelistBefore: number;
-	freelistAfter: number;
-	walTruncated: boolean;
-} {
-	const freelistBefore = db.pragma('freelist_count', { simple: true }) as number;
-	db.pragma('incremental_vacuum');
-	db.prepare("INSERT INTO vault_fts(vault_fts) VALUES('optimize')").run();
-	const checkpoint = db.pragma('wal_checkpoint(TRUNCATE)') as Array<{
-		busy: number;
-		log: number;
-		checkpointed: number;
-	}>;
-	const freelistAfter = db.pragma('freelist_count', { simple: true }) as number;
-	// With TRUNCATE mode, a non-busy checkpoint guarantees the WAL file was
-	// truncated to zero bytes.
+function databasePath(db: Database.Database): string | null {
+	const databases = db.pragma('database_list') as Array<{ name: string; file: string }>;
+	const main = databases.find((entry) => entry.name === 'main');
+	return main?.file || null;
+}
+
+export function collectDbMaintenanceMetrics(db: Database.Database): DbMaintenanceMetrics {
+	const pageCount = db.pragma('page_count', { simple: true }) as number;
+	const pageSize = db.pragma('page_size', { simple: true }) as number;
+	const freelistCount = db.pragma('freelist_count', { simple: true }) as number;
+	const path = databasePath(db);
+	const walPath = path ? `${path}-wal` : null;
+	const walBytes = walPath ? (existsSync(walPath) ? statSync(walPath).size : 0) : null;
+	const walPages =
+		walBytes === null ? null : walBytes <= 32 ? 0 : Math.floor((walBytes - 32) / (pageSize + 24));
 	return {
-		freelistBefore,
-		freelistAfter,
-		walTruncated: checkpoint[0] !== undefined && checkpoint[0].busy === 0,
+		pageCount,
+		freelistCount,
+		freelistBytes: freelistCount * pageSize,
+		walPages,
+		walBytes,
 	};
+}
+
+function runMaintenance(
+	db: Database.Database,
+	mode: DbMaintenanceMode,
+	operation: (before: DbMaintenanceMetrics) => void,
+): DbMaintenanceReport {
+	const started = Date.now();
+	const startedAt = new Date(started).toISOString();
+	let before: DbMaintenanceMetrics | null = null;
+	try {
+		before = collectDbMaintenanceMetrics(db);
+		operation(before);
+		const after = collectDbMaintenanceMetrics(db);
+		const finished = Date.now();
+		return {
+			mode,
+			state: 'succeeded',
+			startedAt,
+			finishedAt: new Date(finished).toISOString(),
+			durationMs: finished - started,
+			before,
+			after,
+			error: null,
+		};
+	} catch (error) {
+		const finished = Date.now();
+		let after: DbMaintenanceMetrics | null = null;
+		try {
+			after = collectDbMaintenanceMetrics(db);
+		} catch {
+			// 指标读取失败时保留 null，避免用零值伪装未知状态。
+		}
+		return {
+			mode,
+			state: 'failed',
+			startedAt,
+			finishedAt: new Date(finished).toISOString(),
+			durationMs: finished - started,
+			before,
+			after,
+			error: error instanceof Error ? error.message : String(error),
+		};
+	}
+}
+
+/** 例行维护：回收 freelist、有限合并 FTS 段，并执行非截断 checkpoint。 */
+export function runDbMaintenance(db: Database.Database): DbMaintenanceReport {
+	return runMaintenance(db, 'routine', (before) => {
+		db.pragma(`incremental_vacuum(${before.freelistCount})`);
+		db.prepare("INSERT INTO vault_fts(vault_fts, rank) VALUES('merge', 4)").run();
+		db.pragma('wal_checkpoint(PASSIVE)');
+	});
+}
+
+/** 显式压缩：完整重建数据库、优化 FTS，并截断 WAL。仅供明确的 compact 路径调用。 */
+export function runDbCompaction(db: Database.Database): DbMaintenanceReport {
+	return runMaintenance(db, 'explicit', () => {
+		db.pragma('auto_vacuum = INCREMENTAL');
+		db.prepare("INSERT INTO vault_fts(vault_fts) VALUES('optimize')").run();
+		db.exec('VACUUM');
+		db.pragma('wal_checkpoint(TRUNCATE)');
+	});
 }
 
 /**

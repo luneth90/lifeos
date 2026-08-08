@@ -1,6 +1,7 @@
 import { symlinkSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { memoryBootstrapOutputSchema } from '../src/tool-schemas.js';
 import { type TempVault, createTempVault } from './setup.js';
 
 function startupResult(text = 'Layer0', snapshotId = 'ctx-test') {
@@ -38,7 +39,45 @@ function startupResult(text = 'Layer0', snapshotId = 'ctx-test') {
 			updatedSinceLast: 0,
 			unchanged: 0,
 			removed: 0,
+			maintenanceState: 'pending',
 			maintenancePending: true,
+		},
+	};
+}
+
+function successfulMaintenanceResult() {
+	return {
+		vaultStats: {
+			totalFiles: 0,
+			updatedSinceLast: 0,
+			unchanged: 0,
+			removed: 0,
+			maintenanceState: 'succeeded' as const,
+			maintenancePending: false as const,
+		},
+		activeDocs: [],
+		impact: { taskboardChanged: false, profileChanged: false, affectedScopes: [] },
+		maintenance: {
+			mode: 'routine' as const,
+			state: 'succeeded' as const,
+			startedAt: '2026-08-09T00:00:00.000Z',
+			finishedAt: '2026-08-09T00:00:00.010Z',
+			durationMs: 10,
+			before: {
+				pageCount: 100,
+				freelistCount: 30,
+				freelistBytes: 122_880,
+				walPages: 4,
+				walBytes: 16_512,
+			},
+			after: {
+				pageCount: 80,
+				freelistCount: 0,
+				freelistBytes: 0,
+				walPages: 0,
+				walBytes: 0,
+			},
+			error: null,
 		},
 	};
 }
@@ -93,6 +132,7 @@ describe('server 最终 V2/V4 契约', () => {
 		vault = createTempVault();
 		for (const mock of Object.values(coreMock)) mock.mockClear();
 		coreMock.memoryStartup.mockReturnValue(startupResult());
+		coreMock.memoryStartupMaintenance.mockReturnValue(successfulMaintenanceResult());
 		testing = await loadServerTesting();
 	});
 
@@ -136,7 +176,123 @@ describe('server 最终 V2/V4 契约', () => {
 					obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
 				},
 			},
+			db_maintenance: {
+				mode: 'routine',
+				state: 'pending',
+				started_at: null,
+				finished_at: null,
+				duration_ms: null,
+				before: null,
+				after: null,
+				error: null,
+			},
 		});
+	});
+
+	it('bootstrap 维护只经历 pending → running → succeeded，且等待同一终态 Promise', async () => {
+		vi.useFakeTimers();
+		let finishMaintenance!: (value: ReturnType<typeof successfulMaintenanceResult>) => void;
+		const maintenance = new Promise<ReturnType<typeof successfulMaintenanceResult>>((resolve) => {
+			finishMaintenance = resolve;
+		});
+		coreMock.memoryStartupMaintenance.mockReturnValueOnce(
+			maintenance as unknown as ReturnType<typeof successfulMaintenanceResult>,
+		);
+
+		const initial = testing.callMemoryBootstrap({ vault_root: vault.root });
+		expect(initial.db_maintenance).toMatchObject({
+			state: 'pending',
+			started_at: null,
+			finished_at: null,
+		});
+
+		vi.advanceTimersToNextTimer();
+		await Promise.resolve();
+		const running = testing.callMemoryBootstrap({ vault_root: vault.root });
+		expect(running.db_maintenance).toMatchObject({
+			state: 'running',
+			started_at: expect.any(String),
+			finished_at: null,
+			duration_ms: null,
+			before: null,
+			after: null,
+			error: null,
+		});
+
+		finishMaintenance(successfulMaintenanceResult());
+		await testing.waitForMaintenance({ vault_root: vault.root });
+		const finished = testing.callMemoryBootstrap({ vault_root: vault.root });
+		expect(finished.db_maintenance).toMatchObject({
+			state: 'succeeded',
+			started_at: running.db_maintenance.started_at,
+			finished_at: expect.any(String),
+			duration_ms: expect.any(Number),
+			before: {
+				page_count: 100,
+				freelist_count: 30,
+				freelist_bytes: 122_880,
+				wal_pages: 4,
+				wal_bytes: 16_512,
+			},
+			after: {
+				page_count: 80,
+				freelist_count: 0,
+				freelist_bytes: 0,
+				wal_pages: 0,
+				wal_bytes: 0,
+			},
+			error: null,
+		});
+		expect(Date.parse(finished.db_maintenance.finished_at as string)).toBeGreaterThanOrEqual(
+			Date.parse(finished.db_maintenance.started_at as string),
+		);
+		expect(coreMock.memoryStartupMaintenance).toHaveBeenCalledTimes(1);
+	});
+
+	it('同一 Vault 并发 bootstrap 共享维护任务，不同 Vault 各执行一次', async () => {
+		vi.useFakeTimers();
+		expect(typeof testing.waitForMaintenance).toBe('function');
+		const other = createTempVault();
+		try {
+			const first = testing.callMemoryBootstrap({ vault_root: vault.root });
+			const repeated = testing.callMemoryBootstrap({ vault_root: vault.root });
+			const isolated = testing.callMemoryBootstrap({ vault_root: other.root });
+			expect(first.db_maintenance.state).toBe('pending');
+			expect(repeated.db_maintenance.state).toBe('pending');
+			expect(isolated.db_maintenance.state).toBe('pending');
+
+			vi.runAllTimers();
+			await Promise.all([
+				testing.waitForMaintenance({ vault_root: vault.root }),
+				testing.waitForMaintenance({ vault_root: other.root }),
+			]);
+			expect(coreMock.memoryStartupMaintenance).toHaveBeenCalledTimes(2);
+			expect(testing.runtimeCount()).toBe(2);
+		} finally {
+			other.cleanup();
+		}
+	});
+
+	it('维护失败保留错误详情并进入 failed 终态，不伪装成功', async () => {
+		vi.useFakeTimers();
+		expect(typeof testing.waitForMaintenance).toBe('function');
+		coreMock.memoryStartupMaintenance.mockImplementationOnce(() => {
+			throw new Error('routine maintenance exploded');
+		});
+		testing.callMemoryBootstrap({ vault_root: vault.root });
+		vi.runAllTimers();
+		await testing.waitForMaintenance({ vault_root: vault.root });
+
+		expect(testing.callMemoryBootstrap({ vault_root: vault.root }).db_maintenance).toMatchObject({
+			state: 'failed',
+			started_at: expect.any(String),
+			finished_at: expect.any(String),
+			duration_ms: expect.any(Number),
+			before: null,
+			after: null,
+			error: 'routine maintenance exploded',
+		});
+		expect(coreMock.memoryStartupMaintenance).toHaveBeenCalledTimes(1);
 	});
 
 	it('旧客户端在任何 Vault、数据库或 startup 动作前硬失败', () => {
@@ -327,7 +483,7 @@ describe('server 最终 V2/V4 契约', () => {
 		expect(coreMock.memoryStartup).toHaveBeenCalledTimes(2);
 	});
 
-	it('成功工具请求会更新 runtime dbPath，后台维护使用最新路径', () => {
+	it('成功工具请求会更新 runtime dbPath，后台维护使用最新路径', async () => {
 		vi.useFakeTimers();
 		const initialDbPath = join(vault.root, 'initial.db');
 		const currentDbPath = join(vault.root, 'current.db');
@@ -340,6 +496,7 @@ describe('server 最终 V2/V4 契约', () => {
 			query: '最新路径',
 		});
 		vi.runAllTimers();
+		await testing.waitForMaintenance({ vault_root: vault.root });
 
 		expect(coreMock.memoryStartupMaintenance).toHaveBeenCalledTimes(1);
 		expect(coreMock.memoryStartupMaintenance).toHaveBeenCalledWith({
@@ -349,7 +506,7 @@ describe('server 最终 V2/V4 契约', () => {
 		});
 	});
 
-	it('成功刷新会更新 runtime dbPath，后台维护使用刷新请求路径', () => {
+	it('成功刷新会更新 runtime dbPath，后台维护使用刷新请求路径', async () => {
 		vi.useFakeTimers();
 		const initialDbPath = join(vault.root, 'initial.db');
 		const refreshedDbPath = join(vault.root, 'refreshed.db');
@@ -357,6 +514,7 @@ describe('server 最终 V2/V4 契约', () => {
 
 		testing.callMemoryBootstrap({ vault_root: vault.root, db_path: refreshedDbPath });
 		vi.runAllTimers();
+		await testing.waitForMaintenance({ vault_root: vault.root });
 
 		expect(coreMock.memoryStartup).toHaveBeenNthCalledWith(2, {
 			dbPath: refreshedDbPath,
@@ -444,6 +602,68 @@ describe('server 最终 V2/V4 契约', () => {
 		expect(() => mod.memoryScopeSchema.parse({ type: 'global', key: 'default' })).toThrow();
 		expect(() => mod.memoryScopeSchema.parse({ type: 'project', key: '' })).toThrow();
 		expect(() => mod.memoryScopeSchema.parse({ type: 'legacy', key: 'x' })).toThrow();
+	});
+
+	it('bootstrap 严格结果 schema 精确校验维护状态与可空指标', () => {
+		const output = {
+			contract_version: 2,
+			schema_version: 4,
+			status: 'ok',
+			startup_ran: true,
+			layer0_refreshed: false,
+			snapshot_id: 'ctx-schema',
+			_layer0: 'Layer0',
+			layer0_meta: {
+				token_estimate: 1,
+				token_budget: 1800,
+				global_items_total: 0,
+				global_items_loaded: 0,
+				omitted_slot_keys: [],
+				oversized_items: [],
+				warnings: [],
+				sections: {
+					global_rules: { total: 0, loaded: 0, omitted: 0 },
+					taskboard_focus: { total: 0, loaded: 0, omitted: 0 },
+					userprofile_summary: { total: 0, loaded: 0, omitted: 0 },
+					revision_reminder: { total: 0, loaded: 0, omitted: 0 },
+				},
+			},
+			scope_hints: {
+				available_projects: [],
+				available_repositories: [],
+				available_skills: [],
+				available_tools: [],
+				tool_bindings: {},
+			},
+			db_maintenance: {
+				mode: 'routine',
+				state: 'pending',
+				started_at: null,
+				finished_at: null,
+				duration_ms: null,
+				before: null,
+				after: null,
+				error: null,
+			},
+		};
+
+		expect(memoryBootstrapOutputSchema.parse(output)).toEqual(output);
+		expect(() =>
+			memoryBootstrapOutputSchema.parse({
+				...output,
+				db_maintenance: { ...output.db_maintenance, state: 'unknown' },
+			}),
+		).toThrow();
+		expect(() =>
+			memoryBootstrapOutputSchema.parse({
+				...output,
+				db_maintenance: {
+					...output.db_maintenance,
+					started_at: '2026-08-09T00:00:00.000Z',
+				},
+			}),
+		).toThrow();
+		expect(() => memoryBootstrapOutputSchema.parse({ ...output, extra: true })).toThrow();
 	});
 
 	it('toToolResult 以同一份 JSON 值生成结构化结果和兼容文本', async () => {

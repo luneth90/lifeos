@@ -43,6 +43,7 @@ describe('V4 启动路径', () => {
 			updatedSinceLast: 0,
 			unchanged: 0,
 			removed: 0,
+			maintenanceState: 'pending',
 			maintenancePending: true,
 		});
 		expect(db.prepare('SELECT * FROM vault_index').all()).toEqual([]);
@@ -151,7 +152,18 @@ describe('V4 启动维护路径', () => {
 			updatedSinceLast: 1,
 			unchanged: 0,
 			removed: 0,
+			maintenanceState: 'succeeded',
 			maintenancePending: false,
+		});
+		expect(result.maintenance).toMatchObject({
+			mode: 'routine',
+			state: 'succeeded',
+			startedAt: expect.any(String),
+			finishedAt: expect.any(String),
+			durationMs: expect.any(Number),
+			before: expect.any(Object),
+			after: expect.any(Object),
+			error: null,
 		});
 		expect(result.activeDocs.map((item) => item.target)).toEqual(['TaskBoard', 'UserProfile']);
 		expect(result.activeDocs.every((item) => item.changed && existsSync(item.path))).toBe(true);
@@ -177,6 +189,7 @@ describe('V4 启动维护路径', () => {
 			updatedSinceLast: 0,
 			unchanged: 1,
 			removed: 0,
+			maintenanceState: 'succeeded',
 			maintenancePending: false,
 		});
 		expect(second.activeDocs.every((item) => item.changed === false)).toBe(true);

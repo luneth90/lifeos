@@ -71,6 +71,60 @@ const scopeHintsSchema = z
 	})
 	.strict();
 
+const dbMaintenanceMetricsSchema = z
+	.object({
+		page_count: z.number().int().nonnegative(),
+		freelist_count: z.number().int().nonnegative(),
+		freelist_bytes: z.number().int().nonnegative(),
+		wal_pages: z.number().int().nonnegative().nullable(),
+		wal_bytes: z.number().int().nonnegative().nullable(),
+	})
+	.strict();
+
+const dbMaintenanceReportSchema = z
+	.object({
+		mode: z.enum(['routine', 'explicit']),
+		state: z.enum(['pending', 'running', 'succeeded', 'failed']),
+		started_at: z.string().nullable(),
+		finished_at: z.string().nullable(),
+		duration_ms: z.number().int().nonnegative().nullable(),
+		before: dbMaintenanceMetricsSchema.nullable(),
+		after: dbMaintenanceMetricsSchema.nullable(),
+		error: z.string().nullable(),
+	})
+	.strict()
+	.superRefine((report, ctx) => {
+		const terminalTimesPresent =
+			report.started_at !== null && report.finished_at !== null && report.duration_ms !== null;
+		const invalid =
+			report.state === 'pending'
+				? report.started_at !== null ||
+					report.finished_at !== null ||
+					report.duration_ms !== null ||
+					report.before !== null ||
+					report.after !== null ||
+					report.error !== null
+				: report.state === 'running'
+					? report.started_at === null ||
+						report.finished_at !== null ||
+						report.duration_ms !== null ||
+						report.before !== null ||
+						report.after !== null ||
+						report.error !== null
+					: report.state === 'succeeded'
+						? !terminalTimesPresent ||
+							report.before === null ||
+							report.after === null ||
+							report.error !== null
+						: !terminalTimesPresent || report.error === null;
+		if (invalid) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: `数据库维护状态 ${report.state} 与时间、指标或错误字段不一致`,
+			});
+		}
+	});
+
 const bootstrapSuccessOutputSchema = z
 	.object({
 		contract_version: z.literal(2),
@@ -82,6 +136,7 @@ const bootstrapSuccessOutputSchema = z
 		_layer0: z.string(),
 		layer0_meta: layer0MetaSchema,
 		scope_hints: scopeHintsSchema,
+		db_maintenance: dbMaintenanceReportSchema,
 	})
 	.strict();
 
@@ -96,6 +151,7 @@ const bootstrapErrorOutputSchema = z
 		_layer0: z.literal(''),
 		layer0_meta: z.null(),
 		scope_hints: z.null(),
+		db_maintenance: z.null(),
 		startup_error: z.string(),
 	})
 	.strict();
@@ -272,6 +328,7 @@ const memoryBootstrapMcpOutputSchema = z
 		_layer0: z.string(),
 		layer0_meta: layer0MetaSchema.nullable(),
 		scope_hints: scopeHintsSchema.nullable(),
+		db_maintenance: dbMaintenanceReportSchema.nullable(),
 		startup_error: z.string().optional(),
 	})
 	.strict();

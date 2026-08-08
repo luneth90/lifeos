@@ -23,6 +23,7 @@ import {
 	memoryStartupMaintenance,
 } from '../../src/core.js';
 import { CONTRACT_VERSION } from '../../src/runtime-contract.js';
+import { __testing as serverTesting } from '../../src/server.js';
 import {
 	assertNotProductionVault,
 	createIsolatedMemoryVault,
@@ -822,7 +823,7 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		}
 	});
 
-	it('[版本夹具] H-02 freelist 占 page_count 比例低于 5%', () => {
+	it('[版本夹具] H-02 等待例行维护终态，并由显式压缩满足 freelist/WAL 验收', async () => {
 		const maintenanceVault = createIsolatedMemoryVault();
 		const sharedVaultRoot = process.env.LIFEOS_VAULT_ROOT;
 		process.env.LIFEOS_VAULT_ROOT = maintenanceVault.root;
@@ -833,7 +834,6 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		};
 		try {
 			assertNotProductionVault(maintenanceVault.root);
-			memoryStartupMaintenance(maintenanceRuntime);
 			const loadDb = new Database(maintenanceVault.dbPath);
 			let before: { pages: number; free: number };
 			try {
@@ -853,7 +853,49 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 			expect(before.pages).toBeGreaterThan(0);
 			expect(before.free / before.pages).toBeGreaterThan(0.5);
 
-			memoryStartupMaintenance(maintenanceRuntime);
+			const initial = serverTesting.callMemoryBootstrap({
+				db_path: maintenanceVault.dbPath,
+				vault_root: maintenanceVault.root,
+			});
+			expect(initial.db_maintenance).toMatchObject({ state: 'pending' });
+			await serverTesting.waitForMaintenance({ vault_root: maintenanceVault.root });
+			const routineTerminal = serverTesting.callMemoryBootstrap({
+				db_path: maintenanceVault.dbPath,
+				vault_root: maintenanceVault.root,
+			});
+			expect(routineTerminal.db_maintenance).toMatchObject({
+				mode: 'routine',
+				state: 'succeeded',
+				started_at: expect.any(String),
+				finished_at: expect.any(String),
+				duration_ms: expect.any(Number),
+				before: expect.any(Object),
+				after: expect.any(Object),
+				error: null,
+			});
+			expect(routineTerminal.db_maintenance.before.freelist_count).toBeGreaterThan(0);
+			expect(routineTerminal.db_maintenance.after.freelist_count).toBeLessThan(
+				routineTerminal.db_maintenance.before.freelist_count,
+			);
+
+			const fragmentAgain = new Database(maintenanceVault.dbPath);
+			try {
+				fragmentAgain.exec('CREATE TABLE h02_explicit(payload TEXT NOT NULL)');
+				const insert = fragmentAgain.prepare('INSERT INTO h02_explicit(payload) VALUES (?)');
+				fragmentAgain.transaction(() => {
+					for (let index = 0; index < 500; index += 1) insert.run('y'.repeat(8192));
+				})();
+				fragmentAgain.exec('DELETE FROM h02_explicit; DROP TABLE h02_explicit');
+			} finally {
+				fragmentAgain.close();
+			}
+			const compactResult = await doctor([maintenanceVault.root, '--compact-db']);
+			expect(compactResult.checks.find((check) => check.name === 'database compact')).toMatchObject(
+				{
+					status: 'pass',
+					detail: expect.stringContaining('state=succeeded'),
+				},
+			);
 			const maintainedDb = new Database(maintenanceVault.dbPath, {
 				readonly: true,
 				fileMustExist: true,
@@ -864,12 +906,14 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 					free: maintainedDb.pragma('freelist_count', { simple: true }) as number,
 				};
 				expect(after.pages).toBeGreaterThan(0);
-				expect(after.free).toBeLessThan(before.free);
 				expect(after.free / after.pages).toBeLessThan(0.05);
 			} finally {
 				maintainedDb.close();
 			}
+			const walPath = `${maintenanceVault.dbPath}-wal`;
+			expect(existsSync(walPath) ? statSync(walPath).size : 0).toBe(0);
 		} finally {
+			serverTesting.resetState();
 			_resetDefaultInstance();
 			if (sharedVaultRoot === undefined) {
 				Reflect.deleteProperty(process.env, 'LIFEOS_VAULT_ROOT');
@@ -923,7 +967,7 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		]);
 	});
 
-	it('[版本夹具] H-08 FTS5 optimize 后中英文查询均可执行', () => {
+	it('[版本夹具] H-08 例行有限 FTS merge 后中英文查询均可执行', () => {
 		memoryStartupMaintenance(runtime());
 		expect(memoryQuery({ ...runtime(), query: '群', limit: 20 }).results.length).toBeGreaterThan(0);
 		expect(

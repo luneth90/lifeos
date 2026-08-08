@@ -52,6 +52,7 @@ export function runStartup(
 			updatedSinceLast: 0,
 			unchanged: 0,
 			removed: 0,
+			maintenanceState: 'pending',
 			maintenancePending: true,
 		},
 		dictLoaded,
@@ -68,15 +69,17 @@ export function runStartupMaintenance(
 	const scan = fullScan(vaultRoot, db, config);
 	const taskboard = refreshTaskboard(db, vaultRoot, { config });
 	const userprofile = refreshUserprofile(db, vaultRoot, { config });
-	runDbMaintenance(db);
+	const maintenance = runDbMaintenance(db);
 	return {
 		vaultStats: {
 			totalFiles: countRows(db, 'vault_index'),
 			updatedSinceLast: scan.indexed,
 			unchanged: scan.unchanged,
 			removed: scan.removed,
+			maintenanceState: maintenance.state === 'succeeded' ? 'succeeded' : 'failed',
 			maintenancePending: false,
 		},
+		maintenance,
 		activeDocs: [
 			{ target: 'TaskBoard', changed: taskboard.changed, path: taskboard.path },
 			{ target: 'UserProfile', changed: userprofile.changed, path: userprofile.path },

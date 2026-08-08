@@ -5,6 +5,7 @@ import Database from 'better-sqlite3';
 import { parse as parseYaml } from 'yaml';
 import { ConfigValidationError, resolveConfig } from '../../config.js';
 import type { LifeOSConfig, VaultConfig } from '../../config.js';
+import { runDbCompaction } from '../../db/index.js';
 import { validateRuntimeContract } from '../../runtime-contract.js';
 import {
 	describeGlobalHardSafety,
@@ -18,6 +19,26 @@ import { bold, green, log, parseArgs, red, yellow } from '../utils/ui.js';
 import { VERSION } from '../utils/version.js';
 
 export const MIN_NODE_VERSION = '24.14.1';
+const FREELIST_RATIO_WARNING_THRESHOLD = 0.25;
+const FREELIST_BYTES_WARNING_THRESHOLD = 64 * 1024 * 1024;
+
+export function assessFreelistHealth(metrics: {
+	pageCount: number;
+	freelistCount: number;
+	pageSize: number;
+}): { status: 'pass' | 'warn'; freelistRatio: number; freelistBytes: number } {
+	const freelistRatio = metrics.pageCount > 0 ? metrics.freelistCount / metrics.pageCount : 0;
+	const freelistBytes = metrics.freelistCount * metrics.pageSize;
+	return {
+		status:
+			freelistRatio >= FREELIST_RATIO_WARNING_THRESHOLD &&
+			freelistBytes >= FREELIST_BYTES_WARNING_THRESHOLD
+				? 'warn'
+				: 'pass',
+		freelistRatio,
+		freelistBytes,
+	};
+}
 
 export interface DoctorResult {
 	passed: boolean;
@@ -344,11 +365,12 @@ function checkDbHealth(
 		try {
 			const pageCount = db.pragma('page_count', { simple: true }) as number;
 			const freelistCount = db.pragma('freelist_count', { simple: true }) as number;
-			const freelistRatio = pageCount > 0 ? freelistCount / pageCount : 0;
+			const pageSize = db.pragma('page_size', { simple: true }) as number;
+			const health = assessFreelistHealth({ pageCount, freelistCount, pageSize });
 			check(
 				'database freelist',
-				freelistRatio > 0.5 ? 'warn' : 'pass',
-				`${freelistCount}/${pageCount} pages (${Math.round(freelistRatio * 100)}%)`,
+				health.status,
+				`${freelistCount}/${pageCount} pages (${Math.round(health.freelistRatio * 100)}%; ${(health.freelistBytes / (1024 * 1024)).toFixed(1)} MiB)`,
 			);
 		} catch {
 			check('database freelist', 'fail', 'pragma failed');
@@ -611,19 +633,15 @@ function runDatabaseMaintenance(
 		try {
 			const db = new Database(dbPath);
 			try {
-				const beforePages = db.pragma('page_count', { simple: true }) as number;
-				const beforeFreelist = db.pragma('freelist_count', { simple: true }) as number;
-				// Enabling incremental auto_vacuum first makes the rebuilt file
-				// use incremental vacuum going forward, so runtime maintenance
-				// only needs PRAGMA incremental_vacuum afterwards.
-				db.pragma('auto_vacuum = INCREMENTAL');
-				db.exec('VACUUM');
-				const afterPages = db.pragma('page_count', { simple: true }) as number;
-				const afterFreelist = db.pragma('freelist_count', { simple: true }) as number;
+				const report = runDbCompaction(db);
+				const before = report.before;
+				const after = report.after;
 				check(
 					'database compact',
-					'pass',
-					`pages ${beforePages} → ${afterPages}, freelist ${beforeFreelist} → ${afterFreelist}`,
+					report.state === 'succeeded' ? 'pass' : 'fail',
+					report.state === 'succeeded'
+						? `state=succeeded; pages ${before?.pageCount ?? 'unknown'} → ${after?.pageCount ?? 'unknown'}, freelist ${before?.freelistCount ?? 'unknown'} → ${after?.freelistCount ?? 'unknown'}, WAL=${after?.walBytes ?? 'unknown'} bytes`
+						: `state=failed; ${report.error ?? 'unknown error'}`,
 				);
 			} finally {
 				db.close();

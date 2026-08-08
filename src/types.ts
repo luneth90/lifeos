@@ -71,6 +71,29 @@ export interface ScopeCatalog {
 	files: ScopeCatalogFile[];
 }
 
+export type MaintenanceState = 'pending' | 'running' | 'succeeded' | 'failed';
+
+export type DbMaintenanceMode = 'routine' | 'explicit';
+
+export interface DbMaintenanceMetrics {
+	pageCount: number;
+	freelistCount: number;
+	freelistBytes: number;
+	walPages: number | null;
+	walBytes: number | null;
+}
+
+export interface DbMaintenanceReport {
+	mode: DbMaintenanceMode;
+	state: MaintenanceState;
+	startedAt: string | null;
+	finishedAt: string | null;
+	durationMs: number | null;
+	before: DbMaintenanceMetrics | null;
+	after: DbMaintenanceMetrics | null;
+	error: string | null;
+}
+
 // ─── DB row interfaces ────────────────────────────────────────────────────────
 // These map 1:1 to the SQLite column names (snake_case) as returned by better-sqlite3.
 
@@ -222,6 +245,8 @@ export interface StartupResult {
 		updatedSinceLast: number;
 		unchanged: number;
 		removed: number;
+		maintenanceState: MaintenanceState;
+		/** @deprecated 使用 maintenanceState；仅保留为旧调用方的派生兼容字段。 */
 		maintenancePending: boolean;
 	};
 	dictLoaded?: boolean;
@@ -234,8 +259,11 @@ export interface StartupMaintenanceResult {
 		updatedSinceLast: number;
 		unchanged: number;
 		removed: number;
+		maintenanceState: 'succeeded' | 'failed';
+		/** @deprecated 使用 maintenanceState；维护终态恒为 false。 */
 		maintenancePending: false;
 	};
+	maintenance: DbMaintenanceReport;
 	activeDocs: Array<{ target: ActiveDocTarget; changed: boolean; path: string }>;
 	impact: {
 		taskboardChanged: boolean;

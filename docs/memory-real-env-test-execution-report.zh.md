@@ -38,7 +38,9 @@ aliases: []
 | `npm run test:memory-real-env`（第一次） | 统计固定且退出码为 0 | 1 个文件通过；53 项通过、1 项预期失败、1 项跳过 |
 | `npm run test:memory-real-env`（第二次） | 与第一次完全一致 | 1 个文件通过；53 项通过、1 项预期失败、1 项跳过 |
 | `npx vitest run tests/e2e/memory-real-env-v2.test.ts -t H-02` | H-02 不依赖前序用例并普通通过 | 1 项通过、54 项跳过；退出码 0 |
-| `npm test` | 不低于任务 0 的 998 项基线，新增套件不回归 | 61 个文件通过；1060 项通过、1 项预期失败、1 项跳过，共 1062 项 |
+| `npx vitest run tests/db/maintenance.test.ts tests/services/startup.test.ts tests/server.test.ts tests/cli/doctor.test.ts tests/e2e/memory-real-env-v2.test.ts`（任务 6 RED） | 新维护状态、single-flight、双阈值、SQL 强度和 H-02 先失败 | 5 个文件均按预期失败；13 项失败、96 项通过、1 项预期失败、1 项跳过；退出码 1 |
+| 同上（任务 6 GREEN） | 新维护契约全部通过 | 5 个文件通过；109 项通过、1 项预期失败、1 项跳过；退出码 0 |
+| `npm test` | 不低于任务 0 的 998 项基线，新增套件不回归 | 61 个文件通过；1069 项通过、1 项预期失败、1 项跳过，共 1071 项 |
 | `npm run lint` | 生产源码检查无错误 | 52 个源码文件通过 |
 | `npm run typecheck` | 0 个类型错误 | 退出码 0，无类型错误 |
 | `npx biome check src/types.ts src/services/context-router.ts src/active-docs/userprofile.ts tests/services/context-router-v4.test.ts tests/active-docs/active-docs.test.ts tests/skill-contracts/data-contract.test.ts tests/e2e/memory-real-env-v2.test.ts` | 本任务相关 TypeScript 文件无格式或静态检查错误 | 7 个文件通过，无修复项 |
@@ -64,7 +66,24 @@ aliases: []
 
 ### H-02 自包含维护验证
 
-旧测试依赖整套前序写入与归档形成碎片，单独运行时新鲜库比例为 0，导致 `it.fails` 反向失败。纠正后的 H-02 为自己再创建一个专属临时 Vault，在该库内创建 500 行、每行 8192 字节的临时负载，删除并丢弃临时表后确认维护前 freelist 比例超过 50%，再执行启动维护并确认维护后低于 5%；`finally` 恢复共享环境并删除专属 Vault。诊断运行记录为维护前 `1064/1085`（约 98.1%），维护后 `0/20`；因此 H-02 是普通通过，不是当前生产缺陷。
+H-02 为自己创建专属临时 Vault，在该库内创建 500 行、每行 8192 字节的临时负载，删除并丢弃临时表后确认维护前 freelist 比例超过 50%。首次 bootstrap 同步返回 `pending`，用例直接等待同一 Vault runtime 暴露的维护 Promise；没有定时休眠。例行维护终态必须为 `succeeded`，并保留完整时间与前后指标。
+
+随后用例在同一临时库重新制造碎片，只通过显式 `doctor --compact-db` 执行完整压缩，终态后再读取数据库，验收 freelist 比例低于 5% 且 WAL 为 0 或不存在。样本指标如下：
+
+- 初始：`pending`，时间与前后指标均为 `null`；
+- 例行维护前：`page_count=1085`、`freelist_count=1064`、`freelist_bytes=4358144`、`wal_pages=10`、`wal_bytes=41232`；
+- 例行维护后：`page_count=20`、`freelist_count=0`、`freelist_bytes=0`；PASSIVE checkpoint 后 WAL 保持非截断，可见 `wal_pages=15`、`wal_bytes=61832`；
+- 显式压缩后：`page_count=20`、`freelist_count=0`、`freelist_bytes=0`、`wal_pages=0`、`wal_bytes=0`。
+
+例行 SQL 验证明确要求有限 FTS merge 与 `wal_checkpoint(PASSIVE)`，并明确排除 FTS optimize 与 `wal_checkpoint(TRUNCATE)`；显式压缩则要求完整 VACUUM、FTS optimize 和 WAL truncate。
+
+### 任务 6 状态机与健康口径
+
+- 每个 canonical Vault runtime 只创建一个维护 Promise；同一 Vault 的连续 bootstrap 共享任务，不同 Vault 各执行一次。
+- 状态只允许 `pending → running → succeeded|failed`。失败终态保留开始、结束、耗时和错误详情，不以成功或零值伪装。
+- `maintenancePending` 只保留为旧调用方的派生兼容字段；`maintenanceState` 与 bootstrap 的 `db_maintenance.state` 是权威状态。
+- doctor 稳态告警同时要求 `freelistRatio >= 25%` 和 `freelistBytes >= 64 MiB`；等于边界时告警，小库即使比例为 26% 也不告警。
+- bootstrap 成功与 `startup_error` 两条 strict structured output 分支都要求显式 `db_maintenance` 字段；错误分支固定为 `null`，没有把 schema 放宽为可选。
 
 ### H-06 未知工具 candidates
 

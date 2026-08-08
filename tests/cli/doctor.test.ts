@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+	existsSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	statSync,
+	unlinkSync,
+	writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import Database from 'better-sqlite3';
@@ -8,6 +16,7 @@ import doctorCommand, {
 	MIN_NODE_VERSION,
 	isNodeVersionSupported,
 } from '../../src/cli/commands/doctor.js';
+import * as doctorModule from '../../src/cli/commands/doctor.js';
 import initCommand from '../../src/cli/commands/init.js';
 import rulesCommand from '../../src/cli/commands/rules.js';
 import { memoryStartup } from '../../src/core.js';
@@ -48,6 +57,20 @@ describe.each(['zh', 'en'] as const)('lifeos doctor --lang %s', (lang) => {
 });
 
 describe('lifeos doctor', () => {
+	test('freelist 健康告警同时要求比例达到 25% 且字节达到 64 MiB', () => {
+		expect(typeof doctorModule.assessFreelistHealth).toBe('function');
+		const assessFreelistHealth = doctorModule.assessFreelistHealth;
+		expect(
+			assessFreelistHealth({ pageCount: 1_000, freelistCount: 260, pageSize: 4_096 }),
+		).toMatchObject({ status: 'pass', freelistRatio: 0.26, freelistBytes: 1_064_960 });
+		expect(
+			assessFreelistHealth({ pageCount: 256, freelistCount: 64, pageSize: 1024 * 1024 }),
+		).toMatchObject({ status: 'warn', freelistRatio: 0.25, freelistBytes: 64 * 1024 * 1024 });
+		expect(
+			assessFreelistHealth({ pageCount: 257, freelistCount: 64, pageSize: 1024 * 1024 }),
+		).toMatchObject({ status: 'pass', freelistBytes: 64 * 1024 * 1024 });
+	});
+
 	test('missing directory: reports warning', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		try {
@@ -357,18 +380,19 @@ describe('lifeos doctor', () => {
 	);
 
 	test('已归档记忆不算孤儿作用域，孤儿只统计活跃记忆', async () => {
-	const { dir, cleanup } = makeTmpDir();
-	let db: Database.Database | undefined;
-	try {
-		await initCommand([dir, '--lang', 'zh', '--no-mcp']);
-		const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
-		db = new Database(dbPath);
-		initDb(db);
-		const now = new Date().toISOString();
-		// 已归档（archived）的项目/文件记忆：作用域无对应实体，但不应计入孤儿
-		const insertArchived = (slotKey: string, scopeKey: string) =>
-			db!
-				.prepare(`
+		const { dir, cleanup } = makeTmpDir();
+		let db: Database.Database | undefined;
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
+			db = new Database(dbPath);
+			initDb(db);
+			const activeDb = db;
+			const now = new Date().toISOString();
+			// 已归档（archived）的项目/文件记忆：作用域无对应实体，但不应计入孤儿
+			const insertArchived = (slotKey: string, scopeKey: string) =>
+				activeDb
+					.prepare(`
 					INSERT INTO memory_items(
 						slot_key, content, item_kind, scope_type, scope_key, priority,
 						enforcement, source, related_files, manual_flag, status,
@@ -376,10 +400,11 @@ describe('lifeos doctor', () => {
 					) VALUES (?, '已归档', 'decision', ?, ?, 50, 'soft',
 						'correction', '[]', 0, 'archived', ?, ?, NULL, ?, 'test')
 				`)
-				.run(slotKey, 'project', scopeKey, now, now, now);
-		insertArchived('p:archived-1', 'gone-project-a');
-		insertArchived('p:archived-2', 'gone-project-b');
-		db!.prepare(`
+					.run(slotKey, 'project', scopeKey, now, now, now);
+			insertArchived('p:archived-1', 'gone-project-a');
+			insertArchived('p:archived-2', 'gone-project-b');
+			activeDb
+				.prepare(`
 				INSERT INTO memory_items(
 					slot_key, content, item_kind, scope_type, scope_key, priority,
 					enforcement, source, related_files, manual_flag, status,
@@ -387,26 +412,26 @@ describe('lifeos doctor', () => {
 				) VALUES ('f:archived', '已归档', 'decision', 'file', 'gone-file.md', 50, 'soft',
 					'correction', '[]', 0, 'archived', ?, ?, NULL, ?, 'test')
 			`)
-			.run(now, now, now);
-		// 活跃但无实体的记忆：仍应计入孤儿
-		upsertMemoryItem(db, {
-			slotKey: 'p:active-orphan',
-			content: '活跃孤儿',
-			itemKind: 'decision',
-			scope: { type: 'project', key: 'ghost-project' },
-		});
-		let result = await doctorCommand([dir]);
-		const scopes = result.checks.find((check) => check.name === 'memory scopes');
-		expect(scopes?.status).toBe('fail');
-		expect(scopes?.detail).toBe('1 orphan');
-		expect(result.passed).toBe(false);
-	} finally {
-		db?.close();
-		cleanup();
-	}
-});
+				.run(now, now, now);
+			// 活跃但无实体的记忆：仍应计入孤儿
+			upsertMemoryItem(db, {
+				slotKey: 'p:active-orphan',
+				content: '活跃孤儿',
+				itemKind: 'decision',
+				scope: { type: 'project', key: 'ghost-project' },
+			});
+			const result = await doctorCommand([dir]);
+			const scopes = result.checks.find((check) => check.name === 'memory scopes');
+			expect(scopes?.status).toBe('fail');
+			expect(scopes?.detail).toBe('1 orphan');
+			expect(result.passed).toBe(false);
+		} finally {
+			db?.close();
+			cleanup();
+		}
+	});
 
-test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async () => {
+	test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		let db: Database.Database | undefined;
 		try {
@@ -501,7 +526,7 @@ test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async
 		}
 	});
 
-	test('freelist/auto_vacuum/memory_items warn; --compact-db reclaims space', async () => {
+	test('小库高 freelist 比例不告警；--compact-db 终态满足比例与 WAL 验收', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		let db: Database.Database | undefined;
 		try {
@@ -529,18 +554,13 @@ test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async
 
 			let result = await doctorCommand([dir]);
 			expect(
-				result.checks.some(
-					(c) => c.name === 'database auto_vacuum' && c.status === 'warn',
-				),
+				result.checks.some((c) => c.name === 'database auto_vacuum' && c.status === 'warn'),
 			).toBe(true);
 			expect(
-				result.checks.some(
-					(c) => c.name === 'database memory_items size' && c.status === 'warn',
-				),
+				result.checks.some((c) => c.name === 'database memory_items size' && c.status === 'warn'),
 			).toBe(true);
 
-			// Deleting every row leaves the pages on the freelist, so the ratio
-			// climbs above 50% until the database is compacted.
+			// 删除全部行制造高比例 freelist；该临时库不足 64 MiB，按双阈值不告警。
 			db.exec('DELETE FROM memory_items');
 			const beforePages = db.pragma('page_count', { simple: true }) as number;
 			db.close();
@@ -548,18 +568,21 @@ test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async
 
 			result = await doctorCommand([dir]);
 			const freelist = result.checks.find((c) => c.name === 'database freelist');
-			expect(freelist).toMatchObject({ status: 'warn' });
-			expect(freelist?.detail).toMatch(/\d+%\)$/);
+			expect(freelist).toMatchObject({ status: 'pass' });
+			expect(freelist?.detail).toMatch(/\d+%; [\d.]+ MiB\)$/);
 
 			const compactResult = await doctorCommand([dir, '--compact-db']);
-			expect(
-				compactResult.checks.find((c) => c.name === 'database compact'),
-			).toMatchObject({ status: 'pass' });
+			expect(compactResult.checks.find((c) => c.name === 'database compact')).toMatchObject({
+				status: 'pass',
+				detail: expect.stringContaining('state=succeeded'),
+			});
 
 			db = new Database(dbPath);
 			const afterPages = db.pragma('page_count', { simple: true }) as number;
 			const afterFreelist = db.pragma('freelist_count', { simple: true }) as number;
 			expect(afterFreelist / afterPages).toBeLessThan(0.05);
+			const walPath = `${dbPath}-wal`;
+			expect(existsSync(walPath) ? statSync(walPath).size : 0).toBe(0);
 			expect(afterPages).toBeLessThanOrEqual(beforePages * 0.2);
 			expect(db.pragma('auto_vacuum', { simple: true })).toBe(2);
 		} finally {
@@ -616,11 +639,7 @@ test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async
 			const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
 			// Custom dictionary turns the otherwise default-segmented
 			// 四元数群 (四元 / 数 / 群) into a single token.
-			writeFileSync(
-				join(dir, '90_系统', '记忆', 'custom_dict.txt'),
-				'四元数群 5 n\n',
-				'utf-8',
-			);
+			writeFileSync(join(dir, '90_系统', '记忆', 'custom_dict.txt'), '四元数群 5 n\n', 'utf-8');
 			writeFileSync(
 				join(dir, '00_草稿', 'quat.md'),
 				'---\ntitle: 四元数群笔记\n---\n四元数群 的几何性质\n',
@@ -664,9 +683,7 @@ test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async
 			const seededState = countQuery(db, 'SELECT COUNT(*) AS n FROM scan_state');
 			expect(seededState).toBeGreaterThanOrEqual(1);
 			const seededRows = db
-				.prepare(
-					'SELECT file_path, search_hints, indexed_at FROM vault_index ORDER BY file_path',
-				)
+				.prepare('SELECT file_path, search_hints, indexed_at FROM vault_index ORDER BY file_path')
 				.all();
 			db.close();
 			db = undefined;
@@ -689,9 +706,7 @@ test('历史异常 global hard 可按 Doctor 参数归档并恢复启动', async
 			const afterState = countQuery(db, 'SELECT COUNT(*) AS n FROM scan_state');
 			expect(afterState).toBe(seededState);
 			const afterRows = db
-				.prepare(
-					'SELECT file_path, search_hints, indexed_at FROM vault_index ORDER BY file_path',
-				)
+				.prepare('SELECT file_path, search_hints, indexed_at FROM vault_index ORDER BY file_path')
 				.all();
 			expect(afterRows).toEqual(seededRows);
 		} finally {

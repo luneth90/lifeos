@@ -16,7 +16,13 @@ import * as core from './core.js';
 import { SCHEMA_VERSION } from './db/schema.js';
 import { CONTRACT_VERSION } from './runtime-contract.js';
 import { toolOutputSchemas, toolResultSchemas } from './tool-schemas.js';
-import type { MemoryScope, ScopeType, StartupResult } from './types.js';
+import type {
+	DbMaintenanceReport,
+	MemoryScope,
+	ScopeType,
+	StartupMaintenanceResult,
+	StartupResult,
+} from './types.js';
 import { canonicalVaultRoot } from './utils/safe-path.js';
 
 export const slotKeySchema = z
@@ -98,10 +104,37 @@ interface RuntimeContext {
 	batchTimer: NodeJS.Timeout | null;
 	notifyInFlight: boolean;
 	maintenanceTimer: NodeJS.Immediate | null;
+	maintenanceTask: Promise<void> | null;
+	maintenance: DbMaintenanceReport;
 }
 
 const runtimes = new Map<string, RuntimeContext>();
 const DEBOUNCE_MS = 500;
+
+function pendingMaintenanceReport(): DbMaintenanceReport {
+	return {
+		mode: 'routine',
+		state: 'pending',
+		startedAt: null,
+		finishedAt: null,
+		durationMs: null,
+		before: null,
+		after: null,
+		error: null,
+	};
+}
+
+function maintenanceMetricsOutput(metrics: DbMaintenanceReport['before']): unknown {
+	return metrics
+		? {
+				page_count: metrics.pageCount,
+				freelist_count: metrics.freelistCount,
+				freelist_bytes: metrics.freelistBytes,
+				wal_pages: metrics.walPages,
+				wal_bytes: metrics.walBytes,
+			}
+		: null;
+}
 
 function resolveRuntimeIdentity(params: Record<string, unknown>): {
 	key: string;
@@ -140,6 +173,8 @@ function getRuntime(params: Record<string, unknown>): RuntimeContext {
 		batchTimer: null,
 		notifyInFlight: false,
 		maintenanceTimer: null,
+		maintenanceTask: null,
+		maintenance: pendingMaintenanceReport(),
 	};
 	runtimes.set(identity.key, runtime);
 	return runtime;
@@ -200,21 +235,63 @@ function applyNotifyInvalidation(runtime: RuntimeContext, result: unknown): void
 	else if (explicitLayer0 === undefined && !Array.isArray(scopes)) invalidateLayer0(runtime);
 }
 
-function runBackgroundMaintenance(runtime: RuntimeContext): void {
-	if (runtime.maintenanceTimer) return;
-	runtime.maintenanceTimer = setImmediate(() => {
-		runtime.maintenanceTimer = null;
-		try {
-			const result = core.memoryStartupMaintenance({
-				contractVersion: CONTRACT_VERSION,
-				dbPath: runtime.dbPath,
-				vaultRoot: runtime.vaultRoot,
-			});
-			applyNotifyInvalidation(runtime, result);
-		} catch (error) {
-			console.warn(`[lifeos] 后台维护失败（${runtime.vaultRoot}）:`, error);
-		}
+function finishMaintenance(
+	runtime: RuntimeContext,
+	state: 'succeeded' | 'failed',
+	result?: StartupMaintenanceResult,
+	error?: unknown,
+): void {
+	const finished = Date.now();
+	const started = runtime.maintenance.startedAt
+		? Date.parse(runtime.maintenance.startedAt)
+		: finished;
+	const serviceReport = result?.maintenance;
+	runtime.maintenance = {
+		...runtime.maintenance,
+		state,
+		finishedAt: new Date(finished).toISOString(),
+		durationMs: Math.max(0, finished - started),
+		before: serviceReport?.before ?? null,
+		after: serviceReport?.after ?? null,
+		error:
+			state === 'failed'
+				? (serviceReport?.error ?? (error instanceof Error ? error.message : String(error)))
+				: null,
+	};
+}
+
+function runBackgroundMaintenance(runtime: RuntimeContext): Promise<void> {
+	if (runtime.maintenanceTask) return runtime.maintenanceTask;
+	runtime.maintenanceTask = new Promise<void>((resolveTask) => {
+		runtime.maintenanceTimer = setImmediate(() => {
+			runtime.maintenanceTimer = null;
+			const started = Date.now();
+			runtime.maintenance = {
+				...pendingMaintenanceReport(),
+				state: 'running',
+				startedAt: new Date(started).toISOString(),
+			};
+			Promise.resolve()
+				.then(() =>
+					core.memoryStartupMaintenance({
+						contractVersion: CONTRACT_VERSION,
+						dbPath: runtime.dbPath,
+						vaultRoot: runtime.vaultRoot,
+					}),
+				)
+				.then((result) => {
+					applyNotifyInvalidation(runtime, result);
+					const terminalState = result.maintenance?.state === 'failed' ? 'failed' : 'succeeded';
+					finishMaintenance(runtime, terminalState, result);
+				})
+				.catch((error: unknown) => {
+					finishMaintenance(runtime, 'failed', undefined, error);
+					console.warn(`[lifeos] 后台维护失败（${runtime.vaultRoot}）:`, error);
+				})
+				.finally(resolveTask);
+		});
 	});
+	return runtime.maintenanceTask;
 }
 
 function ensureStartup(runtime: RuntimeContext): { startedThisCall: boolean } {
@@ -331,6 +408,7 @@ function closeRuntime(runtime: RuntimeContext): void {
 	runtime.watcher?.close();
 	runtime.batchTimer = null;
 	runtime.maintenanceTimer = null;
+	runtime.maintenanceTask = null;
 	runtime.watcher = null;
 	runtime.pendingFiles.clear();
 }
@@ -376,6 +454,7 @@ interface BootstrapOutput {
 	_layer0: string;
 	layer0_meta: unknown;
 	scope_hints: unknown;
+	db_maintenance: unknown;
 	startup_error?: string;
 }
 
@@ -390,6 +469,7 @@ function bootstrapError(error: unknown): BootstrapOutput {
 		_layer0: '',
 		layer0_meta: null,
 		scope_hints: null,
+		db_maintenance: null,
 		startup_error: error instanceof Error ? error.message : String(error),
 	};
 }
@@ -452,6 +532,16 @@ function runMemoryBootstrap(params: Record<string, unknown>): BootstrapOutput {
 					tool_bindings: result.scopeHints.toolBindings,
 				}
 			: null,
+		db_maintenance: {
+			mode: runtime.maintenance.mode,
+			state: runtime.maintenance.state,
+			started_at: runtime.maintenance.startedAt,
+			finished_at: runtime.maintenance.finishedAt,
+			duration_ms: runtime.maintenance.durationMs,
+			before: maintenanceMetricsOutput(runtime.maintenance.before),
+			after: maintenanceMetricsOutput(runtime.maintenance.after),
+			error: runtime.maintenance.error,
+		},
 	};
 }
 
@@ -782,7 +872,13 @@ export const __testing = {
 			layer0Dirty: runtime.layer0Dirty,
 			globalVersion: runtime.globalVersion,
 			scopeVersions: Object.fromEntries(runtime.scopeVersions),
+			maintenance: runtime.maintenance,
 		};
+	},
+	async waitForMaintenance(params: Record<string, unknown>) {
+		const runtime = getRuntime(normalizeParams(params));
+		if (runtime.maintenanceTask) await runtime.maintenanceTask;
+		return runtime.maintenance;
 	},
 	resetState: resetRuntimeState,
 };
