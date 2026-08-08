@@ -132,7 +132,10 @@ describe('assetsDir', () => {
 				},
 			);
 			expect(packed.status, packed.stderr).toBe(0);
-			const [{ files }] = JSON.parse(packed.stdout) as Array<{
+			const { normalizePackEntries } = await import(
+				pathToFileURL(join(packageSource, 'scripts', 'release', 'pack.mjs')).href
+			);
+			const [{ files }] = normalizePackEntries(JSON.parse(packed.stdout)) as Array<{
 				files: Array<{ path: string }>;
 			}>;
 			const packedPaths = new Set(files.map((file) => file.path));

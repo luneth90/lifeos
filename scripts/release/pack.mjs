@@ -6,6 +6,28 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '../..');
 
+function isPackEntry(value) {
+	return (
+		value !== null &&
+		typeof value === 'object' &&
+		(typeof value.filename === 'string' || Array.isArray(value.files))
+	);
+}
+
+export function normalizePackEntries(value) {
+	const candidates = Array.isArray(value)
+		? value
+		: value !== null && typeof value === 'object'
+			? Object.values(value)
+			: [];
+
+	if (candidates.length === 0 || !candidates.every(isPackEntry)) {
+		throw new Error('npm pack json output did not contain package entries');
+	}
+
+	return candidates;
+}
+
 export function extractTarballName(output) {
 	const trimmedOutput = output.trim();
 
@@ -15,7 +37,7 @@ export function extractTarballName(output) {
 
 	try {
 		const parsed = JSON.parse(trimmedOutput);
-		const tarball = Array.isArray(parsed) ? parsed[0]?.filename : undefined;
+		const tarball = normalizePackEntries(parsed)[0]?.filename;
 
 		if (typeof tarball === 'string' && tarball.endsWith('.tgz')) {
 			return tarball;
