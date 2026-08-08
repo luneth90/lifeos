@@ -67,6 +67,7 @@ function render(items: ScopedMemoryItem[]): string {
 		['rule', '行为约束'],
 		['decision', '已确认决策'],
 		['fact', '稳定事实'],
+		['profile', '作用域画像'],
 	];
 	return specs
 		.map(([kind, title]) => {
@@ -94,6 +95,7 @@ function emptyResponse(
 		rules: [],
 		decisions: [],
 		facts: [],
+		profiles: [],
 		relatedFiles: [],
 		text: '',
 		diagnostics,
@@ -120,9 +122,18 @@ export function buildMemoryContext(
 	if (request.includeGlobal && !fetchScopes.some((scope) => scope.type === 'global')) {
 		fetchScopes.push({ type: 'global', key: '' });
 	}
+	const explicitProfileScopes = new Set(
+		resolution.resolvedScopes
+			.filter((scope) => scope.type !== 'global')
+			.map((scope) => scopeId(scope)),
+	);
 	const candidates = fetchScopes
 		.flatMap((scope) => listMemoryItems(db, { scope, status: 'active', limit: 10_000 }))
-		.filter((item) => ['rule', 'decision', 'fact'].includes(item.itemKind))
+		.filter(
+			(item) =>
+				['rule', 'decision', 'fact'].includes(item.itemKind) ||
+				(item.itemKind === 'profile' && explicitProfileScopes.has(scopeId(item.scope))),
+		)
 		.filter((item) => !item.expiresAt || item.expiresAt >= now);
 	const globalHard = listMemoryItems(db, {
 		scope: { type: 'global', key: '' },
@@ -208,6 +219,7 @@ export function buildMemoryContext(
 		rules: loaded.filter((item) => item.itemKind === 'rule'),
 		decisions: loaded.filter((item) => item.itemKind === 'decision'),
 		facts: loaded.filter((item) => item.itemKind === 'fact'),
+		profiles: loaded.filter((item) => item.itemKind === 'profile'),
 		relatedFiles,
 		text,
 		diagnostics,

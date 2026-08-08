@@ -17,7 +17,7 @@
 | --- | --- | --- |
 | `memory_bootstrap` | 启动会话并返回全局 Layer 0、快照和可用 scope 提示 | 不传 `contract_version`；必须是会话第一步 |
 | `memory_query` | 查询 Vault 索引中的笔记、项目和知识 | 必须传 `contract_version=2`；不查询记忆条目 |
-| `memory_context` | 按显式 scope 读取局部规则、决策、事实和关联文件 | 必须传 `contract_version=2` 与 `scopes` |
+| `memory_context` | 按显式 scope 读取局部规则、决策、事实、画像和关联文件 | 必须传 `contract_version=2` 与 `scopes` |
 | `memory_log` | 新建或更新规则、决策、事实、画像 | 必须传 `contract_version=2`、`slot_key`、`content`、`item_kind`、`scope` |
 | `memory_rules` | 按类型、scope、状态或 slot 审计记忆条目 | 必须传 `contract_version=2` |
 | `memory_forget` | 按 `item_id` 软归档条目 | 必须传 `contract_version=2` 与非空 `reason` |
@@ -79,9 +79,10 @@ memory_notify(contract_version=2, file_path="40_知识/笔记/群论.md")
 1. 显式传入当前任务需要的 `skill`、`project`、`repository`、`tool` 或 `file` scope。
 2. 同一 slot 由更具体的 scope 生效，优先级为 `file > project > repository > skill > tool > global`。
 3. 全局 `hard` 规则始终阻止局部同 slot 覆盖。
-4. `memory_context` 只返回 `rule`、`decision`、`fact`；画像仍属于全局摘要链路。
-5. 单条预算与总预算超限时，调用方必须检查诊断字段，不得假设全部条目已加载。
-6. 若任务执行途中新增了 scope，必须在首次使用对应对象前增量调用 `memory_context`；首次调用形成的作用域集合不是固定快照。
+4. `memory_context` 只读取本次显式声明的非 global scope 画像，画像同时进入结构化 `profiles` 与正文“作用域画像”区块；相关文件、目录提示、缓存或其他 scope 不会扩大画像读取范围。
+5. global 画像只由 `UserProfile` 聚合进入 Layer 0。即使设置 `include_global=true` 或显式请求 global scope，也不会把 global 画像放入 `profiles` 或局部正文。
+6. 单条预算与总预算超限时，调用方必须检查诊断字段，不得假设全部条目已加载；画像与规则、决策、事实使用同一优先级、稳定排序和裁剪规则。
+7. 若任务执行途中新增了 scope，必须在首次使用对应对象前增量调用 `memory_context`；首次调用形成的作用域集合不是固定快照。
 
 工具别名配置示例：
 

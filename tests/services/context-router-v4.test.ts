@@ -43,6 +43,10 @@ describe('V4 context router', () => {
 		`).run();
 		db.prepare(`
 			INSERT INTO vault_index(file_path,title,type,status,entity_id)
+			VALUES ('20_项目/其他项目.md','其他项目','project','active','project-other')
+		`).run();
+		db.prepare(`
+			INSERT INTO vault_index(file_path,title,type,status,entity_id)
 			VALUES ('40_知识/概念.md','概念','note','review','note-concept')
 		`).run();
 	});
@@ -130,19 +134,29 @@ describe('V4 context router', () => {
 		expect(scopedOnly.diagnostics.warnings).toHaveLength(1);
 	});
 
-	it('只输出 rule、decision、fact，并可关闭 relatedFiles', () => {
+	it('显式作用域画像进入 profiles、正文与关联文件', () => {
 		const scope: MemoryScope = { type: 'project', key: 'project-main' };
 		put(scope, 'rule:one', '规则', { relatedFiles: ['规则.md'] });
 		put(scope, 'decision:one', '决策', { itemKind: 'decision', relatedFiles: ['决策.md'] });
 		put(scope, 'fact:one', '事实', { itemKind: 'fact', relatedFiles: ['规则.md', '事实.md'] });
-		put(scope, 'profile:one', '画像', { itemKind: 'profile', relatedFiles: ['画像.md'] });
+		put(scope, 'profile:one', '项目画像内容', {
+			itemKind: 'profile',
+			relatedFiles: ['画像.md'],
+		});
+		put(scope, 'profile:two', '高优先级项目画像', {
+			itemKind: 'profile',
+			priority: 90,
+		});
 
 		const included = buildMemoryContext(db, '/unused', { scopes: [scope] }, { config: config() });
 		expect(included.rules).toHaveLength(1);
 		expect(included.decisions).toHaveLength(1);
 		expect(included.facts).toHaveLength(1);
-		expect(included.effectiveItems.some((item) => item.itemKind === 'profile')).toBe(false);
-		expect(included.relatedFiles).toEqual(['事实.md', '决策.md', '规则.md']);
+		expect(included.profiles?.map((item) => item.slotKey)).toEqual(['profile:two', 'profile:one']);
+		expect(included.effectiveItems.some((item) => item.itemKind === 'profile')).toBe(true);
+		expect(included.text).toContain('## 作用域画像');
+		expect(included.text).toContain('项目画像内容');
+		expect(included.relatedFiles).toEqual(['事实.md', '决策.md', '画像.md', '规则.md']);
 
 		const excluded = buildMemoryContext(
 			db,
@@ -153,10 +167,42 @@ describe('V4 context router', () => {
 		expect(excluded.relatedFiles).toEqual([]);
 	});
 
+	it('只返回本次显式请求的非 global 作用域画像', () => {
+		put({ type: 'project', key: 'project-main' }, 'profile:main', '主项目画像', {
+			itemKind: 'profile',
+		});
+		put({ type: 'project', key: 'project-other' }, 'profile:other', '其他项目画像', {
+			itemKind: 'profile',
+		});
+		put({ type: 'tool', key: 'obsidian' }, 'profile:tool', '工具画像', {
+			itemKind: 'profile',
+		});
+		put({ type: 'global', key: '' }, 'profile:global', '全局画像', {
+			itemKind: 'profile',
+		});
+
+		const result = buildMemoryContext(
+			db,
+			'/unused',
+			{
+				scopes: [{ type: 'project', key: 'project-main' }],
+				includeGlobal: true,
+			},
+			{ config: config() },
+		);
+
+		expect(result.profiles?.map((item) => item.slotKey)).toEqual(['profile:main']);
+		expect(result.text).toContain('主项目画像');
+		expect(result.text).not.toContain('其他项目画像');
+		expect(result.text).not.toContain('工具画像');
+		expect(result.text).not.toContain('全局画像');
+	});
+
 	it('严格执行单条与总 token 预算，并给出遗漏诊断', () => {
 		const scope: MemoryScope = { type: 'project', key: 'project-main' };
 		put(scope, 'budget:oversized', '很长的内容'.repeat(80), { priority: 100 });
 		put(scope, 'budget:first', '第一条短规则', { priority: 90 });
+		put(scope, 'profile:budget', '预算内也要裁剪', { itemKind: 'profile', priority: 85 });
 		put(scope, 'budget:second', '第二条短规则', { priority: 80 });
 		const result = buildMemoryContext(
 			db,
@@ -166,7 +212,8 @@ describe('V4 context router', () => {
 		);
 		expect(result.diagnostics.oversizedItems).toEqual(['budget:oversized']);
 		expect(result.effectiveItems.map((item) => item.slotKey)).toEqual(['budget:first']);
-		expect(result.diagnostics.omittedSlotKeys).toEqual(['budget:second']);
+		expect(result.profiles).toEqual([]);
+		expect(result.diagnostics.omittedSlotKeys).toEqual(['profile:budget', 'budget:second']);
 	});
 
 	it('未知 scope 返回稳定空响应与诊断', () => {

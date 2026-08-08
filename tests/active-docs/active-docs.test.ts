@@ -254,6 +254,22 @@ describe('buildUserprofileSections', () => {
 		expect(sections['profile-summary']).toContain('子群判定条件容易混淆');
 	});
 
+	it('global 画像只在 UserProfile 摘要出现一次且不混入项目画像', () => {
+		putGlobal(db, 'profile:work_style', '全局画像唯一内容', 'profile');
+		upsertMemoryItem(db, {
+			slotKey: 'profile:weak.project_only',
+			content: '项目画像不得进入 Layer 0',
+			itemKind: 'profile',
+			scope: { type: 'project', key: 'project-algebra' },
+		});
+
+		const sections = buildUserprofileSections(db, '/tmp/vault');
+		const rendered = Object.values(sections).join('\n');
+		expect(rendered.match(/全局画像唯一内容/g)).toHaveLength(1);
+		expect(sections['profile-summary']).toContain('全局画像唯一内容');
+		expect(rendered).not.toContain('项目画像不得进入 Layer 0');
+	});
+
 	it('profile-summary keeps unrecognized structured profile slots visible', () => {
 		putGlobal(db, 'profile:custom_signal', '这是未来扩展用的画像信号', 'profile');
 
@@ -430,9 +446,11 @@ describe('refreshUserprofile 最终区块协议', () => {
 			setVaultConfig(vc);
 			refreshUserprofile(db, vault.root);
 			const content = readFileSync(join(vc.memoryDir(), 'UserProfile.md'), 'utf-8');
-			expect([...content.matchAll(/<!-- BEGIN AUTO:(\S+) -->/g)].map((match) => match[1])).toEqual(
-				['profile-summary', 'global-rules', 'scoped-rules-index'],
-			);
+			expect([...content.matchAll(/<!-- BEGIN AUTO:(\S+) -->/g)].map((match) => match[1])).toEqual([
+				'profile-summary',
+				'global-rules',
+				'scoped-rules-index',
+			]);
 			expect(content).not.toContain('AUTO:rules');
 			expect(content).not.toContain('AUTO:preferences');
 		} finally {
@@ -458,9 +476,9 @@ describe('refreshUserprofile 最终区块协议', () => {
 			expect(content).toContain('旧画像');
 			expect(content).not.toContain('新画像');
 			expect(content).toContain('必须使用中文');
-			expect(() =>
-				refreshUserprofile(db, vault.root, { section: 'unknown-section' }),
-			).toThrow(/未知 AUTO 区块/);
+			expect(() => refreshUserprofile(db, vault.root, { section: 'unknown-section' })).toThrow(
+				/未知 AUTO 区块/,
+			);
 		} finally {
 			_resetDefaultInstance();
 			vault.cleanup();

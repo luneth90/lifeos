@@ -80,7 +80,7 @@ memory_context(
 )
 ```
 
-`memory_context` returns rules, decisions, facts, related files, and diagnostics for the requested scopes. Global hard rules have already been injected by bootstrap, so global context should not normally be repeated.
+`memory_context` returns rules, decisions, facts, profiles, related files, and diagnostics for the explicitly requested scopes. Profiles from explicitly requested non-global scopes appear in the structured `profiles` field and in the “Scoped Profiles” text section; related files, directory hints, caches, and other scopes never expand profile retrieval. Global profiles remain available only through the `UserProfile` summary in Layer 0. They never appear again in `profiles` or local text, even when `include_global=true`. Global hard rules have already been injected by bootstrap, so global context should not normally be repeated.
 
 ## Search and File Notifications
 
@@ -165,7 +165,7 @@ Common structured profile slots:
 - `profile:context_switch_pattern`
 - `profile:thinking_preference`
 
-Profile content should include the fact, evidence, and decision impact. Use global scope for stable cross-context signals and project scope for motivation or strengths and weaknesses that only apply to one project. Do not write removed aggregate profile slots.
+Profile content should include the fact, evidence, and decision impact. Use global scope for stable cross-context signals and project scope for motivation or strengths and weaknesses that only apply to one project. After `/revise` writes `profile:weak.<domain_slug>` or `profile:strong.<domain_slug>` to a project scope, pass that same project as an explicit scope to `memory_context`, then read the item from `profiles` and the “Scoped Profiles” text section. Do not write removed aggregate profile slots.
 
 ## Noise Protection
 

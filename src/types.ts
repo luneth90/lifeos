@@ -294,6 +294,7 @@ export interface ContextResponse {
 	rules: ScopedMemoryItem[];
 	decisions: ScopedMemoryItem[];
 	facts: ScopedMemoryItem[];
+	profiles: ScopedMemoryItem[];
 	relatedFiles: string[];
 	text: string;
 	diagnostics: ContextDiagnostics;

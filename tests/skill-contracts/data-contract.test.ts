@@ -25,6 +25,11 @@ const researchPaths = [
 	'assets/skills/research/references/planning-agent-prompt.en.md',
 	'assets/skills/research/references/execution-agent-prompt.en.md',
 ];
+const revisePaths = ['assets/skills/revise/SKILL.zh.md', 'assets/skills/revise/SKILL.en.md'];
+const memoryProtocolPaths = [
+	'assets/skills/_shared/memory-protocol.zh.md',
+	'assets/skills/_shared/memory-protocol.en.md',
+];
 
 function read(relativePath: string): string {
 	return readFileSync(join(process.cwd(), relativePath), 'utf-8');
@@ -134,6 +139,24 @@ describe('阶段一数据契约', () => {
 			expect(content, path).not.toMatch(
 				/Output Format.*替换默认章节|替换默认章节结构|replace default chapters|replace default chapter structure/i,
 			);
+		}
+	});
+
+	it('/revise 的项目画像写入槽位与 memory_context 读取入口一致', () => {
+		for (const path of revisePaths) {
+			const content = read(path);
+			expect(content, path).toMatch(/profile:weak\.<domain_slug>/);
+			expect(content, path).toMatch(/profile:strong\.<domain_slug>/);
+			expect(content, path).toMatch(/scope=\{type: "project", key: "<project_id>"\}/);
+			expect(content, path).toMatch(
+				/memory_context\([\s\S]*scopes=\[[\s\S]{0,200}project[\s\S]{0,200}include_global=false/,
+			);
+		}
+		for (const path of memoryProtocolPaths) {
+			const content = read(path);
+			expect(content, path).toMatch(/profiles|作用域画像/);
+			expect(content, path).toMatch(/profile:weak\.<domain_slug>/);
+			expect(content, path).toMatch(/profile:strong\.<domain_slug>/);
 		}
 	});
 

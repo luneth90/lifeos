@@ -588,7 +588,7 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		).toContain('fixture-group-theory');
 	});
 
-	it.fails('[版本夹具] D-06 revise 同时加载技能与项目画像并筛选待复习项', () => {
+	it('[版本夹具] D-06 revise 同时加载技能与项目画像并筛选待复习项', () => {
 		const scoped = context([
 			{ type: 'skill', key: 'revise' },
 			{ type: 'project', key: 'fixture-project' },
@@ -600,8 +600,9 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		expect(scoped.rules.map((item) => item.slotKey)).toContain('fixture:revise-rule');
 		const review = memoryQuery({ ...runtime(), filters: { status: 'review' }, limit: 10 }).results;
 		expect(review.map((item) => item.entityId)).toContain('fixture-group-theory');
-		const profileAware = scoped as typeof scoped & { profiles?: Array<{ slotKey: string }> };
-		expect(profileAware.profiles?.map((item) => item.slotKey)).toContain('profile:weak.fixture');
+		expect(scoped.profiles).toEqual(
+			expect.arrayContaining([expect.objectContaining({ slotKey: 'profile:weak.fixture' })]),
+		);
 		expect(scoped.text).toContain('作用域画像');
 	});
 

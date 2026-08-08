@@ -80,7 +80,7 @@ memory_context(
 )
 ```
 
-`memory_context` 返回当前作用域的规则、决策、事实、关联文件和诊断信息。全局硬规则已由 bootstrap 注入，默认不要重复加载 global。
+`memory_context` 返回当前显式作用域的规则、决策、事实、画像、关联文件和诊断信息。显式请求的非 global 作用域画像进入结构化 `profiles`，并在正文的“作用域画像”区块显示；相关文件、目录提示、缓存或其他作用域不会扩大画像读取范围。global 画像仍只由 `UserProfile` 聚合进入 Layer 0，即使 `include_global=true` 也不会重复进入 `profiles` 或局部正文。全局硬规则已由 bootstrap 注入，默认不要重复加载 global。
 
 ## 文件检索与变更通知
 
@@ -165,7 +165,7 @@ memory_log(
 - `profile:context_switch_pattern`
 - `profile:thinking_preference`
 
-画像内容应包含事实、证据和决策影响。跨场景稳定画像可使用 global；只在单个项目成立的动机、强弱项使用 project scope。禁止写入已删除的综合画像槽位。
+画像内容应包含事实、证据和决策影响。跨场景稳定画像可使用 global；只在单个项目成立的动机、强弱项使用 project scope。`/revise` 写入项目作用域的 `profile:weak.<domain_slug>` 或 `profile:strong.<domain_slug>` 后，同一项目必须作为显式 scope 传给 `memory_context`，再从 `profiles` 与“作用域画像”正文读取。禁止写入已删除的综合画像槽位。
 
 ## 噪声防护
 

@@ -2,9 +2,11 @@ import type Database from 'better-sqlite3';
 import { listMemoryItems } from '../services/memory-items.js';
 import type { ScopedMemoryItem } from '../types.js';
 
+const GLOBAL_SCOPE = { type: 'global', key: '' } as const;
+
 function globalProfileItems(db: Database.Database): ScopedMemoryItem[] {
 	return listMemoryItems(db, {
-		scope: { type: 'global', key: '' },
+		scope: GLOBAL_SCOPE,
 		itemKind: 'profile',
 		status: 'active',
 		limit: 10_000,
@@ -70,7 +72,7 @@ export function buildGlobalProfileSummary(db: Database.Database): string {
 
 export function buildGlobalRulesSection(db: Database.Database): string {
 	const items = listMemoryItems(db, {
-		scope: { type: 'global', key: '' },
+		scope: GLOBAL_SCOPE,
 		itemKind: 'rule',
 		status: 'active',
 		limit: 10_000,

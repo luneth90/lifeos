@@ -20,10 +20,10 @@ aliases: []
 | 项 | 实际结果 |
 |---|---|
 | 夹具护栏测试 | 3 项通过 |
-| 52 项业务映射 | 49 项普通通过、2 项预期失败、1 项宿主跳过 |
-| Vitest 总计 | 52 项通过、2 项 expected fail、1 项 skipped，共 55 项 |
+| 52 项业务映射 | 50 项普通通过、1 项预期失败、1 项宿主跳过 |
+| Vitest 总计 | 53 项通过、1 项 expected fail、1 项 skipped，共 55 项 |
 | 自动核心 | 36/36 达到当前自动标准 |
-| 版本夹具 | 13 项普通通过、2 项保留预期失败 |
+| 版本夹具 | 14 项普通通过、1 项保留预期失败 |
 | 宿主跨会话 | C-06 未执行，不计为通过 |
 | 活跃测试记忆残留 | 0；每项结束钩子断言并清理失败现场 |
 | 生产数据访问 | 0；根目录硬护栏只允许系统临时目录真实子目录 |
@@ -34,13 +34,14 @@ aliases: []
 |---|---|---|
 | `npx vitest run tests/e2e/memory-real-env-v2.test.ts`（RED） | 因夹具函数不存在失败 | 失败于无法导入 `../helpers/memory-real-env-vault.js`，0 项测试 |
 | `npx vitest run tests/e2e/memory-real-env-v2.test.ts`（夹具 GREEN） | 夹具三项通过 | 1 个文件、3 项通过 |
-| `npm run test:memory-real-env`（第一次） | 统计固定且退出码为 0 | 1 个文件通过；52 项通过、2 项预期失败、1 项跳过 |
-| `npm run test:memory-real-env`（第二次） | 与第一次完全一致 | 1 个文件通过；52 项通过、2 项预期失败、1 项跳过 |
+| `npm run test:memory-real-env -- -t D-06` | D-06 单独普通通过且保持完整断言 | 1 项通过、54 项跳过；退出码 0 |
+| `npm run test:memory-real-env`（第一次） | 统计固定且退出码为 0 | 1 个文件通过；53 项通过、1 项预期失败、1 项跳过 |
+| `npm run test:memory-real-env`（第二次） | 与第一次完全一致 | 1 个文件通过；53 项通过、1 项预期失败、1 项跳过 |
 | `npx vitest run tests/e2e/memory-real-env-v2.test.ts -t H-02` | H-02 不依赖前序用例并普通通过 | 1 项通过、54 项跳过；退出码 0 |
-| `npm test` | 不低于任务 0 的 998 项基线，新增套件不回归 | 60 个文件通过；1050 项通过、2 项预期失败、1 项跳过，共 1053 项 |
-| `npm run lint` | 生产源码检查无错误 | 51 个源码文件通过 |
+| `npm test` | 不低于任务 0 的 998 项基线，新增套件不回归 | 61 个文件通过；1060 项通过、1 项预期失败、1 项跳过，共 1062 项 |
+| `npm run lint` | 生产源码检查无错误 | 52 个源码文件通过 |
 | `npm run typecheck` | 0 个类型错误 | 退出码 0，无类型错误 |
-| `npx biome check tests/helpers/memory-real-env-vault.ts tests/e2e/memory-real-env-v2.test.ts` | 0 个格式或静态检查错误 | 2 个文件通过，无修复项 |
+| `npx biome check src/types.ts src/services/context-router.ts src/active-docs/userprofile.ts tests/services/context-router-v4.test.ts tests/active-docs/active-docs.test.ts tests/skill-contracts/data-contract.test.ts tests/e2e/memory-real-env-v2.test.ts` | 本任务相关 TypeScript 文件无格式或静态检查错误 | 7 个文件通过，无修复项 |
 
 ## 分类结果
 
@@ -49,17 +50,17 @@ aliases: []
 | A 会话启动与路由 | 8 | 0 | 0 | 8 项通过 |
 | B 写入正确性 | 9 | 0 | 0 | 9 项通过 |
 | C 召回与检索 | 2 | 3 | 1 | 5 项自动执行；C-06 等待宿主证据 |
-| D 学习工作流 | 7 | 3 | 0 | 9 项普通通过；D-06 保留任务 4 预期失败 |
+| D 学习工作流 | 7 | 3 | 0 | 10 项普通通过；D-06 已转为普通通过 |
 | E 上下文恢复 | 2 | 0 | 0 | 2 项通过 |
 | F 治理与遗忘 | 4 | 0 | 0 | 4 项通过 |
 | G 变更同步 | 4 | 0 | 0 | 4 项通过；G-01 只通过稳定 id 定位 |
 | H 版本验收 | 0 | 9 | 0 | 8 项普通通过；H-06 预期失败 |
 
-## 未通过与边界
+## 验收结果与边界
 
 ### D-06 项目画像读取
 
-任务 4 的明确契约是：显式请求的非 global 项目画像进入 `ContextResponse.profiles`，并渲染“作用域画像”文本。当前响应仍排除项目画像。D-06 在确认 skill/project scope 与 review 过滤可用后，以 `it.fails` 固定 `profile:weak.fixture` 的结构化返回和文本渲染目标；任务 1 未修改 context 生产逻辑。
+显式请求的非 global 项目画像现已进入 `ContextResponse.profiles`，并渲染到“作用域画像”文本区块。D-06 保留原有 skill/project scope、review 过滤、`profile:weak.fixture` 结构化返回和文本渲染断言，从 `it.fails` 转为普通测试；单独运行与完整套件双跑均通过。
 
 ### H-02 自包含维护验证
 
@@ -84,4 +85,4 @@ aliases: []
 
 ## 结论
 
-零污染隔离护栏、52 项映射和可重复执行入口已经建立。当前自动结果明确区分普通通过、预期失败和宿主未执行项，不把 D-06、H-06 或 C-06 伪装成成功；H-02 已改为自包含普通通过。
+零污染隔离护栏、52 项映射和可重复执行入口已经建立。D-06 已有普通通过证据；H-06 仍明确保留为预期失败，C-06 仍是宿主未执行项；H-02 保持自包含普通通过。
