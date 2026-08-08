@@ -87,7 +87,7 @@ function writeFixtureFiles(root: string): void {
 		{
 			id: 'fixture-group-theory',
 			title: '群论与群作用',
-			type: 'wiki',
+			type: 'knowledge',
 			status: 'review',
 			summary: '群论、群同态、同构与 Group Action 的检索夹具。',
 			tags: ['群论', 'Group Action', '同构', 'Lagrange'],

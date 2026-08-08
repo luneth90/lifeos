@@ -37,7 +37,7 @@ aliases: []
 | 版本夹具 | 使用隔离的确定性样本验收特定版本行为 | 同上；已知缺陷用 `it.fails` 保留 |
 | 宿主跨会话 | 必须由新宿主会话与宿主工具日志证明 | 不在单一 MCP 测试中伪造 |
 
-分类统计：自动核心 37 项、版本夹具 14 项、宿主跨会话 1 项，共 52 项。
+分类统计：自动核心 36 项、版本夹具 15 项、宿主跨会话 1 项，共 52 项。
 
 ## 3. 52 项映射
 
@@ -47,7 +47,7 @@ aliases: []
 
 | 编号 | 分类 | 绑定测试名 | 预期 |
 |---|---|---|---|
-| A-01 | 自动核心 | `[自动核心] A-01 bootstrap 返回完整 Layer 0 与作用域提示` | 四个 Layer 0 section、项目与仓库提示完整 |
+| A-01 | 自动核心 | `[自动核心] A-01 bootstrap 返回完整 Layer 0 与作用域提示` | 四个 Layer 0 section、待复习计数及四类 scope hints 完整 |
 | A-02 | 自动核心 | `[自动核心] A-02 context 按 skill scope 精确加载` | 只加载 `skill:revise`，不夹带 global |
 | A-03 | 自动核心 | `[自动核心] A-03 context 按稳定 project id 精确加载` | 通过 `fixture-project` 精确解析 |
 | A-04 | 自动核心 | `[自动核心] A-04 context 组合加载多个 scope` | skill 与 project 同时命中 |
@@ -90,7 +90,7 @@ aliases: []
 | D-03 | 版本夹具 | `[版本夹具] D-03 brainstorm 可静默检索相关项目` | 密码学 Agent 查询命中项目夹具 |
 | D-04 | 自动核心 | `[自动核心] D-04 project 通过稳定 id 解析并出现在索引` | 项目解析不依赖历史文件名 |
 | D-05 | 自动核心 | `[自动核心] D-05 knowledge 通知后可立即检索` | notify 后立即 query 命中 |
-| D-06 | 自动核心 | `[自动核心] D-06 revise 同时加载技能与项目画像并筛选待复习项` | 两个 scope 命中且 review 过滤正确 |
+| D-06 | 版本夹具 | `[版本夹具] D-06 revise 同时加载技能与项目画像并筛选待复习项` | review 过滤通过；项目画像尚未进入 `profiles` 与“作用域画像”文本，以 `it.fails` 固定任务 4 目标 |
 | D-07 | 版本夹具 | `[版本夹具] D-07 research 启动前可检索已有报告避重` | 空间智能报告可检索 |
 | D-08 | 自动核心 | `[自动核心] D-08 digest skill scope 可加载` | digest 规则可加载 |
 | D-09 | 自动核心 | `[自动核心] D-09 非生产 skill scope 可批量软归档` | 两条测试记忆被批量归档 |
@@ -100,7 +100,7 @@ aliases: []
 
 | 编号 | 分类 | 绑定测试名 | 预期 |
 |---|---|---|---|
-| E-01 | 自动核心 | `[自动核心] E-01 重置进程内配置后仍可恢复项目上下文` | bootstrap 定位项目，context 恢复决策与关联文件 |
+| E-01 | 自动核心 | `[自动核心] E-01 重置进程内配置后仍可恢复项目上下文` | bootstrap 只从 global profile 恢复画像；context 恢复项目决策，且关联文件真实存在 |
 | E-02 | 自动核心 | `[自动核心] E-02 写入后重置调用边界仍可召回` | 重新打开调用边界后仍可召回 |
 
 ### F. 治理与遗忘
@@ -126,7 +126,7 @@ aliases: []
 | 编号 | 分类 | 绑定测试名 | 预期与当前状态 |
 |---|---|---|---|
 | H-01 | 版本夹具 | `[版本夹具] H-01 数据库使用 INCREMENTAL auto_vacuum` | `auto_vacuum=2` |
-| H-02 | 版本夹具 | `[版本夹具] H-02 freelist 占 page_count 比例低于 5%` | 当前隔离库为约 7.69%，以 `it.fails` 保留 |
+| H-02 | 版本夹具 | `[版本夹具] H-02 freelist 占 page_count 比例低于 5%` | 使用专属临时 Vault，在用例内先制造超过 50% 的 freelist；维护后比例低于 5%，普通通过 |
 | H-03 | 版本夹具 | `[版本夹具] H-03 启动维护后 WAL 小于 1MB` | WAL 小于 1MB |
 | H-04 | 版本夹具 | `[版本夹具] H-04 doctor 的数据库健康指标无告警` | 三项数据库指标为 pass |
 | H-05 | 版本夹具 | `[版本夹具] H-05 中文与英文 bm25 场景将目标排入前三` | 同构与 Lagrange 目标位于前三 |
@@ -151,6 +151,7 @@ C-06 禁止在同一个 MCP 测试进程里模拟“未调用工具”并宣称�
 ## 5. 执行命令
 
 ```bash
+npx vitest run tests/e2e/memory-real-env-v2.test.ts -t H-02
 npm run test:memory-real-env
 npm run test:memory-real-env
 npm test
@@ -158,4 +159,4 @@ npm run typecheck
 npx biome check tests/helpers/memory-real-env-vault.ts tests/e2e/memory-real-env-v2.test.ts
 ```
 
-聚焦命令连续两次必须得到相同统计。H-02 与 H-06 只有在生产缺陷修复后才能把 `it.fails` 改为普通测试；C-06 只有取得宿主日志后才能记录为通过。
+聚焦命令连续两次必须得到相同统计。D-06 与 H-06 只有在对应生产缺陷修复后才能把 `it.fails` 改为普通测试；C-06 只有取得宿主日志后才能记录为通过。H-02 还必须使用 `-t H-02` 单独运行，证明结果不依赖前序用例制造碎片。

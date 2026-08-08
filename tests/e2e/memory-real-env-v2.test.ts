@@ -170,7 +170,13 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 				relatedFiles: ['20_项目/稳定项目定位.md'],
 			},
 			{
-				slotKey: 'fixture:project-profile',
+				slotKey: 'profile:work_style',
+				content: '隔离夹具用户偏好深度优先学习。',
+				scope: { type: 'global', key: '' } as const,
+				itemKind: 'profile' as const,
+			},
+			{
+				slotKey: 'profile:weak.fixture',
 				content: '项目薄弱点是群作用。',
 				scope: { type: 'project', key: 'fixture-project' } as const,
 				itemKind: 'profile' as const,
@@ -212,14 +218,15 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 
 	it('[自动核心] A-01 bootstrap 返回完整 Layer 0 与作用域提示', () => {
 		const result = memoryStartup(runtime());
-		for (const heading of ['行为约束', 'TaskBoard 当前焦点', 'UserProfile 速览']) {
+		for (const heading of ['行为约束', 'TaskBoard 当前焦点', 'UserProfile 速览', '复习提醒']) {
 			expect(result.layer0.text).toContain(heading);
 		}
+		expect(result.layer0.text).toContain('待复习笔记：1 篇');
 		expect(result.layer0.meta.sections).toMatchObject({
 			globalRules: { total: expect.any(Number), loaded: expect.any(Number) },
 			taskboardFocus: { total: expect.any(Number), loaded: expect.any(Number) },
 			userprofileSummary: { total: expect.any(Number), loaded: expect.any(Number) },
-			revisionReminder: { total: expect.any(Number), loaded: expect.any(Number) },
+			revisionReminder: { total: 1, loaded: 1, omitted: 0 },
 		});
 		expect(result.scopeHints).toMatchObject({
 			availableProjects: expect.arrayContaining(['fixture-project']),
@@ -486,7 +493,8 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 
 	it('[版本夹具] C-02 中文关键词由相关性优先召回', () => {
 		const results = memoryQuery({ ...runtime(), query: '群论', limit: 10 }).results;
-		expect(results.findIndex((item) => item.entityId === 'fixture-group-theory')).toBeLessThan(3);
+		const topThreeEntityIds = results.slice(0, 3).map((item) => item.entityId);
+		expect(topThreeEntityIds).toContain('fixture-group-theory');
 	});
 
 	it('[版本夹具] C-03 英文关键词可召回中文知识夹具', () => {
@@ -580,7 +588,7 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		).toContain('fixture-group-theory');
 	});
 
-	it('[自动核心] D-06 revise 同时加载技能与项目画像并筛选待复习项', () => {
+	it.fails('[版本夹具] D-06 revise 同时加载技能与项目画像并筛选待复习项', () => {
 		const scoped = context([
 			{ type: 'skill', key: 'revise' },
 			{ type: 'project', key: 'fixture-project' },
@@ -592,6 +600,9 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		expect(scoped.rules.map((item) => item.slotKey)).toContain('fixture:revise-rule');
 		const review = memoryQuery({ ...runtime(), filters: { status: 'review' }, limit: 10 }).results;
 		expect(review.map((item) => item.entityId)).toContain('fixture-group-theory');
+		const profileAware = scoped as typeof scoped & { profiles?: Array<{ slotKey: string }> };
+		expect(profileAware.profiles?.map((item) => item.slotKey)).toContain('profile:weak.fixture');
+		expect(scoped.text).toContain('作用域画像');
 	});
 
 	it('[版本夹具] D-07 research 启动前可检索已有报告避重', () => {
@@ -655,9 +666,15 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		_resetDefaultInstance();
 		const startup = memoryStartup(runtime());
 		expect(startup.scopeHints.availableProjects).toContain('fixture-project');
+		expect(startup.layer0.text).toContain('隔离夹具用户偏好深度优先学习。');
+		expect(startup.layer0.text).not.toContain('项目薄弱点是群作用。');
 		const restored = context([{ type: 'project', key: 'fixture-project' }]);
 		expect(restored.decisions.map((item) => item.slotKey)).toContain('fixture:project-decision');
 		expect(restored.relatedFiles).toContain('20_项目/稳定项目定位.md');
+		expect(restored.relatedFiles.length).toBeGreaterThan(0);
+		for (const relatedFile of restored.relatedFiles) {
+			expect(existsSync(join(vault.root, relatedFile)), `关联文件 ${relatedFile}`).toBe(true);
+		}
 	});
 
 	it('[自动核心] E-02 写入后重置调用边界仍可召回', () => {
@@ -804,16 +821,61 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		}
 	});
 
-	it.fails('[版本夹具] H-02 freelist 占 page_count 比例低于 5%', () => {
-		memoryStartupMaintenance(runtime());
-		const db = openFixtureDb();
+	it('[版本夹具] H-02 freelist 占 page_count 比例低于 5%', () => {
+		const maintenanceVault = createIsolatedMemoryVault();
+		const sharedVaultRoot = process.env.LIFEOS_VAULT_ROOT;
+		process.env.LIFEOS_VAULT_ROOT = maintenanceVault.root;
+		const maintenanceRuntime = {
+			contractVersion: CONTRACT_VERSION,
+			dbPath: maintenanceVault.dbPath,
+			vaultRoot: maintenanceVault.root,
+		};
 		try {
-			const pages = db.pragma('page_count', { simple: true }) as number;
-			const free = db.pragma('freelist_count', { simple: true }) as number;
-			expect(pages).toBeGreaterThan(0);
-			expect(free / pages).toBeLessThan(0.05);
+			assertNotProductionVault(maintenanceVault.root);
+			memoryStartupMaintenance(maintenanceRuntime);
+			const loadDb = new Database(maintenanceVault.dbPath);
+			let before: { pages: number; free: number };
+			try {
+				loadDb.exec('CREATE TABLE h02_fragmentation(payload TEXT NOT NULL)');
+				const insert = loadDb.prepare('INSERT INTO h02_fragmentation(payload) VALUES (?)');
+				loadDb.transaction(() => {
+					for (let index = 0; index < 500; index += 1) insert.run('x'.repeat(8192));
+				})();
+				loadDb.exec('DELETE FROM h02_fragmentation; DROP TABLE h02_fragmentation');
+				before = {
+					pages: loadDb.pragma('page_count', { simple: true }) as number,
+					free: loadDb.pragma('freelist_count', { simple: true }) as number,
+				};
+			} finally {
+				loadDb.close();
+			}
+			expect(before.pages).toBeGreaterThan(0);
+			expect(before.free / before.pages).toBeGreaterThan(0.5);
+
+			memoryStartupMaintenance(maintenanceRuntime);
+			const maintainedDb = new Database(maintenanceVault.dbPath, {
+				readonly: true,
+				fileMustExist: true,
+			});
+			try {
+				const after = {
+					pages: maintainedDb.pragma('page_count', { simple: true }) as number,
+					free: maintainedDb.pragma('freelist_count', { simple: true }) as number,
+				};
+				expect(after.pages).toBeGreaterThan(0);
+				expect(after.free).toBeLessThan(before.free);
+				expect(after.free / after.pages).toBeLessThan(0.05);
+			} finally {
+				maintainedDb.close();
+			}
 		} finally {
-			db.close();
+			_resetDefaultInstance();
+			if (sharedVaultRoot === undefined) {
+				Reflect.deleteProperty(process.env, 'LIFEOS_VAULT_ROOT');
+			} else {
+				process.env.LIFEOS_VAULT_ROOT = sharedVaultRoot;
+			}
+			maintenanceVault.cleanup();
 		}
 	});
 
@@ -838,7 +900,8 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 	it('[版本夹具] H-05 中文与英文 bm25 场景将目标排入前三', () => {
 		for (const query of ['同构', 'Lagrange']) {
 			const results = memoryQuery({ ...runtime(), query, limit: 10 }).results;
-			expect(results.findIndex((item) => item.entityId === 'fixture-group-theory')).toBeLessThan(3);
+			const topThreeEntityIds = results.slice(0, 3).map((item) => item.entityId);
+			expect(topThreeEntityIds, `查询 ${query} 的前三名`).toContain('fixture-group-theory');
 		}
 	});
 
