@@ -79,6 +79,35 @@ describe('V4 文件变更通知', () => {
 		});
 	});
 
+	it('无操作移动产生的作用域不会污染后续未变化通知', () => {
+		const filePath = '40_知识/稳定笔记.md';
+		writeTestNote(vault.root, filePath, {
+			id: 'note-stable',
+			title: '稳定笔记',
+			type: 'knowledge',
+			status: 'review',
+		});
+		notifyFileChanged(db, vault.root, filePath);
+
+		const moved = notifyFileChanged(db, vault.root, filePath, filePath);
+		try {
+			expect(moved.action).toBe('unchanged');
+			expect(moved.impact.affectedScopes).toEqual(
+				expect.arrayContaining([
+					{ type: 'file', key: filePath },
+					{ type: 'file', key: 'note-stable' },
+				]),
+			);
+
+			const unchanged = notifyFileChanged(db, vault.root, filePath);
+			expect(unchanged.action).toBe('unchanged');
+			expect(unchanged.impact.affectedScopes).toEqual([]);
+		} finally {
+			moved.impact.affectedScopes.length = 0;
+			moved.impact.changedEntityIds.length = 0;
+		}
+	});
+
 	it('批量通知在同一事务内索引，并对输入路径去重', () => {
 		writeTestNote(vault.root, '00_草稿/甲.md', {
 			id: 'draft-a',

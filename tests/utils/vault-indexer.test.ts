@@ -727,4 +727,31 @@ describe('indexFiles() 影响报告', () => {
 			changedEntityIds: [],
 		});
 	});
+
+	it('每次空影响结果的对象与数组均为独立实例', () => {
+		const filePath = '00_草稿/独立影响.md';
+		writeTestNote(vault.root, filePath, {
+			id: 'draft-independent-impact',
+			title: '独立影响',
+			type: 'draft',
+			status: 'pending',
+		});
+		indexFiles(db, vault.root, [filePath]);
+
+		const first = indexFiles(db, vault.root, [filePath]).impact;
+		try {
+			first.affectedScopes.push({ type: 'file', key: 'polluted-scope' });
+			first.changedEntityIds.push('polluted-entity');
+			const second = indexFiles(db, vault.root, [filePath]).impact;
+
+			expect(first).not.toBe(second);
+			expect(first.affectedScopes).not.toBe(second.affectedScopes);
+			expect(first.changedEntityIds).not.toBe(second.changedEntityIds);
+			expect(second.affectedScopes).toEqual([]);
+			expect(second.changedEntityIds).toEqual([]);
+		} finally {
+			first.affectedScopes.length = 0;
+			first.changedEntityIds.length = 0;
+		}
+	});
 });

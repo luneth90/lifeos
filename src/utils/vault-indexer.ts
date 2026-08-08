@@ -86,14 +86,16 @@ interface IndexChange {
 	changed: boolean;
 }
 
-const EMPTY_IMPACT: IndexImpact = {
-	vaultIndexChanged: false,
-	backlinksChanged: false,
-	taskboardChanged: false,
-	profileChanged: false,
-	affectedScopes: [],
-	changedEntityIds: [],
-};
+export function createEmptyIndexImpact(): IndexImpact {
+	return {
+		vaultIndexChanged: false,
+		backlinksChanged: false,
+		taskboardChanged: false,
+		profileChanged: false,
+		affectedScopes: [],
+		changedEntityIds: [],
+	};
+}
 
 export function shouldIndex(relativePath: string, config?: VaultConfig): boolean {
 	if (!relativePath.endsWith('.md')) return false;
@@ -491,7 +493,7 @@ function rowAffectsProfile(row: IndexedRow | null): boolean {
 }
 
 function buildImpact(changes: IndexChange[], backlinksChanged: boolean): IndexImpact {
-	if (!changes.length) return { ...EMPTY_IMPACT };
+	if (!changes.length) return createEmptyIndexImpact();
 	const scopes = new Map<string, MemoryScope>();
 	const entityIds = new Set<string>();
 	let taskboardChanged = false;

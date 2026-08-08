@@ -5,7 +5,7 @@ import type Database from 'better-sqlite3';
 import { type VaultConfig, getOrCreateVaultConfig } from '../config.js';
 import type { MemoryScope } from '../types.js';
 import type { IndexImpact, IndexResult } from '../utils/vault-indexer.js';
-import { indexFiles, shouldIndex } from '../utils/vault-indexer.js';
+import { createEmptyIndexImpact, indexFiles, shouldIndex } from '../utils/vault-indexer.js';
 
 export interface NotifyFileChangedResult {
 	action: 'indexed' | 'unchanged' | 'removed' | 'skipped' | 'error';
@@ -19,15 +19,6 @@ export interface NotifyFilesChangedResult {
 	results: NotifyFileChangedResult[];
 	impact: IndexImpact;
 }
-
-const EMPTY_IMPACT: IndexImpact = {
-	vaultIndexChanged: false,
-	backlinksChanged: false,
-	taskboardChanged: false,
-	profileChanged: false,
-	affectedScopes: [],
-	changedEntityIds: [],
-};
 
 function toNotifyResult(result: IndexResult, impact: IndexImpact): NotifyFileChangedResult {
 	return {
@@ -48,14 +39,23 @@ function vaultRelativePath(vaultRoot: string, filePath: string): string {
 	return path;
 }
 
-function addAffectedScope(impact: IndexImpact, scope: MemoryScope): void {
-	if (
-		!impact.affectedScopes.some(
-			(candidate) => candidate.type === scope.type && candidate.key === scope.key,
-		)
-	) {
-		impact.affectedScopes.push(scope);
+function addAffectedScope(scopes: Map<string, MemoryScope>, scope: MemoryScope): void {
+	scopes.set(`${scope.type}\u0000${scope.key}`, scope);
+}
+
+function mergeIndexImpact(impact: IndexImpact, affectedScopes: MemoryScope[]): IndexImpact {
+	const scopes = new Map<string, MemoryScope>();
+	for (const scope of [...impact.affectedScopes, ...affectedScopes]) {
+		addAffectedScope(scopes, scope);
 	}
+	return {
+		vaultIndexChanged: impact.vaultIndexChanged,
+		backlinksChanged: impact.backlinksChanged,
+		taskboardChanged: impact.taskboardChanged,
+		profileChanged: impact.profileChanged,
+		affectedScopes: [...scopes.values()],
+		changedEntityIds: [...impact.changedEntityIds],
+	};
 }
 
 function migrateMovedFileReferences(
@@ -64,9 +64,9 @@ function migrateMovedFileReferences(
 	oldPath: string,
 	newPath: string,
 	newScopeKey: string,
-	impact: IndexImpact,
-): void {
+): MemoryScope[] {
 	const now = new Date().toISOString();
+	const affectedScopes = new Map<string, MemoryScope>();
 	const sourceKeys = [...new Set(oldScopeKeys)];
 	const allKeys = [...new Set([...sourceKeys, newScopeKey])];
 	const placeholders = allKeys.map(() => '?').join(', ');
@@ -91,8 +91,8 @@ function migrateMovedFileReferences(
 			WHERE scope_type = 'file' AND scope_key IN (${migratingPlaceholders})
 		`).run(newScopeKey, now, ...migratingKeys);
 	}
-	for (const key of sourceKeys) addAffectedScope(impact, { type: 'file', key });
-	addAffectedScope(impact, { type: 'file', key: newScopeKey });
+	for (const key of sourceKeys) addAffectedScope(affectedScopes, { type: 'file', key });
+	addAffectedScope(affectedScopes, { type: 'file', key: newScopeKey });
 
 	const rows = db
 		.prepare(`
@@ -116,8 +116,9 @@ function migrateMovedFileReferences(
 			now,
 			row.item_id,
 		);
-		addAffectedScope(impact, { type: row.scope_type, key: row.scope_key });
+		addAffectedScope(affectedScopes, { type: row.scope_type, key: row.scope_key });
 	}
+	return [...affectedScopes.values()];
 }
 
 function notifyFileMoved(
@@ -166,12 +167,18 @@ function notifyFileMoved(
 			).count;
 			if (count === 1) newScopeKey = current.entity_id;
 		}
-		migrateMovedFileReferences(db, oldScopeKeys, oldPath, newPath, newScopeKey, indexed.impact);
+		const affectedScopes = migrateMovedFileReferences(
+			db,
+			oldScopeKeys,
+			oldPath,
+			newPath,
+			newScopeKey,
+		);
 		return {
 			action: result?.status ?? (targetShouldIndex ? 'indexed' : 'skipped'),
 			filePath: newPath,
 			previousFilePath: oldPath,
-			impact: indexed.impact,
+			impact: mergeIndexImpact(indexed.impact, affectedScopes),
 			reason: result?.reason,
 		} satisfies NotifyFileChangedResult;
 	});
@@ -195,10 +202,10 @@ export function notifyFilesChanged(
 			results: filePaths.map((filePath) => ({
 				action: 'error',
 				filePath,
-				impact: { ...EMPTY_IMPACT },
+				impact: createEmptyIndexImpact(),
 				reason: error instanceof Error ? error.message : String(error),
 			})),
-			impact: { ...EMPTY_IMPACT },
+			impact: createEmptyIndexImpact(),
 		};
 	}
 }
@@ -218,7 +225,7 @@ export function notifyFileChanged(
 				action: 'error',
 				filePath,
 				previousFilePath,
-				impact: { ...EMPTY_IMPACT },
+				impact: createEmptyIndexImpact(),
 				reason: error instanceof Error ? error.message : String(error),
 			};
 		}
