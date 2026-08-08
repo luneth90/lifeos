@@ -10,6 +10,28 @@ export type ActiveDocTarget = 'TaskBoard' | 'UserProfile';
 
 export type MatchSource = 'exact_filter' | 'fts5' | 'hybrid_expand' | 'like_fallback';
 
+export type VaultEvidenceField = 'title' | 'summary' | 'search_hints' | 'tags';
+
+export interface VaultQueryEvidence {
+	field: VaultEvidenceField;
+	snippet: string;
+	matchedTerms: string[];
+	sourcePath: string;
+}
+
+export type VaultRankSource = 'vault_fts_bm25' | 'deterministic_fallback' | 'requested_order';
+
+export interface VaultRankSortKey {
+	field: 'rankScore' | 'modifiedAt' | 'filePath';
+	direction: 'asc' | 'desc' | 'input';
+	value: number | string | null;
+}
+
+export interface VaultRankExplanation {
+	rankSource: VaultRankSource;
+	sortKeys: VaultRankSortKey[];
+}
+
 export const MEMORY_ITEM_KINDS = ['rule', 'decision', 'fact', 'profile', 'event'] as const;
 export type MemoryItemKind = (typeof MEMORY_ITEM_KINDS)[number];
 
@@ -251,6 +273,8 @@ export type VaultSelectRow = Pick<
 	| 'modified_at'
 	| 'entity_id'
 >;
+
+export type VaultFtsSelectRow = VaultSelectRow & { rank_score: number };
 
 // ─── Result types for core.ts ──────────────────────────────────────────────────
 

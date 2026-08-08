@@ -278,6 +278,23 @@ describe('临时 Vault 生产检索评测', () => {
 		expect(report.metrics.staleHitRate).toBeLessThanOrEqual(0);
 		expect(report.metrics.forbiddenHitRate).toBeLessThanOrEqual(0);
 		expect(report.categoryReports.long_tail.metrics.recallAt5).toBeGreaterThanOrEqual(0.8);
+		expect(report.metrics).toEqual({
+			recallAt5: 1,
+			mrrAt10: 1,
+			abstentionAccuracy: 1,
+			scopeLeakageRate: 0,
+			staleHitRate: 0,
+			forbiddenHitRate: 0,
+			averageContextTokens: 55.45238095238095,
+		});
+		expect(report.denominators).toEqual({
+			relevanceCases: 37,
+			abstentionCases: 42,
+			scopedResults: 43,
+			temporalResults: 6,
+			forbiddenEligibleResults: 18,
+			contextCases: 42,
+		});
 	});
 
 	it('从生产索引事实推导作用域，夹具自报值不能隐藏泄漏', () => {

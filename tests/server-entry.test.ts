@@ -109,6 +109,54 @@ function scopedItemFixture(): Record<string, unknown> {
 	};
 }
 
+function rankedQueryResultFixture(): Record<string, unknown> {
+	return {
+		filePath: '40_知识/可审计检索.md',
+		entityId: 'auditable-query',
+		title: '可审计检索',
+		type: 'note',
+		status: 'review',
+		domain: '测试',
+		summary: '可审计检索证据',
+		displaySummary: '可审计检索证据',
+		matchSource: 'fts5',
+		matchedFields: ['title', 'summary'],
+		score: 490,
+		rankScore: -1.25,
+		rankPosition: 1,
+		rankExplanation: {
+			rankSource: 'vault_fts_bm25',
+			sortKeys: [
+				{ field: 'rankScore', direction: 'asc', value: -1.25 },
+				{
+					field: 'modifiedAt',
+					direction: 'desc',
+					value: '2026-08-09T00:00:00.000Z',
+				},
+				{
+					field: 'filePath',
+					direction: 'asc',
+					value: '40_知识/可审计检索.md',
+				},
+			],
+		},
+		evidence: [
+			{
+				field: 'title',
+				snippet: '可审计检索',
+				matchedTerms: ['可审计检索'],
+				sourcePath: '40_知识/可审计检索.md',
+			},
+		],
+		modifiedAt: '2026-08-09T00:00:00.000Z',
+		masteryStatus: 'review',
+		tags: ['检索'],
+		aliases: [],
+		wikilinks: [],
+		backlinks: [],
+	};
+}
+
 function outputFixtures(): Record<(typeof TOOL_NAMES)[number], Record<string, unknown>> {
 	const item = scopedItemFixture();
 	return {
@@ -153,7 +201,7 @@ function outputFixtures(): Record<(typeof TOOL_NAMES)[number], Record<string, un
 				error: null,
 			},
 		},
-		memory_query: { results: [] },
+		memory_query: { results: [rankedQueryResultFixture()] },
 		memory_context: {
 			snapshotId: 'ctx-test',
 			matchedScopes: [],
@@ -356,11 +404,24 @@ describe('lifeos bin entry', () => {
 			await withMcpClient(vault, async (client) => {
 				const results: CallToolResult[] = [];
 				results.push(await client.callTool({ name: 'memory_bootstrap', arguments: {} }));
-				results.push(
-					await client.callTool({
-						name: 'memory_query',
-						arguments: { contract_version: 2, query: '结构化输出' },
-					}),
+				const queried = await client.callTool({
+					name: 'memory_query',
+					arguments: { contract_version: 2, query: '结构化输出' },
+				});
+				results.push(queried);
+				const queryOutput = queried.structuredContent as
+					| { results?: Array<Record<string, unknown>> }
+					| undefined;
+				const firstQueryResult = queryOutput?.results?.[0];
+				expect(firstQueryResult?.rankScore).toBeTypeOf('number');
+				expect(firstQueryResult?.rankPosition).toBe(1);
+				expect(firstQueryResult?.rankExplanation).toEqual(expect.any(Object));
+				expect(firstQueryResult?.evidence).toEqual(
+					expect.arrayContaining([
+						expect.objectContaining({
+							sourcePath: '40_知识/笔记/结构化输出.md',
+						}),
+					]),
 				);
 				results.push(
 					await client.callTool({

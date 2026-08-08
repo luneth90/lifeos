@@ -4,7 +4,15 @@
 
 import type Database from 'better-sqlite3';
 import { inClause, queryAll } from '../db/index.js';
-import type { ListMemoryItemsInput, MatchSource, VaultSelectRow } from '../types.js';
+import type {
+	ListMemoryItemsInput,
+	MatchSource,
+	VaultEvidenceField,
+	VaultFtsSelectRow,
+	VaultQueryEvidence,
+	VaultRankExplanation,
+	VaultSelectRow,
+} from '../types.js';
 import { tokenize } from '../utils/segmenter.js';
 import { compactText, containsCjk, loadsJsonList } from '../utils/shared.js';
 import { listMemoryItems } from './memory-items.js';
@@ -23,6 +31,10 @@ export interface VaultQueryResult {
 	matchSource: MatchSource;
 	matchedFields: string[];
 	score: number;
+	rankScore: number | null;
+	rankPosition: number;
+	rankExplanation: VaultRankExplanation;
+	evidence: VaultQueryEvidence[];
 	modifiedAt: string | null;
 	masteryStatus?: string | null;
 	tags?: string[];
@@ -46,6 +58,10 @@ const FIELD_SCORES: Record<string, number> = {
 	search_hints: 60,
 	tags: 30,
 };
+
+const EVIDENCE_FIELDS: VaultEvidenceField[] = ['title', 'summary', 'search_hints', 'tags'];
+const EVIDENCE_MAX_LENGTH = 160;
+const EVIDENCE_CONTEXT_LENGTH = 48;
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
@@ -106,6 +122,92 @@ function matchedFields(query: string, row: VaultSelectRow): string[] {
 		.map(([, name]) => name);
 }
 
+function compactEvidenceText(value: string): string {
+	return value.replace(/\s+/g, ' ').trim();
+}
+
+function evidenceSnippet(
+	value: string,
+	terms: string[],
+): { snippet: string; terms: string[] } | null {
+	const text = compactEvidenceText(value);
+	const lower = text.toLowerCase();
+	const firstMatch = terms
+		.map((term) => lower.indexOf(term.toLowerCase()))
+		.filter((index) => index >= 0)
+		.sort((left, right) => left - right)[0];
+	if (firstMatch === undefined) return null;
+
+	const start = Math.max(0, firstMatch - EVIDENCE_CONTEXT_LENGTH);
+	const prefix = start > 0 ? '…' : '';
+	const rawBudget = EVIDENCE_MAX_LENGTH - prefix.length - 1;
+	let raw = text.slice(start, start + rawBudget);
+	const suffix = start + raw.length < text.length ? '…' : '';
+	if (!suffix) raw = text.slice(start, start + EVIDENCE_MAX_LENGTH - prefix.length);
+	const snippet = `${prefix}${raw}${suffix}`;
+	const snippetLower = snippet.toLowerCase();
+	const matchedTerms = [...new Set(terms)].filter((term) =>
+		snippetLower.includes(term.toLowerCase()),
+	);
+	return matchedTerms.length > 0 ? { snippet, terms: matchedTerms } : null;
+}
+
+function buildEvidence(query: string, row: VaultSelectRow): VaultQueryEvidence[] {
+	if (!query.trim()) return [];
+	const terms = queryTerms(query);
+	const sourcePath = String(row.file_path);
+	const evidence: VaultQueryEvidence[] = [];
+	for (const field of EVIDENCE_FIELDS) {
+		const value = row[field];
+		if (value == null || !textMatchesTerms(String(value), terms)) continue;
+		const excerpt = evidenceSnippet(String(value), terms);
+		if (!excerpt) continue;
+		evidence.push({
+			field,
+			snippet: excerpt.snippet,
+			matchedTerms: excerpt.terms,
+			sourcePath,
+		});
+	}
+	return evidence;
+}
+
+function buildRankExplanation(
+	row: VaultSelectRow,
+	matchSource: MatchSource,
+	rankScore: number | null,
+	requestedOrder = false,
+): VaultRankExplanation {
+	if (requestedOrder) {
+		return {
+			rankSource: 'requested_order',
+			sortKeys: [{ field: 'filePath', direction: 'input', value: String(row.file_path) }],
+		};
+	}
+	const modifiedAt = row.modified_at != null ? String(row.modified_at) : null;
+	const filePath = String(row.file_path);
+	if (rankScore !== null) {
+		return {
+			rankSource: 'vault_fts_bm25',
+			sortKeys: [
+				{ field: 'rankScore', direction: 'asc', value: rankScore },
+				{ field: 'modifiedAt', direction: 'desc', value: modifiedAt },
+				{ field: 'filePath', direction: 'asc', value: filePath },
+			],
+		};
+	}
+	return {
+		rankSource: 'deterministic_fallback',
+		sortKeys: [
+			...(matchSource === 'hybrid_expand'
+				? ([{ field: 'rankScore', direction: 'asc', value: null }] as const)
+				: []),
+			{ field: 'modifiedAt', direction: 'desc', value: modifiedAt },
+			{ field: 'filePath', direction: 'asc', value: filePath },
+		],
+	};
+}
+
 /**
  * Compute a coarse display score based on match source and matched fields.
  * The score is for display purposes only and never participates in result
@@ -124,6 +226,9 @@ function buildQueryResult(
 	row: VaultSelectRow,
 	matchSource: MatchSource,
 	fields: string[],
+	query = '',
+	rankScore: number | null = null,
+	requestedOrder = false,
 ): VaultQueryResult {
 	const summary = row.summary != null ? String(row.summary) : null;
 
@@ -139,6 +244,10 @@ function buildQueryResult(
 		matchSource,
 		matchedFields: fields,
 		score: scoreResult(matchSource, fields),
+		rankScore,
+		rankPosition: 0,
+		rankExplanation: buildRankExplanation(row, matchSource, rankScore, requestedOrder),
+		evidence: buildEvidence(query, row),
 		modifiedAt: row.modified_at != null ? String(row.modified_at) : null,
 		masteryStatus: row.status != null ? String(row.status) : null,
 		tags: loadsJsonList(row.tags),
@@ -146,6 +255,34 @@ function buildQueryResult(
 		wikilinks: loadsJsonList(row.wikilinks),
 		backlinks: loadsJsonList(row.backlinks),
 	};
+}
+
+function withRankPositions(results: VaultQueryResult[]): VaultQueryResult[] {
+	return results.map((result, index) => ({ ...result, rankPosition: index + 1 }));
+}
+
+function compareTextAsc(left: string, right: string): number {
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
+interface SearchCandidate {
+	row: VaultSelectRow;
+	source: MatchSource;
+	rankScore: number | null;
+}
+
+function compareSearchCandidates(left: SearchCandidate, right: SearchCandidate): number {
+	if (left.rankScore !== null && right.rankScore !== null && left.rankScore !== right.rankScore) {
+		return left.rankScore - right.rankScore;
+	}
+	if (left.rankScore !== null) return -1;
+	if (right.rankScore !== null) return 1;
+	const modifiedOrder = compareTextAsc(
+		String(right.row.modified_at ?? ''),
+		String(left.row.modified_at ?? ''),
+	);
+	if (modifiedOrder !== 0) return modifiedOrder;
+	return compareTextAsc(String(left.row.file_path), String(right.row.file_path));
 }
 
 /**
@@ -229,23 +366,25 @@ export function queryVaultIndex(
       SELECT ${VAULT_SELECT}
       FROM vault_index vi
       WHERE ${filterWhere}
-      ORDER BY vi.modified_at DESC
+      ORDER BY vi.modified_at DESC, vi.file_path ASC
       LIMIT ?
     `;
 		const rows = queryAll<VaultSelectRow>(db, sql, ...filterParams, limit);
-		const results = rows.map((row) => buildQueryResult(row, 'exact_filter', matchedFields(q, row)));
+		const results = withRankPositions(
+			rows.map((row) => buildQueryResult(row, 'exact_filter', matchedFields(q, row), q)),
+		);
 		return { results };
 	}
 
 	// Case 3: Has query — try FTS5 first
 	const ftsQ = ftsQuery(q);
-	let ftsRows: VaultSelectRow[] = [];
+	let ftsRows: VaultFtsSelectRow[] = [];
 	let ftsError = false;
 
 	if (ftsQ) {
 		try {
 			let sql = `
-        SELECT ${VAULT_SELECT}
+        SELECT ${VAULT_SELECT}, bm25(vault_fts, 0, 4, 3, 10, 2) AS rank_score
         FROM vault_index vi
         JOIN vault_fts vf ON vf.rowid = vi.rowid
         WHERE vault_fts MATCH ?
@@ -257,13 +396,12 @@ export function queryVaultIndex(
 				params.push(...filterParams);
 			}
 
-			// Rank by bm25 relevance (weights per column order file_path, title,
-			// summary, search_hints, tags: 0, 4, 3, 10, 2). The first operand must be
-			// the real table name vault_fts, not the join alias.
-			sql += ' ORDER BY bm25(vault_fts, 0, 4, 3, 10, 2) LIMIT ?';
-			params.push(limit * 2); // Over-fetch for reranking
+			// 权重按 FTS 列顺序 file_path、title、summary、search_hints、tags 对应
+			// 0、4、3、10、2；rank_score 是查询实际使用的原始 BM25 值。
+			sql += ' ORDER BY rank_score ASC, vi.modified_at DESC, vi.file_path ASC LIMIT ?';
+			params.push(limit);
 
-			ftsRows = queryAll<VaultSelectRow>(db, sql, ...params);
+			ftsRows = queryAll<VaultFtsSelectRow>(db, sql, ...params);
 		} catch {
 			ftsError = true;
 		}
@@ -274,9 +412,11 @@ export function queryVaultIndex(
 
 	// FTS5 succeeded and has enough results
 	if (!needsFallback && ftsRows.length > 0) {
-		const results = ftsRows
-			.slice(0, limit)
-			.map((row) => buildQueryResult(row, 'fts5', matchedFields(q, row)));
+		const results = withRankPositions(
+			ftsRows.map((row) =>
+				buildQueryResult(row, 'fts5', matchedFields(q, row), q, Number(row.rank_score)),
+			),
+		);
 		return { results };
 	}
 
@@ -300,7 +440,7 @@ export function queryVaultIndex(
 			    SELECT ${VAULT_SELECT}
 			    FROM vault_index vi
 			    WHERE ${likeWhere}
-			    ORDER BY vi.modified_at DESC
+			    ORDER BY vi.modified_at DESC, vi.file_path ASC
 			    LIMIT ?
 			  `;
 		likeParams.push(fetchLimit);
@@ -315,15 +455,28 @@ export function queryVaultIndex(
 		likeRows = runLikeQuery(['title', 'search_hints', 'summary', 'tags'], limit);
 	}
 
-	// Merge FTS rows + LIKE rows, deduplicate by file_path
+	// 明确合并 FTS 与 LIKE 两个候选源；这一步只去重并按公开排序键稳定排序。
 	const likeSource: MatchSource = ftsRows.length > 0 ? 'hybrid_expand' : 'like_fallback';
-	const ftsTagged = ftsRows.map((row) => ({ row, source: 'fts5' as MatchSource }));
-	const likeTagged = likeRows.map((row) => ({ row, source: likeSource }));
+	const ftsTagged: SearchCandidate[] = ftsRows.map((row) => ({
+		row,
+		source: 'fts5' as MatchSource,
+		rankScore: Number(row.rank_score),
+	}));
+	const likeTagged: SearchCandidate[] = likeRows.map((row) => ({
+		row,
+		source: likeSource,
+		rankScore: null,
+	}));
 	const merged = mergeAndDedupe(ftsTagged, likeTagged, (item) => String(item.row.file_path));
 
-	const results = merged
-		.slice(0, limit)
-		.map(({ row, source }) => buildQueryResult(row, source, matchedFields(q, row)));
+	const results = withRankPositions(
+		merged
+			.sort(compareSearchCandidates)
+			.slice(0, limit)
+			.map(({ row, source, rankScore }) =>
+				buildQueryResult(row, source, matchedFields(q, row), q, rankScore),
+			),
+	);
 	return { results };
 }
 
@@ -355,11 +508,11 @@ export function queryVaultIndexByPaths(
 	for (const fp of filePaths) {
 		const row = rowMap.get(fp);
 		if (row) {
-			results.push(buildQueryResult(row, 'exact_filter', []));
+			results.push(buildQueryResult(row, 'exact_filter', [], '', null, true));
 		}
 	}
 
-	return { results };
+	return { results: withRankPositions(results) };
 }
 
 /**
@@ -385,10 +538,10 @@ export function queryVaultIndexByTitles(
 		params.push(`${pathPrefix}%`);
 	}
 
-	sql += ' ORDER BY vi.modified_at DESC';
+	sql += ' ORDER BY vi.modified_at DESC, vi.file_path ASC';
 
 	const rows = queryAll<VaultSelectRow>(db, sql, ...params);
-	const results = rows.map((row) => buildQueryResult(row, 'exact_filter', []));
+	const results = withRankPositions(rows.map((row) => buildQueryResult(row, 'exact_filter', [])));
 	return { results };
 }
 
@@ -432,13 +585,13 @@ export function queryVaultIndexByPrefixes(
     SELECT ${VAULT_SELECT}
     FROM vault_index vi
     WHERE ${conditions.join(' AND ')}
-    ORDER BY vi.modified_at DESC
+    ORDER BY vi.modified_at DESC, vi.file_path ASC
     LIMIT ?
   `;
 	params.push(limit);
 
 	const rows = queryAll<VaultSelectRow>(db, sql, ...params);
-	const results = rows.map((row) => buildQueryResult(row, 'exact_filter', []));
+	const results = withRankPositions(rows.map((row) => buildQueryResult(row, 'exact_filter', [])));
 	return { results };
 }
 
@@ -487,13 +640,13 @@ export function queryVaultIndexByDomainsOrTags(
     SELECT ${VAULT_SELECT}
     FROM vault_index vi
     WHERE ${conditions.join(' AND ')}
-    ORDER BY vi.modified_at DESC
+    ORDER BY vi.modified_at DESC, vi.file_path ASC
     LIMIT ?
   `;
 	params.push(limit);
 
 	const rows = queryAll<VaultSelectRow>(db, sql, ...params);
-	const results = rows.map((row) => buildQueryResult(row, 'exact_filter', []));
+	const results = withRankPositions(rows.map((row) => buildQueryResult(row, 'exact_filter', [])));
 	return { results };
 }
 

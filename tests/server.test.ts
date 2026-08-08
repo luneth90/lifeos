@@ -82,6 +82,54 @@ function successfulMaintenanceResult() {
 	};
 }
 
+function rankedQueryResultFixture() {
+	return {
+		filePath: '40_知识/可审计检索.md',
+		entityId: 'auditable-query',
+		title: '可审计检索',
+		type: 'note',
+		status: 'review',
+		domain: '测试',
+		summary: '可审计检索证据',
+		displaySummary: '可审计检索证据',
+		matchSource: 'fts5' as const,
+		matchedFields: ['title', 'summary'],
+		score: 490,
+		rankScore: -1.25,
+		rankPosition: 1,
+		rankExplanation: {
+			rankSource: 'vault_fts_bm25' as const,
+			sortKeys: [
+				{ field: 'rankScore' as const, direction: 'asc' as const, value: -1.25 },
+				{
+					field: 'modifiedAt' as const,
+					direction: 'desc' as const,
+					value: '2026-08-09T00:00:00.000Z',
+				},
+				{
+					field: 'filePath' as const,
+					direction: 'asc' as const,
+					value: '40_知识/可审计检索.md',
+				},
+			],
+		},
+		evidence: [
+			{
+				field: 'title' as const,
+				snippet: '可审计检索',
+				matchedTerms: ['可审计检索'],
+				sourcePath: '40_知识/可审计检索.md',
+			},
+		],
+		modifiedAt: '2026-08-09T00:00:00.000Z',
+		masteryStatus: 'review',
+		tags: ['检索'],
+		aliases: [],
+		wikilinks: [],
+		backlinks: [],
+	};
+}
+
 const coreMock = vi.hoisted(() => ({
 	memoryStartup: vi.fn(),
 	memoryStartupMaintenance: vi.fn(() => ({
@@ -314,6 +362,19 @@ describe('server 最终 V2/V4 契约', () => {
 		expect(coreMock.memoryStartup).not.toHaveBeenCalled();
 		expect(coreMock.memoryQuery).not.toHaveBeenCalled();
 		expect(testing.runtimeCount()).toBe(0);
+	});
+
+	it('memory_query 严格保留真实排名与索引证据字段', () => {
+		const fixture = rankedQueryResultFixture();
+		coreMock.memoryQuery.mockReturnValueOnce({ results: [fixture] });
+
+		const result = testing.callTool('memory_query', {
+			contract_version: 2,
+			vault_root: vault.root,
+			query: '可审计检索',
+		});
+
+		expect(result).toEqual({ results: [fixture] });
 	});
 
 	it('memory_log 只转发最终字段；global 写入精确失效 Layer 0', () => {

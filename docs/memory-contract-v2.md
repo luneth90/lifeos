@@ -51,6 +51,59 @@ memory_forget(contract_version=2, item_id=42, reason="规则已被新约定替�
 memory_notify(contract_version=2, file_path="40_知识/笔记/群论.md")
 ```
 
+### `memory_query` 排名与证据
+
+`memory_query.results[]` 保留原有 `score`，并固定暴露以下可审计字段：
+
+| 字段 | 语义 |
+| --- | --- |
+| `score` | 兼容展示分数，由命中来源与命中字段计算；不参与结果排序 |
+| `rankScore` | FTS 路径实际使用的 `bm25(vault_fts, 0, 4, 3, 10, 2)` 原始值，低值优先；LIKE 与纯过滤路径没有 BM25，固定为 `null` |
+| `rankPosition` | 所有过滤、候选合并、去重、稳定排序与截断完成后的 1 基输出位置 |
+| `rankExplanation` | 结构化记录排名来源及本结果实际使用的排序键、方向和值，不生成推测性理由 |
+| `evidence` | 仅从当前结果的真实索引字段提取的确定性短证据 |
+
+FTS SQL 固定按 `rank_score ASC, modified_at DESC, file_path ASC` 排序。中文查询触发
+FTS 与 LIKE 候选合并时，有真实 BM25 的 FTS 候选排在 `rankScore=null` 的 LIKE 候选之前；
+同类候选继续按修改时间降序、文件路径升序排列。纯 LIKE 或纯过滤查询只使用修改时间与路径；
+按显式路径列表查询时，解释来源为 `requested_order`，位置遵循输入路径顺序。
+
+`rankExplanation.rankSource` 只可能是：
+
+- `vault_fts_bm25`：`rankScore` 来自本次 FTS SQL 的真实 BM25；
+- `deterministic_fallback`：当前路径不存在 BM25，使用确定性备用排序；
+- `requested_order`：内部精确路径查询保持调用方输入顺序。
+
+证据字段优先级固定为 `title`、`summary`、`search_hints`、`tags`。每条证据包含
+`field`、`snippet`、`matchedTerms` 与 `sourcePath`；`snippet` 最长 160 个字符，必须包含
+至少一个实际命中词，`sourcePath` 必须与结果的 `filePath` 一致。`aliases`、正文、反向链接等
+未参与该证据契约的内容不会进入证据。若查询词只跨字段组合命中、任何单一字段都无法生成
+可追溯片段，则返回空 `evidence`，不会补写理由。
+
+```json
+{
+  "score": 490,
+  "rankScore": -1.25,
+  "rankPosition": 1,
+  "rankExplanation": {
+    "rankSource": "vault_fts_bm25",
+    "sortKeys": [
+      { "field": "rankScore", "direction": "asc", "value": -1.25 },
+      { "field": "modifiedAt", "direction": "desc", "value": "2026-08-09T00:00:00.000Z" },
+      { "field": "filePath", "direction": "asc", "value": "40_知识/笔记/群论.md" }
+    ]
+  },
+  "evidence": [
+    {
+      "field": "title",
+      "snippet": "群论",
+      "matchedTerms": ["群论"],
+      "sourcePath": "40_知识/笔记/群论.md"
+    }
+  ]
+}
+```
+
 `memory_log` 不接受 `item_kind="event"`。历史事件只能在离线升级时归档，或由治理命令把已归档条目重分类为 `event`；它不能恢复为有效记忆。
 
 ## 记忆条目模型

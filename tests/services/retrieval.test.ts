@@ -232,6 +232,149 @@ describe('queryVaultIndex', () => {
 		);
 	});
 
+	it('兼容 score 相同时暴露真实 BM25 与最终排名', () => {
+		insertVaultNote(db, {
+			filePath: '40_知识/quantum-dense.md',
+			title: 'Dense Note',
+			summary: 'Physics reference',
+			searchHints: 'quantum quantum quantum quantum',
+			modifiedAt: '2025-01-01T00:00:00Z',
+		});
+		insertVaultNote(db, {
+			filePath: '40_知识/quantum-sparse.md',
+			title: 'Sparse Note',
+			summary: 'Physics reference',
+			searchHints: 'quantum',
+			modifiedAt: '2026-01-01T00:00:00Z',
+		});
+
+		const expected = db
+			.prepare(
+				`SELECT vi.file_path, bm25(vault_fts, 0, 4, 3, 10, 2) AS rank_score
+				 FROM vault_index vi
+				 JOIN vault_fts ON vault_fts.rowid = vi.rowid
+				 WHERE vault_fts MATCH ?
+				 ORDER BY rank_score ASC, vi.modified_at DESC, vi.file_path ASC`,
+			)
+			.all('quantum*') as Array<{ file_path: string; rank_score: number }>;
+		const { results } = queryVaultIndex(db, 'quantum', null, 10);
+
+		expect(new Set(results.map((result) => result.score)).size).toBe(1);
+		expect(new Set(results.map((result) => result.rankScore)).size).toBeGreaterThan(1);
+		expect(
+			results.map(({ filePath, rankScore, rankPosition }) => ({
+				file_path: filePath,
+				rank_score: rankScore,
+				rank_position: rankPosition,
+			})),
+		).toEqual(
+			expected.map((row, index) => ({
+				file_path: row.file_path,
+				rank_score: row.rank_score,
+				rank_position: index + 1,
+			})),
+		);
+	});
+
+	it('并列 BM25 按修改时间和路径稳定排序并连续编号', () => {
+		for (const [filePath, modifiedAt] of [
+			['40_知识/tie-b.md', '2025-01-01T00:00:00Z'],
+			['40_知识/tie-a.md', '2025-01-01T00:00:00Z'],
+			['40_知识/tie-new.md', '2026-01-01T00:00:00Z'],
+		] as const) {
+			insertVaultNote(db, {
+				filePath,
+				title: 'Stable Note',
+				summary: 'tie ranking',
+				searchHints: 'tie ranking',
+				modifiedAt,
+			});
+		}
+
+		const runs = Array.from({ length: 5 }, () => queryVaultIndex(db, 'tie', null, 10).results);
+		const expectedPaths = ['40_知识/tie-new.md', '40_知识/tie-a.md', '40_知识/tie-b.md'];
+
+		for (const results of runs) {
+			expect(new Set(results.map((result) => result.rankScore)).size).toBe(1);
+			expect(results.map((result) => result.filePath)).toEqual(expectedPaths);
+			expect(results.map((result) => result.rankPosition)).toEqual([1, 2, 3]);
+		}
+	});
+
+	it('证据只取真实索引字段并保留命中词、来源路径和长度上限', () => {
+		insertVaultNote(db, {
+			filePath: '40_知识/evidence.md',
+			title: 'Evidence Note',
+			summary: `${'前置上下文'.repeat(40)} needle ${'后置上下文'.repeat(40)}`,
+			searchHints: 'audit needle traceable',
+			tags: '["needle-tag", "audit"]',
+			aliases: '["needle-private-alias"]',
+			wikilinks: '["needle-private-link"]',
+			backlinks: '["needle-private-backlink"]',
+		});
+
+		const { results } = queryVaultIndex(db, 'needle', null, 10);
+		const result = results.find(({ filePath }) => filePath === '40_知识/evidence.md');
+
+		expect(result).toBeDefined();
+		expect(result?.evidence.map(({ field }) => field)).toEqual(['summary', 'search_hints', 'tags']);
+		for (const evidence of result?.evidence ?? []) {
+			expect(evidence.sourcePath).toBe('40_知识/evidence.md');
+			expect(evidence.snippet.length).toBeLessThanOrEqual(160);
+			expect(evidence.snippet.toLowerCase()).toContain('needle');
+			expect(evidence.matchedTerms).toContain('needle');
+		}
+		expect(JSON.stringify(result?.evidence)).not.toContain('needle-private-alias');
+		expect(JSON.stringify(result?.evidence)).not.toContain('needle-private-link');
+		expect(JSON.stringify(result?.evidence)).not.toContain('needle-private-backlink');
+	});
+
+	it('混合候选仅为 FTS 命中保留 BM25，LIKE 候选使用可解释 null', () => {
+		insertVaultNote(db, {
+			filePath: '40_知识/fts-hit.md',
+			title: '群论指南',
+			searchHints: '群论 对称性',
+			modifiedAt: '2025-01-01T00:00:00Z',
+		});
+		insertVaultNote(db, {
+			filePath: '40_知识/like-hit.md',
+			title: '前群论后',
+			searchHints: '前群论后',
+			modifiedAt: '2026-01-01T00:00:00Z',
+		});
+
+		const { results } = queryVaultIndex(db, '群论', null, 10);
+
+		expect(
+			results.map(({ filePath, matchSource, rankScore, rankPosition }) => ({
+				filePath,
+				matchSource,
+				rankScore,
+				rankPosition,
+			})),
+		).toEqual([
+			{
+				filePath: '40_知识/fts-hit.md',
+				matchSource: 'fts5',
+				rankScore: expect.any(Number),
+				rankPosition: 1,
+			},
+			{
+				filePath: '40_知识/like-hit.md',
+				matchSource: 'hybrid_expand',
+				rankScore: null,
+				rankPosition: 2,
+			},
+		]);
+		expect(results[0]?.rankExplanation.rankSource).toBe('vault_fts_bm25');
+		expect(results[1]?.rankExplanation.rankSource).toBe('deterministic_fallback');
+		expect(results[1]?.rankExplanation.sortKeys[0]).toEqual({
+			field: 'rankScore',
+			direction: 'asc',
+			value: null,
+		});
+	});
+
 	it('returns empty array for no match', () => {
 		insertVaultNote(db, {
 			filePath: '40_知识/note.md',

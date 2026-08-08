@@ -19,6 +19,30 @@ const memoryScopeOutputSchema: z.ZodType<MemoryScope> = z
 	})
 	.strict();
 
+const vaultQueryEvidenceSchema = z
+	.object({
+		field: z.enum(['title', 'summary', 'search_hints', 'tags']),
+		snippet: z.string().max(160),
+		matchedTerms: z.array(z.string().min(1)).min(1),
+		sourcePath: z.string(),
+	})
+	.strict();
+
+const vaultRankSortKeySchema = z
+	.object({
+		field: z.enum(['rankScore', 'modifiedAt', 'filePath']),
+		direction: z.enum(['asc', 'desc', 'input']),
+		value: z.union([z.number(), z.string(), z.null()]),
+	})
+	.strict();
+
+const vaultRankExplanationSchema = z
+	.object({
+		rankSource: z.enum(['vault_fts_bm25', 'deterministic_fallback', 'requested_order']),
+		sortKeys: z.array(vaultRankSortKeySchema).min(1),
+	})
+	.strict();
+
 const startupErrorOutputSchema = z
 	.object({
 		status: z.literal('error'),
@@ -174,6 +198,10 @@ const vaultQueryResultSchema: z.ZodType<VaultQueryResult> = z
 		matchSource: z.enum(['exact_filter', 'fts5', 'hybrid_expand', 'like_fallback']),
 		matchedFields: z.array(z.string()),
 		score: z.number(),
+		rankScore: z.number().nullable(),
+		rankPosition: z.number().int().positive(),
+		rankExplanation: vaultRankExplanationSchema,
+		evidence: z.array(vaultQueryEvidenceSchema),
 		modifiedAt: z.string().nullable(),
 		masteryStatus: z.string().nullable().optional(),
 		tags: z.array(z.string()).optional(),
