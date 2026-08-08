@@ -16,13 +16,7 @@ import * as core from './core.js';
 import { SCHEMA_VERSION } from './db/schema.js';
 import { CONTRACT_VERSION } from './runtime-contract.js';
 import { toolOutputSchemas, toolResultSchemas } from './tool-schemas.js';
-import type {
-	DbMaintenanceReport,
-	MemoryScope,
-	ScopeType,
-	StartupMaintenanceResult,
-	StartupResult,
-} from './types.js';
+import type { DbMaintenanceReport, MemoryScope, ScopeType, StartupResult } from './types.js';
 import { canonicalVaultRoot } from './utils/safe-path.js';
 
 export const slotKeySchema = z
@@ -235,28 +229,19 @@ function applyNotifyInvalidation(runtime: RuntimeContext, result: unknown): void
 	else if (explicitLayer0 === undefined && !Array.isArray(scopes)) invalidateLayer0(runtime);
 }
 
-function finishMaintenance(
-	runtime: RuntimeContext,
-	state: 'succeeded' | 'failed',
-	result?: StartupMaintenanceResult,
-	error?: unknown,
-): void {
+function finishMaintenanceFailure(runtime: RuntimeContext, error: unknown): void {
 	const finished = Date.now();
 	const started = runtime.maintenance.startedAt
 		? Date.parse(runtime.maintenance.startedAt)
 		: finished;
-	const serviceReport = result?.maintenance;
 	runtime.maintenance = {
 		...runtime.maintenance,
-		state,
+		state: 'failed',
 		finishedAt: new Date(finished).toISOString(),
 		durationMs: Math.max(0, finished - started),
-		before: serviceReport?.before ?? null,
-		after: serviceReport?.after ?? null,
-		error:
-			state === 'failed'
-				? (serviceReport?.error ?? (error instanceof Error ? error.message : String(error)))
-				: null,
+		before: null,
+		after: null,
+		error: error instanceof Error ? error.message : String(error),
 	};
 }
 
@@ -281,11 +266,14 @@ function runBackgroundMaintenance(runtime: RuntimeContext): Promise<void> {
 				)
 				.then((result) => {
 					applyNotifyInvalidation(runtime, result);
-					const terminalState = result.maintenance?.state === 'failed' ? 'failed' : 'succeeded';
-					finishMaintenance(runtime, terminalState, result);
+					if (result.maintenance.state !== 'succeeded' && result.maintenance.state !== 'failed') {
+						finishMaintenanceFailure(runtime, '启动维护返回了非终态报告');
+						return;
+					}
+					runtime.maintenance = result.maintenance;
 				})
 				.catch((error: unknown) => {
-					finishMaintenance(runtime, 'failed', undefined, error);
+					finishMaintenanceFailure(runtime, error);
 					console.warn(`[lifeos] 后台维护失败（${runtime.vaultRoot}）:`, error);
 				})
 				.finally(resolveTask);

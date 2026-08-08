@@ -123,4 +123,28 @@ describe('runDbMaintenance', () => {
 		// TRUNCATE checkpoint leaves the WAL file at zero bytes (or removes it).
 		expect(existsSync(walPath) ? statSync(walPath).size : 0).toBe(0);
 	});
+
+	it('显式压缩在读事务阻止 TRUNCATE 时返回 failed 与 checkpoint 诊断', () => {
+		const reader = new Database(dbPath);
+		try {
+			reader.pragma('journal_mode = WAL');
+			reader.exec('BEGIN');
+			reader.prepare('SELECT COUNT(*) FROM vault_index').get();
+
+			db.prepare(`
+				INSERT INTO vault_index(file_path, title, type, status, search_hints, tags)
+				VALUES ('20_项目/checkpoint-busy.md', 'Checkpoint busy', 'note', 'active', 'busy', '[]')
+			`).run();
+
+			const result = dbMaintenance.runDbCompaction(db);
+
+			expect(result.state).toBe('failed');
+			expect(result.error).toMatch(/wal_checkpoint\(TRUNCATE\).*busy=1.*log=\d+.*checkpointed=\d+/);
+			expect(result.after?.walBytes).toBeGreaterThan(0);
+			expect(existsSync(`${dbPath}-wal`) ? statSync(`${dbPath}-wal`).size : 0).toBeGreaterThan(0);
+		} finally {
+			reader.exec('ROLLBACK');
+			reader.close();
+		}
+	});
 });

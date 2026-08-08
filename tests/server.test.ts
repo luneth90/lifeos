@@ -189,8 +189,9 @@ describe('server 最终 V2/V4 契约', () => {
 		});
 	});
 
-	it('bootstrap 维护只经历 pending → running → succeeded，且等待同一终态 Promise', async () => {
+	it('bootstrap 等待延迟扫描时保留内部 DB 维护报告的精确时间区间', async () => {
 		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
 		let finishMaintenance!: (value: ReturnType<typeof successfulMaintenanceResult>) => void;
 		const maintenance = new Promise<ReturnType<typeof successfulMaintenanceResult>>((resolve) => {
 			finishMaintenance = resolve;
@@ -211,7 +212,7 @@ describe('server 最终 V2/V4 契约', () => {
 		const running = testing.callMemoryBootstrap({ vault_root: vault.root });
 		expect(running.db_maintenance).toMatchObject({
 			state: 'running',
-			started_at: expect.any(String),
+			started_at: '2030-01-01T00:00:00.000Z',
 			finished_at: null,
 			duration_ms: null,
 			before: null,
@@ -224,9 +225,9 @@ describe('server 最终 V2/V4 契约', () => {
 		const finished = testing.callMemoryBootstrap({ vault_root: vault.root });
 		expect(finished.db_maintenance).toMatchObject({
 			state: 'succeeded',
-			started_at: running.db_maintenance.started_at,
-			finished_at: expect.any(String),
-			duration_ms: expect.any(Number),
+			started_at: '2026-08-09T00:00:00.000Z',
+			finished_at: '2026-08-09T00:00:00.010Z',
+			duration_ms: 10,
 			before: {
 				page_count: 100,
 				freelist_count: 30,
@@ -243,6 +244,7 @@ describe('server 最终 V2/V4 契约', () => {
 			},
 			error: null,
 		});
+		expect(finished.db_maintenance.started_at).not.toBe(running.db_maintenance.started_at);
 		expect(Date.parse(finished.db_maintenance.finished_at as string)).toBeGreaterThanOrEqual(
 			Date.parse(finished.db_maintenance.started_at as string),
 		);

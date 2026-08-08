@@ -73,12 +73,35 @@ export interface ScopeCatalog {
 
 export type MaintenanceState = 'pending' | 'running' | 'succeeded' | 'failed';
 
+export function maintenanceStateFields(state: 'pending' | 'running'): {
+	maintenanceState: 'pending' | 'running';
+	maintenancePending: true;
+};
+export function maintenanceStateFields(state: 'succeeded' | 'failed'): {
+	maintenanceState: 'succeeded' | 'failed';
+	maintenancePending: false;
+};
+export function maintenanceStateFields(state: MaintenanceState): {
+	maintenanceState: MaintenanceState;
+	maintenancePending: boolean;
+};
+export function maintenanceStateFields(state: MaintenanceState): {
+	maintenanceState: MaintenanceState;
+	maintenancePending: boolean;
+} {
+	return {
+		maintenanceState: state,
+		maintenancePending: state === 'pending' || state === 'running',
+	};
+}
+
 export type DbMaintenanceMode = 'routine' | 'explicit';
 
 export interface DbMaintenanceMetrics {
 	pageCount: number;
 	freelistCount: number;
 	freelistBytes: number;
+	/** 根据 WAL 文件物理大小估算的已分配帧数，不表示待回写页数。 */
 	walPages: number | null;
 	walBytes: number | null;
 }

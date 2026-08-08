@@ -6,8 +6,24 @@ import { _resetDefaultInstance } from '../../src/config.js';
 import { initDb } from '../../src/db/schema.js';
 import { upsertMemoryItem } from '../../src/services/memory-items.js';
 import { runStartup, runStartupMaintenance } from '../../src/services/startup.js';
+import * as maintenanceTypes from '../../src/types.js';
 import { createTempVault, createTestDb, writeTestNote } from '../setup.js';
 import type { TempVault } from '../setup.js';
+
+describe('维护状态兼容字段', () => {
+	it.each([
+		['pending', true],
+		['running', true],
+		['succeeded', false],
+		['failed', false],
+	] as const)('%s 只从 maintenanceState 派生 maintenancePending=%s', (state, pending) => {
+		expect(typeof maintenanceTypes.maintenanceStateFields).toBe('function');
+		expect(maintenanceTypes.maintenanceStateFields(state)).toEqual({
+			maintenanceState: state,
+			maintenancePending: pending,
+		});
+	});
+});
 
 describe('V4 启动路径', () => {
 	let db: Database.Database;

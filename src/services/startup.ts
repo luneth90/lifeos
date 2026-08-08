@@ -5,7 +5,11 @@ import { refreshTaskboard, refreshUserprofile } from '../active-docs/index.js';
 import { type VaultConfig, resolveConfig } from '../config.js';
 import { runDbMaintenance } from '../db/index.js';
 import { initDb } from '../db/schema.js';
-import type { StartupMaintenanceResult, StartupResult } from '../types.js';
+import {
+	type StartupMaintenanceResult,
+	type StartupResult,
+	maintenanceStateFields,
+} from '../types.js';
 import { loadCustomDict } from '../utils/segmenter.js';
 import { countRows } from '../utils/shared.js';
 import { fullScan } from '../utils/vault-indexer.js';
@@ -52,8 +56,7 @@ export function runStartup(
 			updatedSinceLast: 0,
 			unchanged: 0,
 			removed: 0,
-			maintenanceState: 'pending',
-			maintenancePending: true,
+			...maintenanceStateFields('pending'),
 		},
 		dictLoaded,
 		dictError,
@@ -70,14 +73,14 @@ export function runStartupMaintenance(
 	const taskboard = refreshTaskboard(db, vaultRoot, { config });
 	const userprofile = refreshUserprofile(db, vaultRoot, { config });
 	const maintenance = runDbMaintenance(db);
+	const maintenanceState = maintenance.state === 'succeeded' ? 'succeeded' : 'failed';
 	return {
 		vaultStats: {
 			totalFiles: countRows(db, 'vault_index'),
 			updatedSinceLast: scan.indexed,
 			unchanged: scan.unchanged,
 			removed: scan.removed,
-			maintenanceState: maintenance.state === 'succeeded' ? 'succeeded' : 'failed',
-			maintenancePending: false,
+			...maintenanceStateFields(maintenanceState),
 		},
 		maintenance,
 		activeDocs: [

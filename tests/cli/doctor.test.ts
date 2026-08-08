@@ -591,6 +591,44 @@ describe('lifeos doctor', () => {
 		}
 	});
 
+	test('--compact-db 在读事务阻止 WAL TRUNCATE 时失败并返回 checkpoint 诊断', async () => {
+		const { dir, cleanup } = makeTmpDir();
+		let reader: Database.Database | undefined;
+		try {
+			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+			const dbPath = join(dir, '90_系统', '记忆', 'memory.db');
+			reader = new Database(dbPath);
+			reader.pragma('journal_mode = WAL');
+			reader.exec('BEGIN');
+			reader.prepare('SELECT COUNT(*) FROM schema_version').get();
+
+			const writer = new Database(dbPath);
+			try {
+				writer.pragma('journal_mode = WAL');
+				writer.exec('CREATE TABLE checkpoint_busy(payload TEXT NOT NULL)');
+				writer.prepare('INSERT INTO checkpoint_busy(payload) VALUES (?)').run('busy'.repeat(4096));
+			} finally {
+				writer.close();
+			}
+
+			const result = await doctorCommand([dir, '--compact-db']);
+			expect(result.passed).toBe(false);
+			expect(result.checks.find((check) => check.name === 'database compact')).toMatchObject({
+				status: 'fail',
+				detail: expect.stringMatching(
+					/wal_checkpoint\(TRUNCATE\).*busy=1.*log=\d+.*checkpointed=\d+/,
+				),
+			});
+			expect(existsSync(`${dbPath}-wal`) ? statSync(`${dbPath}-wal`).size : 0).toBeGreaterThan(0);
+		} finally {
+			if (reader) {
+				reader.exec('ROLLBACK');
+				reader.close();
+			}
+			cleanup();
+		}
+	});
+
 	test('--reindex clears scan_state and rebuilds the index', async () => {
 		const { dir, cleanup } = makeTmpDir();
 		let db: Database.Database | undefined;

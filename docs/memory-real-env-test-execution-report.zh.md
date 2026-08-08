@@ -39,11 +39,12 @@ aliases: []
 | `npm run test:memory-real-env`（第二次） | 与第一次完全一致 | 1 个文件通过；53 项通过、1 项预期失败、1 项跳过 |
 | `npx vitest run tests/e2e/memory-real-env-v2.test.ts -t H-02` | H-02 不依赖前序用例并普通通过 | 1 项通过、54 项跳过；退出码 0 |
 | `npx vitest run tests/db/maintenance.test.ts tests/services/startup.test.ts tests/server.test.ts tests/cli/doctor.test.ts tests/e2e/memory-real-env-v2.test.ts`（任务 6 RED） | 新维护状态、single-flight、双阈值、SQL 强度和 H-02 先失败 | 5 个文件均按预期失败；13 项失败、96 项通过、1 项预期失败、1 项跳过；退出码 1 |
-| 同上（任务 6 GREEN） | 新维护契约全部通过 | 5 个文件通过；109 项通过、1 项预期失败、1 项跳过；退出码 0 |
-| `npm test` | 不低于任务 0 的 998 项基线，新增套件不回归 | 61 个文件通过；1069 项通过、1 项预期失败、1 项跳过，共 1071 项 |
-| `npm run lint` | 生产源码检查无错误 | 52 个源码文件通过 |
+| 同上（任务 6 GREEN） | 新维护契约及复审纠正全部通过 | 5 个文件通过；115 项通过、1 项预期失败、1 项跳过；退出码 0 |
+| `npx vitest run tests/db/maintenance.test.ts tests/cli/doctor.test.ts -t '阻止.*TRUNCATE\|阻止 WAL TRUNCATE'` | 真实读事务令 DB 报告与 doctor 同步失败 | 2 个文件通过、2 项通过、30 项跳过；退出码 0 |
+| `npm test` | 不低于任务 0 的 998 项基线，新增套件不回归 | 61 个文件通过；1075 项通过、1 项预期失败、1 项跳过，共 1077 项 |
+| `npm run lint` | 生产源码检查无错误 | 53 个源码文件通过 |
 | `npm run typecheck` | 0 个类型错误 | 退出码 0，无类型错误 |
-| `npx biome check src/types.ts src/services/context-router.ts src/active-docs/userprofile.ts tests/services/context-router-v4.test.ts tests/active-docs/active-docs.test.ts tests/skill-contracts/data-contract.test.ts tests/e2e/memory-real-env-v2.test.ts` | 本任务相关 TypeScript 文件无格式或静态检查错误 | 7 个文件通过，无修复项 |
+| `npx biome check src/types.ts src/db/index.ts src/services/startup.ts src/server.ts src/tool-schemas.ts src/cli/commands/doctor.ts tests/db/maintenance.test.ts tests/services/startup.test.ts tests/server.test.ts tests/server-entry.test.ts tests/cli/doctor.test.ts tests/e2e/memory-real-env-v2.test.ts` | 本任务相关 TypeScript 文件无格式或静态检查错误 | 12 个文件通过，无修复项 |
 
 ## 分类结果
 
@@ -75,7 +76,7 @@ H-02 为自己创建专属临时 Vault，在该库内创建 500 行、每行 819
 - 例行维护后：`page_count=20`、`freelist_count=0`、`freelist_bytes=0`；PASSIVE checkpoint 后 WAL 保持非截断，可见 `wal_pages=15`、`wal_bytes=61832`；
 - 显式压缩后：`page_count=20`、`freelist_count=0`、`freelist_bytes=0`、`wal_pages=0`、`wal_bytes=0`。
 
-例行 SQL 验证明确要求有限 FTS merge 与 `wal_checkpoint(PASSIVE)`，并明确排除 FTS optimize 与 `wal_checkpoint(TRUNCATE)`；显式压缩则要求完整 VACUUM、FTS optimize 和 WAL truncate。
+例行 SQL 验证明确要求有限 FTS merge 与 `wal_checkpoint(PASSIVE)`，并明确排除 FTS optimize 与 `wal_checkpoint(TRUNCATE)`；显式压缩则要求完整 VACUUM、FTS optimize 和 WAL truncate。`wal_pages` 由 WAL 文件物理大小估算已分配帧数，不表示仍待回写的页数。
 
 ### 任务 6 状态机与健康口径
 
@@ -84,6 +85,9 @@ H-02 为自己创建专属临时 Vault，在该库内创建 500 行、每行 819
 - `maintenancePending` 只保留为旧调用方的派生兼容字段；`maintenanceState` 与 bootstrap 的 `db_maintenance.state` 是权威状态。
 - doctor 稳态告警同时要求 `freelistRatio >= 25%` 和 `freelistBytes >= 64 MiB`；等于边界时告警，小库即使比例为 26% 也不告警。
 - bootstrap 成功与 `startup_error` 两条 strict structured output 分支都要求显式 `db_maintenance` 字段；错误分支固定为 `null`，没有把 schema 放宽为可选。
+- 真实 busy 回归让第二连接保持读事务；`wal_checkpoint(TRUNCATE)` 返回 `busy=1` 且 WAL 非零时，底层 `DbMaintenanceReport` 固定为 `failed`，错误包含 `busy/log/checkpointed`，doctor 同步返回失败。
+- 终态时间直接采用内部 `runDbMaintenance` 报告，不再用后台扫描的 running 起点覆盖 DB 指标区间。
+- `maintenancePending` 仅由 `maintenanceStateFields()` 按四状态派生，调用点不再手工维护第二份布尔状态。
 
 ### H-06 未知工具 candidates
 

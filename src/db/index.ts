@@ -85,7 +85,27 @@ export function runDbCompaction(db: Database.Database): DbMaintenanceReport {
 		db.pragma('auto_vacuum = INCREMENTAL');
 		db.prepare("INSERT INTO vault_fts(vault_fts) VALUES('optimize')").run();
 		db.exec('VACUUM');
-		db.pragma('wal_checkpoint(TRUNCATE)');
+		const checkpoint = db.pragma('wal_checkpoint(TRUNCATE)') as Array<{
+			busy: number;
+			log: number;
+			checkpointed: number;
+		}>;
+		const terminal = checkpoint[0];
+		const afterCheckpoint = collectDbMaintenanceMetrics(db);
+		const checkpointComplete =
+			terminal?.busy === 0 &&
+			((terminal.log === 0 && terminal.checkpointed === 0) ||
+				(terminal.log === -1 && terminal.checkpointed === -1 && afterCheckpoint.walBytes === 0));
+		if (!checkpointComplete) {
+			throw new Error(
+				`wal_checkpoint(TRUNCATE) 未达终态: busy=${terminal?.busy ?? 'unknown'} log=${terminal?.log ?? 'unknown'} checkpointed=${terminal?.checkpointed ?? 'unknown'}`,
+			);
+		}
+		if (afterCheckpoint.walBytes !== 0) {
+			throw new Error(
+				`wal_checkpoint(TRUNCATE) 返回成功但 WAL 仍为 ${afterCheckpoint.walBytes ?? 'unknown'} bytes`,
+			);
+		}
 	});
 }
 

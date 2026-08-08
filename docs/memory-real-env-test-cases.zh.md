@@ -159,4 +159,4 @@ npm run typecheck
 npx biome check tests/helpers/memory-real-env-vault.ts tests/e2e/memory-real-env-v2.test.ts
 ```
 
-真实环境完整命令连续两次必须得到相同统计。D-06 的生产缺陷已修复并改为普通测试；H-06 仍以 `it.fails` 保留，C-06 只有取得宿主日志后才能记录为通过。H-02 还必须使用 `-t H-02` 单独运行，证明结果不依赖前序用例制造碎片；等待必须使用 runtime 暴露的维护 Promise 与有限状态，禁止定时休眠。例行路径只允许 `incremental_vacuum`、有限 FTS merge 与非截断 checkpoint；只有显式 `doctor --compact-db` 执行完整压缩、FTS optimize 与 WAL truncate。
+真实环境完整命令连续两次必须得到相同统计。D-06 的生产缺陷已修复并改为普通测试；H-06 仍以 `it.fails` 保留，C-06 只有取得宿主日志后才能记录为通过。H-02 还必须使用 `-t H-02` 单独运行，证明结果不依赖前序用例制造碎片；等待必须使用 runtime 暴露的维护 Promise 与有限状态，禁止定时休眠。例行路径只允许 `incremental_vacuum`、有限 FTS merge 与非截断 checkpoint；只有显式 `doctor --compact-db` 执行完整压缩、FTS optimize 与 WAL truncate。若第二连接的读事务令 `wal_checkpoint(TRUNCATE)` 返回 busy 或残留 WAL，数据库报告和 doctor 都必须失败。`wal_pages` 是根据 WAL 文件物理大小估算的已分配帧数，不表示待回写页数。
