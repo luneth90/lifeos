@@ -802,7 +802,8 @@
 			"tags": ["长文"],
 			"body": "本手册先说明山地观测站的道路、供电、保暖、值班和设备交接流程。观测员到站后依次检查穹顶轨道、赤道仪配重、相机冷却、导星镜焦点和网络授时状态，并在日志中记录环境温度与湿度。夜间作业须保留红光照明，避免强光破坏暗适应；风速超过阈值时关闭穹顶，结露风险上升时启用镜面加热。每轮曝光前核对目标坐标、滤镜编号、曝光时长和存储容量，结束后复制原始文件并校验散列。交接班还要说明云量变化、月光影响、异常振动、自动对焦曲线和剩余任务。数据处理阶段先做偏置、暗场和平场校正，再进行星点匹配、背景扣除和测光标定。对于长时间序列，应统一时间系统并保存气象记录，以便排查系统误差。观测计划根据目标高度角、月相、季节可见窗口与科学优先级排序，临时插入目标需要在日志中说明原因。设备维护包括线缆应力检查、风扇清洁、转轴润滑和备用电源测试，任何人工改动都要双人复核。附录列出常见故障的隔离步骤以及联系人员，但不替代现场安全规范。针对多夜联合观测，手册另设质量控制章节：先比较各夜零点漂移，再检查导星误差是否与风向相关；同一目标使用不同滤镜时保持命名一致，并在元数据中写明曝光序列。若云层导致信噪比下降，原始数据仍需保留，不得只留下筛选后的图片。时域项目还要核对闰秒表和时间戳来源，防止不同控制电脑产生系统偏差。观测人员每日结束前复查磁盘余量、备份副本、故障工单与次日优先级，值班负责人签字后才完成交接。完成所有通用流程后，尾部特别记录苍穹赤经校准锚点位于北天参考星附近，用于本批次数据复核。",
 			"modifiedAt": "2026-07-20T00:00:00.000Z",
-			"scope": { "type": "file", "key": "long-astronomy" }
+			"scope": { "type": "project", "key": "deliberately-wrong-astronomy" },
+			"tailEvidence": { "text": "苍穹赤经校准锚点", "offset": 4101 }
 		},
 		{
 			"filePath": "40_知识/长文/陶瓷烧制.md",
@@ -816,7 +817,8 @@
 			"tags": ["长文"],
 			"body": "记录从选土、淘洗、陈腐、练泥到拉坯成形的完整过程。坯体阴干期间要控制空气流动，避免口沿和底足失水速度差异过大；素烧前逐件检查暗裂、夹砂与厚薄突变。釉浆配制需记录原料批次、比重、黏度和过筛目数，浸釉时间根据器形与吸水率调整。装窑时为火焰通道留出间距，匣钵底部垫砂，器物之间不得接触。升温初段缓慢排除结构水，中段观察有机物燃尽与坯体收缩，高温段结合测温锥和火色判断热工状态。还原气氛不能只看燃料加入量，应结合烟道压力和氧含量记录。保温结束后按窑型制定降温曲线，过早开窑会增加炸裂与釉面缺陷。出窑后分类记录针孔、缩釉、开片、变形和色差，并回溯对应窑位。试片必须和成品使用相同坯釉组合，单独摆放会失去比较意义。工具清洁与原料回收要防止交叉污染，含金属氧化物的废浆单独处理。批次比较表继续记录燃料含水率、烟囱抽力、窑门密封和各测温点差值，避免把偶然色差归因于单一配方。取样分析需要保留未经研磨的原始碎片，并在显微照片中标注釉层与胎体边界。复烧试验每次只改变一个变量，温度、气氛和保温时间不得同时调整。作坊交接时核对原料余量、称量工具校准状态、试片编号以及待处理废料，所有判断均附日期和操作者。最后的尾证据注明月白釉还原转折温度为九百六十摄氏度，这是本次窑次复烧的关键参数。",
 			"modifiedAt": "2026-07-21T00:00:00.000Z",
-			"scope": { "type": "file", "key": "long-ceramic" }
+			"scope": { "type": "file", "key": "long-ceramic" },
+			"tailEvidence": { "text": "还原转折温度为", "offset": 4201 }
 		},
 		{
 			"filePath": "40_知识/长文/湿地调查.md",
@@ -830,7 +832,8 @@
 			"tags": ["长文"],
 			"body": "调查日志覆盖潮沟、泥滩、芦苇带和外缘浅水区。每个样方记录坐标、高程、植被盖度、优势种、底质粒径和人为干扰，照片必须包含方向标和尺度尺。潮位会改变可达区域，因此出发前根据潮汐表规划路线，并为回撤留出余量。鸟类观察采用固定点与样线结合的方法，避免重复计数同一群体；发现巢区时保持距离。底栖动物取样统一面积和筛网孔径，样品标签同时写纸质编号与电子编号。水质测量包括温度、盐度、溶解氧、浊度和营养盐，仪器每天用标准液校验。无人机航拍须记录航高、重叠度、光照和风速，以便不同批次影像拼接。数据录入采用双人核对，缺测值保留为空并注明原因，不用零值替代。异常气味、油膜、漂浮垃圾与岸线施工另建事件记录。样品运输保持低温，超过保存时间的数据不得与合格样品混合分析。统计分析前先检查样点是否因天气或交通条件发生偏移，再决定是否纳入同一时间序列。植被分类要保存原始鉴定照片和不确定标签，后续专家修订不能覆盖初次记录。空间插值仅在采样密度满足条件时使用，并报告边缘区域的不确定性。团队每日汇总电池余量、样品数量、人员位置和潮汐风险，任何路线改变都同步给岸上联系人。综合章节之后，尾部证据指出银沙潮沟盐度跃层深度为一米二，用于解释当日溶解氧剖面的突变。",
 			"modifiedAt": "2026-07-22T00:00:00.000Z",
-			"scope": { "type": "file", "key": "long-wetland" }
+			"scope": { "type": "file", "key": "long-wetland" },
+			"tailEvidence": { "text": "溶解氧剖面的突变", "offset": 4301 }
 		},
 		{
 			"filePath": "40_知识/长文/古琴修复.md",
@@ -844,7 +847,8 @@
 			"tags": ["长文"],
 			"body": "修复前先完成尺寸测绘、高清摄影、紫外观察和历史资料比对，不在状态未知时贸然拆解。琴体表面灰尘用软刷分区清理，松动漆片先临时加固并标注位置。检测包括木材裂隙、髹漆层起甲、岳山磨损、弦路偏移与内部结构，不可见区域通过内窥镜记录。修复方案遵循最小干预和可逆原则，补配材料在颜色、强度和老化特性上与原件相容。裂缝合拢前确认变形来源，避免强行施压造成新的应力。灰胎缺损分层填补，每层充分干燥后再整平；色彩处理只降低视觉干扰，不覆盖原有历史痕迹。装弦后逐步加张力，连续监测琴体形变和音高稳定性。试奏记录散音、泛音、按音以及杂音位置，并和修复前录音比较。全部材料批次、配比、工具和操作人员写入档案，便于未来撤除或再修复。包装运输采用悬空支撑并控制温湿度变化。环境稳定章节要求展柜和库房分别布置记录器，比较昼夜波动以及季节变化；湿度异常时先寻找建筑或空调原因，不直接对文物进行快速加湿。历史琴弦、脱落漆片和旧包装均作为伴随材料编号保存。修复报告需区分观察事实、推测判断和实际操作，引用前人档案时标明页码。复查周期依据材料状态制定，短期稳定不代表可以取消长期监测。档案尾部特别注明雁足内侧旧修墨记为松风二字，是确认上一次修复年代的重要线索。",
 			"modifiedAt": "2026-07-23T00:00:00.000Z",
-			"scope": { "type": "file", "key": "long-guqin" }
+			"scope": { "type": "file", "key": "long-guqin" },
+			"tailEvidence": { "text": "重要线索", "offset": 4401 }
 		},
 		{
 			"filePath": "40_知识/长文/冰芯运输.md",
@@ -858,7 +862,8 @@
 			"tags": ["长文"],
 			"body": "冰芯钻取后立即按深度分段、编号、拍照并装入洁净套管，方向标记贯穿现场记录与实验室数据库。每段样品的顶底不可倒置，破碎片收集在同编号附袋中。临时营地使用多点温度探头监控冷库，发电机切换和开门操作都写入日志。装箱前按研究用途分配备份段，避免同一科学目标全部集中在一个运输单元。保温箱加入缓冲材料，箱体外侧粘贴方向、重量和紧急联系人。运输路线预先评估中转时间、装卸设备、海关文件与备用冷库，延误预案明确责任人。数据记录器使用独立电源并设置越界告警，抵达每个节点后读取状态但不改写原始数据。实验室接收时先核对封条、箱号、温度曲线和样品清单，再移入稳定冷库。发生局部融化时单独隔离并标记，不得简单重新冻结后当作完好样品。清洁程序区分外层包装区与样品处理区，防止现代污染物进入。风险演练覆盖车辆故障、航班取消、记录器失联和备用冷库不可用四种场景，每次演练保存响应时间与通信链路。交接文件采用箱号、深度范围和封条号码三项核对，口头确认不能替代签字记录。保险和报关材料与科学清单分开保存，但版本变更需要同步。长期运输后安排分阶段回温检查外包装，确认无凝水后再进入洁净处理区。规范最后给出的尾部证据是曙光三号冰芯中转温度上限为零下十八摄氏度，超过即启动异常处置。",
 			"modifiedAt": "2026-07-24T00:00:00.000Z",
-			"scope": { "type": "file", "key": "long-ice-core" }
+			"scope": { "type": "file", "key": "long-ice-core" },
+			"tailEvidence": { "text": "超过即启动异常处置", "offset": 4501 }
 		}
 	],
 	"cases": [
@@ -1022,7 +1027,7 @@
 			"id": "temporal-01",
 			"category": "temporal_update",
 			"query": "北境群岛签证材料清单",
-			"filters": null,
+			"filters": { "status": "active" },
 			"expectedFiles": ["70_资源/旅行/签证新规.md"],
 			"forbiddenFiles": ["70_资源/旅行/签证旧规.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-north-islands" }],
@@ -1033,7 +1038,7 @@
 			"id": "temporal-02",
 			"category": "temporal_update",
 			"query": "星河接口认证方式",
-			"filters": null,
+			"filters": { "status": "active" },
 			"expectedFiles": ["40_知识/接口/认证新版.md"],
 			"forbiddenFiles": ["40_知识/接口/认证旧版.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-stellar-api" }],
@@ -1044,7 +1049,7 @@
 			"id": "temporal-03",
 			"category": "temporal_update",
 			"query": "海盐摄入建议",
-			"filters": null,
+			"filters": { "status": "active" },
 			"expectedFiles": ["40_知识/健康/海盐建议新版.md"],
 			"forbiddenFiles": ["40_知识/健康/海盐建议旧版.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-nutrition" }],
@@ -1055,7 +1060,7 @@
 			"id": "temporal-04",
 			"category": "temporal_update",
 			"query": "极光发布里程碑日期",
-			"filters": null,
+			"filters": { "status": "active" },
 			"expectedFiles": ["20_项目/极光发布/里程碑新版.md"],
 			"forbiddenFiles": ["20_项目/极光发布/里程碑旧版.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-aurora" }],
@@ -1066,7 +1071,7 @@
 			"id": "temporal-05",
 			"category": "temporal_update",
 			"query": "远洋个税申报窗口",
-			"filters": null,
+			"filters": { "status": "active" },
 			"expectedFiles": ["70_资源/税务/申报窗口新版.md"],
 			"forbiddenFiles": ["70_资源/税务/申报窗口旧版.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-tax" }],
@@ -1077,7 +1082,7 @@
 			"id": "temporal-06",
 			"category": "temporal_update",
 			"query": "霁光光谱仪校准周期",
-			"filters": null,
+			"filters": { "status": "active" },
 			"expectedFiles": ["70_资源/实验室/校准周期新版.md"],
 			"forbiddenFiles": ["70_资源/实验室/校准周期旧版.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-lab" }],
@@ -1089,7 +1094,7 @@
 			"id": "conflict-01",
 			"category": "conflict_override",
 			"query": "晨星项目周报格式规则",
-			"filters": null,
+			"filters": { "project": "project-morning-star" },
 			"expectedFiles": ["20_项目/晨星/周报规则.md"],
 			"forbiddenFiles": ["40_知识/规则/全局周报.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-morning-star" }],
@@ -1100,7 +1105,7 @@
 			"id": "conflict-02",
 			"category": "conflict_override",
 			"query": "青岚代码分支命名规则",
-			"filters": null,
+			"filters": { "project": "project-breeze" },
 			"expectedFiles": ["20_项目/青岚/分支规则.md"],
 			"forbiddenFiles": ["40_知识/规则/全局命名.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-breeze" }],
@@ -1111,7 +1116,7 @@
 			"id": "conflict-03",
 			"category": "conflict_override",
 			"query": "潮汐研究图表配色规则",
-			"filters": null,
+			"filters": { "project": "project-tide" },
 			"expectedFiles": ["30_研究/潮汐/图表规则.md"],
 			"forbiddenFiles": ["40_知识/规则/全局图表.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-tide" }],
@@ -1122,7 +1127,7 @@
 			"id": "conflict-04",
 			"category": "conflict_override",
 			"query": "白鹭论文引用格式规则",
-			"filters": null,
+			"filters": { "project": "project-egret" },
 			"expectedFiles": ["20_项目/白鹭/引用规则.md"],
 			"forbiddenFiles": ["40_知识/规则/全局引用.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-egret" }],
@@ -1133,7 +1138,7 @@
 			"id": "conflict-05",
 			"category": "conflict_override",
 			"query": "云杉数据备份频率规则",
-			"filters": null,
+			"filters": { "project": "project-spruce" },
 			"expectedFiles": ["20_项目/云杉/备份规则.md"],
 			"forbiddenFiles": ["40_知识/规则/全局备份.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-spruce" }],
@@ -1144,7 +1149,7 @@
 			"id": "conflict-06",
 			"category": "conflict_override",
 			"query": "赤霄发布审阅人数规则",
-			"filters": null,
+			"filters": { "project": "project-red-sky" },
 			"expectedFiles": ["20_项目/赤霄/审阅规则.md"],
 			"forbiddenFiles": ["40_知识/规则/全局审阅.md"],
 			"expectedScopes": [{ "type": "project", "key": "project-red-sky" }],

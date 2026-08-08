@@ -137,7 +137,7 @@ describe('记忆检索纯指标计算', () => {
 		expect(report.metrics.abstentionAccuracy).toBeCloseTo(4 / 5, 12);
 		expect(report.metrics.scopeLeakageRate).toBeCloseTo(1 / 10, 12);
 		expect(report.metrics.staleHitRate).toBeCloseTo(1 / 6, 12);
-		expect(report.metrics.forbiddenHitRate).toBeCloseTo(2 / 10, 12);
+		expect(report.metrics.forbiddenHitRate).toBeCloseTo(2 / 9, 12);
 		expect(report.metrics.averageContextTokens).toBe(18);
 		expect(report.timings).toEqual({ averageMs: 30, p50Ms: 30, p95Ms: 50 });
 		expect(report.denominators).toEqual({
@@ -145,7 +145,7 @@ describe('记忆检索纯指标计算', () => {
 			abstentionCases: 5,
 			scopedResults: 10,
 			temporalResults: 6,
-			forbiddenEligibleResults: 10,
+			forbiddenEligibleResults: 9,
 			contextCases: 5,
 		});
 	});
@@ -197,9 +197,65 @@ describe('固定中文评测夹具', () => {
 		const documents = new Map(fixture.documents.map((document) => [document.filePath, document]));
 		for (const testCase of fixture.cases.filter(({ category }) => category === 'long_tail')) {
 			const evidenceDocument = documents.get(testCase.expectedFiles[0] ?? '');
-			expect(evidenceDocument?.body.length).toBeGreaterThan(500);
-			expect(evidenceDocument?.body.indexOf(testCase.query)).toBeGreaterThan(500);
+			expect(evidenceDocument?.tailEvidence).toEqual({
+				text: testCase.query,
+				offset: expect.any(Number),
+			});
+			expect(evidenceDocument?.body.indexOf(testCase.query)).toBeGreaterThan(4000);
+			expect(evidenceDocument?.body.lastIndexOf(testCase.query)).toBe(
+				evidenceDocument?.body.indexOf(testCase.query),
+			);
 		}
+	});
+
+	it.each([
+		[
+			'temporal 必须声明时间条件',
+			(fixture: RetrievalEvalFixture) => {
+				const testCase = fixture.cases.find(({ category }) => category === 'temporal_update');
+				if (testCase) testCase.timeCondition = null;
+			},
+		],
+		[
+			'temporal 必须声明生产过滤器',
+			(fixture: RetrievalEvalFixture) => {
+				const testCase = fixture.cases.find(({ category }) => category === 'temporal_update');
+				if (testCase) testCase.filters = null;
+			},
+		],
+		[
+			'abstention 必须拒答',
+			(fixture: RetrievalEvalFixture) => {
+				const testCase = fixture.cases.find(({ category }) => category === 'abstention');
+				if (testCase) testCase.shouldAbstain = false;
+			},
+		],
+		[
+			'long-tail 必须只有一个期望文件',
+			(fixture: RetrievalEvalFixture) => {
+				const testCase = fixture.cases.find(({ category }) => category === 'long_tail');
+				if (testCase) testCase.expectedFiles.push('40_知识/长文/陶瓷烧制.md');
+			},
+		],
+		[
+			'conflict 必须声明生产作用域过滤器',
+			(fixture: RetrievalEvalFixture) => {
+				const testCase = fixture.cases.find(({ category }) => category === 'conflict_override');
+				if (testCase) testCase.filters = { status: 'active' };
+			},
+		],
+		[
+			'scope 必须声明生产作用域过滤器',
+			(fixture: RetrievalEvalFixture) => {
+				const testCase = fixture.cases.find(({ category }) => category === 'scope_isolation');
+				if (testCase) testCase.filters = { status: 'active' };
+			},
+		],
+	] as const)('拒绝违反类别语义不变量：%s', (_label, mutate) => {
+		const fixture = loadFixture();
+		mutate(fixture);
+
+		expect(() => parseRetrievalFixture(fixture)).toThrow();
 	});
 });
 
@@ -215,8 +271,53 @@ describe('临时 Vault 生产检索评测', () => {
 		});
 		expect(report.rankings).toHaveLength(42);
 		expect(report.categoryReports.long_tail.denominators.relevanceCases).toBe(5);
-		expect(report.categoryReports.long_tail.metrics.recallAt5).toBeGreaterThanOrEqual(0);
-		expect(report.categoryReports.long_tail.metrics.recallAt5).toBeLessThanOrEqual(1);
+		expect(report.metrics.recallAt5).toBeGreaterThanOrEqual(0.9);
+		expect(report.metrics.mrrAt10).toBeGreaterThanOrEqual(0.85);
+		expect(report.metrics.abstentionAccuracy).toBeGreaterThanOrEqual(0.9);
+		expect(report.metrics.scopeLeakageRate).toBeLessThanOrEqual(0);
+		expect(report.metrics.staleHitRate).toBeLessThanOrEqual(0);
+		expect(report.metrics.forbiddenHitRate).toBeLessThanOrEqual(0);
+		expect(report.categoryReports.long_tail.metrics.recallAt5).toBeGreaterThanOrEqual(0.8);
+	});
+
+	it('从生产索引事实推导作用域，夹具自报值不能隐藏泄漏', () => {
+		const fixture: RetrievalEvalFixture = {
+			version: 'scope-fact-check.v1',
+			documents: [
+				{
+					filePath: '20_项目/索引事实.md',
+					title: '生产索引作用域事实',
+					type: 'project',
+					status: 'active',
+					domain: '测试',
+					category: 'development',
+					project: 'project-index-fact',
+					entityId: 'scope-index-fact',
+					tags: ['作用域'],
+					body: '生产索引作用域事实来自 project 字段。',
+					modifiedAt: '2026-08-01T00:00:00.000Z',
+					scope: { type: 'project', key: 'project-self-report' },
+					tailEvidence: null,
+				},
+			],
+			cases: [
+				{
+					id: 'scope-fact-check',
+					category: 'scope_isolation',
+					query: '生产索引作用域事实',
+					filters: { project: 'project-index-fact' },
+					expectedFiles: ['20_项目/索引事实.md'],
+					forbiddenFiles: [],
+					expectedScopes: [{ type: 'project', key: 'project-self-report' }],
+					timeCondition: null,
+					shouldAbstain: false,
+				},
+			],
+		};
+
+		const report = runMemoryRetrievalEvaluation(fixture);
+
+		expect(report.metrics.scopeLeakageRate).toBe(1);
 	});
 
 	it('除本机耗时外连续两次报告完全一致', () => {
@@ -229,7 +330,7 @@ describe('临时 Vault 生产检索评测', () => {
 		);
 	});
 
-	it.fails('达到任务 8 应解除 expected fail 的固定门槛', () => {
+	it('达到固定门槛', () => {
 		const report = runMemoryRetrievalEvaluation(loadFixture());
 
 		expect(report.passed).toBe(true);

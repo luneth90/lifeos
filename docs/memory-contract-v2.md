@@ -199,16 +199,23 @@ draft → review → revised → mastered
 | `conflict_override` | 6 | 更具体作用域规则覆盖全局规则 |
 | `scope_isolation` | 6 | 显式过滤下的项目作用域隔离 |
 | `abstention` | 5 | 无证据时返回空结果 |
-| `long_tail` | 5 | 位于正文第 500 字符之后的尾部证据 |
+| `long_tail` | 5 | 唯一出现在正文第 4000 字符之后的尾部证据 |
 
 每个 `RetrievalEvalCase` 必须包含稳定 `id`、`query`、`filters`、`expectedFiles`、
 `forbiddenFiles`、`expectedScopes`、`timeCondition` 与 `shouldAbstain`。运行时使用 Zod
-校验字段类型、未知字段、时间格式、唯一 id、唯一查询、文件引用、期望/禁止文件互斥及拒答用例约束。
+校验字段类型、未知字段、时间格式、唯一 id、唯一查询、文件引用、期望/禁止文件互斥及类别语义。
+`temporal_update` 必须同时声明时间条件和合法生产过滤器；`abstention` 必须声明拒答；
+`long_tail` 只能有一个期望文件；`conflict_override` 与 `scope_isolation` 必须使用
+`file_path`、`project` 或 `entity_id` 等生产作用域过滤字段。夹具中的 `tailEvidence.offset`
+用于生成固定长文，查询文本在正文中仅出现一次且偏移必须大于 4000。
 
 评测器分为两层：`evaluateRetrieval` 只根据手工排名观察值计算指标；
 `runMemoryRetrievalEvaluation` 把固定语料写入临时 Vault，调用生产 `fullScan` 和
 `queryVaultIndex`，不复制或改写生产排序逻辑。拒答只按生产检索返回空结果判定，不引入回答模型。
 临时数据库和 Markdown 在每次运行结束后删除，报告只在进程内返回，不读写生产 Vault。
+作用域评分从临时生产 `vault_index` 的 `project`、`entity_id` 与 `file_path` 推导，
+不信任夹具文档的 `scope` 自报值。时间、冲突和隔离约束通过 `queryVaultIndex` 的合法
+`filters` 传入生产检索，自报 scope 与事后评分不能替代生产输入约束。
 
 ### 指标、分母与空集合语义
 
@@ -225,7 +232,8 @@ $E_c$ 为其期望文件集合：
   除以这些用例的全部返回结果数；分母为零时取 $0$。
 - `staleHitRate`：声明了 `timeCondition.notBefore` 的用例中，`modifiedAt` 缺失或早于该时刻的
   返回结果数，除以这些用例的全部返回结果数；分母为零时取 $0$。
-- `forbiddenHitRate`：命中本用例 `forbiddenFiles` 的结果数除以全部返回结果数；无结果时取 $0$。
+- `forbiddenHitRate`：命中本用例 `forbiddenFiles` 的结果数，除以仅限
+  `forbiddenFiles.length > 0` 用例的全部返回结果数；该分母为零时取 $0$。
 - `averageContextTokens`：每个结果按生产 `estimateTokens(title + "\\n" + displaySummary)` 估算，
   全部结果的 token 和除以全部用例数；无用例时取 $0$。
 - 本机耗时记录 `averageMs`、`p50Ms`、`p95Ms`。分位数采用排序后的 nearest-rank 规则；
@@ -246,5 +254,7 @@ $E_c$ 为其期望文件集合：
 npm run test:memory-eval
 ```
 
-当前生产检索尚未达到全部门槛时，集成门槛测试使用准确的 expected fail；纯指标、夹具校验、
-真实生产检索调用和双跑确定性测试仍必须通过。任务 8 达到门槛后应删除 expected fail 标记。
+真实执行器测试另有普通防退化断言：固定 42 条排名，并约束全局 Recall、MRR、拒答准确率、
+长文 Recall 的下界，以及作用域泄漏、陈旧命中和禁止命中的上界。普通断言确保全空结果、
+长文全部丢失或风险指标恶化会立即失败，不能由 expected fail 吞掉。当前固定夹具已达到全部门槛，
+因此不使用 expected fail；后续任务只能在保持这些普通边界通过的前提下改善生产检索。

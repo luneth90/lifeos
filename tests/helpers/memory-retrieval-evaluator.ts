@@ -46,6 +46,10 @@ export interface RetrievalEvalDocument {
 	body: string;
 	modifiedAt: string;
 	scope: MemoryScope;
+	tailEvidence: {
+		text: string;
+		offset: number;
+	} | null;
 }
 
 export interface RetrievalEvalFixture {
@@ -146,6 +150,15 @@ const documentSchema = z
 		body: z.string().min(1),
 		modifiedAt: z.string().datetime(),
 		scope: scopeSchema,
+		tailEvidence: z
+			.object({
+				text: z.string().min(1),
+				offset: z.number().int().min(4001),
+			})
+			.strict()
+			.nullable()
+			.optional()
+			.default(null),
 	})
 	.strict();
 
@@ -175,8 +188,48 @@ function assertUnique(values: string[], label: string): void {
 	if (new Set(values).size !== values.length) throw new Error(`${label} 必须唯一`);
 }
 
+const PRODUCTION_FILTER_FIELDS = new Set([
+	'file_path',
+	'title',
+	'type',
+	'status',
+	'domain',
+	'category',
+	'project',
+	'entity_id',
+]);
+
+const PRODUCTION_SCOPE_FILTER_FIELDS = new Set(['file_path', 'project', 'entity_id']);
+
+function materializeTailEvidence(document: RetrievalEvalDocument): RetrievalEvalDocument {
+	const evidence = document.tailEvidence;
+	if (!evidence) return document;
+	if (
+		document.body.indexOf(evidence.text) === evidence.offset &&
+		document.body.lastIndexOf(evidence.text) === evidence.offset
+	) {
+		return document;
+	}
+	const cleanBody = document.body.split(evidence.text).join('').trimEnd();
+	const headingPrefix = '\n\n## ';
+	const paddingLength = evidence.offset - cleanBody.length - headingPrefix.length;
+	if (paddingLength < 0) {
+		throw new Error(`长文 ${document.filePath} 无法在固定偏移 ${evidence.offset} 放置尾证据`);
+	}
+	const fillerUnit = '\n补充记录用于保持长文结构、固定证据偏移并验证尾部检索边界。';
+	const filler = fillerUnit
+		.repeat(Math.ceil(paddingLength / fillerUnit.length))
+		.slice(0, paddingLength);
+	const body = `${cleanBody}${filler}${headingPrefix}${evidence.text}\n该标题记录本用例唯一的尾部证据。`;
+	return { ...document, body };
+}
+
 export function parseRetrievalFixture(value: unknown): RetrievalEvalFixture {
-	const fixture = fixtureSchema.parse(value) as RetrievalEvalFixture;
+	const parsed = fixtureSchema.parse(value) as RetrievalEvalFixture;
+	const fixture = {
+		...parsed,
+		documents: parsed.documents.map(materializeTailEvidence),
+	};
 	assertUnique(
 		fixture.documents.map((document) => document.filePath),
 		'评测文档 filePath',
@@ -195,6 +248,11 @@ export function parseRetrievalFixture(value: unknown): RetrievalEvalFixture {
 	);
 	const documentPaths = new Set(fixture.documents.map((document) => document.filePath));
 	for (const testCase of fixture.cases) {
+		for (const field of Object.keys(testCase.filters ?? {})) {
+			if (!PRODUCTION_FILTER_FIELDS.has(field)) {
+				throw new Error(`评测用例 ${testCase.id} 使用了非法生产过滤字段：${field}`);
+			}
+		}
 		for (const filePath of [...testCase.expectedFiles, ...testCase.forbiddenFiles]) {
 			if (!documentPaths.has(filePath)) {
 				throw new Error(`评测用例 ${testCase.id} 引用了不存在的文档：${filePath}`);
@@ -205,6 +263,37 @@ export function parseRetrievalFixture(value: unknown): RetrievalEvalFixture {
 		}
 		if (testCase.shouldAbstain && testCase.expectedFiles.length > 0) {
 			throw new Error(`拒答用例 ${testCase.id} 不得声明期望文件`);
+		}
+		if (testCase.category === 'temporal_update') {
+			if (!testCase.timeCondition) throw new Error(`时间用例 ${testCase.id} 必须声明时间条件`);
+			if (!testCase.filters || Object.keys(testCase.filters).length === 0) {
+				throw new Error(`时间用例 ${testCase.id} 必须声明生产过滤器`);
+			}
+		}
+		if (testCase.category === 'abstention' && !testCase.shouldAbstain) {
+			throw new Error(`拒答用例 ${testCase.id} 必须声明 shouldAbstain=true`);
+		}
+		if (testCase.category === 'long_tail') {
+			if (testCase.expectedFiles.length !== 1) {
+				throw new Error(`长文用例 ${testCase.id} 必须且只能声明一个期望文件`);
+			}
+			const document = fixture.documents.find(
+				(candidate) => candidate.filePath === testCase.expectedFiles[0],
+			);
+			if (
+				!document?.tailEvidence ||
+				document.tailEvidence.text !== testCase.query ||
+				document.body.indexOf(testCase.query) <= 4000 ||
+				document.body.lastIndexOf(testCase.query) !== document.body.indexOf(testCase.query)
+			) {
+				throw new Error(`长文用例 ${testCase.id} 必须在正文第 4000 字符后提供唯一证据`);
+			}
+		}
+		if (testCase.category === 'conflict_override' || testCase.category === 'scope_isolation') {
+			const filterFields = Object.keys(testCase.filters ?? {});
+			if (!filterFields.some((field) => PRODUCTION_SCOPE_FILTER_FIELDS.has(field))) {
+				throw new Error(`作用域用例 ${testCase.id} 必须声明生产作用域过滤器`);
+			}
 		}
 	}
 	return fixture;
@@ -252,6 +341,7 @@ export function evaluateRetrieval(
 	let temporalResults = 0;
 	let staleHits = 0;
 	let allResults = 0;
+	let forbiddenEligibleResults = 0;
 	let forbiddenHits = 0;
 	let contextTokens = 0;
 	const durations: number[] = [];
@@ -277,6 +367,7 @@ export function evaluateRetrieval(
 
 		for (const result of observation.results) {
 			allResults += 1;
+			if (forbidden.size > 0) forbiddenEligibleResults += 1;
 			contextTokens += result.contextTokens;
 			if (forbidden.has(result.filePath)) forbiddenHits += 1;
 			if (testCase.expectedScopes.length > 0) {
@@ -304,7 +395,7 @@ export function evaluateRetrieval(
 		abstentionAccuracy: cases.length === 0 ? 1 : correctAbstentions / cases.length,
 		scopeLeakageRate: scopedResults === 0 ? 0 : scopeLeaks / scopedResults,
 		staleHitRate: temporalResults === 0 ? 0 : staleHits / temporalResults,
-		forbiddenHitRate: allResults === 0 ? 0 : forbiddenHits / allResults,
+		forbiddenHitRate: forbiddenEligibleResults === 0 ? 0 : forbiddenHits / forbiddenEligibleResults,
 		averageContextTokens: cases.length === 0 ? 0 : contextTokens / cases.length,
 	};
 	const passed =
@@ -327,7 +418,7 @@ export function evaluateRetrieval(
 			abstentionCases: cases.length,
 			scopedResults,
 			temporalResults,
-			forbiddenEligibleResults: allResults,
+			forbiddenEligibleResults,
 			contextCases: cases.length,
 		},
 		thresholds: THRESHOLDS,
@@ -361,9 +452,6 @@ export function runMemoryRetrievalEvaluation(
 		}
 
 		fullScan(vault.root, vault.dbPath, new VaultConfig(vault.root));
-		const documentsByPath = new Map(
-			fixture.documents.map((document) => [document.filePath, document]),
-		);
 		const observations = withDb(vault.dbPath, (db) =>
 			fixture.cases.map((testCase): RetrievalEvalObservation => {
 				const started = performance.now();
@@ -373,10 +461,20 @@ export function runMemoryRetrievalEvaluation(
 					caseId: testCase.id,
 					durationMs,
 					results: results.map((result) => {
-						const document = documentsByPath.get(result.filePath);
+						const indexedFact = db
+							.prepare('SELECT project, entity_id FROM vault_index WHERE file_path = ?')
+							.get(result.filePath) as
+							| { project: string | null; entity_id: string | null }
+							| undefined;
+						const scope: MemoryScope = indexedFact?.project
+							? { type: 'project', key: indexedFact.project }
+							: {
+									type: 'file',
+									key: indexedFact?.entity_id ?? result.filePath,
+								};
 						return {
 							filePath: result.filePath,
-							scope: document?.scope ?? { type: 'file', key: result.filePath },
+							scope,
 							modifiedAt: result.modifiedAt,
 							contextTokens: estimateTokens(`${result.title}\n${result.displaySummary}`),
 						};
