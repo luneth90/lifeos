@@ -185,3 +185,66 @@ draft → review → revised → mastered
 ```
 
 状态只升不降。`frozen` 项目及其关联知识笔记不进入 TaskBoard 焦点、活跃项目或复习链路。
+
+## 长期记忆检索评测基准
+
+固定评测夹具位于 `tests/fixtures/memory-retrieval-eval.zh.json`，当前版本为
+`2026-08-09.v1`。夹具包含 61 篇临时文档和 42 个不重复的中文查询，用例类别与数量固定为：
+
+| 类别 | 数量 | 评测重点 |
+| --- | ---: | --- |
+| `direct_extraction` | 8 | 单文档直接信息提取 |
+| `multi_document` | 6 | 同一问题的多文档召回 |
+| `temporal_update` | 6 | 新版本覆盖陈旧版本 |
+| `conflict_override` | 6 | 更具体作用域规则覆盖全局规则 |
+| `scope_isolation` | 6 | 显式过滤下的项目作用域隔离 |
+| `abstention` | 5 | 无证据时返回空结果 |
+| `long_tail` | 5 | 位于正文第 500 字符之后的尾部证据 |
+
+每个 `RetrievalEvalCase` 必须包含稳定 `id`、`query`、`filters`、`expectedFiles`、
+`forbiddenFiles`、`expectedScopes`、`timeCondition` 与 `shouldAbstain`。运行时使用 Zod
+校验字段类型、未知字段、时间格式、唯一 id、唯一查询、文件引用、期望/禁止文件互斥及拒答用例约束。
+
+评测器分为两层：`evaluateRetrieval` 只根据手工排名观察值计算指标；
+`runMemoryRetrievalEvaluation` 把固定语料写入临时 Vault，调用生产 `fullScan` 和
+`queryVaultIndex`，不复制或改写生产排序逻辑。拒答只按生产检索返回空结果判定，不引入回答模型。
+临时数据库和 Markdown 在每次运行结束后删除，报告只在进程内返回，不读写生产 Vault。
+
+### 指标、分母与空集合语义
+
+设 $C_r$ 为 `expectedFiles` 非空的用例集合，$R_c@k$ 为用例 $c$ 的前 $k$ 个返回文件，
+$E_c$ 为其期望文件集合：
+
+- `Recall@5`：$\frac{1}{|C_r|}\sum_{c\in C_r}\frac{|R_c@5\cap E_c|}{|E_c|}$。
+  无相关用例时取 $1$；期望文件非空但无结果时，该用例取 $0$。
+- `MRR@10`：对 $C_r$ 做宏平均；首个期望文件在前十名中的名次为 $r$ 时取 $1/r$，
+  未命中取 $0$。无相关用例时取 $1$。
+- `abstentionAccuracy`：`results.length === 0` 与 `shouldAbstain` 相等的用例数除以全部用例数；
+  无用例时取 $1$。
+- `scopeLeakageRate`：声明了 `expectedScopes` 的用例中，不属于任一期望作用域的返回结果数，
+  除以这些用例的全部返回结果数；分母为零时取 $0$。
+- `staleHitRate`：声明了 `timeCondition.notBefore` 的用例中，`modifiedAt` 缺失或早于该时刻的
+  返回结果数，除以这些用例的全部返回结果数；分母为零时取 $0$。
+- `forbiddenHitRate`：命中本用例 `forbiddenFiles` 的结果数除以全部返回结果数；无结果时取 $0$。
+- `averageContextTokens`：每个结果按生产 `estimateTokens(title + "\\n" + displaySummary)` 估算，
+  全部结果的 token 和除以全部用例数；无用例时取 $0$。
+- 本机耗时记录 `averageMs`、`p50Ms`、`p95Ms`。分位数采用排序后的 nearest-rank 规则；
+  无用例时三者均为 $0$。耗时只用于本机基线观察，不设跨机器失败门槛。
+
+固定门槛为：`Recall@5 >= 0.90`、`MRR@10 >= 0.85`、
+`abstentionAccuracy >= 0.90`、`scopeLeakageRate = 0`、`staleHitRate = 0`。
+夹具同时要求 `forbiddenHitRate = 0`，用于确保明确禁止文件不会被其他平均指标掩盖。
+
+### 报告与确定性
+
+报告包含 `fixture`、`metrics`、`timings`、`denominators`、`thresholds`、`passed`、
+`categoryReports` 与每个用例的 `rankings`。`categoryReports.long_tail` 是长文尾部证据的独立子集指标。
+稳定 JSON 序列化会递归按键名排序；确定性比较把所有 `timings` 归一化为零，其余字段必须逐字节一致。
+固定入口为：
+
+```bash
+npm run test:memory-eval
+```
+
+当前生产检索尚未达到全部门槛时，集成门槛测试使用准确的 expected fail；纯指标、夹具校验、
+真实生产检索调用和双跑确定性测试仍必须通过。任务 8 达到门槛后应删除 expected fail 标记。

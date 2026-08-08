@@ -17,6 +17,7 @@
 		"dev": "tsx watch src/server.ts",
 		"start": "node dist/server.js",
 		"test": "vitest run",
+		"test:memory-eval": "vitest run tests/evals/memory-retrieval.eval.test.ts",
 		"test:memory-real-env": "vitest run tests/e2e/memory-real-env-v2.test.ts",
 		"test:watch": "vitest",
 		"lint": "biome check src/",
