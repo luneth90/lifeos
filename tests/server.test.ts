@@ -445,4 +445,19 @@ describe('server 最终 V2/V4 契约', () => {
 		expect(() => mod.memoryScopeSchema.parse({ type: 'project', key: '' })).toThrow();
 		expect(() => mod.memoryScopeSchema.parse({ type: 'legacy', key: 'x' })).toThrow();
 	});
+
+	it('toToolResult 以同一份 JSON 值生成结构化结果和兼容文本', async () => {
+		const mod = await loadServerModule();
+		const result = mod.toToolResult({
+			status: 'error',
+			startup_error: '测试启动错误',
+			omitted: undefined,
+		});
+
+		expect(result.structuredContent).toEqual({
+			status: 'error',
+			startup_error: '测试启动错误',
+		});
+		expect(JSON.parse(result.content[0]?.text ?? '')).toEqual(result.structuredContent);
+	});
 });

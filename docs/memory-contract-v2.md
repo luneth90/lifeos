@@ -11,6 +11,16 @@
 - Layer 0 只包含全局上下文，不包含 `skill`、`project`、`repository`、`tool` 或 `file` 作用域记忆。
 - 局部上下文必须在任务路由完成后，通过 `memory_context` 和显式 `scopes` 获取。
 
+## MCP 结果格式
+
+七个工具都声明了 `outputSchema`。成功调用优先从 `structuredContent` 读取机器可解析结果；`content[0].text` 继续提供 JSON 文本兼容层，供尚未读取结构化结果的客户端使用。服务端从同一份 JSON 序列化值生成两条路径，因此始终满足：
+
+```text
+structuredContent == JSON.parse(content[0].text)
+```
+
+工具自身捕获的启动错误仍保持既有 `{ "status": "error", "startup_error": "..." }` 结果语义，并同时出现在结构化与文本路径中。MCP SDK 在输入模式校验失败或 handler 抛出异常时仍返回 `isError=true` 的协议错误；该路径保留 SDK 的纯文本错误格式，不伪装成工具成功结果，也不受工具 `outputSchema` 校验。
+
 ## 七个 MCP 工具
 
 | 工具 | 作用 | 必要约束 |

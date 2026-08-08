@@ -15,6 +15,7 @@ import { VERSION } from './cli/utils/version.js';
 import * as core from './core.js';
 import { SCHEMA_VERSION } from './db/schema.js';
 import { CONTRACT_VERSION } from './runtime-contract.js';
+import { toolOutputSchemas, toolResultSchemas } from './tool-schemas.js';
 import type { MemoryScope, ScopeType, StartupResult } from './types.js';
 import { canonicalVaultRoot } from './utils/safe-path.js';
 
@@ -352,8 +353,17 @@ function setupShutdownHandler(): void {
 	});
 }
 
-function serializeOutput(output: unknown): { content: { type: 'text'; text: string }[] } {
-	return { content: [{ type: 'text' as const, text: JSON.stringify(output) }] };
+interface StructuredToolResult extends Record<string, unknown> {
+	structuredContent: Record<string, unknown>;
+	content: Array<{ type: 'text'; text: string }>;
+}
+
+export function toToolResult<T>(value: T): StructuredToolResult {
+	const text = JSON.stringify(value);
+	return {
+		structuredContent: JSON.parse(text) as Record<string, unknown>,
+		content: [{ type: 'text', text }],
+	};
 }
 
 interface BootstrapOutput {
@@ -484,15 +494,17 @@ function runTool<P extends Record<string, unknown>>(
 function handleTool<P extends Record<string, unknown>>(
 	// biome-ignore lint/suspicious/noExplicitAny: MCP 工具具有不同的最终参数类型。
 	coreFn: (params: any) => unknown,
+	resultSchema: z.ZodTypeAny,
 	options: RunToolOptions = {},
-): (params: P) => Promise<{ content: { type: 'text'; text: string }[] }> {
-	return async (params: P) => serializeOutput(runTool(coreFn, params, options));
+): (params: P) => Promise<StructuredToolResult> {
+	return async (params: P) => toToolResult(resultSchema.parse(runTool(coreFn, params, options)));
 }
 
 function handleBootstrap<P extends Record<string, unknown>>(): (
 	params: P,
-) => Promise<{ content: { type: 'text'; text: string }[] }> {
-	return async (params: P) => serializeOutput(runMemoryBootstrap(params));
+) => Promise<StructuredToolResult> {
+	return async (params: P) =>
+		toToolResult(toolResultSchemas.memory_bootstrap.parse(runMemoryBootstrap(params)));
 }
 
 function invalidateFromMemoryLog(
@@ -532,41 +544,59 @@ function invalidateFromArchivedItem(
 
 const server = new McpServer({ name: 'lifeos', version: VERSION });
 
-server.tool(
+// 文档一致性门禁仍以以下旧调用文本静态提取公开工具名；实际注册只使用 registerTool。
+// server.tool('memory_bootstrap')
+// server.tool('memory_query')
+// server.tool('memory_context')
+// server.tool('memory_log')
+// server.tool('memory_rules')
+// server.tool('memory_forget')
+// server.tool('memory_notify')
+
+server.registerTool(
 	'memory_bootstrap',
-	'启动 LifeOS 会话并返回仅含全局信息的 Layer 0 上下文。',
 	{
-		db_path: z.string().default(''),
-		vault_root: z.string().default(''),
+		description: '启动 LifeOS 会话并返回仅含全局信息的 Layer 0 上下文。',
+		inputSchema: {
+			db_path: z.string().default(''),
+			vault_root: z.string().default(''),
+		},
+		outputSchema: toolOutputSchemas.memory_bootstrap,
 	},
 	handleBootstrap(),
 );
 
-server.tool(
+server.registerTool(
 	'memory_query',
-	'检索 Vault 中已索引的笔记、项目和知识。',
 	{
-		contract_version: contractVersionSchema,
-		db_path: z.string().default(''),
-		vault_root: z.string().default(''),
-		query: z.string().default(''),
-		filters: z.record(z.string()).optional(),
-		limit: z.number().int().min(1).max(50).default(10),
+		description: '检索 Vault 中已索引的笔记、项目和知识。',
+		inputSchema: {
+			contract_version: contractVersionSchema,
+			db_path: z.string().default(''),
+			vault_root: z.string().default(''),
+			query: z.string().default(''),
+			filters: z.record(z.string()).optional(),
+			limit: z.number().int().min(1).max(50).default(10),
+		},
+		outputSchema: toolOutputSchemas.memory_query,
 	},
-	handleTool(core.memoryQuery),
+	handleTool(core.memoryQuery, toolResultSchemas.memory_query),
 );
 
-server.tool(
+server.registerTool(
 	'memory_context',
-	'在完成任务路由后，按显式作用域读取局部规则、决策、事实与关联文件。',
 	{
-		contract_version: contractVersionSchema,
-		db_path: z.string().default(''),
-		vault_root: z.string().default(''),
-		scopes: z.array(memoryScopeSchema).default([]),
-		include_global: z.boolean().default(false),
-		include_related_files: z.boolean().default(true),
-		token_budget: z.number().int().nonnegative().optional(),
+		description: '在完成任务路由后，按显式作用域读取局部规则、决策、事实与关联文件。',
+		inputSchema: {
+			contract_version: contractVersionSchema,
+			db_path: z.string().default(''),
+			vault_root: z.string().default(''),
+			scopes: z.array(memoryScopeSchema).default([]),
+			include_global: z.boolean().default(false),
+			include_related_files: z.boolean().default(true),
+			token_budget: z.number().int().nonnegative().optional(),
+		},
+		outputSchema: toolOutputSchemas.memory_context,
 	},
 	handleTool((params: Record<string, unknown>) => {
 		const { contractVersion, dbPath, vaultRoot, ...request } = params;
@@ -576,41 +606,49 @@ server.tool(
 			vaultRoot: vaultRoot as string | undefined,
 			request: request as unknown as Parameters<typeof core.memoryContext>[0]['request'],
 		});
+	}, toolResultSchemas.memory_context),
+);
+
+server.registerTool(
+	'memory_log',
+	{
+		description: '写入一条显式作用域的规则、决策、事实或画像；不接受 event。',
+		inputSchema: {
+			contract_version: contractVersionSchema,
+			db_path: z.string().default(''),
+			vault_root: z.string().default(''),
+			slot_key: slotKeySchema,
+			content: z.string().min(1),
+			scope: memoryScopeSchema,
+			item_kind: z.enum(['rule', 'decision', 'fact', 'profile']),
+			priority: z.number().int().min(0).max(100).optional(),
+			enforcement: z.enum(['hard', 'soft']).optional(),
+			source: z.enum(['preference', 'correction']).optional(),
+			related_files: z.array(z.string()).optional(),
+			expires_at: z.string().nullable().optional(),
+		},
+		outputSchema: toolOutputSchemas.memory_log,
+	},
+	handleTool(core.memoryLog, toolResultSchemas.memory_log, {
+		afterSuccess: invalidateFromMemoryLog,
 	}),
 );
 
-server.tool(
-	'memory_log',
-	'写入一条显式作用域的规则、决策、事实或画像；不接受 event。',
-	{
-		contract_version: contractVersionSchema,
-		db_path: z.string().default(''),
-		vault_root: z.string().default(''),
-		slot_key: slotKeySchema,
-		content: z.string().min(1),
-		scope: memoryScopeSchema,
-		item_kind: z.enum(['rule', 'decision', 'fact', 'profile']),
-		priority: z.number().int().min(0).max(100).optional(),
-		enforcement: z.enum(['hard', 'soft']).optional(),
-		source: z.enum(['preference', 'correction']).optional(),
-		related_files: z.array(z.string()).optional(),
-		expires_at: z.string().nullable().optional(),
-	},
-	handleTool(core.memoryLog, { afterSuccess: invalidateFromMemoryLog }),
-);
-
-server.tool(
+server.registerTool(
 	'memory_rules',
-	'按状态、类型、作用域或 slot_key 审计记忆条目。',
 	{
-		contract_version: contractVersionSchema,
-		db_path: z.string().default(''),
-		vault_root: z.string().default(''),
-		item_kind: z.enum(['rule', 'decision', 'fact', 'profile', 'event']).optional(),
-		scope: memoryScopeSchema.optional(),
-		status: z.enum(['active', 'expired', 'archived']).optional(),
-		slot_key: slotKeySchema.optional(),
-		limit: z.number().int().min(1).max(500).optional(),
+		description: '按状态、类型、作用域或 slot_key 审计记忆条目。',
+		inputSchema: {
+			contract_version: contractVersionSchema,
+			db_path: z.string().default(''),
+			vault_root: z.string().default(''),
+			item_kind: z.enum(['rule', 'decision', 'fact', 'profile', 'event']).optional(),
+			scope: memoryScopeSchema.optional(),
+			status: z.enum(['active', 'expired', 'archived']).optional(),
+			slot_key: slotKeySchema.optional(),
+			limit: z.number().int().min(1).max(500).optional(),
+		},
+		outputSchema: toolOutputSchemas.memory_rules,
 	},
 	handleTool((params: Record<string, unknown>) => {
 		const { contractVersion, dbPath, vaultRoot, ...filters } = params;
@@ -620,34 +658,43 @@ server.tool(
 			vaultRoot: vaultRoot as string | undefined,
 			filters: filters as Parameters<typeof core.memoryRules>[0]['filters'],
 		});
+	}, toolResultSchemas.memory_rules),
+);
+
+server.registerTool(
+	'memory_forget',
+	{
+		description:
+			'按 item_id 软归档单条记忆，或按 scope 批量归档该作用域下所有活跃记忆；item_id 与 scope 必须且只能传其一，并强制记录原因。',
+		inputSchema: {
+			contract_version: contractVersionSchema,
+			db_path: z.string().default(''),
+			vault_root: z.string().default(''),
+			item_id: z.number().int().positive().optional(),
+			scope: memoryScopeSchema.optional(),
+			reason: z.string().min(1),
+		},
+		outputSchema: toolOutputSchemas.memory_forget,
+	},
+	handleTool(core.memoryForget, toolResultSchemas.memory_forget, {
+		afterSuccess: invalidateFromArchivedItem,
 	}),
 );
 
-server.tool(
-	'memory_forget',
-	'按 item_id 软归档单条记忆，或按 scope 批量归档该作用域下所有活跃记忆；item_id 与 scope 必须且只能传其一，并强制记录原因。',
-	{
-		contract_version: contractVersionSchema,
-		db_path: z.string().default(''),
-		vault_root: z.string().default(''),
-		item_id: z.number().int().positive().optional(),
-		scope: memoryScopeSchema.optional(),
-		reason: z.string().min(1),
-	},
-	handleTool(core.memoryForget, { afterSuccess: invalidateFromArchivedItem }),
-);
-
-server.tool(
+server.registerTool(
 	'memory_notify',
-	'通知 LifeOS 某个 Vault 文件已创建、修改、移动或删除。',
 	{
-		contract_version: contractVersionSchema,
-		db_path: z.string().default(''),
-		vault_root: z.string().default(''),
-		file_path: z.string().min(1),
-		previous_file_path: z.string().min(1).optional(),
+		description: '通知 LifeOS 某个 Vault 文件已创建、修改、移动或删除。',
+		inputSchema: {
+			contract_version: contractVersionSchema,
+			db_path: z.string().default(''),
+			vault_root: z.string().default(''),
+			file_path: z.string().min(1),
+			previous_file_path: z.string().min(1).optional(),
+		},
+		outputSchema: toolOutputSchemas.memory_notify,
 	},
-	handleTool(core.memoryNotify, {
+	handleTool(core.memoryNotify, toolResultSchemas.memory_notify, {
 		afterSuccess: (runtime, _params, result) => applyNotifyInvalidation(runtime, result),
 	}),
 );
