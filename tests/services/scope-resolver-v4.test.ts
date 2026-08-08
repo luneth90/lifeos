@@ -1,15 +1,21 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { VaultConfig } from '../../src/config.js';
+import { VaultConfig } from '../../src/config.js';
 import { initDb } from '../../src/db/schema.js';
 import { upsertMemoryItem } from '../../src/services/memory-items.js';
 import { resolveMemoryScopes } from '../../src/services/scope-resolver.js';
 import type { MemoryScope } from '../../src/types.js';
+import { createTempVault } from '../setup.js';
+import type { TempVault } from '../setup.js';
 
 describe('V4 scope resolver', () => {
 	let db: Database.Database;
+	let vault: TempVault;
 
 	beforeEach(() => {
+		vault = createTempVault();
 		db = new Database(':memory:');
 		initDb(db);
 		db.prepare(`
@@ -22,7 +28,10 @@ describe('V4 scope resolver', () => {
 		`).run('40_知识/群论.md', '群论', 'note', 'review', 'note-group');
 	});
 
-	afterEach(() => db.close());
+	afterEach(() => {
+		db.close();
+		vault.cleanup();
+	});
 
 	it('项目仅按稳定 entity_id 解析，不按标题或路径猜测', () => {
 		const result = resolveMemoryScopes(db, [
@@ -47,7 +56,7 @@ describe('V4 scope resolver', () => {
 		expect(result.unresolvedScopes).toEqual([]);
 	});
 
-	it('repository 可由配置绑定或已有记忆证明，未知仓库不自动创建', () => {
+	it('repository 只由配置绑定证明，已有记忆不能让未知仓库变合法', () => {
 		upsertMemoryItem(db, {
 			slotKey: 'repo:rule',
 			content: '仓库规则',
@@ -64,19 +73,19 @@ describe('V4 scope resolver', () => {
 				{ type: 'repository', key: 'repo-memory' },
 				{ type: 'repository', key: 'repo-new' },
 			],
-			{ config, allowCreate: true },
+			{ config },
 		);
-		expect(result.resolvedScopes).toEqual([
-			{ type: 'repository', key: 'repo-config' },
-			{ type: 'repository', key: 'repo-memory' },
+		expect(result.resolvedScopes).toEqual([{ type: 'repository', key: 'repo-config' }]);
+		expect(result.unresolvedScopes).toEqual([
+			{ scope: { type: 'repository', key: 'repo-memory' }, reason: 'unknown_repository' },
+			{ scope: { type: 'repository', key: 'repo-new' }, reason: 'unknown_repository' },
 		]);
-		expect(result.unresolvedScopes[0]).toEqual({
-			scope: { type: 'repository', key: 'repo-new' },
-			reason: 'unknown_repository',
-		});
 	});
 
-	it('skill 与 tool 默认要求已有 active 记忆，allowCreate 时可显式创建', () => {
+	it('已安装技能与已配置工具在零记忆时可解析，allowCreate 不能创建未知对象', () => {
+		const skillRoot = join(vault.root, '.agents', 'skills', 'translate');
+		mkdirSync(skillRoot, { recursive: true });
+		writeFileSync(join(skillRoot, 'SKILL.md'), '# translate\n', 'utf-8');
 		upsertMemoryItem(db, {
 			slotKey: 'skill:language',
 			content: '翻译保持术语',
@@ -86,24 +95,24 @@ describe('V4 scope resolver', () => {
 		const requested: MemoryScope[] = [
 			{ type: 'skill', key: 'translate' },
 			{ type: 'skill', key: 'research' },
-			{ type: 'tool', key: 'obsidian-cli' },
+			{ type: 'tool', key: 'obsidian' },
+			{ type: 'tool', key: 'unknown-tool' },
 		];
-		expect(resolveMemoryScopes(db, requested).resolvedScopes).toEqual([
+		const config = new VaultConfig(vault.root);
+		const result = resolveMemoryScopes(db, requested, { config });
+		expect(result.resolvedScopes).toEqual([
 			{ type: 'skill', key: 'translate' },
+			{ type: 'tool', key: 'obsidian' },
 		]);
-		expect(resolveMemoryScopes(db, requested, { allowCreate: true }).resolvedScopes).toEqual(
-			requested,
-		);
+		expect(result.unresolvedScopes.map((item) => item.reason)).toEqual([
+			'unknown_skill',
+			'unknown_tool',
+		]);
 	});
 
 	it('tool 可通过配置中的命令或技能别名解析为稳定 ID', () => {
-		upsertMemoryItem(db, {
-			slotKey: 'runtime:cli-outside-sandbox',
-			content: 'Obsidian CLI 必须在沙盒外执行',
-			itemKind: 'rule',
-			scope: { type: 'tool', key: 'obsidian' },
-		});
 		const config = {
+			vaultRoot: vault.root,
 			repositoryBindings: () => ({}),
 			toolBindings: () => ({
 				obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
@@ -131,7 +140,6 @@ describe('V4 scope resolver', () => {
 		} as unknown as VaultConfig;
 		const result = resolveMemoryScopes(db, [{ type: 'tool', key: 'obsidian' }], {
 			config,
-			allowCreate: true,
 		});
 		expect(result.resolvedScopes).toEqual([]);
 		expect(result.unresolvedScopes).toEqual([
@@ -143,8 +151,9 @@ describe('V4 scope resolver', () => {
 		]);
 	});
 
-	it('tool 单候选别名未绑定时给出 unknown_tool 与候选', () => {
+	it('tool 单候选别名在对应工具零记忆时仍解析为稳定 ID', () => {
 		const config = {
+			vaultRoot: vault.root,
 			repositoryBindings: () => ({}),
 			toolBindings: () => ({
 				obsidian: { commands: ['obsidian-cli'], skills: [] },
@@ -153,14 +162,8 @@ describe('V4 scope resolver', () => {
 		const result = resolveMemoryScopes(db, [{ type: 'tool', key: 'obsidian-cli' }], {
 			config,
 		});
-		expect(result.resolvedScopes).toEqual([]);
-		expect(result.unresolvedScopes).toEqual([
-			{
-				scope: { type: 'tool', key: 'obsidian-cli' },
-				reason: 'unknown_tool',
-				candidates: ['obsidian'],
-			},
-		]);
+		expect(result.resolvedScopes).toEqual([{ type: 'tool', key: 'obsidian' }]);
+		expect(result.unresolvedScopes).toEqual([]);
 	});
 
 	it('非 tool 未绑定 scope 不带 candidates', () => {

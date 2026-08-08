@@ -198,11 +198,7 @@ export function memoryLog(
 ): UpsertMemoryItemResult {
 	assertContractVersion(opts.contractVersion);
 	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault, config }) => {
-		const resolution = resolveMemoryScopes(db, [opts.scope], {
-			config,
-			allowCreate: true,
-			requireRepositoryBinding: true,
-		});
+		const resolution = resolveMemoryScopes(db, [opts.scope], { config });
 		if (resolution.unresolvedScopes.length > 0) {
 			const unresolved = resolution.unresolvedScopes[0];
 			if (unresolved.reason === 'unknown_repository') {

@@ -11,6 +11,7 @@ import { countRows } from '../utils/shared.js';
 import { fullScan } from '../utils/vault-indexer.js';
 import { buildLayer0Context } from './layer0.js';
 import { expireMemoryItems } from './memory-items.js';
+import { buildScopeCatalog } from './scope-catalog.js';
 
 export function runStartup(
 	db: Database.Database,
@@ -32,51 +33,19 @@ export function runStartup(
 	}
 	expireMemoryItems(db);
 	const totalFiles = countRows(db, 'vault_index');
-	const availableProjects = (
-		db
-			.prepare(`
-				SELECT DISTINCT entity_id
-				FROM vault_index
-				WHERE type = 'project' AND entity_id IS NOT NULL
-				ORDER BY entity_id
-			`)
-			.all() as Array<{ entity_id: string }>
-	).map((row) => row.entity_id);
-	const availableSkills = (
-		db
-			.prepare(`
-				SELECT DISTINCT scope_key
-				FROM memory_items
-				WHERE status = 'active' AND scope_type = 'skill'
-				ORDER BY scope_key
-			`)
-			.all() as Array<{ scope_key: string }>
-	).map((row) => row.scope_key);
-	const availableTools = (
-		db
-			.prepare(`
-				SELECT DISTINCT scope_key
-				FROM memory_items
-				WHERE status = 'active' AND scope_type = 'tool'
-				ORDER BY scope_key
-			`)
-			.all() as Array<{ scope_key: string }>
-	).map((row) => row.scope_key);
-	const configuredToolBindings = config.toolBindings();
-	const toolBindings = Object.fromEntries(
-		availableTools.flatMap((toolId) => {
-			const binding = configuredToolBindings[toolId];
-			return binding ? [[toolId, binding] as const] : [];
-		}),
-	);
+	const catalog = buildScopeCatalog(db, config);
+	const availableProjects = [
+		...new Set(catalog.projects.map((project) => project.entityId)),
+	].sort();
+	const availableTools = Object.keys(catalog.tools);
 	return {
 		layer0: buildLayer0Context(db, vaultRoot, config.contextBudgets()),
 		scopeHints: {
 			availableProjects,
-			availableRepositories: Object.keys(config.repositoryBindings()).sort(),
-			availableSkills,
+			availableRepositories: Object.keys(catalog.repositories),
+			availableSkills: catalog.skills,
 			availableTools,
-			toolBindings,
+			toolBindings: catalog.tools,
 		},
 		vaultStats: {
 			totalFiles,

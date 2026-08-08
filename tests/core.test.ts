@@ -34,13 +34,17 @@ describe('memoryStartup 最终 V2/V4 契约', () => {
 
 		expect(result.layer0.text).toEqual(expect.any(String));
 		expect(result.layer0.snapshotId).toMatch(/^ctx-/);
-		expect(result.scopeHints).toEqual({
+		expect(result.scopeHints).toMatchObject({
 			availableProjects: [],
 			availableRepositories: [],
-			availableSkills: [],
-			availableTools: [],
-			toolBindings: {},
+			availableTools: ['obsidian'],
+			toolBindings: {
+				obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
+			},
 		});
+		expect(result.scopeHints.availableSkills).toEqual(
+			expect.arrayContaining(['today', 'ask', 'brainstorm', 'knowledge', 'research']),
+		);
 		expect(result.vaultStats).toMatchObject({ maintenancePending: true });
 		expect(result).not.toHaveProperty('layer0_summary');
 		expect(result).not.toHaveProperty('vault_stats');
@@ -169,6 +173,26 @@ describe('scoped memory 核心接口', () => {
 				{ type: 'skill', key: 'revise' },
 			]),
 		);
+	});
+
+	it('memory_log 拒绝 allowCreate 隐式创建未知技能与工具', () => {
+		for (const scope of [
+			{ type: 'skill' as const, key: 'skill-typo' },
+			{ type: 'tool' as const, key: 'tool-typo' },
+		]) {
+			expect(() =>
+				memoryLog({
+					contractVersion: CONTRACT_VERSION,
+					dbPath: vault.dbPath,
+					vaultRoot: vault.root,
+					slotKey: 'unknown:scope',
+					content: '不应写入',
+					scope,
+					itemKind: 'rule',
+				}),
+			).toThrow(`unknown_${scope.type}`);
+			_resetDefaultInstance();
+		}
 	});
 
 	it('memory_context 只读取显式 scope，memory_forget 只做软归档', () => {

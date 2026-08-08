@@ -109,10 +109,9 @@ export function buildMemoryContext(
 	if (!request.scopes?.length) return emptyResponse();
 	const config = options.config ?? resolveConfig(vaultRoot);
 	const budgets = { ...config.contextBudgets(), ...options.budgets };
-	const resolution = resolveMemoryScopes(db, request.scopes, {
-		config,
-		requireRepositoryBinding: true,
-	});
+	const now = new Date().toISOString();
+	assertGlobalHardSafety(db, { now });
+	const resolution = resolveMemoryScopes(db, request.scopes, { config });
 	if (!resolution.resolvedScopes.length) return emptyResponse(resolution.unresolvedScopes);
 	const requestedOrder = new Map(
 		resolution.resolvedScopes.map((scope, index) => [scopeId(scope), index]),
@@ -121,8 +120,6 @@ export function buildMemoryContext(
 	if (request.includeGlobal && !fetchScopes.some((scope) => scope.type === 'global')) {
 		fetchScopes.push({ type: 'global', key: '' });
 	}
-	const now = new Date().toISOString();
-	assertGlobalHardSafety(db, { now });
 	const candidates = fetchScopes
 		.flatMap((scope) => listMemoryItems(db, { scope, status: 'active', limit: 10_000 }))
 		.filter((item) => ['rule', 'decision', 'fact'].includes(item.itemKind))

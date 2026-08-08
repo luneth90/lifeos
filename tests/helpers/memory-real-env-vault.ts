@@ -208,12 +208,22 @@ function initializeRuntime(root: string): string {
 
 	writeFileSync(join(root, 'lifeos.yaml'), stringifyYaml(initialConfig(root)), 'utf-8');
 	writeFixtureFiles(root);
-	const reviseSkillRoot = join(root, '.agents', 'skills', 'revise');
-	mkdirSync(reviseSkillRoot, { recursive: true });
-	copyFileSync(
-		fileURLToPath(new URL('../../assets/skills/revise/SKILL.zh.md', import.meta.url)),
-		join(reviseSkillRoot, 'SKILL.md'),
-	);
+	for (const skillName of [
+		'ask',
+		'brainstorm',
+		'digest',
+		'knowledge',
+		'research',
+		'revise',
+		'today',
+	]) {
+		const skillRoot = join(root, '.agents', 'skills', skillName);
+		mkdirSync(skillRoot, { recursive: true });
+		copyFileSync(
+			fileURLToPath(new URL(`../../assets/skills/${skillName}/SKILL.zh.md`, import.meta.url)),
+			join(skillRoot, 'SKILL.md'),
+		);
+	}
 
 	_resetDefaultInstance();
 	const config = structuredClone(resolveConfig(root).rawConfig);

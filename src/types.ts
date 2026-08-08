@@ -53,6 +53,24 @@ export interface ToolBinding {
 
 export type ToolBindings = Record<string, ToolBinding>;
 
+export interface ScopeCatalogProject {
+	entityId: string;
+	filePath: string;
+}
+
+export interface ScopeCatalogFile {
+	entityId: string | null;
+	filePath: string;
+}
+
+export interface ScopeCatalog {
+	skills: string[];
+	tools: ToolBindings;
+	repositories: Record<string, string[]>;
+	projects: ScopeCatalogProject[];
+	files: ScopeCatalogFile[];
+}
+
 // ─── DB row interfaces ────────────────────────────────────────────────────────
 // These map 1:1 to the SQLite column names (snake_case) as returned by better-sqlite3.
 

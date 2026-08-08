@@ -186,16 +186,18 @@ describe('V4 文件变更通知', () => {
 		expect(db.prepare('SELECT file_path FROM vault_index').all()).toEqual([]);
 		const memory = db
 			.prepare(`
-				SELECT scope_key, related_files
+				SELECT scope_key, content, related_files
 				FROM memory_items
 				WHERE slot_key = 'file:daily-path'
 			`)
-			.get() as { scope_key: string; related_files: string };
+			.get() as { scope_key: string; content: string; related_files: string };
 		expect(memory.scope_key).toBe(target);
+		expect(memory.content).toBe('关联旧日记路径');
 		expect(JSON.parse(memory.related_files)).toEqual([target]);
-		expect(
-			resolveMemoryScopes(db, [{ type: 'file', key: target }], { config }).resolvedScopes,
-		).toEqual([{ type: 'file', key: target }]);
+		expect(resolveMemoryScopes(db, [{ type: 'file', key: target }], { config })).toEqual({
+			resolvedScopes: [],
+			unresolvedScopes: [{ scope: { type: 'file', key: target }, reason: 'unknown_file' }],
+		});
 	});
 
 	it('排除目录中的普通文件没有既有记忆时仍不能新建文件作用域', () => {

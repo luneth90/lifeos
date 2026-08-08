@@ -1,10 +1,14 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { VaultConfig } from '../../src/config.js';
+import { VaultConfig } from '../../src/config.js';
 import { initDb } from '../../src/db/schema.js';
 import { buildMemoryContext } from '../../src/services/context-router.js';
 import { upsertMemoryItem } from '../../src/services/memory-items.js';
 import type { ContextBudgets, MemoryScope } from '../../src/types.js';
+import { createTempVault } from '../setup.js';
+import type { TempVault } from '../setup.js';
 
 const DEFAULT_BUDGETS: ContextBudgets = {
 	layer0_total: 1800,
@@ -27,8 +31,10 @@ function config(budgets: Partial<ContextBudgets> = {}): VaultConfig {
 
 describe('V4 context router', () => {
 	let db: Database.Database;
+	let vault: TempVault;
 
 	beforeEach(() => {
+		vault = createTempVault();
 		db = new Database(':memory:');
 		initDb(db);
 		db.prepare(`
@@ -41,7 +47,10 @@ describe('V4 context router', () => {
 		`).run();
 	});
 
-	afterEach(() => db.close());
+	afterEach(() => {
+		db.close();
+		vault.cleanup();
+	});
 
 	function put(
 		scope: MemoryScope,
@@ -170,6 +179,25 @@ describe('V4 context router', () => {
 			{ scope: { type: 'project', key: 'missing' }, reason: 'unknown_project' },
 		]);
 		expect(first.snapshotId).toBe(second.snapshotId);
+	});
+
+	it('合法零记忆技能进入 matchedScopes，正文不会混入其他作用域', () => {
+		const skillRoot = join(vault.root, '.agents', 'skills', 'today');
+		mkdirSync(skillRoot, { recursive: true });
+		writeFileSync(join(skillRoot, 'SKILL.md'), '# today\n', 'utf-8');
+		put({ type: 'skill', key: 'other-skill' }, 'unrelated:rule', '不能混入的规则');
+
+		const result = buildMemoryContext(
+			db,
+			vault.root,
+			{ scopes: [{ type: 'skill', key: 'today' }] },
+			{ config: new VaultConfig(vault.root) },
+		);
+
+		expect(result.matchedScopes).toEqual([{ type: 'skill', key: 'today' }]);
+		expect(result.text).toBe('');
+		expect(result.effectiveItems).toEqual([]);
+		expect(result.diagnostics.unresolvedScopes).toEqual([]);
 	});
 
 	it('memory_context 通过工具别名加载规范工具作用域', () => {

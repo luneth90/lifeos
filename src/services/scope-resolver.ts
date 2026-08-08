@@ -1,9 +1,7 @@
-import { existsSync, lstatSync } from 'node:fs';
-import { isAbsolute, resolve, win32 } from 'node:path';
 import type Database from 'better-sqlite3';
 import type { VaultConfig } from '../config.js';
 import type { MemoryScope, ScopeType } from '../types.js';
-import { assertVaultPathSafe } from '../utils/safe-path.js';
+import { buildScopeCatalog } from './scope-catalog.js';
 
 const SCOPE_TYPES = new Set<ScopeType>([
 	'global',
@@ -27,7 +25,9 @@ export interface ScopeResolutionResult {
 
 export interface ScopeResolverOptions {
 	config?: VaultConfig;
+	/** @deprecated 保留调用兼容；未知对象不再允许隐式创建。 */
 	allowCreate?: boolean;
+	/** @deprecated repository 始终要求存在于作用域目录。 */
 	requireRepositoryBinding?: boolean;
 }
 
@@ -42,21 +42,10 @@ function normalize(scope: MemoryScope): MemoryScope | null {
 	return key ? { type: scope.type, key } : null;
 }
 
-function hasMemoryScope(db: Database.Database, scope: MemoryScope): boolean {
-	return (
-		db
-			.prepare(`
-				SELECT 1 FROM memory_items
-				WHERE scope_type = ? AND scope_key = ? AND status = 'active'
-				LIMIT 1
-			`)
-			.get(scope.type, scope.key) !== undefined
-	);
-}
-
-function resolveToolAlias(config: VaultConfig | undefined, key: string): string[] {
-	if (!config) return [];
-	const bindings = config.toolBindings();
+function resolveToolAlias(
+	bindings: ReturnType<VaultConfig['toolBindings']>,
+	key: string,
+): string[] {
 	return Object.entries(bindings)
 		.filter(
 			([toolId, binding]) =>
@@ -64,31 +53,6 @@ function resolveToolAlias(config: VaultConfig | undefined, key: string): string[
 		)
 		.map(([toolId]) => toolId)
 		.sort();
-}
-
-function resolveExistingVaultFile(
-	db: Database.Database,
-	config: VaultConfig | undefined,
-	key: string,
-): MemoryScope | null {
-	const vaultRoot = config?.vaultRoot;
-	const scope = { type: 'file', key } as const;
-	if (!vaultRoot || !hasMemoryScope(db, scope)) return null;
-	const portable = key.replaceAll('\\', '/');
-	if (
-		isAbsolute(key) ||
-		win32.isAbsolute(key) ||
-		portable.startsWith('/') ||
-		portable.split('/').some((component) => component === '.' || component === '..')
-	) {
-		return null;
-	}
-	try {
-		const candidate = assertVaultPathSafe(vaultRoot, resolve(vaultRoot, portable));
-		return existsSync(candidate) && lstatSync(candidate).isFile() ? scope : null;
-	} catch {
-		return null;
-	}
 }
 
 export function resolveMemoryScopes(
@@ -99,7 +63,7 @@ export function resolveMemoryScopes(
 	const resolvedScopes: MemoryScope[] = [];
 	const unresolvedScopes: UnresolvedScope[] = [];
 	const seen = new Set<string>();
-	const bindings = options.config?.repositoryBindings() ?? {};
+	const catalog = buildScopeCatalog(db, options.config);
 
 	for (const raw of scopes ?? []) {
 		const scope = normalize(raw);
@@ -113,63 +77,42 @@ export function resolveMemoryScopes(
 		if (scope.type === 'global') {
 			canonical = scope;
 		} else if (scope.type === 'project') {
-			const rows = db
-				.prepare("SELECT file_path FROM vault_index WHERE type = 'project' AND entity_id = ?")
-				.all(scope.key) as Array<{ file_path: string }>;
+			const rows = catalog.projects.filter((project) => project.entityId === scope.key);
 			canonical = rows.length === 1 ? scope : null;
 			unresolvedReason = rows.length > 1 ? 'duplicate_project_entity_id' : 'unknown_project';
 		} else if (scope.type === 'file') {
-			const exactPath = db
-				.prepare('SELECT entity_id, file_path FROM vault_index WHERE file_path = ?')
-				.get(scope.key) as { entity_id: string | null; file_path: string } | undefined;
+			const exactPath = catalog.files.find((file) => file.filePath === scope.key);
 			if (exactPath) {
-				const idCount = exactPath.entity_id
-					? (
-							db
-								.prepare('SELECT COUNT(*) AS count FROM vault_index WHERE entity_id = ?')
-								.get(exactPath.entity_id) as { count: number }
-						).count
+				const idCount = exactPath.entityId
+					? catalog.files.filter((file) => file.entityId === exactPath.entityId).length
 					: 0;
 				canonical = {
 					type: 'file',
-					key: exactPath.entity_id && idCount === 1 ? exactPath.entity_id : exactPath.file_path,
+					key: exactPath.entityId && idCount === 1 ? exactPath.entityId : exactPath.filePath,
 				};
 			} else {
-				const byId = db
-					.prepare('SELECT file_path FROM vault_index WHERE entity_id = ?')
-					.all(scope.key) as Array<{ file_path: string }>;
-				canonical =
-					byId.length === 1
-						? scope
-						: byId.length === 0
-							? resolveExistingVaultFile(db, options.config, scope.key)
-							: null;
+				const byId = catalog.files.filter((file) => file.entityId === scope.key);
+				canonical = byId.length === 1 ? scope : null;
 				unresolvedReason = byId.length > 1 ? 'duplicate_file_entity_id' : 'unknown_file';
 			}
 		} else if (scope.type === 'repository') {
-			canonical =
-				Object.prototype.hasOwnProperty.call(bindings, scope.key) ||
-				(!options.requireRepositoryBinding && hasMemoryScope(db, scope))
-					? scope
-					: null;
+			canonical = Object.prototype.hasOwnProperty.call(catalog.repositories, scope.key)
+				? scope
+				: null;
 		} else if (scope.type === 'tool') {
-			if (hasMemoryScope(db, scope)) {
+			if (Object.prototype.hasOwnProperty.call(catalog.tools, scope.key)) {
 				canonical = scope;
 			} else {
-				const aliases = resolveToolAlias(options.config, scope.key);
+				const aliases = resolveToolAlias(catalog.tools, scope.key);
 				if (aliases.length === 1) {
-					const candidate = { type: 'tool', key: aliases[0] } as const;
-					canonical = options.allowCreate || hasMemoryScope(db, candidate) ? candidate : null;
-					if (!canonical) candidates = aliases;
-				} else if (aliases.length === 0 && options.allowCreate) {
-					canonical = scope;
+					canonical = { type: 'tool', key: aliases[0] };
 				} else {
 					unresolvedReason = aliases.length > 1 ? 'ambiguous_tool_alias' : 'unknown_tool';
 					if (aliases.length > 0) candidates = aliases;
 				}
 			}
 		} else {
-			canonical = options.allowCreate || hasMemoryScope(db, scope) ? scope : null;
+			canonical = catalog.skills.includes(scope.key) ? scope : null;
 		}
 
 		if (!canonical) {

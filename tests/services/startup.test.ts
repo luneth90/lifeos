@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { _resetDefaultInstance } from '../../src/config.js';
@@ -51,6 +51,11 @@ describe('V4 启动路径', () => {
 	});
 
 	it('从现有索引和 active memory 返回 scopeHints 与 Layer 0', () => {
+		for (const name of ['translate', 'ask']) {
+			const skillFile = join(vault.root, '.agents', 'skills', name, 'SKILL.md');
+			mkdirSync(dirname(skillFile), { recursive: true });
+			writeFileSync(skillFile, `# ${name}\n`, 'utf-8');
+		}
 		db.prepare(`
 			INSERT INTO vault_index(file_path,title,type,status,entity_id)
 			VALUES ('20_项目/代数.md','代数学习','project','active','project-algebra')
@@ -61,18 +66,6 @@ describe('V4 启动路径', () => {
 			itemKind: 'rule',
 			scope: { type: 'global', key: '' },
 			enforcement: 'hard',
-		});
-		upsertMemoryItem(db, {
-			slotKey: 'skill:terminology',
-			content: '保持术语一致',
-			itemKind: 'rule',
-			scope: { type: 'skill', key: 'translate' },
-		});
-		upsertMemoryItem(db, {
-			slotKey: 'runtime:cli-outside-sandbox',
-			content: 'Obsidian CLI 必须在沙盒外执行',
-			itemKind: 'rule',
-			scope: { type: 'tool', key: 'obsidian' },
 		});
 
 		const yamlPath = join(vault.root, 'lifeos.yaml');
@@ -89,7 +82,7 @@ describe('V4 启动路径', () => {
 		expect(result.scopeHints).toEqual({
 			availableProjects: ['project-algebra'],
 			availableRepositories: ['alpha-repo', 'zeta-repo'],
-			availableSkills: ['translate'],
+			availableSkills: ['ask', 'translate'],
 			availableTools: ['obsidian'],
 			toolBindings: {
 				obsidian: { commands: ['obsidian'], skills: ['obsidian-cli'] },
@@ -97,8 +90,6 @@ describe('V4 启动路径', () => {
 		});
 		expect(result.vaultStats.totalFiles).toBe(1);
 		expect(result.layer0.text).toContain('必须使用中文');
-		expect(result.layer0.text).not.toContain('保持术语一致');
-		expect(result.layer0.text).not.toContain('Obsidian CLI 必须在沙盒外执行');
 		expect(result.layer0.snapshotId).toMatch(/^ctx-[0-9a-f]{20}$/);
 	});
 
