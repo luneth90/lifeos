@@ -272,11 +272,13 @@ interface SearchCandidate {
 }
 
 function compareSearchCandidates(left: SearchCandidate, right: SearchCandidate): number {
-	if (left.rankScore !== null && right.rankScore !== null && left.rankScore !== right.rankScore) {
-		return left.rankScore - right.rankScore;
+	if (left.rankScore !== null && right.rankScore !== null) {
+		const rankOrder = left.rankScore - right.rankScore;
+		if (rankOrder !== 0) return rankOrder;
+	} else {
+		if (left.rankScore !== null) return -1;
+		if (right.rankScore !== null) return 1;
 	}
-	if (left.rankScore !== null) return -1;
-	if (right.rankScore !== null) return 1;
 	const modifiedOrder = compareTextAsc(
 		String(right.row.modified_at ?? ''),
 		String(left.row.modified_at ?? ''),

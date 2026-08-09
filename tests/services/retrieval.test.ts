@@ -375,6 +375,80 @@ describe('queryVaultIndex', () => {
 		});
 	});
 
+	it('混合回退对相等 BM25 候选保持反对称次级排序与连续位置', () => {
+		for (const note of [
+			{
+				filePath: '40_知识/mixed-time-old.md',
+				title: '群论指南',
+				searchHints: '群论 对称性',
+				modifiedAt: '2025-01-01T00:00:00Z',
+			},
+			{
+				filePath: '40_知识/mixed-time-new.md',
+				title: '群论指南',
+				searchHints: '群论 对称性',
+				modifiedAt: '2026-01-01T00:00:00Z',
+			},
+			{
+				filePath: '40_知识/mixed-time-like.md',
+				title: '前群论后',
+				searchHints: '前群论后',
+				modifiedAt: '2027-01-01T00:00:00Z',
+			},
+			{
+				filePath: '40_知识/mixed-path-b.md',
+				title: '拓扑指南',
+				searchHints: '拓扑 连续性',
+				modifiedAt: '2026-01-01T00:00:00Z',
+			},
+			{
+				filePath: '40_知识/mixed-path-a.md',
+				title: '拓扑指南',
+				searchHints: '拓扑 连续性',
+				modifiedAt: '2026-01-01T00:00:00Z',
+			},
+			{
+				filePath: '40_知识/mixed-path-like.md',
+				title: '前拓扑后',
+				searchHints: '前拓扑后',
+				modifiedAt: '2027-01-01T00:00:00Z',
+			},
+		]) {
+			insertVaultNote(db, note);
+		}
+
+		const scenarios = [
+			{
+				query: '群论',
+				expectedPaths: [
+					'40_知识/mixed-time-new.md',
+					'40_知识/mixed-time-old.md',
+					'40_知识/mixed-time-like.md',
+				],
+			},
+			{
+				query: '拓扑',
+				expectedPaths: [
+					'40_知识/mixed-path-a.md',
+					'40_知识/mixed-path-b.md',
+					'40_知识/mixed-path-like.md',
+				],
+			},
+		];
+
+		for (const { query, expectedPaths } of scenarios) {
+			const runs = Array.from({ length: 5 }, () => queryVaultIndex(db, query, null, 10).results);
+			for (const results of runs) {
+				expect(results.map(({ filePath }) => filePath)).toEqual(expectedPaths);
+				expect(results.map(({ rankPosition }) => rankPosition)).toEqual([1, 2, 3]);
+				expect(results.slice(0, 2).map(({ matchSource }) => matchSource)).toEqual(['fts5', 'fts5']);
+				expect(results[2]?.matchSource).toBe('hybrid_expand');
+				expect(results[2]?.rankScore).toBeNull();
+				expect(results[0]?.rankScore).toBe(results[1]?.rankScore);
+			}
+		}
+	});
+
 	it('returns empty array for no match', () => {
 		insertVaultNote(db, {
 			filePath: '40_知识/note.md',
