@@ -210,9 +210,7 @@
 })();
 ```
 
----
-
-## 🚨 待复习与升阶章节
+## 🚨 待复习
 
 ```dataview
 TABLE WITHOUT ID
@@ -224,8 +222,6 @@ FROM "{{knowledge_notes}}"
 WHERE type = "knowledge" AND status != "mastered"
 SORT file.mtime ASC
 ```
-
----
 
 ## 📚 活跃项目
 

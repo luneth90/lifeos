@@ -210,8 +210,6 @@
 })();
 ```
 
----
-
 ## 🚨 Due for Review
 
 ```dataview
@@ -224,8 +222,6 @@ FROM "{{knowledge_notes}}"
 WHERE type = "knowledge" AND status != "mastered"
 SORT file.mtime ASC
 ```
-
----
 
 ## 📚 Active Projects
 
