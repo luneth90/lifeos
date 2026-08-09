@@ -4,7 +4,7 @@
 
 ### 新增
 
-- MCP 结果新增严格 `outputSchema` 与 `structuredContent`，八个工具均从同一份 JSON 生成结构化结果和 `content[0].text` 文本兼容层；既有客户端可继续读取文本 JSON，新客户端应优先读取 `structuredContent`
+- MCP 结果新增严格 `outputSchema` 与 `structuredContent`，八个工具的成功调用均从同一份 JSON 生成 `structuredContent` 结构化结果和 `content[0].text` 文本兼容层；既有客户端可继续读取文本 JSON，新客户端应优先读取 `structuredContent`
 - 数据库升级至 Schema V5：新增 `memory_item_events` 追加式变更历史和 `memory_history` 工具；V4→V5 只为升级时的当前投影写入一个 `baseline_snapshot`，不伪造升级前历史
 - 项目等非 global 画像由 `memory_context.profiles` 与“作用域画像”区块按显式 scope 返回；ScopeCatalog 改由已安装技能、配置中的工具/仓库及索引中的项目/文件共同构成，合法的零记忆对象也可解析
 - `memory_query` 保留兼容 `score`，并新增真实 `rankScore`、最终 `rankPosition`、结构化 `rankExplanation` 与可追溯 `evidence`
@@ -12,7 +12,7 @@
 ### 改进
 
 - 例行数据库维护统一为每 Vault single-flight 的 `pending → running → succeeded|failed` 状态机，并记录维护前后指标；`doctor --compact-db` 保持更强的显式压缩路径
-- 六个单一成功形状的非 bootstrap 工具直接发布真实必填字段的严格 `outputSchema`；其他七工具的启动失败按 MCP `isError` 返回，同时保留原文本 JSON。`memory_forget` 以必填 `result` 判别 envelope 严格表达单条与批量成功分支，原顶层字段作为同值镜像保留
+- 六个单一成功形状的非 bootstrap 工具直接发布真实必填字段的严格 `outputSchema`；其他七工具的启动失败按 MCP `isError` 返回，不返回 `structuredContent`，同时保留原文本 JSON。`memory_forget` 以必填 `result` 判别 envelope 严格表达单条与批量成功分支，原顶层字段作为同值镜像保留
 - 文件移动引起的文件作用域与 `relatedFiles` 变更现在与 Vault 索引一起在同一 `IMMEDIATE` 事务中追加 V5 历史事件；单条移动只保留最终完整快照，事件失败时投影与索引一并回滚
 - Schema V6 分段检索量化结论为 No-Go：当前 Schema V5 长文子集 `Recall@5=1.0`，高于 `0.90` 门槛，因此不创建分段表、分段 FTS 或 V6 migration；夹具、生产索引或排序逻辑、指标定义、门槛变化，或长文 `Recall@5` 跌破门槛时必须重新评审
 

@@ -154,7 +154,7 @@ memory_bootstrap
 
 记忆条目以 `(scope.type, scope.key, slot_key)` 为稳定身份。ScopeCatalog 来自安装技能、配置工具/仓库及 `vault_index` 的项目/文件；合法的零记忆对象仍可解析，未知写入会被拒绝。Layer 0 只加载 global 规则、画像摘要和当前焦点；显式非 global 画像只由 `memory_context.profiles` 与“作用域画像”返回，不跨 scope 泄漏。
 
-8 个工具都有 strict `outputSchema`，并从同一 JSON 生成等值的 `structuredContent` 与文本结果。`memory_query` 保留兼容 `score`，同时公开真实 `rankScore`、`rankPosition` 与可追溯证据。例行维护按每 Vault single-flight 运行，状态为 `pending → running → succeeded|failed`；显式 `doctor --compact-db` 使用更高强度的压缩流程。
+8 个工具都有 strict `outputSchema`；成功调用从同一 JSON 生成等值的 `structuredContent` 与文本结果。bootstrap 以外的其他 7 个工具在启动失败时返回 MCP `isError`，保留文本 JSON，且不返回 structuredContent。`memory_query` 保留兼容 `score`，同时公开真实 `rankScore`、`rankPosition` 与可追溯证据。例行维护按每 Vault single-flight 运行，状态为 `pending → running → succeeded|failed`；显式 `doctor --compact-db` 使用更高强度的压缩流程。
 
 `memory_items` 只保存当前投影，`memory_item_events` 保存正常 append-only 历史；V4 baseline 不伪造升级前历史。MCP 不提供 purge。CLI 单条 purge 是唯一显式隐私删除例外，只允许已归档条目，并要求双 item id、非空原因及先创建并验证备份。当前量化结论为 Schema V6 **No-Go**，不会创建分段表。
 

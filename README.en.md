@@ -144,8 +144,7 @@ ScopeCatalog is built from installed skills, configured tools and repositories, 
 Global profiles enter Layer 0 only. Explicit non-global profiles are returned through
 `memory_context.profiles` and the scoped-profile text section without leaking across scopes.
 
-All 8 MCP tools have strict `outputSchema` declarations and return equivalent `structuredContent` and
-text JSON. Retrieval keeps the compatibility `score` while exposing the real `rankScore`,
+All 8 MCP tools have strict `outputSchema` declarations; successful calls return equivalent `structuredContent` and text JSON. For the seven non-bootstrap tools, a startup failure returns MCP `isError`, preserves the compatible text JSON, and has no structuredContent. Retrieval keeps the compatibility `score` while exposing the real `rankScore`,
 `rankPosition`, and traceable evidence. Routine maintenance is single-flight per Vault and follows
 `pending → running → succeeded|failed`; explicit `doctor --compact-db` uses a stronger compaction path.
 

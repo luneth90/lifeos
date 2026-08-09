@@ -57,7 +57,7 @@ MCP 不提供物理删除；唯一例外是带双 item id、非空原因和已�
   零记忆对象仍可解析，未知写入必须拒绝。
 - global 画像只进入 Layer 0；显式非 global 画像只进入 `memory_context.profiles` 与
   “作用域画像”文本区块。
-- 8 tools 都返回等值的 `structuredContent` 与 `content[0].text` JSON。
+- 8 tools 的成功调用都返回等值的 `structuredContent` 与 `content[0].text` JSON；bootstrap 以外的 7 个工具在启动失败时返回 MCP `isError`，保留文本 JSON 且无 structuredContent。
 - 检索保留兼容 `score`，并公开真实 `rankScore`、`rankPosition` 与 `evidence`。
 - 例行维护状态为 `pending → running → succeeded|failed`，每个 Vault single-flight；
   `doctor --compact-db` 是更强的显式压缩路径。

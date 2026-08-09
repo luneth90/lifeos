@@ -258,6 +258,42 @@ describe('公开协议文档门禁', () => {
 		}
 	});
 
+	it('公开说明将结构化与文本同值限定为成功调用，并声明启动错误边界', () => {
+		for (const surface of [
+			{
+				path: 'README.md',
+				success: /8 个工具[^\n]*成功调用[^\n]*structuredContent[^\n]*文本结果/,
+				startup:
+					/bootstrap[^\n]*以外的其他 7 个工具[^\n]*启动失败[^\n]*isError[^\n]*文本 JSON[^\n]*不返回 structuredContent/,
+			},
+			{
+				path: 'README.en.md',
+				success:
+					/All 8 MCP tools[^\n]*successful calls[^\n]*equivalent[^\n]*structuredContent[^\n]*text JSON/i,
+				startup:
+					/seven non-bootstrap tools[^\n]*startup failure[^\n]*isError[^\n]*text JSON[^\n]*no structuredContent/i,
+			},
+			{
+				path: 'AGENTS.md',
+				success: /8 tools[^\n]*成功调用[^\n]*structuredContent[^\n]*content\[0\]\.text/,
+				startup:
+					/bootstrap 以外的 7 个工具[^\n]*启动失败[^\n]*isError[^\n]*文本 JSON[^\n]*无 structuredContent/,
+			},
+		] as const) {
+			const content = read(surface.path);
+			expect(content, `${surface.path} 未将同值契约限定为成功调用`).toMatch(surface.success);
+			expect(content, `${surface.path} 未精确说明启动错误边界`).toMatch(surface.startup);
+		}
+
+		const changelog = read('CHANGELOG.md');
+		expect(changelog).toMatch(
+			/MCP 结果新增严格 `outputSchema`[^\n]*成功调用[^\n]*structuredContent[^\n]*content\[0\]\.text/,
+		);
+		expect(changelog).toMatch(
+			/其他七工具的启动失败[^\n]*isError[^\n]*不返回 `structuredContent`[^\n]*原文本 JSON/,
+		);
+	});
+
 	it('真实环境文档记录 51 个自动项普通通过、C-06 唯一跳过和 Schema V5 夹具', () => {
 		const cases = read('docs/memory-real-env-test-cases.zh.md');
 		const report = read('docs/memory-real-env-test-execution-report.zh.md');
