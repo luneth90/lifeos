@@ -6,6 +6,7 @@ import { type VaultConfig, getOrCreateVaultConfig } from '../config.js';
 import type { MemoryScope } from '../types.js';
 import type { IndexImpact, IndexResult } from '../utils/vault-indexer.js';
 import { createEmptyIndexImpact, indexFiles, shouldIndex } from '../utils/vault-indexer.js';
+import { getMemoryItemById, updateMemoryItemForFileMove } from './memory-items.js';
 
 export interface NotifyFileChangedResult {
 	action: 'indexed' | 'unchanged' | 'removed' | 'skipped' | 'error';
@@ -84,39 +85,44 @@ function migrateMovedFileReferences(
 		throw new Error(`移动后的文件记忆作用域冲突：file:${newScopeKey}/${conflict.slot_key}`);
 	}
 	const migratingKeys = sourceKeys.filter((key) => key !== newScopeKey);
-	if (migratingKeys.length > 0) {
-		const migratingPlaceholders = migratingKeys.map(() => '?').join(', ');
-		db.prepare(`
-			UPDATE memory_items SET scope_key = ?, updated_at = ?
-			WHERE scope_type = 'file' AND scope_key IN (${migratingPlaceholders})
-		`).run(newScopeKey, now, ...migratingKeys);
-	}
 	for (const key of sourceKeys) addAffectedScope(affectedScopes, { type: 'file', key });
 	addAffectedScope(affectedScopes, { type: 'file', key: newScopeKey });
 
-	const rows = db
-		.prepare(`
-			SELECT item_id, scope_type, scope_key, related_files
-			FROM memory_items WHERE related_files != '[]'
-		`)
-		.all() as Array<{
-		item_id: number;
-		scope_type: MemoryScope['type'];
-		scope_key: string;
-		related_files: string;
-	}>;
-	const update = db.prepare(
-		'UPDATE memory_items SET related_files = ?, updated_at = ? WHERE item_id = ?',
-	);
-	for (const row of rows) {
-		const related: unknown = JSON.parse(row.related_files);
-		if (!Array.isArray(related) || !related.includes(oldPath)) continue;
-		update.run(
-			JSON.stringify(related.map((path) => (path === oldPath ? newPath : path))),
-			now,
-			row.item_id,
+	const candidateConditions = ["related_files != '[]'"];
+	const candidateParams: string[] = [];
+	if (migratingKeys.length > 0) {
+		candidateConditions.push(
+			`(scope_type = 'file' AND scope_key IN (${migratingKeys.map(() => '?').join(', ')}))`,
 		);
-		addAffectedScope(affectedScopes, { type: row.scope_type, key: row.scope_key });
+		candidateParams.push(...migratingKeys);
+	}
+	const candidateIds = db
+		.prepare(`
+			SELECT item_id FROM memory_items
+			WHERE ${candidateConditions.join(' OR ')}
+			ORDER BY item_id
+		`)
+		.all(...candidateParams) as Array<{ item_id: number }>;
+	const correlationId = `memory-notify:move:${oldPath}:${newPath}:${now}`;
+	const reason = `文件移动同步：${oldPath} -> ${newPath}`;
+	for (const { item_id: itemId } of candidateIds) {
+		const item = getMemoryItemById(db, itemId);
+		if (!item) continue;
+		const scope =
+			item.scope.type === 'file' && migratingKeys.includes(item.scope.key)
+				? { type: 'file' as const, key: newScopeKey }
+				: item.scope;
+		const relatedFiles = item.relatedFiles.map((path) => (path === oldPath ? newPath : path));
+		const changed = updateMemoryItemForFileMove(db, {
+			itemId,
+			scope,
+			relatedFiles,
+			updatedAt: now,
+			actor: 'service:capture',
+			correlationId,
+			reason,
+		});
+		if (changed) addAffectedScope(affectedScopes, changed.scope);
 	}
 	return [...affectedScopes.values()];
 }

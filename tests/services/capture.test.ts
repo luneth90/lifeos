@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { VaultConfig, _resetDefaultInstance, getOrCreateVaultConfig } from '../../src/config.js';
 import { initDb } from '../../src/db/schema.js';
 import { notifyFileChanged, notifyFilesChanged } from '../../src/services/capture.js';
-import { upsertMemoryItem } from '../../src/services/memory-items.js';
+import { getMemoryHistory } from '../../src/services/memory-history.js';
+import { getMemoryItemById, upsertMemoryItem } from '../../src/services/memory-items.js';
 import { resolveMemoryScopes } from '../../src/services/scope-resolver.js';
 import { createTempVault, createTestDb, writeTestNote } from '../setup.js';
 import type { TempVault } from '../setup.js';
@@ -298,7 +299,7 @@ describe('V4 文件变更通知', () => {
 			status: 'review',
 		});
 		notifyFileChanged(db, vault.root, source);
-		upsertMemoryItem(db, {
+		const created = upsertMemoryItem(db, {
 			slotKey: 'file:renamed-path',
 			content: '关联旧知识笔记路径',
 			itemKind: 'fact',
@@ -324,6 +325,110 @@ describe('V4 文件变更通知', () => {
 			.get() as { scope_key: string; related_files: string };
 		expect(memory.scope_key).toBe('note-renamed');
 		expect(JSON.parse(memory.related_files)).toEqual([target]);
+		const history = getMemoryHistory(db, { itemId: created.itemId }).events;
+		expect(history).toHaveLength(2);
+		const movedEvent = history.at(-1);
+		expect(movedEvent).toMatchObject({
+			eventType: 'reclassify',
+			actor: 'service:capture',
+			reason: `文件移动同步：${source} -> ${target}`,
+			correlationId: expect.stringContaining(`memory-notify:move:${source}:${target}:`),
+			before: {
+				scope: { type: 'file', key: source },
+				relatedFiles: [source],
+			},
+			after: {
+				scope: { type: 'file', key: 'note-renamed' },
+				relatedFiles: [target],
+			},
+		});
+		expect(movedEvent?.after).toEqual(getMemoryItemById(db, created.itemId));
+	});
+
+	it('移动会为仅 relatedFiles 变化的非文件作用域条目记录 update 事件', () => {
+		const source = '40_知识/关联来源.md';
+		const target = '40_知识/关联目标.md';
+		writeTestNote(vault.root, source, {
+			id: 'related-source',
+			title: '关联来源',
+			type: 'knowledge',
+			status: 'review',
+		});
+		notifyFileChanged(db, vault.root, source);
+		const created = upsertMemoryItem(db, {
+			slotKey: 'project:related-path',
+			content: '项目关联文件',
+			itemKind: 'fact',
+			scope: { type: 'project', key: 'project-related' },
+			relatedFiles: [source, '40_知识/保留.md'],
+		});
+		renameSync(join(vault.root, source), join(vault.root, target));
+
+		expect(notifyFileChanged(db, vault.root, target, source).action).toBe('indexed');
+
+		const event = getMemoryHistory(db, { itemId: created.itemId }).events.at(-1);
+		expect(event).toMatchObject({
+			eventType: 'update',
+			actor: 'service:capture',
+			reason: `文件移动同步：${source} -> ${target}`,
+			correlationId: expect.stringContaining(`memory-notify:move:${source}:${target}:`),
+			before: {
+				scope: { type: 'project', key: 'project-related' },
+				relatedFiles: [source, '40_知识/保留.md'],
+			},
+			after: {
+				scope: { type: 'project', key: 'project-related' },
+				relatedFiles: [target, '40_知识/保留.md'],
+			},
+		});
+		expect(event?.after).toEqual(getMemoryItemById(db, created.itemId));
+	});
+
+	it('移动事件写入失败时回滚投影、索引与扫描状态', () => {
+		const source = '40_知识/事务来源.md';
+		const target = '40_知识/事务目标.md';
+		writeTestNote(vault.root, source, {
+			id: 'transactional-move',
+			title: '事务来源',
+			type: 'knowledge',
+			status: 'review',
+		});
+		notifyFileChanged(db, vault.root, source);
+		const created = upsertMemoryItem(db, {
+			slotKey: 'file:transactional-move',
+			content: '移动事务回归',
+			itemKind: 'fact',
+			scope: { type: 'file', key: source },
+			relatedFiles: [source],
+		});
+		const projectionBefore = db
+			.prepare('SELECT * FROM memory_items WHERE item_id = ?')
+			.get(created.itemId);
+		const indexBefore = db.prepare('SELECT * FROM vault_index ORDER BY file_path').all();
+		const scanBefore = db.prepare('SELECT * FROM scan_state ORDER BY file_path').all();
+		const eventsBefore = db.prepare('SELECT * FROM memory_item_events ORDER BY event_id').all();
+		db.exec(`
+			CREATE TRIGGER fail_capture_move_event
+			BEFORE INSERT ON memory_item_events
+			WHEN NEW.actor = 'service:capture'
+			BEGIN
+				SELECT RAISE(ABORT, '模拟移动事件写入失败');
+			END
+		`);
+		renameSync(join(vault.root, source), join(vault.root, target));
+
+		const result = notifyFileChanged(db, vault.root, target, source);
+
+		expect(result.action).toBe('error');
+		expect(result.reason).toContain('模拟移动事件写入失败');
+		expect(db.prepare('SELECT * FROM memory_items WHERE item_id = ?').get(created.itemId)).toEqual(
+			projectionBefore,
+		);
+		expect(db.prepare('SELECT * FROM vault_index ORDER BY file_path').all()).toEqual(indexBefore);
+		expect(db.prepare('SELECT * FROM scan_state ORDER BY file_path').all()).toEqual(scanBefore);
+		expect(db.prepare('SELECT * FROM memory_item_events ORDER BY event_id').all()).toEqual(
+			eventsBefore,
+		);
 	});
 
 	it('移动到可索引目录但目标无有效 Frontmatter 时保持失败关闭', () => {

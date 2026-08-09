@@ -12,6 +12,8 @@
 ### 改进
 
 - 例行数据库维护统一为每 Vault single-flight 的 `pending → running → succeeded|failed` 状态机，并记录维护前后指标；`doctor --compact-db` 保持更强的显式压缩路径
+- 六个单一成功形状的非 bootstrap 工具直接发布真实必填字段的严格 `outputSchema`；其他七工具的启动失败按 MCP `isError` 返回，同时保留原文本 JSON。`memory_forget` 以必填 `result` 判别 envelope 严格表达单条与批量成功分支，原顶层字段作为同值镜像保留
+- 文件移动引起的文件作用域与 `relatedFiles` 变更现在与 Vault 索引一起在同一 `IMMEDIATE` 事务中追加 V5 历史事件；单条移动只保留最终完整快照，事件失败时投影与索引一并回滚
 - Schema V6 分段检索量化结论为 No-Go：当前 Schema V5 长文子集 `Recall@5=1.0`，高于 `0.90` 门槛，因此不创建分段表、分段 FTS 或 V6 migration；夹具、生产索引或排序逻辑、指标定义、门槛变化，或长文 `Recall@5` 跌破门槛时必须重新评审
 
 ### 安全与升级

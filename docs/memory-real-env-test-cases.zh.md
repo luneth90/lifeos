@@ -12,7 +12,7 @@ aliases: []
 
 # LifeOS 记忆系统真实环境测试用例集
 
-> 版本：v2.4.0 · 记忆协议：`contract_version=2` · 用例数：52
+> 版本：v2.5.0 · 记忆协议：`contract_version=2` · 用例数：52
 
 ## 1. 隔离契约
 

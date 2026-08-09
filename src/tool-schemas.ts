@@ -1,5 +1,6 @@
 /** MCP 八工具的结构化输出模式。 */
 
+import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import type { NotifyFileChangedResult } from './services/capture.js';
 import type { VaultQueryResult } from './services/retrieval.js';
@@ -44,7 +45,7 @@ const vaultRankExplanationSchema = z
 	})
 	.strict();
 
-const startupErrorOutputSchema = z
+export const startupErrorOutputSchema = z
 	.object({
 		status: z.literal('error'),
 		startup_error: z.string(),
@@ -353,6 +354,68 @@ export const memoryForgetOutputSchema = z.union([
 	startupErrorOutputSchema,
 ]);
 
+const memoryForgetItemResultSchema = z
+	.object({
+		kind: z.literal('item'),
+		item: scopedMemoryItemSchema,
+	})
+	.strict();
+
+const memoryForgetScopeResultSchema = z
+	.object({
+		kind: z.literal('scope'),
+		archived: z.number().int().nonnegative(),
+	})
+	.strict();
+
+const memoryForgetItemToolOutputSchema = scopedMemoryItemSchema
+	.extend({ result: memoryForgetItemResultSchema })
+	.strict()
+	.superRefine((output, ctx) => {
+		const { result: _result, ...legacyItem } = output;
+		if (!isDeepStrictEqual(output.result.item, legacyItem)) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'memory_forget result.item 必须与兼容顶层条目同值',
+			});
+		}
+	});
+
+const memoryForgetScopeToolOutputSchema = z
+	.object({
+		result: memoryForgetScopeResultSchema,
+		archived: z.number().int().nonnegative(),
+	})
+	.strict()
+	.superRefine((output, ctx) => {
+		if (output.result.archived !== output.archived) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: 'memory_forget result.archived 必须与兼容顶层计数同值',
+			});
+		}
+	});
+
+const memoryForgetToolOutputSchema = z.union([
+	memoryForgetItemToolOutputSchema,
+	memoryForgetScopeToolOutputSchema,
+	startupErrorOutputSchema,
+]);
+
+export function formatMemoryForgetToolSuccess(value: unknown): unknown {
+	const success = z.union([scopedMemoryItemSchema, archivedCountSchema]).parse(value);
+	if ('archived' in success) {
+		return {
+			result: { kind: 'scope' as const, archived: success.archived },
+			archived: success.archived,
+		};
+	}
+	return {
+		result: { kind: 'item' as const, item: success },
+		...success,
+	};
+}
+
 const indexImpactSchema = z
 	.object({
 		vaultIndexChanged: z.boolean(),
@@ -386,13 +449,14 @@ export const toolResultSchemas = {
 	memory_log: memoryLogOutputSchema,
 	memory_rules: memoryRulesOutputSchema,
 	memory_history: memoryHistoryOutputSchema,
-	memory_forget: memoryForgetOutputSchema,
+	memory_forget: memoryForgetToolOutputSchema,
 	memory_notify: memoryNotifyOutputSchema,
 } as const;
 
 /*
- * MCP SDK 1.30.0 只会发布并校验顶层 ZodObject。这里保留每个分支的全部显式字段，
- * 由上面的严格结果模式在 handler 内校验成功/错误分支的完整性与互斥关系。
+ * MCP SDK 1.30.0 只会发布并校验顶层 ZodObject。六个单一成功形状直接发布
+ * 严格对象；memory_forget 通过必填 result 包装嵌套成功 union，顶层可选字段仅用于兼容旧客户端。
+ * 完整性及包装与顶层镜像的同值关系仍由 handler 的严格结果模式复核。
  */
 const memoryBootstrapMcpOutputSchema = z
 	.object({
@@ -410,70 +474,39 @@ const memoryBootstrapMcpOutputSchema = z
 	})
 	.strict();
 
-const memoryQueryMcpOutputSchema = memoryQuerySuccessOutputSchema
-	.partial()
-	.extend({
-		status: z.literal('error').optional(),
-		startup_error: z.string().optional(),
-	})
-	.strict();
-
-const memoryContextMcpOutputSchema = contextResponseSchema
-	.partial()
-	.extend({
-		status: z.literal('error').optional(),
-		startup_error: z.string().optional(),
-	})
-	.strict();
-
-const memoryLogMcpOutputSchema = upsertMemoryItemSchema
-	.partial()
-	.extend({
-		status: z.enum(['active', 'expired', 'archived', 'error']).optional(),
-		startup_error: z.string().optional(),
-	})
-	.strict();
-
-const memoryRulesMcpOutputSchema = memoryRulesSuccessOutputSchema
-	.partial()
-	.extend({
-		status: z.literal('error').optional(),
-		startup_error: z.string().optional(),
-	})
-	.strict();
-
-const memoryHistoryMcpOutputSchema = memoryHistorySuccessOutputSchema
-	.partial()
-	.extend({
-		status: z.literal('error').optional(),
-		startup_error: z.string().optional(),
-	})
-	.strict();
-
-const memoryForgetMcpOutputSchema = scopedMemoryItemSchema
-	.partial()
-	.extend({
-		status: z.enum(['active', 'expired', 'archived', 'error']).optional(),
+const memoryForgetMcpOutputSchema = z
+	.object({
+		result: z.discriminatedUnion('kind', [
+			memoryForgetItemResultSchema,
+			memoryForgetScopeResultSchema,
+		]),
+		itemId: z.number().int().positive().optional(),
+		slotKey: z.string().optional(),
+		content: z.string().optional(),
+		itemKind: z.enum(['rule', 'decision', 'fact', 'profile', 'event']).optional(),
+		scope: memoryScopeOutputSchema.optional(),
+		priority: z.number().int().min(0).max(100).optional(),
+		enforcement: z.enum(['hard', 'soft']).optional(),
+		source: z.enum(['preference', 'correction']).optional(),
+		relatedFiles: z.array(z.string()).optional(),
+		manualFlag: z.boolean().optional(),
+		status: z.enum(['active', 'expired', 'archived']).optional(),
+		createdAt: z.string().optional(),
+		updatedAt: z.string().optional(),
+		expiresAt: z.string().nullable().optional(),
+		archivedAt: z.string().nullable().optional(),
+		archiveReason: z.string().nullable().optional(),
 		archived: z.number().int().nonnegative().optional(),
-		startup_error: z.string().optional(),
-	})
-	.strict();
-
-const memoryNotifyMcpOutputSchema = notifySuccessOutputSchema
-	.partial()
-	.extend({
-		status: z.literal('error').optional(),
-		startup_error: z.string().optional(),
 	})
 	.strict();
 
 export const toolOutputSchemas = {
 	memory_bootstrap: memoryBootstrapMcpOutputSchema,
-	memory_query: memoryQueryMcpOutputSchema,
-	memory_context: memoryContextMcpOutputSchema,
-	memory_log: memoryLogMcpOutputSchema,
-	memory_rules: memoryRulesMcpOutputSchema,
-	memory_history: memoryHistoryMcpOutputSchema,
+	memory_query: memoryQuerySuccessOutputSchema,
+	memory_context: contextResponseSchema,
+	memory_log: upsertMemoryItemSchema,
+	memory_rules: memoryRulesSuccessOutputSchema,
+	memory_history: memoryHistorySuccessOutputSchema,
 	memory_forget: memoryForgetMcpOutputSchema,
-	memory_notify: memoryNotifyMcpOutputSchema,
+	memory_notify: notifySuccessOutputSchema,
 } as const;

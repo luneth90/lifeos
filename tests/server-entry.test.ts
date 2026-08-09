@@ -240,7 +240,10 @@ function outputFixtures(): Record<(typeof TOOL_NAMES)[number], Record<string, un
 				},
 			],
 		},
-		memory_forget: { archived: 1 },
+		memory_forget: {
+			result: { kind: 'scope', archived: 1 },
+			archived: 1,
+		},
 		memory_notify: {
 			action: 'indexed',
 			filePath: '40_知识/笔记/结构化输出.md',
@@ -355,7 +358,7 @@ describe('lifeos bin entry', () => {
 		}
 	});
 
-	it('八个工具均发布 outputSchema，严格 Zod 模式拒绝缺字段、错误类型和额外字段', async () => {
+	it('八个工具的真实 MCP outputSchema 拒绝空对象、任一必要字段缺失与额外字段', async () => {
 		const vault = createTempVault();
 
 		try {
@@ -372,8 +375,47 @@ describe('lifeos bin entry', () => {
 					if (!tool?.outputSchema) continue;
 
 					const validate = validatorProvider.getValidator(tool.outputSchema);
-					expect(validate(fixture).valid, `${name} 应接受完整结果`).toBe(true);
-					expect(validate(errorFixtures[name as keyof typeof errorFixtures]).valid).toBe(true);
+					const item = scopedItemFixture();
+					const successFixtures =
+						name === 'memory_forget'
+							? [fixture, { result: { kind: 'item', item }, ...item }]
+							: [fixture];
+					for (const successFixture of successFixtures) {
+						expect(validate(successFixture).valid, `${name} 应接受完整成功结果`).toBe(true);
+						const necessaryFields =
+							name === 'memory_forget' ? ['result'] : Object.keys(successFixture);
+						for (const field of necessaryFields) {
+							const missing = structuredClone(successFixture);
+							delete missing[field];
+							expect(validate(missing).valid, `${name} 应拒绝缺少必要字段 ${field}`).toBe(false);
+						}
+						if (name === 'memory_forget') {
+							const result = successFixture.result as Record<string, unknown>;
+							for (const field of Object.keys(result)) {
+								const missingResult = structuredClone(successFixture);
+								delete (missingResult.result as Record<string, unknown>)[field];
+								expect(
+									validate(missingResult).valid,
+									`memory_forget 应拒绝 result 缺少 ${field}`,
+								).toBe(false);
+							}
+							if (result.kind === 'item') {
+								for (const field of Object.keys(result.item as Record<string, unknown>)) {
+									const missingItemField = structuredClone(successFixture);
+									delete (missingItemField.result as { item: Record<string, unknown> }).item[field];
+									expect(
+										validate(missingItemField).valid,
+										`memory_forget 应拒绝 result.item 缺少 ${field}`,
+									).toBe(false);
+								}
+							}
+						}
+					}
+					expect(validate({}).valid, `${name} 应拒绝空对象`).toBe(false);
+					const startupError = errorFixtures[name as keyof typeof errorFixtures];
+					expect(validate(startupError).valid, `${name} 的公开 schema 错误边界不符`).toBe(
+						name === 'memory_bootstrap',
+					);
 					expect(validate([]).valid, `${name} 应拒绝错误类型`).toBe(false);
 					expect(validate({ ...fixture, unexpected: true }).valid, `${name} 应拒绝额外字段`).toBe(
 						false,
@@ -398,9 +440,60 @@ describe('lifeos bin entry', () => {
 						strictSchema.safeParse({ ...fixture, unexpected: true }).success,
 						`${name} 应拒绝额外字段`,
 					).toBe(false);
+					if (name === 'memory_forget') {
+						const mismatched = structuredClone(fixture);
+						(mismatched.result as { archived: number }).archived = 2;
+						expect(
+							strictSchema.safeParse(mismatched).success,
+							'memory_forget 应拒绝 envelope 与顶层镜像不同值',
+						).toBe(false);
+					}
 					const missing = structuredClone(fixture);
 					delete missing[Object.keys(missing)[0] as keyof typeof missing];
 					expect(strictSchema.safeParse(missing).success, `${name} 应拒绝缺少必要字段`).toBe(false);
+				}
+			});
+		} finally {
+			vault.cleanup();
+		}
+	});
+
+	it('启动失败边界：bootstrap 保留结构化错误，其他七工具返回 MCP isError', async () => {
+		const vault = createTempVault();
+		const calls = [
+			['memory_query', { contract_version: 2, query: '启动错误' }],
+			['memory_context', { contract_version: 2, scopes: [] }],
+			[
+				'memory_log',
+				{
+					contract_version: 2,
+					slot_key: 'test:startup-error',
+					content: '不应写入',
+					scope: { type: 'global', key: '' },
+					item_kind: 'rule',
+				},
+			],
+			['memory_rules', { contract_version: 2 }],
+			['memory_history', { contract_version: 2, item_id: 1 }],
+			['memory_forget', { contract_version: 2, item_id: 1, reason: '启动错误' }],
+			['memory_notify', { contract_version: 2, file_path: '40_知识/不存在.md' }],
+		] as const;
+
+		try {
+			await withMcpClient(vault, async (client) => {
+				const bootstrap = await client.callTool({ name: 'memory_bootstrap', arguments: {} });
+				expect(bootstrap.isError).not.toBe(true);
+				expect(bootstrap.structuredContent).toMatchObject({ status: 'error' });
+				expect(bootstrap.structuredContent).toEqual(parsedText(bootstrap));
+
+				for (const [name, arguments_] of calls) {
+					const result = await client.callTool({ name, arguments: arguments_ });
+					expect(result.isError, `${name} 应返回 MCP isError`).toBe(true);
+					expect(result.structuredContent, `${name} 错误不应携带结构化成功负载`).toBeUndefined();
+					expect(parsedText(result)).toMatchObject({
+						status: 'error',
+						startup_error: expect.any(String),
+					});
 				}
 			});
 		} finally {
@@ -502,6 +595,15 @@ describe('lifeos bin entry', () => {
 						},
 					}),
 				);
+				const forgotten = results.at(-1)?.structuredContent;
+				expect(forgotten).toMatchObject({
+					result: {
+						kind: 'item',
+						item: { itemId: loggedItem?.itemId, status: 'archived' },
+					},
+					itemId: loggedItem?.itemId,
+					status: 'archived',
+				});
 				results.push(
 					await client.callTool({
 						name: 'memory_notify',
@@ -514,6 +616,42 @@ describe('lifeos bin entry', () => {
 
 				expect(results).toHaveLength(TOOL_NAMES.length);
 				for (const result of results) expectEquivalentStructuredResult(result);
+			});
+		} finally {
+			vault.cleanup();
+		}
+	});
+
+	it('memory_forget 批量成功分支返回判别 envelope 并保留 archived 顶层字段', async () => {
+		const vault = createTempVault();
+		try {
+			await prepareRuntimeVault(vault);
+			await withMcpClient(vault, async (client) => {
+				await client.callTool({ name: 'memory_bootstrap', arguments: {} });
+				const logged = await client.callTool({
+					name: 'memory_log',
+					arguments: {
+						contract_version: 2,
+						slot_key: 'test:forget-scope',
+						content: '批量归档结构化输出',
+						scope: { type: 'skill', key: 'ask' },
+						item_kind: 'fact',
+					},
+				});
+				expect(logged.isError).not.toBe(true);
+				const forgotten = await client.callTool({
+					name: 'memory_forget',
+					arguments: {
+						contract_version: 2,
+						scope: { type: 'skill', key: 'ask' },
+						reason: '验证批量分支',
+					},
+				});
+				expectEquivalentStructuredResult(forgotten);
+				expect(forgotten.structuredContent).toEqual({
+					result: { kind: 'scope', archived: 1 },
+					archived: 1,
+				});
 			});
 		} finally {
 			vault.cleanup();

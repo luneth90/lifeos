@@ -262,6 +262,8 @@ describe('公开协议文档门禁', () => {
 		const cases = read('docs/memory-real-env-test-cases.zh.md');
 		const report = read('docs/memory-real-env-test-execution-report.zh.md');
 		for (const content of [cases, report]) {
+			expect(content).toContain('v2.5.0');
+			expect(content).not.toMatch(/(?:版本|包版本)：v2\.4\.0/);
 			expect(content).toContain('Schema V5');
 			expect(content).toContain('51');
 			expect(content).toContain('54');

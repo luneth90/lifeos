@@ -15,7 +15,12 @@ import { VERSION } from './cli/utils/version.js';
 import * as core from './core.js';
 import { SCHEMA_VERSION } from './db/schema.js';
 import { CONTRACT_VERSION } from './runtime-contract.js';
-import { toolOutputSchemas, toolResultSchemas } from './tool-schemas.js';
+import {
+	formatMemoryForgetToolSuccess,
+	startupErrorOutputSchema,
+	toolOutputSchemas,
+	toolResultSchemas,
+} from './tool-schemas.js';
 import type { DbMaintenanceReport, MemoryScope, ScopeType, StartupResult } from './types.js';
 import { canonicalVaultRoot } from './utils/safe-path.js';
 
@@ -424,11 +429,23 @@ interface StructuredToolResult extends Record<string, unknown> {
 	content: Array<{ type: 'text'; text: string }>;
 }
 
+interface ErrorToolResult extends Record<string, unknown> {
+	isError: true;
+	content: Array<{ type: 'text'; text: string }>;
+}
+
 export function toToolResult<T>(value: T): StructuredToolResult {
 	const text = JSON.stringify(value);
 	return {
 		structuredContent: JSON.parse(text) as Record<string, unknown>,
 		content: [{ type: 'text', text }],
+	};
+}
+
+function toToolError(value: { status: 'error'; startup_error: string }): ErrorToolResult {
+	return {
+		isError: true,
+		content: [{ type: 'text', text: JSON.stringify(value) }],
 	};
 }
 
@@ -539,6 +556,7 @@ interface RunToolOptions {
 		params: Record<string, unknown>,
 		result: unknown,
 	) => void;
+	mapSuccess?: (result: unknown) => unknown;
 }
 
 function runTool<P extends Record<string, unknown>>(
@@ -574,8 +592,17 @@ function handleTool<P extends Record<string, unknown>>(
 	coreFn: (params: any) => unknown,
 	resultSchema: z.ZodTypeAny,
 	options: RunToolOptions = {},
-): (params: P) => Promise<StructuredToolResult> {
-	return async (params: P) => toToolResult(resultSchema.parse(runTool(coreFn, params, options)));
+): (params: P) => Promise<StructuredToolResult | ErrorToolResult> {
+	return async (params: P) => {
+		const rawResult = runTool(coreFn, params, options);
+		const startupError = startupErrorOutputSchema.safeParse(rawResult);
+		if (startupError.success) {
+			resultSchema.parse(startupError.data);
+			return toToolError(startupError.data);
+		}
+		const result = options.mapSuccess ? options.mapSuccess(rawResult) : rawResult;
+		return toToolResult(resultSchema.parse(result));
+	};
 }
 
 function handleBootstrap<P extends Record<string, unknown>>(): (
@@ -773,6 +800,7 @@ server.registerTool(
 	},
 	handleTool(core.memoryForget, toolResultSchemas.memory_forget, {
 		afterSuccess: invalidateFromArchivedItem,
+		mapSuccess: formatMemoryForgetToolSuccess,
 	}),
 );
 

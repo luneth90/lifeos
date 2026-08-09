@@ -19,7 +19,16 @@
 structuredContent == JSON.parse(content[0].text)
 ```
 
-工具自身捕获的启动错误仍保持既有 `{ "status": "error", "startup_error": "..." }` 结果语义，并同时出现在结构化与文本路径中。MCP SDK 在输入模式校验失败或 handler 抛出异常时仍返回 `isError=true` 的协议错误；该路径保留 SDK 的纯文本错误格式，不伪装成工具成功结果，也不受工具 `outputSchema` 校验。
+`memory_bootstrap` 自身捕获的启动错误保持完整的结构化错误分支。其他七个工具的
+`outputSchema` 只描述结构化成功负载；启动失败改走标准 MCP error 边界，返回
+`isError=true`、不返回 `structuredContent`，但 `content[0].text` 仍是既有
+`{ "status": "error", "startup_error": "..." }` JSON，旧客户端可继续解析文本。输入模式校验失败或
+handler 抛出的其他异常也返回 `isError=true`，并保留 MCP SDK 的纯文本错误格式。
+
+`memory_forget` 是唯一有两种成功形状的工具。它增加必填 `result` 判别 envelope：
+`result.kind="item"` 时 `result.item` 是完整归档条目，`result.kind="scope"` 时
+`result.archived` 是批量归档数。为保持兼容，单条分支仍镜像保留原顶层条目字段，批量分支仍保留
+顶层 `archived`；服务端在返回前强制验证 envelope 与兼容镜像同值。
 
 ## 八个 MCP 工具
 
@@ -111,7 +120,7 @@ FTS 与 LIKE 候选合并时，有真实 BM25 的 FTS 候选排在 `rankScore=nu
 
 ## 变更历史与隐私
 
-`memory_items` 是当前状态投影；`memory_item_events` 是该投影的正常 append-only（追加式）变更历史。正常路径中的 `create`、`update`、`archive`、`restore`、`reclassify` 和 `expire` 都在同一数据库事务内先后更新投影并追加事件：任一步失败，投影和事件一起回滚，不会留下半次变更。除下述显式隐私清除外，事件不可更新或删除。
+`memory_items` 是当前状态投影；`memory_item_events` 是该投影的正常 append-only（追加式）变更历史。正常路径中的 `create`、`update`、`archive`、`restore`、`reclassify` 和 `expire` 都在同一数据库事务内先后更新投影并追加事件：任一步失败，投影和事件一起回滚，不会留下半次变更。文件移动同步也在同一个 `IMMEDIATE` 事务中更新索引、当前投影和事件：作用域变化记一条 `reclassify`，仅 `relatedFiles` 变化记一条 `update`，同一条目两者同时变化时仍只记录一个最终快照。除下述显式隐私清除外，事件不可更新或删除。
 
 事件按 `occurred_at ASC, event_id ASC` 返回，时间相同也有稳定顺序。每条事件包含 `event_id`、`item_id`、`event_type`、`before`、`after`、`reason`、`actor`、`occurred_at`、`contract_version` 和 `correlation_id`。`baseline_snapshot` 与 `create` 的 `before` 固定为 `null`，其余事件同时保留前后投影。`actor` 与 `correlation_id` 只记录稳定调用来源和关联标识；请求原文、提示词和未显式传入的理由不得写入事件。
 

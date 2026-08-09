@@ -212,6 +212,65 @@ function isUniqueConstraint(error: unknown): boolean {
 	return error instanceof Error && error.message.includes('UNIQUE constraint failed');
 }
 
+export function updateMemoryItemForFileMove(
+	db: Database.Database,
+	input: {
+		itemId: number;
+		scope?: MemoryScope;
+		relatedFiles?: string[];
+		updatedAt: string;
+		actor: string;
+		correlationId: string;
+		reason: string;
+	},
+): ScopedMemoryItem | null {
+	if (!db.inTransaction) {
+		throw new MemoryItemValidationError('文件移动投影与事件必须在同一事务内更新');
+	}
+	const updatedAt = normalizeTimestamp(input.updatedAt, 'updatedAt');
+	const existing = requireById(db, input.itemId);
+	const before = rowToItem(existing);
+	const scope = input.scope ?? before.scope;
+	const relatedFiles = input.relatedFiles ?? before.relatedFiles;
+	validateScope(scope);
+	assertNotTemporaryFileScope(db, scope);
+	if (relatedFiles.some((file) => typeof file !== 'string' || !file.trim())) {
+		throw new MemoryItemValidationError('relatedFiles 必须是非空字符串数组');
+	}
+	const scopeChanged = scope.type !== before.scope.type || scope.key !== before.scope.key;
+	const relatedFilesChanged = JSON.stringify(relatedFiles) !== JSON.stringify(before.relatedFiles);
+	if (!scopeChanged && !relatedFilesChanged) return null;
+
+	try {
+		db.prepare(`
+			UPDATE memory_items SET scope_type = ?, scope_key = ?, related_files = ?, updated_at = ?
+			WHERE item_id = ?
+		`).run(scope.type, scope.key, JSON.stringify(relatedFiles), updatedAt, input.itemId);
+	} catch (error) {
+		if (isUniqueConstraint(error)) {
+			throw new MemoryItemConflictError('文件移动后的目标复合键已存在');
+		}
+		throw error;
+	}
+	const after = rowToItem(requireById(db, input.itemId));
+	if (
+		after.status === 'active' &&
+		after.scope.type === 'global' &&
+		after.itemKind === 'rule' &&
+		after.enforcement === 'hard'
+	) {
+		assertGlobalHardSafety(db, { now: updatedAt, operation: 'write' });
+	}
+	appendMemoryItemEvent(db, {
+		eventType: scopeChanged ? 'reclassify' : 'update',
+		before,
+		after,
+		occurredAt: updatedAt,
+		metadata: input,
+	});
+	return after;
+}
+
 export function upsertMemoryItem(
 	db: Database.Database,
 	input: UpsertMemoryItemInput,
