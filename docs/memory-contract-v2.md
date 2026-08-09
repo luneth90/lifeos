@@ -327,3 +327,39 @@ npm run test:memory-eval
 长文 Recall 的下界，以及作用域泄漏、陈旧命中和禁止命中的上界。普通断言确保全空结果、
 长文全部丢失或风险指标恶化会立即失败，不能由 expected fail 吞掉。当前固定夹具已达到全部门槛，
 因此不使用 expected fail；后续任务只能在保持这些普通边界通过的前提下改善生产检索。
+
+### Schema V6 分段检索 Go/No-Go 快照
+
+- 评测与复核日期：2026-08-09。
+- Git 基线：`4ff7fe8c4088ce0818fd7d1ffd056f4c61474a67`（Schema V5）。
+- 固定夹具：`tests/fixtures/memory-retrieval-eval.zh.json`，版本 `2026-08-09.v1`，
+  61 篇文档、42 个用例。
+- 新鲜评测命令：在上述基线连续执行两次 `npm run test:memory-eval`；两次均为
+  1 个测试文件、13 个测试通过，除本机耗时外的报告一致。
+
+决策子集只包含唯一证据首次出现在正文第 4000 字符之后的 5 个 `long_tail` 用例。
+偏移由测试直接对正文执行 `body.indexOf(query)` 计算，并以 `lastIndexOf(query)` 验证只出现一次，
+不依赖 `tailEvidence.offset` 自报值：
+
+| case id | 唯一期望文件 | 唯一证据首次偏移 |
+| --- | --- | ---: |
+| `long-tail-01` | `40_知识/长文/天文观测.md` | 4101 |
+| `long-tail-02` | `40_知识/长文/陶瓷烧制.md` | 4201 |
+| `long-tail-03` | `40_知识/长文/湿地调查.md` | 4301 |
+| `long-tail-04` | `40_知识/长文/古琴修复.md` | 4401 |
+| `long-tail-05` | `40_知识/长文/冰芯运输.md` | 4501 |
+
+Schema V5 的新鲜全局指标为：`Recall@5=1.0`、`MRR@10=1.0`、
+`abstentionAccuracy=1.0`、`scopeLeakageRate=0`、`staleHitRate=0`、
+`forbiddenHitRate=0`、`averageContextTokens=55.45238095238095`。长文子集指标为：
+`Recall@5=1.0`、`MRR@10=1.0`、`abstentionAccuracy=1.0`、`scopeLeakageRate=0`、
+`staleHitRate=0`、`forbiddenHitRate=0`、`averageContextTokens=158.6`；相关用例分母为 5。
+
+分段检索的 Go 门槛是长文子集 `Recall@5 < 0.90`。本次实测为 `1.0`，因此结论为
+**No-Go：当前不实施 Schema V6 分段检索**。该结论只说明 Schema V5 已满足当前量化门槛，
+不构成永久否决；不创建 `vault_sections`、分段 FTS、V6 migration、分段索引或生产检索逻辑。
+评测回归固定上述夹具版本、5 个 case id、唯一期望文件、正文实算偏移与 `0.90` 门槛；
+未来长文 `Recall@5` 跌破门槛时测试会失败，并强制重新评审 Go/No-Go。
+
+夹具版本、生产索引或检索排序逻辑、指标定义或 `0.90` 门槛发生变化时，在相关变更合入前
+重新执行本节完整取证流程，并以新基线日期、HEAD、偏移和指标替换本快照。

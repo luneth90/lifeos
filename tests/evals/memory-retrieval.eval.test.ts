@@ -13,6 +13,17 @@ import {
 
 const ALPHA_SCOPE = { type: 'project', key: 'project-alpha' } as const;
 const BETA_SCOPE = { type: 'project', key: 'project-beta' } as const;
+const LONG_TAIL_NO_GO_GATE = {
+	fixtureVersion: '2026-08-09.v1',
+	caseOffsets: {
+		'long-tail-01': 4101,
+		'long-tail-02': 4201,
+		'long-tail-03': 4301,
+		'long-tail-04': 4401,
+		'long-tail-05': 4501,
+	},
+	minimumRecallAt5: 0.9,
+} as const;
 
 function loadFixture(): RetrievalEvalFixture {
 	const fixturePath = join(process.cwd(), 'tests/fixtures/memory-retrieval-eval.zh.json');
@@ -260,6 +271,32 @@ describe('固定中文评测夹具', () => {
 });
 
 describe('临时 Vault 生产检索评测', () => {
+	it('锁定 Schema V6 No-Go 决策输入，长文 Recall@5 跌破 0.90 时失败', () => {
+		const fixture = loadFixture();
+		const documents = new Map(fixture.documents.map((document) => [document.filePath, document]));
+		const longTailCases = fixture.cases.filter(({ category }) => category === 'long_tail');
+		const actualOffsets = Object.fromEntries(
+			longTailCases.map((testCase) => {
+				expect(testCase.expectedFiles).toHaveLength(1);
+				const evidenceDocument = documents.get(testCase.expectedFiles[0] ?? '');
+				const firstOffset = evidenceDocument?.body.indexOf(testCase.query) ?? -1;
+				expect(firstOffset).toBeGreaterThan(4000);
+				expect(evidenceDocument?.body.lastIndexOf(testCase.query)).toBe(firstOffset);
+				return [testCase.id, firstOffset];
+			}),
+		);
+
+		expect(fixture.version).toBe(LONG_TAIL_NO_GO_GATE.fixtureVersion);
+		expect(actualOffsets).toEqual(LONG_TAIL_NO_GO_GATE.caseOffsets);
+		expect(new Set(longTailCases.flatMap(({ expectedFiles }) => expectedFiles)).size).toBe(5);
+
+		const report = runMemoryRetrievalEvaluation(fixture);
+		expect(report.categoryReports.long_tail.denominators.relevanceCases).toBe(5);
+		expect(report.categoryReports.long_tail.metrics.recallAt5).toBeGreaterThanOrEqual(
+			LONG_TAIL_NO_GO_GATE.minimumRecallAt5,
+		);
+	});
+
 	it('复用生产索引和检索并单列长文尾部子集', () => {
 		const fixture = loadFixture();
 		const report = runMemoryRetrievalEvaluation(fixture);
