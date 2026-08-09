@@ -1,5 +1,29 @@
 # 更新日志
 
+## 2.5.0 (2026-08-09)
+
+### 新增
+
+- MCP 结果新增严格 `outputSchema` 与 `structuredContent`，八个工具均从同一份 JSON 生成结构化结果和 `content[0].text` 文本兼容层；既有客户端可继续读取文本 JSON，新客户端应优先读取 `structuredContent`
+- 数据库升级至 Schema V5：新增 `memory_item_events` 追加式变更历史和 `memory_history` 工具；V4→V5 只为升级时的当前投影写入一个 `baseline_snapshot`，不伪造升级前历史
+- 项目等非 global 画像由 `memory_context.profiles` 与“作用域画像”区块按显式 scope 返回；ScopeCatalog 改由已安装技能、配置中的工具/仓库及索引中的项目/文件共同构成，合法的零记忆对象也可解析
+- `memory_query` 保留兼容 `score`，并新增真实 `rankScore`、最终 `rankPosition`、结构化 `rankExplanation` 与可追溯 `evidence`
+
+### 改进
+
+- 例行数据库维护统一为每 Vault single-flight 的 `pending → running → succeeded|failed` 状态机，并记录维护前后指标；`doctor --compact-db` 保持更强的显式压缩路径
+- Schema V6 分段检索量化结论为 No-Go：当前 Schema V5 长文子集 `Recall@5=1.0`，高于 `0.90` 门槛，因此不创建分段表、分段 FTS 或 V6 migration；夹具、生产索引或排序逻辑、指标定义、门槛变化，或长文 `Recall@5` 跌破门槛时必须重新评审
+
+### 安全与升级
+
+- `lifeos upgrade` 是 Schema V4→V5 的唯一升级入口；升级前在 Vault 外创建 cutover 备份，失败时自动恢复，自动恢复失败可通过受控 `journal.json` 显式恢复。回滚恢复的是升级前完整写集，V4 备份会原样恢复为 Schema V4
+- CLI 单条 `lifeos rules purge` 是唯一显式物理清除入口，MCP 不提供 purge；只允许已归档条目，要求 `--item-id` 与 `--confirm-item-id` 双重一致、非空原因，并在删除事务前创建和验证可独立打开的 SQLite 备份。备份或并发校验失败时不会删除
+- 升级前仍应保留独立用户备份；cutover 回滚只覆盖该次升级的受控写集，purge 备份仅覆盖清除时的 `memory.db` 快照，两者都不能替代整个 Vault 的灾难恢复备份
+
+### 测试
+
+- 真实环境隔离套件为 54 项通过、1 项宿主跨会话证据待验证；检索评测固定 61 篇文档与 42 个用例，覆盖召回、拒答、作用域泄漏、陈旧命中、禁止文件和上下文预算
+
 ## 2.4.0 (2026-08-05)
 
 ### 新增

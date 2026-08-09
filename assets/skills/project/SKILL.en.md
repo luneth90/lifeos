@@ -1,7 +1,7 @@
 ---
 name: project
 description: "Turn ideas, drafts, or learning resources into formal projects; supports learning, development, creative, and general projects."
-version: 2.4.0
+version: 2.5.0
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Project_Template.md"
