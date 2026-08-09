@@ -161,6 +161,60 @@ describe('Schema V5', () => {
 		expect(() => assertSchemaV5(db)).toThrow(InvalidSchemaError);
 		expect(() => initDb(db)).toThrow(InvalidSchemaError);
 	});
+
+	it.each([
+		{
+			name: 'memory_items scope 索引落在错误表和错误列',
+			sql: `
+				DROP INDEX idx_memory_items_active_scope;
+				CREATE INDEX idx_memory_items_active_scope ON vault_index(file_path);
+			`,
+		},
+		{
+			name: 'history 索引错误设为 unique 且列顺序错误',
+			sql: `
+				DROP INDEX idx_memory_item_events_history;
+				CREATE UNIQUE INDEX idx_memory_item_events_history
+				ON memory_item_events(event_id, occurred_at, item_id);
+			`,
+		},
+		{
+			name: 'baseline partial 索引使用错误 WHERE 条件',
+			sql: `
+				DROP INDEX idx_memory_item_events_baseline;
+				CREATE UNIQUE INDEX idx_memory_item_events_baseline
+				ON memory_item_events(item_id) WHERE event_type = 'create';
+			`,
+		},
+	] as const)('拒绝同名但定义损坏的必需索引：$name', ({ sql }) => {
+		initDb(db);
+		db.exec(sql);
+		expect(() => assertSchemaV5(db)).toThrow(InvalidSchemaError);
+	});
+
+	it('拒绝 reviewer 复现：同名普通 event_type 索引与重复 baseline', () => {
+		initDb(db);
+		db.exec(`
+			DROP INDEX idx_memory_item_events_baseline;
+			CREATE INDEX idx_memory_item_events_baseline ON memory_item_events(event_type);
+			INSERT INTO memory_items(
+				slot_key, content, item_kind, scope_type, scope_key, created_at, updated_at
+			) VALUES (
+				'fact:index-gate', '索引门禁', 'fact', 'global', '',
+				'2026-08-09T00:00:00.000Z', '2026-08-09T00:00:00.000Z'
+			);
+		`);
+		const insertBaseline = db.prepare(`
+			INSERT INTO memory_item_events(
+				item_id, event_type, before_json, after_json, actor,
+				occurred_at, contract_version, correlation_id
+			) VALUES (1, 'baseline_snapshot', NULL, '{}', 'test:schema', ?, 2, ?)
+		`);
+		insertBaseline.run('2026-08-09T00:00:00.000Z', 'baseline:1');
+		insertBaseline.run('2026-08-09T00:00:01.000Z', 'baseline:2');
+
+		expect(() => assertSchemaV5(db)).toThrow(InvalidSchemaError);
+	});
 });
 
 describe('withDb', () => {

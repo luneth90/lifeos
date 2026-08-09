@@ -21,6 +21,7 @@ import initCommand from '../../src/cli/commands/init.js';
 import rulesCommand from '../../src/cli/commands/rules.js';
 import { memoryStartup } from '../../src/core.js';
 import { initDb } from '../../src/db/schema.js';
+import { RUNTIME_SCHEMA_VERSION } from '../../src/runtime-contract.js';
 import { MAX_GLOBAL_HARD_ITEM_PAYLOAD_BYTES } from '../../src/services/global-hard-safety.js';
 import { upsertMemoryItem } from '../../src/services/memory-items.js';
 import { fullScan } from '../../src/utils/vault-indexer.js';
@@ -50,6 +51,9 @@ describe.each(['zh', 'en'] as const)('lifeos doctor --lang %s', (lang) => {
 			const result = await doctorCommand([dir]);
 			expect(result.passed).toBe(true);
 			expect(result.checks.every((c) => c.status === 'pass')).toBe(true);
+			expect(result.checks.find((check) => check.name === 'runtime contract')?.detail).toBe(
+				`contract=2 schema=${RUNTIME_SCHEMA_VERSION} receipt=opened`,
+			);
 		} finally {
 			cleanup();
 		}

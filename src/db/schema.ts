@@ -94,13 +94,18 @@ CREATE TABLE memory_item_events (
 );`;
 }
 
-export const MEMORY_ITEM_EVENTS_V5_INDEX_SQL = `
+const MEMORY_ITEM_EVENTS_HISTORY_V5_INDEX_SQL = `
 CREATE INDEX idx_memory_item_events_history
-ON memory_item_events(item_id, occurred_at, event_id);
+ON memory_item_events(item_id, occurred_at, event_id);`;
 
+const MEMORY_ITEM_EVENTS_BASELINE_V5_INDEX_SQL = `
 CREATE UNIQUE INDEX idx_memory_item_events_baseline
 ON memory_item_events(item_id)
 WHERE event_type = 'baseline_snapshot';`;
+
+export const MEMORY_ITEM_EVENTS_V5_INDEX_SQL = `
+${MEMORY_ITEM_EVENTS_HISTORY_V5_INDEX_SQL}
+${MEMORY_ITEM_EVENTS_BASELINE_V5_INDEX_SQL}`;
 
 const FRESH_SCHEMA_SQL = `
 CREATE TABLE schema_version (version INTEGER NOT NULL);
@@ -295,6 +300,57 @@ function assertMemoryEventTableDefinition(db: Database.Database): void {
 	}
 }
 
+interface RequiredIndexDefinition {
+	name: string;
+	table: string;
+	columns: readonly string[];
+	unique: 0 | 1;
+	partial: 0 | 1;
+	sql: string;
+}
+
+function assertRequiredIndex(db: Database.Database, expected: RequiredIndexDefinition): void {
+	const index = (
+		db.prepare(`PRAGMA index_list(${expected.table})`).all() as Array<{
+			name: string;
+			unique: number;
+			partial: number;
+		}>
+	).find((candidate) => candidate.name === expected.name);
+	if (!index) {
+		throw new InvalidSchemaError(`Schema V5 索引 ${expected.name} 未关联到表 ${expected.table}`);
+	}
+	if (index.unique !== expected.unique || index.partial !== expected.partial) {
+		throw new InvalidSchemaError(`Schema V5 索引 ${expected.name} 的 unique/partial 属性不匹配`);
+	}
+
+	const columns = (
+		db.prepare(`PRAGMA index_info(${expected.name})`).all() as Array<{
+			seqno: number;
+			name: string;
+		}>
+	)
+		.sort((left, right) => left.seqno - right.seqno)
+		.map((column) => column.name);
+	if (
+		columns.length !== expected.columns.length ||
+		expected.columns.some((column, index_) => columns[index_] !== column)
+	) {
+		throw new InvalidSchemaError(`Schema V5 索引 ${expected.name} 的列顺序不匹配`);
+	}
+
+	const definition = db
+		.prepare("SELECT tbl_name, sql FROM sqlite_master WHERE type = 'index' AND name = ?")
+		.get(expected.name) as { tbl_name?: string; sql?: string } | undefined;
+	if (
+		definition?.tbl_name !== expected.table ||
+		!definition.sql ||
+		normalizeSchemaSql(definition.sql) !== normalizeSchemaSql(expected.sql)
+	) {
+		throw new InvalidSchemaError(`Schema V5 索引 ${expected.name} 的 SQL 定义不匹配`);
+	}
+}
+
 export function tableExists(db: Database.Database, table: string): boolean {
 	return (
 		db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !==
@@ -370,15 +426,51 @@ export function assertSchemaV5(db: Database.Database): void {
 	if (!hasCompositeMemoryIdentity(db)) {
 		throw new InvalidSchemaError('Schema V5 缺少 memory_items 复合唯一键');
 	}
-	for (const indexName of [
-		'idx_memory_items_active_scope',
-		'idx_memory_item_events_history',
-		'idx_memory_item_events_baseline',
-	]) {
-		const index = db
-			.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?")
-			.get(indexName);
-		if (!index) throw new InvalidSchemaError(`Schema V5 缺少索引：${indexName}`);
+	for (const index of [
+		{
+			name: 'idx_memory_items_active_scope',
+			table: 'memory_items',
+			columns: [
+				'status',
+				'scope_type',
+				'scope_key',
+				'item_kind',
+				'enforcement',
+				'priority',
+				'updated_at',
+			],
+			unique: 0,
+			partial: 0,
+			sql: MEMORY_ITEMS_V4_INDEX_SQL,
+		},
+		{
+			name: 'idx_memory_item_events_history',
+			table: 'memory_item_events',
+			columns: ['item_id', 'occurred_at', 'event_id'],
+			unique: 0,
+			partial: 0,
+			sql: MEMORY_ITEM_EVENTS_HISTORY_V5_INDEX_SQL,
+		},
+		{
+			name: 'idx_memory_item_events_baseline',
+			table: 'memory_item_events',
+			columns: ['item_id'],
+			unique: 1,
+			partial: 1,
+			sql: MEMORY_ITEM_EVENTS_BASELINE_V5_INDEX_SQL,
+		},
+	] satisfies RequiredIndexDefinition[]) {
+		assertRequiredIndex(db, index);
+	}
+	const duplicateBaseline = db
+		.prepare(`
+			SELECT item_id FROM memory_item_events
+			WHERE event_type = 'baseline_snapshot'
+			GROUP BY item_id HAVING COUNT(*) > 1 LIMIT 1
+		`)
+		.get();
+	if (duplicateBaseline) {
+		throw new InvalidSchemaError('Schema V5 同一 memory item 存在重复 baseline_snapshot');
 	}
 	const foreignKeys = db.prepare('PRAGMA foreign_key_list(memory_item_events)').all() as Array<{
 		table: string;

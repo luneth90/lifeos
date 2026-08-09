@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildScopedRulesIndexSection } from '../../src/active-docs/userprofile.js';
@@ -375,12 +378,154 @@ describe('V4 记忆条目治理', () => {
 			dryRun: true,
 		});
 		expect(getMemoryItemById(db, expired.itemId)?.status).toBe('active');
-		expect(expireMemoryItems(db, { now: '2026-07-21T00:00:00.000Z' })).toEqual({
+		expect(
+			expireMemoryItems(db, {
+				now: '2026-07-21T00:00:00.000Z',
+				actor: 'test:expiry',
+				correlationId: 'expiry:normal',
+			}),
+		).toEqual({
 			expired: 1,
 			dryRun: false,
 		});
 		expect(getMemoryItemById(db, expired.itemId)?.status).toBe('expired');
 		expect(getMemoryItemById(db, future.itemId)?.status).toBe('active');
+		const event = db
+			.prepare("SELECT * FROM memory_item_events WHERE event_type = 'expire'")
+			.get() as Record<string, unknown>;
+		expect(event).toMatchObject({
+			item_id: expired.itemId,
+			actor: 'test:expiry',
+			correlation_id: 'expiry:normal',
+		});
+		expect(JSON.parse(event.before_json as string)).toMatchObject({ status: 'active' });
+		expect(JSON.parse(event.after_json as string)).toMatchObject({ status: 'expired' });
+	});
+
+	it('双连接在写事务建立前延长 expires_at 后，不消费事务外旧候选', () => {
+		const root = mkdtempSync(join(tmpdir(), 'lifeos-expire-race-'));
+		const path = join(root, 'memory.db');
+		const primary = new Database(path);
+		const concurrent = new Database(path);
+		try {
+			primary.pragma('journal_mode = WAL');
+			initDb(primary);
+			const created = upsertMemoryItem(primary, {
+				slotKey: 'temporary:race',
+				content: '扫描时的旧内容',
+				itemKind: 'fact',
+				scope: { type: 'global', key: '' },
+				expiresAt: '2026-08-09T00:00:00.000Z',
+				occurredAt: '2026-08-08T00:00:00.000Z',
+			});
+			let injected = false;
+			const racedDb = new Proxy(primary, {
+				get(target, property) {
+					if (property === 'transaction') {
+						return (callback: () => unknown) => {
+							if (!injected) {
+								concurrent
+									.prepare(
+										'UPDATE memory_items SET content = ?, expires_at = ?, updated_at = ? WHERE item_id = ?',
+									)
+									.run(
+										'并发更新后的内容',
+										'2026-08-11T00:00:00.000Z',
+										'2026-08-09T00:30:00.000Z',
+										created.itemId,
+									);
+								injected = true;
+							}
+							return target.transaction(callback);
+						};
+					}
+					const value = Reflect.get(target, property, target);
+					return typeof value === 'function' ? value.bind(target) : value;
+				},
+			}) as Database.Database;
+
+			expect(expireMemoryItems(racedDb, { now: '2026-08-10T00:00:00.000Z' })).toEqual({
+				expired: 0,
+				dryRun: false,
+			});
+			expect(getMemoryItemById(primary, created.itemId)).toMatchObject({
+				status: 'active',
+				content: '并发更新后的内容',
+				expiresAt: '2026-08-11T00:00:00.000Z',
+			});
+			expect(
+				primary
+					.prepare("SELECT COUNT(*) AS count FROM memory_item_events WHERE event_type = 'expire'")
+					.get(),
+			).toEqual({ count: 0 });
+		} finally {
+			concurrent.close();
+			primary.close();
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
+	it('事务内 fresh 候选在 UPDATE 前变为未到期时，谓词跳过投影与事件', () => {
+		const created = upsertMemoryItem(db, {
+			slotKey: 'temporary:predicate-race',
+			content: '事务读取时的内容',
+			itemKind: 'fact',
+			scope: { type: 'global', key: '' },
+			expiresAt: '2026-08-09T00:00:00.000Z',
+			occurredAt: '2026-08-08T00:00:00.000Z',
+		});
+		let injected = false;
+		const guardedDb = new Proxy(db, {
+			get(target, property) {
+				if (property === 'prepare') {
+					return (sql: string) => {
+						const statement = target.prepare(sql);
+						if (!sql.includes("UPDATE memory_items SET status = 'expired'")) return statement;
+						return new Proxy(statement, {
+							get(statementTarget, statementProperty) {
+								if (statementProperty === 'run') {
+									return (updatedAt: string, itemId: number, cutoff: string) => {
+										if (!injected) {
+											target
+												.prepare(
+													'UPDATE memory_items SET content = ?, expires_at = ?, updated_at = ? WHERE item_id = ?',
+												)
+												.run(
+													'谓词执行前的新内容',
+													'2026-08-11T00:00:00.000Z',
+													'2026-08-09T00:30:00.000Z',
+													created.itemId,
+												);
+											injected = true;
+										}
+										return statementTarget.run(updatedAt, itemId, cutoff);
+									};
+								}
+								const value = Reflect.get(statementTarget, statementProperty, statementTarget);
+								return typeof value === 'function' ? value.bind(statementTarget) : value;
+							},
+						});
+					};
+				}
+				const value = Reflect.get(target, property, target);
+				return typeof value === 'function' ? value.bind(target) : value;
+			},
+		}) as Database.Database;
+
+		expect(expireMemoryItems(guardedDb, { now: '2026-08-10T00:00:00.000Z' })).toEqual({
+			expired: 0,
+			dryRun: false,
+		});
+		expect(getMemoryItemById(db, created.itemId)).toMatchObject({
+			status: 'active',
+			content: '谓词执行前的新内容',
+			expiresAt: '2026-08-11T00:00:00.000Z',
+		});
+		expect(
+			db
+				.prepare("SELECT COUNT(*) AS count FROM memory_item_events WHERE event_type = 'expire'")
+				.get(),
+		).toEqual({ count: 0 });
 	});
 });
 

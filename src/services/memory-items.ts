@@ -585,25 +585,32 @@ export function expireMemoryItems(
 	options: { now?: string; dryRun?: boolean; actor?: string; correlationId?: string } = {},
 ): ExpireMemoryItemsResult {
 	const now = normalizeTimestamp(options.now ?? new Date().toISOString(), 'now');
-	const rows = db
-		.prepare(`
+	const selectCandidates = () =>
+		db
+			.prepare(`
 			SELECT ${MEMORY_COLUMNS} FROM memory_items
 			WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < ?
 			ORDER BY item_id
 		`)
-		.all(now) as MemoryItemRow[];
-	if (options.dryRun || rows.length === 0) {
-		return { expired: rows.length, dryRun: options.dryRun === true };
+			.all(now) as MemoryItemRow[];
+	if (options.dryRun) {
+		return { expired: selectCandidates().length, dryRun: true };
 	}
 	const expire = db.transaction(() => {
+		const rows = selectCandidates();
+		if (rows.length === 0) return 0;
 		const update = db.prepare(
-			"UPDATE memory_items SET status = 'expired', updated_at = ? WHERE item_id = ?",
+			`UPDATE memory_items SET status = 'expired', updated_at = ?
+			 WHERE item_id = ? AND status = 'active'
+			   AND expires_at IS NOT NULL AND expires_at < ?`,
 		);
 		const correlationId =
 			options.correlationId ?? `${options.actor ?? 'service:memory-items'}:expire-batch:${now}`;
+		let expired = 0;
 		for (const row of rows) {
 			const before = rowToItem(row);
-			update.run(now, row.item_id);
+			const result = update.run(now, row.item_id, now);
+			if (result.changes !== 1) continue;
 			const after = rowToItem(requireById(db, row.item_id));
 			appendMemoryItemEvent(db, {
 				eventType: 'expire',
@@ -612,8 +619,9 @@ export function expireMemoryItems(
 				occurredAt: now,
 				metadata: { actor: options.actor, correlationId },
 			});
+			expired += 1;
 		}
+		return expired;
 	});
-	expire.immediate();
-	return { expired: rows.length, dryRun: false };
+	return { expired: expire.immediate(), dryRun: false };
 }

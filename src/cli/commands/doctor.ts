@@ -6,7 +6,11 @@ import { parse as parseYaml } from 'yaml';
 import { ConfigValidationError, resolveConfig } from '../../config.js';
 import type { LifeOSConfig, VaultConfig } from '../../config.js';
 import { runDbCompaction } from '../../db/index.js';
-import { validateRuntimeContract } from '../../runtime-contract.js';
+import {
+	CONTRACT_VERSION,
+	RUNTIME_SCHEMA_VERSION,
+	validateRuntimeContract,
+} from '../../runtime-contract.js';
 import {
 	describeGlobalHardSafety,
 	inspectGlobalHardSafety,
@@ -222,7 +226,9 @@ export default async function doctor(args: string[]): Promise<DoctorResult> {
 	check(
 		'runtime contract',
 		runtime.ok ? 'pass' : 'fail',
-		runtime.ok ? 'contract=2 schema=4 receipt=opened' : runtime.issues.join('; '),
+		runtime.ok
+			? `contract=${CONTRACT_VERSION} schema=${RUNTIME_SCHEMA_VERSION} receipt=opened`
+			: runtime.issues.join('; '),
 	);
 	checkProjectIds(targetPath, resolvedConfig, check);
 	checkProtocolAssets(targetPath, resolvedConfig, check);
