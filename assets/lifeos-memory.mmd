@@ -10,7 +10,7 @@ flowchart TB
     MemoryEvents["memory_item_events<br/>正常 append-only 历史"]
     MaintenanceState["每 Vault single-flight 维护<br/>pending → running → succeeded / failed"]
     CliPurge["CLI 单条 purge<br/>已归档 · 双 item id · 非空原因"]
-    BackupBoundary["先创建并验证 Vault 外 SQLite 备份<br/>MCP 不提供 purge"]
+    BackupBoundary["在 purge-backups 中创建并验证<br/>独立 SQLite 备份文件 · MCP 不提供 purge"]
     NoSchemaV6["Schema V6 量化 No-Go<br/>不创建分段表"]
     Agent --> Bootstrap
     Bootstrap --> ScopeCatalog

@@ -148,7 +148,7 @@ FTS 与 LIKE 候选合并时，有真实 BM25 的 FTS 候选排在 `rankScore=nu
 
 ScopeCatalog 来自 Vault 中已安装的技能、`lifeos.yaml` 已配置的工具和仓库，以及 `vault_index` 中的项目与文件。目录中的合法对象即使尚无任何记忆也可解析；未知对象不能因已有同名记忆变为合法，未知写入必须拒绝。
 
-`memory_bootstrap()` 的 `scope_hints.available_tools` 列出存在活跃记忆的工具作用域，`scope_hints.tool_bindings` 提供命令名或技能名到稳定工具 ID 的映射。它们只用于路由，不包含工具规则正文。`memory_context` 会按该配置规范化工具别名；若同一别名匹配多个工具，则返回 `ambiguous_tool_alias` 及仅含实际匹配稳定 ID 的 `candidates`，不会猜测。未知 tool 返回 `unknown_tool`，并始终附带确定性排序的全部可用稳定 tool ID；没有配置时 `candidates=[]`。非 tool 的未知 scope 不增加该字段。
+`memory_bootstrap()` 的 `scope_hints.available_tools` 列出 `lifeos.yaml` 中已配置的稳定工具 ID，`scope_hints.tool_bindings` 提供命令名或技能名到稳定工具 ID 的映射。它们只用于路由，不包含工具规则正文，也与工具作用域是否已有记忆条目无关。`memory_context` 会按该配置规范化工具别名；若同一别名匹配多个工具，则返回 `ambiguous_tool_alias` 及仅含实际匹配稳定 ID 的 `candidates`，不会猜测。未知 tool 返回 `unknown_tool`，并始终附带确定性排序的全部可用稳定 tool ID；没有配置时 `candidates=[]`。非 tool 的未知 scope 不增加该字段。
 
 完成任务分类后，再调用 `memory_context`：
 

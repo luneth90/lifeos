@@ -10,7 +10,7 @@ flowchart TB
     MemoryEvents["memory_item_events<br/>normal append-only history"]
     MaintenanceState["single-flight maintenance per Vault<br/>pending → running → succeeded / failed"]
     CliPurge["single-item CLI purge<br/>archived · dual item IDs · non-empty reason"]
-    BackupBoundary["create and verify external SQLite backup first<br/>MCP exposes no purge"]
+    BackupBoundary["create and verify an independent SQLite backup file<br/>in purge-backups · MCP exposes no purge"]
     NoSchemaV6["Measured Schema V6 No-Go<br/>no section table"]
     Agent --> Bootstrap
     Bootstrap --> ScopeCatalog

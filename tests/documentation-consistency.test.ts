@@ -302,4 +302,27 @@ describe('公开协议文档门禁', () => {
 			expect(svg).toMatch(/^<\?xml[\s\S]*<svg[\s\S]*<\/svg>\s*$/);
 		}
 	});
+
+	it('工具目录来源与 purge 备份位置符合当前实现', () => {
+		const contract = read('docs/memory-contract-v2.md');
+		expect(contract).toMatch(
+			/scope_hints\.available_tools[^\n]*lifeos\.yaml[^\n]*已配置的稳定工具 ID/,
+		);
+		expect(contract).not.toContain('存在活跃记忆的工具作用域');
+
+		for (const path of ['assets/lifeos-memory.mmd', 'assets/lifeos-memory.svg']) {
+			const content = read(path);
+			expect(content, `${path} 缺少 purge-backups`).toContain('purge-backups');
+			expect(content, `${path} 未声明独立 SQLite 备份文件`).toContain('独立 SQLite 备份文件');
+			expect(content, `${path} 错称备份位于 Vault 外`).not.toContain('Vault 外 SQLite');
+		}
+		for (const path of ['assets/lifeos-memory.en.mmd', 'assets/lifeos-memory.en.svg']) {
+			const content = read(path);
+			expect(content, `${path} 缺少 purge-backups`).toContain('purge-backups');
+			expect(content, `${path} 未声明独立 SQLite 备份文件`).toContain(
+				'independent SQLite backup file',
+			);
+			expect(content, `${path} 错称 external backup`).not.toContain('external SQLite backup');
+		}
+	});
 });
