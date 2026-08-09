@@ -166,6 +166,38 @@ describe('V4 scope resolver', () => {
 		expect(result.unresolvedScopes).toEqual([]);
 	});
 
+	it('未知 tool 在有配置时返回全部稳定 tool id 的确定性排序', () => {
+		const config = {
+			repositoryBindings: () => ({}),
+			toolBindings: () => ({
+				zotero: { commands: ['zotero-cli'], skills: [] },
+				obsidian: { commands: ['obsidian-cli'], skills: ['obsidian-skill'] },
+				'apple-notes': { commands: ['notes'], skills: [] },
+			}),
+		} as unknown as VaultConfig;
+		const result = resolveMemoryScopes(db, [{ type: 'tool', key: 'missing-tool' }], {
+			config,
+		});
+		expect(result.unresolvedScopes).toEqual([
+			{
+				scope: { type: 'tool', key: 'missing-tool' },
+				reason: 'unknown_tool',
+				candidates: ['apple-notes', 'obsidian', 'zotero'],
+			},
+		]);
+	});
+
+	it('未知 tool 在没有配置时仍返回空 candidates 数组', () => {
+		const result = resolveMemoryScopes(db, [{ type: 'tool', key: 'missing-tool' }]);
+		expect(result.unresolvedScopes).toEqual([
+			{
+				scope: { type: 'tool', key: 'missing-tool' },
+				reason: 'unknown_tool',
+				candidates: [],
+			},
+		]);
+	});
+
 	it('非 tool 未绑定 scope 不带 candidates', () => {
 		const result = resolveMemoryScopes(db, [{ type: 'project', key: 'missing-project' }]);
 		expect(result.unresolvedScopes).toHaveLength(1);

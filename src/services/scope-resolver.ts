@@ -108,7 +108,7 @@ export function resolveMemoryScopes(
 					canonical = { type: 'tool', key: aliases[0] };
 				} else {
 					unresolvedReason = aliases.length > 1 ? 'ambiguous_tool_alias' : 'unknown_tool';
-					if (aliases.length > 0) candidates = aliases;
+					candidates = aliases.length > 0 ? aliases : Object.keys(catalog.tools).sort();
 				}
 			}
 		} else {

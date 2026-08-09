@@ -16,7 +16,7 @@ aliases: []
 
 ## 1. 隔离契约
 
-本套件只在 `os.tmpdir()` 的真实子目录内创建一次性 Vault。每个 Vault 都有独立的 `lifeos.yaml`、Schema V4 `memory.db`、技能资产，以及计划、草稿、项目、知识、研究样本。任何不位于系统临时目录内的根目录都由 `assertNotProductionVault()` 失败关闭。
+本套件只在 `os.tmpdir()` 的真实子目录内创建一次性 Vault。每个 Vault 都有独立的 `lifeos.yaml`、Schema V5 `memory.db`、技能资产，以及计划、草稿、项目、知识、研究样本。任何不位于系统临时目录内的根目录都由 `assertNotProductionVault()` 失败关闭。
 
 所有 LifeOS 调用必须同时满足：
 
@@ -27,17 +27,17 @@ aliases: []
 - 测试只断言临时库状态，结束后活跃 `test:` 条目为 0；
 - `finally` 或测试钩子负责删除整个临时 Vault。
 
-禁止把源码仓库、用户 Vault 或其他非临时目录传给 LifeOS 函数。生产计数零变化由系统临时目录硬护栏保证，不通过打开生产数据库验证。
+禁止把源码仓库、用户 Vault 或其他非临时目录传给 LifeOS 函数。发布回归仅允许在套件前后用 SQLite immutable 只读连接查询生产库 `schema_version` 及 `memory_items` 的 active/archived 聚合计数；禁止读取正文、升级、维护或写入。
 
 ## 2. 分类定义
 
 | 分类 | 含义 | 执行方式 |
 |---|---|---|
 | 自动核心 | 使用隔离 Vault 调用真实 core 接口并断言行为 | `npm run test:memory-real-env` |
-| 版本夹具 | 使用隔离的确定性样本验收特定版本行为 | 同上；已知缺陷用 `it.fails` 保留 |
+| 版本夹具 | 使用隔离的确定性样本验收特定版本行为 | 同上；全部使用普通断言 |
 | 宿主跨会话 | 必须由新宿主会话与宿主工具日志证明 | 不在单一 MCP 测试中伪造 |
 
-分类统计：自动核心 36 项、版本夹具 15 项、宿主跨会话 1 项，共 52 项。
+分类统计：自动核心 36 项、版本夹具 15 项、宿主跨会话 1 项，共 52 项。前两类 51 项必须全部普通通过；另有 3 项隔离护栏，因此 Vitest 总计应为 54 项通过、C-06 唯一 1 项跳过。
 
 ## 3. 52 项映射
 
@@ -130,7 +130,7 @@ aliases: []
 | H-03 | 版本夹具 | `[版本夹具] H-03 启动维护后 WAL 小于 1MB` | 例行非截断 checkpoint 后 WAL 小于 1MB |
 | H-04 | 版本夹具 | `[版本夹具] H-04 doctor 的数据库健康指标无告警` | freelist 同时达到 25% 与 64 MiB 才告警；夹具三项数据库指标为 pass |
 | H-05 | 版本夹具 | `[版本夹具] H-05 中文与英文 bm25 场景将目标排入前三` | 同构与 Lagrange 目标位于前三 |
-| H-06 | 版本夹具 | `[版本夹具] H-06 未知工具诊断保留 candidates 数组` | 当前缺少 candidates，以 `it.fails` 保留 |
+| H-06 | 版本夹具 | `[版本夹具] H-06 未知工具诊断保留 candidates 数组` | 未知 tool 始终返回 `candidates`：有配置时为确定性排序的稳定 tool id，无配置时为 `[]`；普通测试通过 |
 | H-07 | 版本夹具 | `[版本夹具] H-07 bootstrap 仓库白名单来自隔离配置` | 精确等于 `learningapp, lifeos` |
 | H-08 | 版本夹具 | `[版本夹具] H-08 例行有限 FTS merge 后中英文查询均可执行` | 例行路径不执行完整 optimize；有限 merge 后两次查询无 FTS5 错误 |
 | H-09 | 版本夹具 | `[版本夹具] H-09 正文深处 4000 字窗口内关键词可召回` | 600 至 4000 字范围的唯一术语可召回 |
@@ -159,4 +159,4 @@ npm run typecheck
 npx biome check tests/helpers/memory-real-env-vault.ts tests/e2e/memory-real-env-v2.test.ts
 ```
 
-真实环境完整命令连续两次必须得到相同统计。D-06 的生产缺陷已修复并改为普通测试；H-06 仍以 `it.fails` 保留，C-06 只有取得宿主日志后才能记录为通过。H-02 还必须使用 `-t H-02` 单独运行，证明结果不依赖前序用例制造碎片；等待必须使用 runtime 暴露的维护 Promise 与有限状态，禁止定时休眠。例行路径只允许 `incremental_vacuum`、有限 FTS merge 与非截断 checkpoint；只有显式 `doctor --compact-db` 执行完整压缩、FTS optimize 与 WAL truncate。若第二连接的读事务令 `wal_checkpoint(TRUNCATE)` 返回 busy 或残留 WAL，数据库报告和 doctor 都必须失败。`wal_pages` 是根据 WAL 文件物理大小估算的已分配帧数，不表示待回写页数。
+真实环境完整命令连续两次必须得到相同的 54 项通过、1 项跳过。D-06 与 H-06 都是普通测试；C-06 只有取得全新宿主会话日志后才能记录为通过。H-02 还必须使用 `-t H-02` 单独运行，证明结果不依赖前序用例制造碎片；等待必须使用 runtime 暴露的维护 Promise 与有限状态，禁止定时休眠。例行路径只允许 `incremental_vacuum`、有限 FTS merge 与非截断 checkpoint；只有显式 `doctor --compact-db` 执行完整压缩、FTS optimize 与 WAL truncate。若第二连接的读事务令 `wal_checkpoint(TRUNCATE)` 返回 busy 或残留 WAL，数据库报告和 doctor 都必须失败。`wal_pages` 是根据 WAL 文件物理大小估算的已分配帧数，不表示待回写页数。

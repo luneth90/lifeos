@@ -13,99 +13,111 @@ aliases: []
 
 # LifeOS 记忆系统测试执行报告
 
-> 执行日期：2026-08-09 · 用例版本：v2.4.0 · 记忆协议：`contract_version=2`
+> 执行日期：2026-08-09 · 包版本：v2.4.0 · 记忆协议：`contract_version=2`
 
 ## 执行概要
 
 | 项 | 实际结果 |
-|---|---|
-| 夹具护栏测试 | 3 项通过 |
-| 52 项业务映射 | 50 项普通通过、1 项预期失败、1 项宿主跳过 |
-| Vitest 总计 | 53 项通过、1 项 expected fail、1 项 skipped，共 55 项 |
-| 自动核心 | 36/36 达到当前自动标准 |
-| 版本夹具 | 14 项普通通过、1 项保留预期失败 |
-| 宿主跨会话 | C-06 未执行，不计为通过 |
-| 活跃测试记忆残留 | 0；每项结束钩子断言并清理失败现场 |
-| 生产数据访问 | 0；根目录硬护栏只允许系统临时目录真实子目录 |
+| --- | --- |
+| 隔离护栏 | 3/3 普通通过 |
+| 52 项业务映射 | 51 项自动/版本夹具普通通过；C-06 唯一跳过 |
+| Vitest 统计 | 54 项通过、1 项 skipped，共 55 项 |
+| 重复性 | 真实环境完整套件连续两次均为 54 项通过、1 项跳过 |
+| H-02 | 单独运行普通通过；维护终态 `succeeded` |
+| H-06 | 单独运行普通通过；未知 tool 始终返回稳定 `candidates` 数组 |
+| 隔离运行时 | Schema V5 |
+| 生产只读快照 | Schema V4，active=30，archived=52；生产只读快照未升级 |
+| 生产计数差 | active `30 → 30`，archived `52 → 52`，两者增量均为 0 |
+| C-06 | 没有新的宿主工具日志，保持 skipped/待证据 |
 
-## 命令、预期与实际证据
+## 命令与证据
 
-| 命令 | 预期 | 实际 |
-|---|---|---|
-| `npx vitest run tests/e2e/memory-real-env-v2.test.ts`（RED） | 因夹具函数不存在失败 | 失败于无法导入 `../helpers/memory-real-env-vault.js`，0 项测试 |
-| `npx vitest run tests/e2e/memory-real-env-v2.test.ts`（夹具 GREEN） | 夹具三项通过 | 1 个文件、3 项通过 |
-| `npm run test:memory-real-env -- -t D-06` | D-06 单独普通通过且保持完整断言 | 1 项通过、54 项跳过；退出码 0 |
-| `npm run test:memory-real-env`（第一次） | 统计固定且退出码为 0 | 1 个文件通过；53 项通过、1 项预期失败、1 项跳过 |
-| `npm run test:memory-real-env`（第二次） | 与第一次完全一致 | 1 个文件通过；53 项通过、1 项预期失败、1 项跳过 |
-| `npx vitest run tests/e2e/memory-real-env-v2.test.ts -t H-02` | H-02 不依赖前序用例并普通通过 | 1 项通过、54 项跳过；退出码 0 |
-| `npx vitest run tests/db/maintenance.test.ts tests/services/startup.test.ts tests/server.test.ts tests/cli/doctor.test.ts tests/e2e/memory-real-env-v2.test.ts`（任务 6 RED） | 新维护状态、single-flight、双阈值、SQL 强度和 H-02 先失败 | 5 个文件均按预期失败；13 项失败、96 项通过、1 项预期失败、1 项跳过；退出码 1 |
-| 同上（任务 6 GREEN） | 新维护契约及复审纠正全部通过 | 5 个文件通过；115 项通过、1 项预期失败、1 项跳过；退出码 0 |
-| `npx vitest run tests/db/maintenance.test.ts tests/cli/doctor.test.ts -t '阻止.*TRUNCATE\|阻止 WAL TRUNCATE'` | 真实读事务令 DB 报告与 doctor 同步失败 | 2 个文件通过、2 项通过、30 项跳过；退出码 0 |
-| `npm test` | 不低于任务 0 的 998 项基线，新增套件不回归 | 61 个文件通过；1075 项通过、1 项预期失败、1 项跳过，共 1077 项 |
-| `npm run lint` | 生产源码检查无错误 | 53 个源码文件通过 |
-| `npm run typecheck` | 0 个类型错误 | 退出码 0，无类型错误 |
-| `npx biome check src/types.ts src/db/index.ts src/services/startup.ts src/server.ts src/tool-schemas.ts src/cli/commands/doctor.ts tests/db/maintenance.test.ts tests/services/startup.test.ts tests/server.test.ts tests/server-entry.test.ts tests/cli/doctor.test.ts tests/e2e/memory-real-env-v2.test.ts` | 本任务相关 TypeScript 文件无格式或静态检查错误 | 12 个文件通过，无修复项 |
+| 命令 | 实际结果 |
+| --- | --- |
+| `npx vitest run tests/services/scope-resolver-v4.test.ts` | 11 项普通通过 |
+| `npx vitest run tests/e2e/memory-real-env-v2.test.ts -t H-06` | 1 项通过、54 项跳过 |
+| `npm run test:memory-real-env`（第一次） | 54 项通过、1 项跳过 |
+| `npm run test:memory-real-env`（第二次） | 54 项通过、1 项跳过 |
+| `npx vitest run tests/e2e/memory-real-env-v2.test.ts -t H-02` | 1 项通过、54 项跳过；维护终态 `succeeded` |
+| SQLite immutable 前快照 | `schema_version=4`、`active=30`、`archived=52` |
+| SQLite immutable 后快照 | `schema_version=4`、`active=30`、`archived=52` |
 
-## 分类结果
+生产快照只执行 `schema_version` 与 `memory_items.status` 聚合查询，没有读取 `content`、事件
+JSON 或 Vault 正文，也没有运行升级、启动维护、doctor、purge 或任何写操作。生产库仍为 Schema V4；
+本次任务不改变其版本。
 
-| 维度 | 自动核心 | 版本夹具 | 宿主跨会话 | 结果摘要 |
-|---|---:|---:|---:|---|
-| A 会话启动与路由 | 8 | 0 | 0 | 8 项通过 |
-| B 写入正确性 | 9 | 0 | 0 | 9 项通过 |
-| C 召回与检索 | 2 | 3 | 1 | 5 项自动执行；C-06 等待宿主证据 |
-| D 学习工作流 | 7 | 3 | 0 | 10 项普通通过；D-06 已转为普通通过 |
-| E 上下文恢复 | 2 | 0 | 0 | 2 项通过 |
-| F 治理与遗忘 | 4 | 0 | 0 | 4 项通过 |
-| G 变更同步 | 4 | 0 | 0 | 4 项通过；G-01 只通过稳定 id 定位 |
-| H 版本验收 | 0 | 9 | 0 | 8 项普通通过；H-06 预期失败 |
+## 52 项逐项结果
 
-## 验收结果与边界
+下表中的“完整套件”均指 `npm run test:memory-real-env`。自动核心与版本夹具全部使用普通断言。
 
-### D-06 项目画像读取
+| 编号 | 分类 | 测试名或宿主协议 | 实际状态 | 证据入口 |
+| --- | --- | --- | --- | --- |
+| A-01 | 自动核心 | bootstrap 返回完整 Layer 0 与作用域提示 | 通过 | 完整套件 |
+| A-02 | 自动核心 | context 按 skill scope 精确加载 | 通过 | 完整套件 |
+| A-03 | 自动核心 | context 按稳定 project id 精确加载 | 通过 | 完整套件 |
+| A-04 | 自动核心 | context 组合加载多个 scope | 通过 | 完整套件 |
+| A-05 | 自动核心 | context 增量补载仅返回新增 repository scope | 通过 | 完整套件 |
+| A-06 | 自动核心 | context 对不存在的 scope 返回诊断而不抛错 | 通过 | 完整套件 |
+| A-07 | 自动核心 | tool scope 通过绑定别名解析 | 通过 | 完整套件 |
+| A-08 | 自动核心 | global 只在 includeGlobal=true 时注入 | 通过 | 完整套件 |
+| B-01 | 自动核心 | rule 写入后可按字段审计 | 通过 | 完整套件 |
+| B-02 | 自动核心 | decision 写入稳定 project id 后可召回关联文件 | 通过 | 完整套件 |
+| B-03 | 自动核心 | fact 与 profile 均可写入和审计 | 通过 | 完整套件 |
+| B-04 | 自动核心 | correction 不被后续 preference 降级 | 通过 | 完整套件 |
+| B-05 | 自动核心 | 相同复合键原地覆盖且不产生归档副本 | 通过 | 完整套件 |
+| B-06 | 自动核心 | plan 与 draft file scope 被硬拦截 | 通过 | 完整套件 |
+| B-07 | 自动核心 | event 不能通过 memoryLog 写入 | 通过 | 完整套件 |
+| B-08 | 自动核心 | global scope 的 key 必须为空 | 通过 | 完整套件 |
+| B-09 | 自动核心 | priority 边界可写而越界被拒 | 通过 | 完整套件 |
+| C-01 | 自动核心 | 写入后 context 立即召回 | 通过 | 完整套件 |
+| C-02 | 版本夹具 | 中文关键词由相关性优先召回 | 通过 | 完整套件 |
+| C-03 | 版本夹具 | 英文关键词可召回中文知识夹具 | 通过 | 完整套件 |
+| C-04 | 版本夹具 | 中文单字通过前缀匹配召回 | 通过 | 完整套件 |
+| C-05 | 自动核心 | query 的 type 过滤精确生效 | 通过 | 完整套件 |
+| C-06 | 宿主跨会话 | 全新闲聊会话 `memory_*` 调用数应为 0 | skipped/待证据 | 新宿主会话工具日志 |
+| D-01 | 自动核心 | today 链路可取得活跃项目并通知新日记 | 通过 | 完整套件 |
+| D-02 | 自动核心 | ask scope 可加载且一次性问答 event 被拒绝 | 通过 | 完整套件 |
+| D-03 | 版本夹具 | brainstorm 可静默检索相关项目 | 通过 | 完整套件 |
+| D-04 | 自动核心 | project 通过稳定 id 解析并出现在索引 | 通过 | 完整套件 |
+| D-05 | 自动核心 | knowledge 通知后可立即检索 | 通过 | 完整套件 |
+| D-06 | 版本夹具 | revise 加载技能与项目画像并筛选待复习项 | 通过 | 完整套件 |
+| D-07 | 版本夹具 | research 启动前可检索已有报告避重 | 通过 | 完整套件 |
+| D-08 | 自动核心 | digest skill scope 可加载 | 通过 | 完整套件 |
+| D-09 | 自动核心 | 非生产 skill scope 可批量软归档 | 通过 | 完整套件 |
+| D-10 | 自动核心 | global scope 禁止批量归档 | 通过 | 完整套件 |
+| E-01 | 自动核心 | 重置进程内配置后仍可恢复项目上下文 | 通过 | 完整套件 |
+| E-02 | 自动核心 | 写入后重置调用边界仍可召回 | 通过 | 完整套件 |
+| F-01 | 自动核心 | rules 按 kind、scope 与 status 精确过滤 | 通过 | 完整套件 |
+| F-02 | 自动核心 | forget 软归档且 reason 必须非空 | 通过 | 完整套件 |
+| F-03 | 自动核心 | 归档条目不再进入 context | 通过 | 完整套件 |
+| F-04 | 自动核心 | forget 的 itemId 与 scope 互斥 | 通过 | 完整套件 |
+| G-01 | 自动核心 | notify 由稳定 id 定位项目夹具 | 通过 | 完整套件 |
+| G-02 | 自动核心 | notify 不存在路径会清理索引且不崩溃 | 通过 | 完整套件 |
+| G-03 | 自动核心 | notify previousFilePath 完成移动索引切换 | 通过 | 完整套件 |
+| G-04 | 自动核心 | notify 后 query 具备 read-after-write 一致性 | 通过 | 完整套件 |
+| H-01 | 版本夹具 | 数据库使用 INCREMENTAL auto_vacuum | 通过 | 完整套件 |
+| H-02 | 版本夹具 | 等待例行维护终态并由显式压缩满足验收 | 通过 | 单项与完整套件 |
+| H-03 | 版本夹具 | 启动维护后 WAL 小于 1MB | 通过 | 完整套件 |
+| H-04 | 版本夹具 | doctor 的数据库健康指标无告警 | 通过 | 完整套件 |
+| H-05 | 版本夹具 | 中文与英文 bm25 场景将目标排入前三 | 通过 | 完整套件 |
+| H-06 | 版本夹具 | 未知工具诊断保留 candidates 数组 | 通过 | 单项与完整套件 |
+| H-07 | 版本夹具 | bootstrap 仓库白名单来自隔离配置 | 通过 | 完整套件 |
+| H-08 | 版本夹具 | 例行有限 FTS merge 后中英文查询均可执行 | 通过 | 完整套件 |
+| H-09 | 版本夹具 | 正文深处 4000 字窗口内关键词可召回 | 通过 | 完整套件 |
 
-显式请求的非 global 项目画像现已进入 `ContextResponse.profiles`，并渲染到“作用域画像”文本区块。D-06 保留原有 skill/project scope、review 过滤、`profile:weak.fixture` 结构化返回和文本渲染断言，从 `it.fails` 转为普通测试；单独运行与完整套件双跑均通过。
+## 维护、Schema 与候选约束
 
-### H-02 自包含维护验证
+H-02 使用专属 Schema V5 临时 Vault 制造碎片。bootstrap 先返回 `pending`，用例等待同一 Vault
+的 single-flight Promise，例行维护到达 `succeeded`。例行路径只使用增量 vacuum、有限 FTS merge
+与 PASSIVE checkpoint；随后只在隔离 Vault 上调用 `doctor --compact-db`，验收高强度压缩与 WAL
+truncate。状态机仍为 `pending → running → succeeded|failed`。
 
-H-02 为自己创建专属临时 Vault，在该库内创建 500 行、每行 8192 字节的临时负载，删除并丢弃临时表后确认维护前 freelist 比例超过 50%。首次 bootstrap 同步返回 `pending`，用例直接等待同一 Vault runtime 暴露的维护 Promise；没有定时休眠。例行维护终态必须为 `succeeded`，并保留完整时间与前后指标。
+H-06 的未知 tool 诊断始终有 `candidates`：有工具配置时为全部可用稳定 tool id 的确定性排序，
+无配置时为 `[]`。歧义 alias 只列实际匹配的稳定 id；已知/唯一 alias 正常解析；非 tool 未知
+scope 不新增 `candidates`。
 
-随后用例在同一临时库重新制造碎片，只通过显式 `doctor --compact-db` 执行完整压缩，终态后再读取数据库，验收 freelist 比例低于 5% 且 WAL 为 0 或不存在。样本指标如下：
+## 剩余限制
 
-- 初始：`pending`，时间与前后指标均为 `null`；
-- 例行维护前：`page_count=1085`、`freelist_count=1064`、`freelist_bytes=4358144`、`wal_pages=10`、`wal_bytes=41232`；
-- 例行维护后：`page_count=20`、`freelist_count=0`、`freelist_bytes=0`；PASSIVE checkpoint 后 WAL 保持非截断，可见 `wal_pages=15`、`wal_bytes=61832`；
-- 显式压缩后：`page_count=20`、`freelist_count=0`、`freelist_bytes=0`、`wal_pages=0`、`wal_bytes=0`。
-
-例行 SQL 验证明确要求有限 FTS merge 与 `wal_checkpoint(PASSIVE)`，并明确排除 FTS optimize 与 `wal_checkpoint(TRUNCATE)`；显式压缩则要求完整 VACUUM、FTS optimize 和 WAL truncate。`wal_pages` 由 WAL 文件物理大小估算已分配帧数，不表示仍待回写的页数。
-
-### 任务 6 状态机与健康口径
-
-- 每个 canonical Vault runtime 只创建一个维护 Promise；同一 Vault 的连续 bootstrap 共享任务，不同 Vault 各执行一次。
-- 状态只允许 `pending → running → succeeded|failed`。失败终态保留开始、结束、耗时和错误详情，不以成功或零值伪装。
-- `maintenancePending` 只保留为旧调用方的派生兼容字段；`maintenanceState` 与 bootstrap 的 `db_maintenance.state` 是权威状态。
-- doctor 稳态告警同时要求 `freelistRatio >= 25%` 和 `freelistBytes >= 64 MiB`；等于边界时告警，小库即使比例为 26% 也不告警。
-- bootstrap 成功与 `startup_error` 两条 strict structured output 分支都要求显式 `db_maintenance` 字段；错误分支固定为 `null`，没有把 schema 放宽为可选。
-- 真实 busy 回归让第二连接保持读事务；`wal_checkpoint(TRUNCATE)` 返回 `busy=1` 且 WAL 非零时，底层 `DbMaintenanceReport` 固定为 `failed`，错误包含 `busy/log/checkpointed`，doctor 同步返回失败。
-- 终态时间直接采用内部 `runDbMaintenance` 报告，不再用后台扫描的 running 起点覆盖 DB 指标区间。
-- `maintenancePending` 仅由 `maintenanceStateFields()` 按四状态派生，调用点不再手工维护第二份布尔状态。
-
-### H-06 未知工具 candidates
-
-未知工具诊断当前返回 `unknown_tool`，没有 `candidates` 数组。测试使用 `it.fails` 保留完整契约。任务 1 未修改作用域解析生产逻辑。
-
-### C-06 宿主跨会话协议
-
-自动套件仅用 `it.skip` 保留编号。必须另开宿主会话，只发送自然语言闲聊，并由宿主工具日志证明该轮 `memory_*` 调用数为 0。没有这份日志时不得记录为通过。
-
-## 数据隔离证据
-
-- `createIsolatedMemoryVault()` 使用 `mkdtempSync()` 在 `os.tmpdir()` 的规范化真实路径下创建 Vault。
-- `assertNotProductionVault()` 对系统临时目录外路径失败关闭，不包含任何用户绝对路径硬编码。
-- 每个 LifeOS 调用前校验环境变量、显式 Vault 根目录和数据库路径属于同一个隔离夹具。
-- `snapshotCounts()` 只打开夹具自己的数据库。
-- 夹具包含独立配置、Schema V4 数据库、技能资产、计划、草稿、稳定项目 id、知识与研究样本。
-- 用例结束检查所有活跃 `test:` 条目为 0，套件结束删除整个临时 Vault。
-
-## 结论
-
-零污染隔离护栏、52 项映射和可重复执行入口已经建立。D-06 已有普通通过证据；H-06 仍明确保留为预期失败，C-06 仍是宿主未执行项；H-02 保持自包含普通通过。
+C-06 需要全新宿主会话的完整工具日志，证明从闲聊消息到最终回答之间 `memory_*` 调用数为 0。
+本任务没有取得新日志，因此保持唯一 skip，不能从进程内测试推断通过。生产 Vault 仍是 Schema V4；
+本报告的 Schema V5 结论仅适用于隔离测试 runtime。

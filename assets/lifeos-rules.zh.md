@@ -52,6 +52,14 @@ Vault 目录布局定义在根目录 `lifeos.yaml` 中。默认映射：
 
 **临时文件禁写（硬约束）：** 禁止为 `plan`/`draft` 类型的临时文件（计划、草稿）写入 `file` 作用域的 `memory_log` 持久记忆，无论 key 是 entity_id 还是文件路径形式。阶段性方案与过程决策一律保留在对应 Markdown 正文或计划文档中，源码层已强制拦截，违规写入会被拒绝。
 
+**当前协议：** 运行时使用 `contract_version=2` 与 `Schema V5`，固定提供 8 个 MCP 工具；第 8 个 `memory_history` 只读返回单条记忆历史。所有工具都有 strict `outputSchema`，`structuredContent` 与文本 JSON 等值。`memory_items` 是当前投影，`memory_item_events` 是正常 append-only 历史；V4 baseline 不伪造升级前历史。
+
+**作用域与画像：** ScopeCatalog 来自安装技能、配置工具/仓库及 `vault_index` 项目/文件，零记忆对象仍合法，未知写入拒绝。global 画像只进入 Layer 0；显式非 global 画像只从 `memory_context.profiles` 与“作用域画像”返回，禁止跨作用域泄漏。
+
+**检索与维护：** 查询保留兼容 `score`，并公开真实 `rankScore`、`rankPosition` 与可追溯 `evidence`。例行维护按每 Vault single-flight 执行，状态固定为 `pending → running → succeeded|failed`；`doctor --compact-db` 使用更强的显式压缩。
+
+**隐私删除与版本决策：** MCP 不提供 purge。CLI 单条 purge 是唯一显式隐私删除例外，只接受已归档条目，并要求双 item id、非空原因、先创建并验证备份。Schema V6 当前量化结论为 **No-Go**，不创建分段表。
+
 > 分层激活规则、规则捕获规范、噪声防护等完整协议见 `memory-protocol.md`。
 
 ---

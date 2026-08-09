@@ -111,7 +111,7 @@ FTS 与 LIKE 候选合并时，有真实 BM25 的 FTS 候选排在 `rankScore=nu
 
 ## 变更历史与隐私
 
-`memory_items` 是当前状态投影；`memory_item_events` 是该投影的追加式变更日志。正常路径中的 `create`、`update`、`archive`、`restore`、`reclassify` 和 `expire` 都在同一数据库事务内先后更新投影并追加事件：任一步失败，投影和事件一起回滚，不会留下半次变更。除下述显式隐私清除外，事件不可更新或删除。
+`memory_items` 是当前状态投影；`memory_item_events` 是该投影的正常 append-only（追加式）变更历史。正常路径中的 `create`、`update`、`archive`、`restore`、`reclassify` 和 `expire` 都在同一数据库事务内先后更新投影并追加事件：任一步失败，投影和事件一起回滚，不会留下半次变更。除下述显式隐私清除外，事件不可更新或删除。
 
 事件按 `occurred_at ASC, event_id ASC` 返回，时间相同也有稳定顺序。每条事件包含 `event_id`、`item_id`、`event_type`、`before`、`after`、`reason`、`actor`、`occurred_at`、`contract_version` 和 `correlation_id`。`baseline_snapshot` 与 `create` 的 `before` 固定为 `null`，其余事件同时保留前后投影。`actor` 与 `correlation_id` 只记录稳定调用来源和关联标识；请求原文、提示词和未显式传入的理由不得写入事件。
 
@@ -146,7 +146,9 @@ FTS 与 LIKE 候选合并时，有真实 BM25 的 FTS 候选排在 `rankScore=nu
 
 新会话第一步必须调用 `memory_bootstrap()`。它只返回全局 Layer 0，包括全局规则、全局画像摘要、TaskBoard 当前焦点和复习提醒；不会注入任何局部 scope 记忆。
 
-`memory_bootstrap()` 的 `scope_hints.available_tools` 列出存在活跃记忆的工具作用域，`scope_hints.tool_bindings` 提供命令名或技能名到稳定工具 ID 的映射。它们只用于路由，不包含工具规则正文。`memory_context` 会按该配置规范化工具别名；若同一别名匹配多个工具，则返回 `ambiguous_tool_alias`，不会猜测。
+ScopeCatalog 来自 Vault 中已安装的技能、`lifeos.yaml` 已配置的工具和仓库，以及 `vault_index` 中的项目与文件。目录中的合法对象即使尚无任何记忆也可解析；未知对象不能因已有同名记忆变为合法，未知写入必须拒绝。
+
+`memory_bootstrap()` 的 `scope_hints.available_tools` 列出存在活跃记忆的工具作用域，`scope_hints.tool_bindings` 提供命令名或技能名到稳定工具 ID 的映射。它们只用于路由，不包含工具规则正文。`memory_context` 会按该配置规范化工具别名；若同一别名匹配多个工具，则返回 `ambiguous_tool_alias` 及仅含实际匹配稳定 ID 的 `candidates`，不会猜测。未知 tool 返回 `unknown_tool`，并始终附带确定性排序的全部可用稳定 tool ID；没有配置时 `candidates=[]`。非 tool 的未知 scope 不增加该字段。
 
 完成任务分类后，再调用 `memory_context`：
 
@@ -224,7 +226,18 @@ memory:
 
 升级过程先以纯读方式形成计划；只有真正的歧义草案允许作为独立 preflight 诊断文件创建。高置信路径会取得外部写闸、重新盘点上下文、创建 Vault 外部备份和 cutover journal，进入 `prepared` 后才依次写项目 ID、最终配置、默认 scope map 与托管资产，随后按 `V1–V3 → V4 → V5` 或 `V4 → V5` 迁移数据库、强制重索引全部正式项目、验证 `Schema V5`，最后写入运行时 receipt。任一步失败都会尝试恢复备份；自动恢复失败时写闸保持关闭，可执行 `lifeos upgrade ./my-vault --restore <journal>` 显式恢复。恢复会识别 staging/previous 残留并续接目录切换。源运行时 receipt 只接受 Schema 4 或 5，目标 journal 固定为 Schema 5；恢复历史 V4 备份时会原样恢复 Schema V4 数据库与 receipt。数据库已是 V5 时不会再次消费旧 scope map、重新自动发现 binding 或重复写 baseline。`--override` 已删除，不能作为兼容入口使用。
 
-V4 升级到 V5 时，升级器在同一个排他事务内建立事件表，并为当时的每个投影写入恰好一个 `baseline_snapshot`。快照 JSON 的键顺序固定，时间使用升级 journal 的迁移时间，重复执行迁移不会生成重复 baseline。该 baseline 只陈述升级时可证明的当前状态，不伪造升级前的历史。事件写入、结构验证或版本更新任一步失败都会回滚到完整 V4。
+V4 升级到 V5 时，升级器在同一个排他事务内建立事件表，并为当时的每个投影写入恰好一个 `baseline_snapshot`。快照 JSON 的键顺序固定，时间使用升级 journal 的迁移时间，重复执行迁移不会生成重复 baseline。该 V4 baseline 只陈述升级时可证明的当前状态，不伪造升级前的历史。事件写入、结构验证或版本更新任一步失败都会回滚到完整 V4。
+
+## 维护状态与强度
+
+例行启动维护的状态固定为 `pending`、`running`、`succeeded`、`failed`。同一个 canonical Vault
+只创建一个维护 Promise，即每 Vault single-flight；不同 Vault 互不共享。成功或失败终态都保留开始、
+结束、耗时、维护前后指标，失败还保留错误详情。
+
+例行路径只执行增量 vacuum、有限 FTS merge 与非截断 checkpoint，适合启动后后台运行。
+`lifeos doctor ./my-vault --compact-db` 是显式高强度路径，执行完整压缩、FTS optimize 与 WAL
+truncate。doctor 的稳定态碎片告警要求 freelist 比例至少 25% 且大小至少 64 MiB；两个入口的
+强度与阈值不能混为同一契约。
 
 ## CLI 治理
 

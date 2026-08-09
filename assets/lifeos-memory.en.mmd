@@ -1,10 +1,27 @@
-flowchart LR
-    Agent["Agent Session"] --> Bootstrap["memory_bootstrap<br/>Layer 0 · global rules & profile"]
-    Bootstrap --> Route{"Scope Routing<br/>skill · project · repository<br/>tool · file · global"}
-    Route --> Context["memory_context<br/>load scoped rules"]
-    Context --> Query["memory_query<br/>retrieve sources on demand"]
-    Query --> Task["Execute Task"]
-    Task --> Notify["memory_notify<br/>sync file changes"]
-    Task --> Log["memory_log<br/>rules · decisions · facts"]
-    Route -. governance .-> Rules["memory_rules<br/>audit · diagnose"]
-    Route -. governance .-> Forget["memory_forget<br/>soft-archive"]
+flowchart TB
+    Agent["Agent session"]
+    Bootstrap["memory_bootstrap<br/>global Layer 0 only"]
+    ScopeCatalog["ScopeCatalog<br/>installed skills · configured tools/repos · indexed projects/files"]
+    ContextQuery["memory_context / memory_query<br/>explicit scoped profiles · ranking and evidence"]
+    EightTools["8 MCP tools<br/>bootstrap · query · context · log<br/>rules · history · forget · notify"]
+    StructuredOutput["strict outputSchema<br/>structuredContent"]
+    TextOutput["compatible text<br/>content[0].text JSON"]
+    MemoryItems["memory_items<br/>current projection"]
+    MemoryEvents["memory_item_events<br/>normal append-only history"]
+    MaintenanceState["single-flight maintenance per Vault<br/>pending → running → succeeded / failed"]
+    CliPurge["single-item CLI purge<br/>archived · dual item IDs · non-empty reason"]
+    BackupBoundary["create and verify external SQLite backup first<br/>MCP exposes no purge"]
+    NoSchemaV6["Measured Schema V6 No-Go<br/>no section table"]
+    Agent --> Bootstrap
+    Bootstrap --> ScopeCatalog
+    ScopeCatalog --> ContextQuery
+    ContextQuery --> EightTools
+    EightTools --> StructuredOutput
+    EightTools --> TextOutput
+    StructuredOutput <--> TextOutput
+    EightTools --> MemoryItems
+    MemoryItems <--> MemoryEvents
+    EightTools --> MaintenanceState
+    CliPurge --> BackupBoundary
+    BackupBoundary --> MemoryItems
+    NoSchemaV6 -.-> MemoryItems

@@ -1,53 +1,72 @@
 ## Project Overview
 
-LifeOS Memory System — an MCP server providing persistent knowledge management and session memory for AI assistants. It indexes an Obsidian-compatible vault of markdown files, maintains a session event log, and assembles contextual summaries for skill execution. Exposes 11 tools over MCP stdio transport.
+LifeOS Memory System 是一个基于 MCP stdio 的持久记忆服务。当前协议为
+`contract_version=2`、数据库为 `Schema V5`，服务端固定公开 8 tools：
+`memory_bootstrap`、`memory_query`、`memory_context`、`memory_log`、
+`memory_rules`、`memory_history`、`memory_forget`、`memory_notify`。
 
 ## Commands
 
 ```bash
-npm run build        # TypeScript compilation (tsc)
-npm run dev          # Dev mode with file watching (tsx watch)
-npm start            # Production server (node dist/server.js)
-npm test             # Run all tests (vitest run)
-npm run test:watch   # Tests in watch mode
-npm test -- tests/services/capture.test.ts  # Run a single test file
-npm run lint         # Check with Biome
-npm run lint:fix     # Auto-fix lint issues
-npm run typecheck    # Type check without emitting
+npm run build
+npm run dev
+npm start
+npm test
+npm run test:memory-real-env
+npm run test:memory-eval
+npm run lint
+npm run typecheck
 ```
 
 ## Architecture
 
-```
-MCP Client (stdio)
-  → server.ts          11 tool definitions with Zod input schemas
-  → core.ts            Thin dispatch: resolve DB/vault, call service, close DB
-  → services/          Business logic (startup, capture, retrieval, enhance, layer0, maintenance)
-  → active-docs/       TaskBoard.md and UserProfile.md builders (AUTO section refresh)
-  → skill-context/     Context assembly with seed profiles and reranking
-  → db/                SQLite schema (FTS5, triggers), connection helpers
-  → utils/             Vault indexer, Chinese tokenizer (jieba), scan state, context policy
+```text
+MCP Client
+  → server.ts               8 个工具、Zod 输入与 strict outputSchema
+  → core.ts                 契约校验、每次调用的配置快照、数据库生命周期
+  → services/startup.ts     Layer 0、ScopeCatalog 提示、后台例行维护
+  → services/scope-*.ts     技能/项目/仓库/工具/文件目录与稳定作用域解析
+  → services/context-router.ts  显式局部规则、决策、事实与画像组装
+  → services/retrieval.ts   Vault FTS5/LIKE 检索、排名与证据
+  → services/memory-*.ts    当前投影、append-only 历史与治理
+  → utils/vault-indexer.ts  Markdown 索引与变更同步
+  → db/schema.ts            Schema V5、FTS5 与结构验证
 ```
 
-**Data flow:** Vault markdown → `vault-indexer` parses frontmatter/metadata → `vault_index` table (FTS5). User actions → `capture.ts` → `session_log` table (FTS5). Queries go through `retrieval.ts` which uses FTS5 with LIKE fallback and field-weighted scoring.
-
-**Key patterns:**
-- DB instances are created per-call in `core.ts` (open → try/service → finally/close)
-- `VaultConfig` is a module-level singleton (`config.ts`) resolving logical directory names to paths via `lifeos.yaml`
-- Vault supports Chinese (zh) and English (en) directory presets
-- Active docs use `<!-- BEGIN AUTO:marker -->` / `<!-- END AUTO:marker -->` blocks to preserve manual content while refreshing generated sections
+`memory_bootstrap` 只返回 global Layer 0。`memory_context` 只加载显式 scope，
+`memory_query` 只检索 Vault 索引。写入和治理通过 `memory_log`、`memory_forget` 与 CLI
+规则命令完成，文件变化由 `memory_notify` 同步。每个非 bootstrap 调用在打开 Vault 和数据库前
+校验 `contract_version=2`；运行时只接受 Schema V5，旧库只能由离线 `lifeos upgrade` 升级。
 
 ## Database
 
-SQLite via `better-sqlite3` with WAL mode. Key tables: `vault_index` (indexed markdown files), `session_log` (events), `memory_items` (active doc slots), `enhance_queue`, `scan_state`, `session_state`. FTS5 virtual tables (`vault_fts`, `session_fts`) are auto-synced via triggers.
+SQLite 使用 WAL。主要结构包括：
 
-## Code Style
+- `vault_index` 与 `vault_fts`：Vault Markdown 的当前索引与全文检索；
+- `scan_state`：增量扫描状态；
+- `memory_items`：规则、决策、事实与画像的当前投影；
+- `memory_item_events`：投影变化的 append-only 历史；
+- `schema_version`：当前结构版本，运行时固定为 V5。
 
-- **Formatter:** Biome — tabs, 100-char line width, single quotes
-- **TypeScript:** strict mode, ES2022 target, Node16 module resolution
-- **Validation:** Zod schemas for all MCP tool inputs
-- **Module type:** ESM (`"type": "module"` in package.json)
+Schema V4 升级到 V5 时只为每个现存投影建立一个 `baseline_snapshot`，不伪造升级前历史。
+MCP 不提供物理删除；唯一例外是带双 item id、非空原因和已验证备份的 CLI 单条 purge。
 
-## Testing
+## Runtime Contracts
 
-Tests use Vitest with `tests/setup.ts` providing fixtures: `createTempVault()` creates isolated vault directories with `lifeos.yaml`, `createTestDb()` initializes an in-memory or temp SQLite DB, `writeTestNote()` creates markdown files with YAML frontmatter.
+- ScopeCatalog 来自安装技能、`lifeos.yaml` 的工具/仓库配置及 `vault_index` 的项目/文件；
+  零记忆对象仍可解析，未知写入必须拒绝。
+- global 画像只进入 Layer 0；显式非 global 画像只进入 `memory_context.profiles` 与
+  “作用域画像”文本区块。
+- 8 tools 都返回等值的 `structuredContent` 与 `content[0].text` JSON。
+- 检索保留兼容 `score`，并公开真实 `rankScore`、`rankPosition` 与 `evidence`。
+- 例行维护状态为 `pending → running → succeeded|failed`，每个 Vault single-flight；
+  `doctor --compact-db` 是更强的显式压缩路径。
+- 当前量化结论是 Schema V6 No-Go，不创建分段表或分段检索逻辑。
+
+## Code Style and Testing
+
+- Biome：tab 缩进、100 字符行宽、single quote。
+- TypeScript strict、ES2022、Node16 module resolution、ESM。
+- 功能或缺陷修复严格执行 RED → GREEN → REFACTOR。
+- 真实环境测试只能写系统临时目录中的隔离 Vault；生产数据库仅在明确授权时做 immutable
+  聚合只读查询，不得读取正文、迁移、维护或写入。

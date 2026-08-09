@@ -950,7 +950,7 @@ describe.sequential('LifeOS v2 真实环境 52 用例映射', () => {
 		}
 	});
 
-	it.fails('[版本夹具] H-06 未知工具诊断保留 candidates 数组', () => {
+	it('[版本夹具] H-06 未知工具诊断保留 candidates 数组', () => {
 		const known = context([{ type: 'tool', key: 'obsidian' }]);
 		expect(known.diagnostics.unresolvedScopes).toEqual([]);
 		const unknown = context([{ type: 'tool', key: 'unknown-tool' }]);

@@ -52,6 +52,14 @@ Applies to Vaults with initialized `{system}/{memory}/`.
 
 **Temporary file write ban (hard enforcement):** Writing persistent `memory_log` entries under `file` scope for `plan`/`draft` type files is prohibited, regardless of whether the key is an entity_id or file path. Interim decisions and work-in-progress schemes must remain in the corresponding Markdown body or plan document. This is enforced at the source code level; violations will be rejected.
 
+**Current contract:** The runtime uses `contract_version=2` and `Schema V5` and exposes 8 MCP tools; the eighth tool, `memory_history`, is read-only and returns one item's history. Every tool has a strict `outputSchema`, with equivalent `structuredContent` and text JSON. `memory_items` is the current projection and `memory_item_events` is the normal append-only history; the V4 baseline does not invent pre-upgrade history.
+
+**Scopes and profiles:** ScopeCatalog comes from installed skills, configured tools/repositories, and projects/files in `vault_index`. Zero-memory objects remain valid, while unknown writes are rejected. Global profiles enter Layer 0 only; explicit non-global profiles are returned only through `memory_context.profiles` and the scoped-profile text section, without cross-scope leakage.
+
+**Retrieval and maintenance:** Queries keep the compatibility `score` and expose the real `rankScore`, `rankPosition`, and traceable `evidence`. Routine maintenance is single-flight per Vault with states `pending → running → succeeded|failed`; `doctor --compact-db` is the stronger explicit compaction path.
+
+**Privacy deletion and version decision:** MCP exposes no purge. The single-item CLI purge is the only explicit privacy-deletion exception; it requires an archived item, matching dual item IDs, a non-empty reason, and a verified backup first. The measured Schema V6 decision is **No-Go**, so no section table is created.
+
 > For the full layered activation rules, rule capture conventions, and noise protection, see `memory-protocol.md`.
 
 ---

@@ -126,19 +126,34 @@ LifeOS provides a set of Agent skills designed around the learning process, conn
 
 ### Memory System
 
-> The memory system is LifeOS's core capability. It works in a directory-scoped, skill-bound way, continuously preserving the context, preferences, and decisions that emerge during learning so long-term learning becomes more continuous, more traceable, and easier to build on.
+LifeOS uses one final contract: `contract_version=2` with `Schema V5`. The MCP server exposes
+8 tools: `memory_bootstrap`, `memory_query`, `memory_context`, `memory_log`, `memory_rules`,
+`memory_history`, `memory_forget`, and `memory_notify`.
 
-#### 1. Cross-session continuity
+```text
+memory_bootstrap
+  → resolve skill, project, repository, tool, or file scope through ScopeCatalog
+  → memory_context
+  → memory_query when source retrieval is needed
+  → execute the task
+  → memory_notify / memory_log
+```
 
-Session bridges and active-document context persist, so agents do not depend only on the current conversation.
+ScopeCatalog is built from installed skills, configured tools and repositories, and projects/files in
+`vault_index`. A catalog object is valid even with zero memory items; unknown writes are rejected.
+Global profiles enter Layer 0 only. Explicit non-global profiles are returned through
+`memory_context.profiles` and the scoped-profile text section without leaking across scopes.
 
-#### 2. Project-scoped and skill-bound
+All 8 MCP tools have strict `outputSchema` declarations and return equivalent `structuredContent` and
+text JSON. Retrieval keeps the compatibility `score` while exposing the real `rankScore`,
+`rankPosition`, and traceable evidence. Routine maintenance is single-flight per Vault and follows
+`pending → running → succeeded|failed`; explicit `doctor --compact-db` uses a stronger compaction path.
 
-The memory system runs around the current LifeOS project in the vault, activates only inside workflows such as `today`, `project`, `research`, `knowledge`, `revise`, `digest`, and `archive`, and keeps accumulating preferences, decisions, and context.
-
-#### 3. More controllable than global memory
-
-Compared with a memory model that mixes cross-directory content and global conversations together, a project-scoped, skill-bound memory system reduces irrelevant noise and keeps retrieval and follow-up decisions closer to the current LifeOS workflow.
+`memory_items` is the current projection and `memory_item_events` is its normal append-only history;
+the V4 baseline does not invent pre-upgrade events. MCP exposes no purge operation. The single-item CLI
+purge is the only explicit privacy-deletion exception and requires an archived item, matching dual item
+IDs, a non-empty reason, and a verified backup first. The measured Schema V6 decision is **No-Go**, so
+no section table is created.
 
 ## Quick Start
 
@@ -176,6 +191,7 @@ lifeos doctor [path]                                      # Health check
 lifeos rename [path]                                      # Interactive directory rename
 lifeos rules list|audit|export [path]                     # Read-only memory governance
 lifeos rules classify|archive|restore [path]              # Explicitly govern memory items
+lifeos rules purge [path] --item-id N --confirm-item-id N --reason "..." # Purge one archived item after backup verification
 lifeos --help                                             # Show help
 lifeos --version                                          # Show version
 ```

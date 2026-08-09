@@ -38,6 +38,29 @@ function allProductDocumentation(): Array<{ path: string; content: string }> {
 	return ['README.md', ...markdownFiles('docs')].map((path) => ({ path, content: read(path) }));
 }
 
+const RELEASE_SURFACES = [
+	'README.md',
+	'README.en.md',
+	'assets/lifeos-rules.zh.md',
+	'assets/lifeos-rules.en.md',
+] as const;
+
+const DIAGRAM_SEMANTICS = [
+	'Agent',
+	'Bootstrap',
+	'ScopeCatalog',
+	'ContextQuery',
+	'EightTools',
+	'StructuredOutput',
+	'TextOutput',
+	'MemoryItems',
+	'MemoryEvents',
+	'MaintenanceState',
+	'CliPurge',
+	'BackupBoundary',
+	'NoSchemaV6',
+] as const;
+
 describe('公开协议文档门禁', () => {
 	it('协议文档列出全部公开 MCP 工具', () => {
 		const registered = [...read('src/server.ts').matchAll(/server\.tool\(\s*'([^']+)'/g)].map(
@@ -182,6 +205,101 @@ describe('公开协议文档门禁', () => {
 		] as const;
 		for (const item of cases) {
 			expect(read(item.path), `${item.path} 缺少完整恢复指引`).toMatch(item.check);
+		}
+	});
+
+	it('公开表面统一声明 Schema V5、8 工具与当前记忆治理边界', () => {
+		for (const path of RELEASE_SURFACES) {
+			const content = read(path);
+			for (const marker of [
+				'Schema V5',
+				'memory_history',
+				'memory_items',
+				'memory_item_events',
+				'ScopeCatalog',
+				'structuredContent',
+				'rankScore',
+			]) {
+				expect(content, `${path} 缺少 ${marker}`).toContain(marker);
+			}
+			expect(content, `${path} 未声明 8 个工具`).toMatch(/(?:8 个|8 MCP|eight MCP)/i);
+			expect(content, `${path} 未声明 No-Go`).toMatch(/No-Go/i);
+		}
+
+		const agents = read('AGENTS.md');
+		expect(agents).toMatch(/8 tools/i);
+		expect(agents).toContain('Schema V5');
+		for (const stale of [
+			'11 tools',
+			'session event log',
+			'session_log',
+			'session_state',
+			'enhance_queue',
+			'module-level singleton',
+		]) {
+			expect(agents).not.toContain(stale);
+		}
+
+		const contract = read('docs/memory-contract-v2.md');
+		for (const marker of [
+			'V4 baseline',
+			'append-only',
+			'--confirm-item-id',
+			'先创建并校验',
+			'pending',
+			'running',
+			'succeeded',
+			'failed',
+			'single-flight',
+			'rankPosition',
+			'evidence',
+		]) {
+			expect(contract, `契约缺少 ${marker}`).toContain(marker);
+		}
+	});
+
+	it('真实环境文档记录 51 个自动项普通通过、C-06 唯一跳过和 Schema V5 夹具', () => {
+		const cases = read('docs/memory-real-env-test-cases.zh.md');
+		const report = read('docs/memory-real-env-test-execution-report.zh.md');
+		for (const content of [cases, report]) {
+			expect(content).toContain('Schema V5');
+			expect(content).toContain('51');
+			expect(content).toContain('54');
+			expect(content).toContain('C-06');
+			expect(content).not.toContain('it.fails');
+			expect(content).not.toContain('expected fail');
+		}
+		expect(report).toContain('生产只读快照未升级');
+		expect(report).toMatch(/active.*archived|活跃.*归档/i);
+	});
+
+	it('中英文 Mermaid 与 SVG 具有相同的关键语义节点和连线契约', () => {
+		for (const [mermaidPath, svgPath] of [
+			['assets/lifeos-memory.mmd', 'assets/lifeos-memory.svg'],
+			['assets/lifeos-memory.en.mmd', 'assets/lifeos-memory.en.svg'],
+		] as const) {
+			const mermaid = read(mermaidPath);
+			const svg = read(svgPath);
+			for (const semantic of DIAGRAM_SEMANTICS) {
+				expect(mermaid, `${mermaidPath} 缺少节点 ${semantic}`).toMatch(
+					new RegExp(`\\b${semantic}[\\[{(]`),
+				);
+				expect(svg, `${svgPath} 缺少节点 ${semantic}`).toContain(`data-semantic=\"${semantic}\"`);
+			}
+			for (const edge of [
+				'Agent --> Bootstrap',
+				'Bootstrap --> ScopeCatalog',
+				'ScopeCatalog --> ContextQuery',
+				'ContextQuery --> EightTools',
+				'MemoryItems <--> MemoryEvents',
+				'EightTools --> StructuredOutput',
+				'EightTools --> TextOutput',
+				'CliPurge --> BackupBoundary',
+				'NoSchemaV6 -.-> MemoryItems',
+			]) {
+				expect(mermaid, `${mermaidPath} 缺少连线 ${edge}`).toContain(edge);
+			}
+			expect(svg).toMatch(/^<\?xml[\s\S]*<svg[\s\S]*<\/svg>\s*$/);
 		}
 	});
 });

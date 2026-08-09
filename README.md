@@ -32,7 +32,7 @@ LifeOS 是一套运行在 Obsidian 之上的 Agent 知识系统：Obsidian 承�
   <img src="./assets/lifeos-workflow.svg" alt="LifeOS 学习工作流" width="720" />
 </p>
 
-> 记忆系统：7 个 MCP 工具三路分工（读链路 / 写链路 / 治理），写入跨会话生效。
+> 记忆系统：8 个 MCP 工具分担读取、写入、历史与治理，写入跨会话生效。
 
 <p align="center">
   <img src="./assets/lifeos-memory.svg" alt="LifeOS 记忆系统" width="720" />
@@ -126,7 +126,7 @@ LifeOS 提供一组围绕学习过程设计的 Agent 技能，把”输入 -> �
 
 ### 记忆系统
 
-LifeOS 当前使用单一最终契约：`contract_version=2` 与 `Schema V4`。MCP 固定暴露 7 个工具，标准调用链如下：
+LifeOS 当前使用单一最终契约：`contract_version=2` 与 `Schema V5`。MCP 固定暴露 8 个工具，标准调用链如下：
 
 ```text
 memory_bootstrap
@@ -144,6 +144,7 @@ memory_bootstrap
 | `memory_query` | 需要检索笔记原文、项目状态或知识索引时按需调用，不负责加载局部规则 | `/today` 查询活跃项目和待复习内容，`/revise` 查询 review 笔记，`/archive` 查询已完成条目，`/ask`、`/knowledge`、`/brainstorm` 检索相关资料 |
 | `memory_log` | 只在信息需要跨会话持续生效时调用，写入显式 `item_kind`、`scope` 与 `slot_key` | 记录用户长期规则、已确认的项目决策、稳定事实，以及 `/revise` 识别出的强弱项或 `/ask` 确认的稳定偏好；普通问答和一次性事件不写入 |
 | `memory_rules` | 需要治理、检查或诊断记忆条目时调用，不参与普通任务的上下文加载 | 查看有效或过期规则、按 scope 或 slot 审计、检查重复项，以及排查某条规则为何生效 |
+| `memory_history` | 需要审计单条记忆的完整变更历史时按正整数 `item_id` 只读调用 | 查看 `memory_items` 当前投影在 `memory_item_events` 中的 append-only 历史 |
 | `memory_forget` | 明确需要废弃某条记忆，并取得 `item_id` 后调用；必须同时记录原因 | 用户明确要求忘记某条记忆，或审计后确认条目失效；执行软归档，不物理删除 |
 | `memory_notify` | 创建、修改、移动或删除 Vault 文件后立即调用；移动或重命名时同时传入旧路径 | `/project`、`/knowledge`、`/today`、`/research`、`/digest`、`/translate`、`/archive` 等所有写入 Vault 文件的流程 |
 
@@ -151,7 +152,11 @@ memory_bootstrap
 
 `memory_bootstrap` 是唯一不传 `contract_version`、也是唯一返回 `_layer0` 的工具。其余工具必须传 `contract_version=2`，版本错误会在运行时触碰 Vault 或数据库前被拒绝。
 
-记忆条目以 `(scope.type, scope.key, slot_key)` 为稳定身份。scope 支持 `global`、`skill`、`project`、`repository`、`tool`、`file`；同一 slot 可以在不同 scope 中分别存在。Layer 0 只加载全局规则、画像摘要和当前焦点，局部规则必须通过 `memory_context` 显式请求。
+记忆条目以 `(scope.type, scope.key, slot_key)` 为稳定身份。ScopeCatalog 来自安装技能、配置工具/仓库及 `vault_index` 的项目/文件；合法的零记忆对象仍可解析，未知写入会被拒绝。Layer 0 只加载 global 规则、画像摘要和当前焦点；显式非 global 画像只由 `memory_context.profiles` 与“作用域画像”返回，不跨 scope 泄漏。
+
+8 个工具都有 strict `outputSchema`，并从同一 JSON 生成等值的 `structuredContent` 与文本结果。`memory_query` 保留兼容 `score`，同时公开真实 `rankScore`、`rankPosition` 与可追溯证据。例行维护按每 Vault single-flight 运行，状态为 `pending → running → succeeded|failed`；显式 `doctor --compact-db` 使用更高强度的压缩流程。
+
+`memory_items` 只保存当前投影，`memory_item_events` 保存正常 append-only 历史；V4 baseline 不伪造升级前历史。MCP 不提供 purge。CLI 单条 purge 是唯一显式隐私删除例外，只允许已归档条目，并要求双 item id、非空原因及先创建并验证备份。当前量化结论为 Schema V6 **No-Go**，不会创建分段表。
 
 完整字段、优先级、预算、升级与治理说明见 [记忆协议 V2](./docs/memory-contract-v2.md)。
 
@@ -191,6 +196,7 @@ lifeos doctor [path]                                      # 健康检查
 lifeos rename [path]                                      # 交互式重命名目录
 lifeos rules list|audit|export [path]                      # 只读审计与导出记忆
 lifeos rules classify|archive|restore [path]               # 显式治理记忆条目
+lifeos rules purge [path] --item-id N --confirm-item-id N --reason "..." # 备份后清除单条已归档隐私记忆
 lifeos --help                                             # 查看帮助
 lifeos --version                                          # 查看版本
 ```
