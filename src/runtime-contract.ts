@@ -23,12 +23,12 @@ import { cutoverRoot, isValidCutoverId, readCutoverLock } from './cutover-lock.j
 import { assertVaultPathSafe, canonicalVaultRoot } from './utils/safe-path.js';
 
 export const CONTRACT_VERSION = 2 as const;
-export const RUNTIME_SCHEMA_VERSION = 4 as const;
+export const RUNTIME_SCHEMA_VERSION = 5 as const;
 export const RUNTIME_RECEIPT_FILENAME = 'runtime-receipt.json';
 
 export type RuntimeReceipt = {
 	contract_version: 2;
-	schema_version: 4;
+	schema_version: 5;
 	kind: 'fresh-install' | 'upgrade';
 	state: 'opened';
 	runtime_version: string;
@@ -135,7 +135,7 @@ function readReceipt(
 			issues.push('receipt contract_version 不是 2');
 		}
 		if (value.schema_version !== RUNTIME_SCHEMA_VERSION) {
-			issues.push('receipt schema_version 不是 4');
+			issues.push('receipt schema_version 不是 5');
 		}
 		if (value.kind !== 'fresh-install' && value.kind !== 'upgrade') {
 			issues.push('receipt kind 非法');
@@ -250,7 +250,7 @@ function checkDb(db: Database.Database | undefined, dbPath: string, issues: stri
 			version?: number;
 		}>;
 		if (rows.length !== 1 || rows[0]?.version !== RUNTIME_SCHEMA_VERSION) {
-			issues.push(`数据库 Schema 必须为 4，当前为 ${rows[0]?.version ?? 'unknown'}`);
+			issues.push(`数据库 Schema 必须为 5，当前为 ${rows[0]?.version ?? 'unknown'}`);
 		}
 	} catch {
 		issues.push('无法读取数据库 Schema 版本');

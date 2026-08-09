@@ -153,13 +153,13 @@ describe.each(['zh', 'en'] as const)('lifeos init --lang %s', (lang) => {
 		});
 	});
 
-	test('写入 opened 的最终 V2/V4 fresh-install 收据', () => {
+	test('写入 opened 的最终 V2/V5 fresh-install 收据', () => {
 		const receipt = JSON.parse(
 			readFileSync(join(dir, d.system, d.memory, 'runtime-receipt.json'), 'utf-8'),
 		) as Record<string, unknown>;
 		expect(receipt).toMatchObject({
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			kind: 'fresh-install',
 			state: 'opened',
 			runtime_version: VERSION,

@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export interface InitDbResult {
 	createdFresh: boolean;
@@ -66,6 +66,42 @@ ON memory_items(
     enforcement, priority DESC, updated_at DESC
 );`;
 
+export function createMemoryItemEventsTableSql(): string {
+	return `
+CREATE TABLE memory_item_events (
+    event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item_id INTEGER NOT NULL REFERENCES memory_items(item_id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL CHECK (event_type IN (
+        'baseline_snapshot', 'create', 'update', 'archive', 'restore', 'reclassify', 'expire'
+    )),
+    before_json TEXT CHECK (
+        before_json IS NULL OR (json_valid(before_json) AND json_type(before_json) = 'object')
+    ),
+    after_json TEXT CHECK (
+        after_json IS NULL OR (json_valid(after_json) AND json_type(after_json) = 'object')
+    ),
+    reason TEXT CHECK (reason IS NULL OR length(trim(reason)) > 0),
+    actor TEXT NOT NULL CHECK (length(trim(actor)) > 0),
+    occurred_at TEXT NOT NULL CHECK (length(trim(occurred_at)) > 0),
+    contract_version INTEGER NOT NULL CHECK (contract_version = 2),
+    correlation_id TEXT NOT NULL CHECK (length(trim(correlation_id)) > 0),
+    CHECK (
+        (event_type IN ('baseline_snapshot', 'create') AND before_json IS NULL AND after_json IS NOT NULL)
+        OR
+        (event_type IN ('update', 'archive', 'restore', 'reclassify', 'expire')
+            AND before_json IS NOT NULL AND after_json IS NOT NULL)
+    )
+);`;
+}
+
+export const MEMORY_ITEM_EVENTS_V5_INDEX_SQL = `
+CREATE INDEX idx_memory_item_events_history
+ON memory_item_events(item_id, occurred_at, event_id);
+
+CREATE UNIQUE INDEX idx_memory_item_events_baseline
+ON memory_item_events(item_id)
+WHERE event_type = 'baseline_snapshot';`;
+
 const FRESH_SCHEMA_SQL = `
 CREATE TABLE schema_version (version INTEGER NOT NULL);
 
@@ -101,6 +137,7 @@ CREATE TABLE scan_state (
 );
 
 ${createMemoryItemsTableSql('memory_items')}
+${createMemoryItemEventsTableSql()}
 
 CREATE VIRTUAL TABLE vault_fts USING fts5(
     file_path, title, summary, search_hints, tags,
@@ -126,6 +163,7 @@ CREATE INDEX idx_vault_index_type_status ON vault_index(type, status);
 CREATE INDEX idx_vault_index_entity_id ON vault_index(entity_id) WHERE entity_id IS NOT NULL;
 CREATE INDEX idx_scan_state_last_indexed_at ON scan_state(last_indexed_at DESC);
 ${MEMORY_ITEMS_V4_INDEX_SQL}
+${MEMORY_ITEM_EVENTS_V5_INDEX_SQL}
 `;
 
 const REQUIRED_MEMORY_COLUMNS = [
@@ -146,6 +184,19 @@ const REQUIRED_MEMORY_COLUMNS = [
 	'expires_at',
 	'archived_at',
 	'archive_reason',
+] as const;
+
+const REQUIRED_MEMORY_EVENT_COLUMNS = [
+	'event_id',
+	'item_id',
+	'event_type',
+	'before_json',
+	'after_json',
+	'reason',
+	'actor',
+	'occurred_at',
+	'contract_version',
+	'correlation_id',
 ] as const;
 
 const REQUIRED_VAULT_COLUMNS = [
@@ -185,12 +236,13 @@ function assertExactColumns(
 	db: Database.Database,
 	table: string,
 	expected: readonly string[],
+	schemaVersion: 4 | 5,
 ): void {
 	const actual = (db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map(
 		(row) => row.name,
 	);
 	if (actual.length !== expected.length || expected.some((column) => !actual.includes(column))) {
-		throw new InvalidSchemaError(`Schema V4 ${table} 列结构不匹配`);
+		throw new InvalidSchemaError(`Schema V${schemaVersion} ${table} 列结构不匹配`);
 	}
 }
 
@@ -233,6 +285,16 @@ function assertMemoryTableDefinition(db: Database.Database): void {
 	}
 }
 
+function assertMemoryEventTableDefinition(db: Database.Database): void {
+	const row = db
+		.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'memory_item_events'")
+		.get() as { sql?: string } | undefined;
+	const expected = normalizeSchemaSql(createMemoryItemEventsTableSql());
+	if (!row?.sql || normalizeSchemaSql(row.sql) !== expected) {
+		throw new InvalidSchemaError('Schema V5 memory_item_events 约束定义不匹配');
+	}
+}
+
 export function tableExists(db: Database.Database, table: string): boolean {
 	return (
 		db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(table) !==
@@ -260,15 +322,15 @@ function isFreshDatabase(db: Database.Database): boolean {
 
 export function assertSchemaV4(db: Database.Database): void {
 	const version = readSchemaVersion(db);
-	if (version !== SCHEMA_VERSION) throw new MigrationRequiredError(version);
+	if (version !== 4) throw new MigrationRequiredError(version);
 	for (const table of ['vault_index', 'scan_state', 'memory_items', 'vault_fts']) {
 		if (!tableExists(db, table)) throw new InvalidSchemaError(`Schema V4 缺少表：${table}`);
 	}
 
-	assertExactColumns(db, 'memory_items', REQUIRED_MEMORY_COLUMNS);
-	assertExactColumns(db, 'vault_index', REQUIRED_VAULT_COLUMNS);
-	assertExactColumns(db, 'scan_state', REQUIRED_SCAN_STATE_COLUMNS);
-	assertExactColumns(db, 'vault_fts', REQUIRED_FTS_COLUMNS);
+	assertExactColumns(db, 'memory_items', REQUIRED_MEMORY_COLUMNS, 4);
+	assertExactColumns(db, 'vault_index', REQUIRED_VAULT_COLUMNS, 4);
+	assertExactColumns(db, 'scan_state', REQUIRED_SCAN_STATE_COLUMNS, 4);
+	assertExactColumns(db, 'vault_fts', REQUIRED_FTS_COLUMNS, 4);
 	assertMemoryTableDefinition(db);
 	if (!hasCompositeMemoryIdentity(db)) {
 		throw new InvalidSchemaError('Schema V4 缺少 memory_items 复合唯一键');
@@ -285,11 +347,69 @@ export function assertSchemaV4(db: Database.Database): void {
 	}
 }
 
+export function assertSchemaV5(db: Database.Database): void {
+	const version = readSchemaVersion(db);
+	if (version !== SCHEMA_VERSION) throw new MigrationRequiredError(version);
+	for (const table of [
+		'vault_index',
+		'scan_state',
+		'memory_items',
+		'memory_item_events',
+		'vault_fts',
+	]) {
+		if (!tableExists(db, table)) throw new InvalidSchemaError(`Schema V5 缺少表：${table}`);
+	}
+
+	assertExactColumns(db, 'memory_items', REQUIRED_MEMORY_COLUMNS, 5);
+	assertExactColumns(db, 'memory_item_events', REQUIRED_MEMORY_EVENT_COLUMNS, 5);
+	assertExactColumns(db, 'vault_index', REQUIRED_VAULT_COLUMNS, 5);
+	assertExactColumns(db, 'scan_state', REQUIRED_SCAN_STATE_COLUMNS, 5);
+	assertExactColumns(db, 'vault_fts', REQUIRED_FTS_COLUMNS, 5);
+	assertMemoryTableDefinition(db);
+	assertMemoryEventTableDefinition(db);
+	if (!hasCompositeMemoryIdentity(db)) {
+		throw new InvalidSchemaError('Schema V5 缺少 memory_items 复合唯一键');
+	}
+	for (const indexName of [
+		'idx_memory_items_active_scope',
+		'idx_memory_item_events_history',
+		'idx_memory_item_events_baseline',
+	]) {
+		const index = db
+			.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?")
+			.get(indexName);
+		if (!index) throw new InvalidSchemaError(`Schema V5 缺少索引：${indexName}`);
+	}
+	const foreignKeys = db.prepare('PRAGMA foreign_key_list(memory_item_events)').all() as Array<{
+		table: string;
+		from: string;
+		to: string;
+		on_delete: string;
+	}>;
+	if (
+		!foreignKeys.some(
+			(key) =>
+				key.table === 'memory_items' &&
+				key.from === 'item_id' &&
+				key.to === 'item_id' &&
+				key.on_delete === 'CASCADE',
+		)
+	) {
+		throw new InvalidSchemaError('Schema V5 缺少 memory_item_events 外键');
+	}
+	for (const trigger of ['vault_fts_ai', 'vault_fts_ad', 'vault_fts_au']) {
+		const exists = db
+			.prepare("SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = ?")
+			.get(trigger);
+		if (!exists) throw new InvalidSchemaError(`Schema V5 缺少触发器：${trigger}`);
+	}
+}
+
 export function initDb(db: Database.Database): InitDbResult {
 	const version = readSchemaVersion(db);
 	if (version !== null) {
 		if (version !== SCHEMA_VERSION) throw new MigrationRequiredError(version);
-		assertSchemaV4(db);
+		assertSchemaV5(db);
 		return { createdFresh: false };
 	}
 	if (!isFreshDatabase(db)) throw new MigrationRequiredError(null);
@@ -298,6 +418,6 @@ export function initDb(db: Database.Database): InitDbResult {
 		db.prepare('INSERT INTO schema_version(version) VALUES (?)').run(SCHEMA_VERSION);
 	});
 	create.exclusive();
-	assertSchemaV4(db);
+	assertSchemaV5(db);
 	return { createdFresh: true };
 }

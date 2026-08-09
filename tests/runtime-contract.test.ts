@@ -30,7 +30,7 @@ function hash(content: string): string {
 	return createHash('sha256').update(content).digest('hex');
 }
 
-describe('runtime contract 最终 V2/V4 门禁', () => {
+describe('runtime contract 最终 V2/V5 门禁', () => {
 	let vault: ReturnType<typeof createTempVault>;
 	let receiptPath: string;
 
@@ -42,7 +42,7 @@ describe('runtime contract 最终 V2/V4 门禁', () => {
 
 	afterEach(() => vault.cleanup());
 
-	it('接受 V4 DB、opened 收据与全量 managed assets 的完整 runtime', () => {
+	it('接受 V5 DB、opened 收据与全量 managed assets 的完整 runtime', () => {
 		const db = new Database(vault.dbPath, { fileMustExist: true });
 		try {
 			const result = validateRuntimeContract({
@@ -54,7 +54,7 @@ describe('runtime contract 最终 V2/V4 门禁', () => {
 				ok: true,
 				receipt: {
 					contract_version: 2,
-					schema_version: 4,
+					schema_version: 5,
 					kind: 'fresh-install',
 					state: 'opened',
 				},
@@ -92,14 +92,14 @@ describe('runtime contract 最终 V2/V4 门禁', () => {
 		expect(result.issues).toEqual(
 			expect.arrayContaining([
 				'receipt contract_version 不是 2',
-				'receipt schema_version 不是 4',
+				'receipt schema_version 不是 5',
 				'receipt kind 非法',
 				'receipt 尚未 opened',
 			]),
 		);
 	});
 
-	it('数据库不是最终 Schema V4 时拒绝启动，不尝试原地兼容', () => {
+	it('数据库不是最终 Schema V5 时拒绝启动，不尝试原地兼容', () => {
 		const db = new Database(vault.dbPath, { fileMustExist: true });
 		try {
 			db.prepare('UPDATE schema_version SET version = 3').run();
@@ -109,7 +109,7 @@ describe('runtime contract 最终 V2/V4 门禁', () => {
 				verifyManagedAssets: false,
 			});
 			expect(result.ok).toBe(false);
-			expect(result.issues).toContain('数据库 Schema 必须为 4，当前为 3');
+			expect(result.issues).toContain('数据库 Schema 必须为 5，当前为 3');
 			expect(() =>
 				assertRuntimeContract({
 					vaultRoot: vault.root,
@@ -122,7 +122,7 @@ describe('runtime contract 最终 V2/V4 门禁', () => {
 		}
 	});
 
-	it('upgrade 收据必须引用绝对且 opened 的 V2/V4 cutover journal', () => {
+	it('upgrade 收据必须引用绝对且 opened 的 V2/V5 cutover journal', () => {
 		const packageSha256 = runtimePackageSha256();
 		const cutover = createCutover(vault.root, '1.8.3', VERSION, packageSha256);
 		const { journalPath } = cutover;
@@ -130,7 +130,7 @@ describe('runtime contract 最终 V2/V4 门禁', () => {
 		mkdirSync(cutover.journal.backup_path);
 		writeRuntimeReceipt(vault.root, {
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			kind: 'upgrade',
 			state: 'opened',
 			runtime_version: VERSION,
@@ -142,7 +142,7 @@ describe('runtime contract 最终 V2/V4 门禁', () => {
 		const journal = {
 			state: 'verified',
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			package_sha256: packageSha256,
 			cutover_id: cutoverId,
 			vault_root: vault.root,

@@ -42,7 +42,7 @@ export interface CutoverJournal {
 	cutover_id: string;
 	vault_root: string;
 	contract_version: 2;
-	schema_version: 4;
+	schema_version: 5;
 	from_version: string;
 	to_version: string;
 	prepared_at: string;
@@ -147,7 +147,7 @@ export function createCutover(
 		cutover_id: id,
 		vault_root: root,
 		contract_version: 2,
-		schema_version: 4,
+		schema_version: 5,
 		from_version: fromVersion,
 		to_version: toVersion,
 		prepared_at: new Date().toISOString(),
@@ -197,7 +197,7 @@ function standaloneRuntimeReceiptOverride(
 	}
 	if (
 		source.contract_version !== 2 ||
-		source.schema_version !== 4 ||
+		(source.schema_version !== 4 && source.schema_version !== 5) ||
 		(source.kind !== 'fresh-install' && source.kind !== 'upgrade') ||
 		source.state !== 'opened' ||
 		typeof source.runtime_version !== 'string' ||

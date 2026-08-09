@@ -5,7 +5,7 @@ import {
 	InvalidSchemaError,
 	MigrationRequiredError,
 	SCHEMA_VERSION,
-	assertSchemaV4,
+	assertSchemaV5,
 	initDb,
 } from '../../src/db/schema.js';
 import { type TempVault, createTempVault } from '../setup.js';
@@ -18,7 +18,7 @@ function names(db: Database.Database, type: 'table' | 'trigger' | 'index'): stri
 	).map((row) => row.name);
 }
 
-describe('Schema V4', () => {
+describe('Schema V5', () => {
 	let db: Database.Database;
 
 	beforeEach(() => {
@@ -35,6 +35,7 @@ describe('Schema V4', () => {
 				'vault_index',
 				'scan_state',
 				'memory_items',
+				'memory_item_events',
 				'vault_fts',
 			]),
 		);
@@ -50,14 +51,16 @@ describe('Schema V4', () => {
 				'idx_vault_index_entity_id',
 				'idx_scan_state_last_indexed_at',
 				'idx_memory_items_active_scope',
+				'idx_memory_item_events_history',
+				'idx_memory_item_events_baseline',
 			]),
 		);
 		const version = db.prepare('SELECT version FROM schema_version').get() as { version: number };
-		expect(version.version).toBe(4);
+		expect(version.version).toBe(5);
 		expect(version.version).toBe(SCHEMA_VERSION);
 	});
 
-	it('重复初始化 V4 不改写版本行', () => {
+	it('重复初始化 V5 不改写版本行', () => {
 		initDb(db);
 		expect(initDb(db)).toEqual({ createdFresh: false });
 		expect(db.prepare('SELECT version FROM schema_version').all()).toHaveLength(1);
@@ -131,7 +134,7 @@ describe('Schema V4', () => {
 		).toHaveLength(0);
 	});
 
-	it.each([1, 2, 3])('runtime 拒绝隐式迁移 Schema V%d', (version) => {
+	it.each([1, 2, 3, 4])('runtime 拒绝隐式迁移 Schema V%d', (version) => {
 		db.exec('CREATE TABLE schema_version(version INTEGER NOT NULL)');
 		db.prepare('INSERT INTO schema_version(version) VALUES (?)').run(version);
 		expect(() => initDb(db)).toThrow(MigrationRequiredError);
@@ -146,16 +149,16 @@ describe('Schema V4', () => {
 		expect(names(db, 'table')).not.toContain('memory_items');
 	});
 
-	it('拒绝伪装成 V4 但缺少关键列或索引的数据库', () => {
+	it('拒绝伪装成 V5 但缺少关键列或索引的数据库', () => {
 		db.exec(`
 			CREATE TABLE schema_version(version INTEGER NOT NULL);
-			INSERT INTO schema_version(version) VALUES (4);
+			INSERT INTO schema_version(version) VALUES (5);
 			CREATE TABLE vault_index(file_path TEXT PRIMARY KEY);
 			CREATE TABLE scan_state(file_path TEXT PRIMARY KEY);
 			CREATE TABLE memory_items(item_id INTEGER PRIMARY KEY);
 			CREATE TABLE vault_fts(value TEXT);
 		`);
-		expect(() => assertSchemaV4(db)).toThrow(InvalidSchemaError);
+		expect(() => assertSchemaV5(db)).toThrow(InvalidSchemaError);
 		expect(() => initDb(db)).toThrow(InvalidSchemaError);
 	});
 });

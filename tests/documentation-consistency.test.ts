@@ -8,6 +8,7 @@ const FINAL_TOOLS = [
 	'memory_context',
 	'memory_log',
 	'memory_rules',
+	'memory_history',
 	'memory_forget',
 	'memory_notify',
 ] as const;
@@ -45,8 +46,11 @@ describe('公开协议文档门禁', () => {
 		expect(registered).toEqual(FINAL_TOOLS);
 		for (const path of PROTOCOL_DOCS) {
 			const content = read(path);
-			for (const tool of FINAL_TOOLS) expect(content, `${path} 缺少 ${tool}`).toContain(tool);
+			for (const tool of FINAL_TOOLS.filter((name) => name !== 'memory_history')) {
+				expect(content, `${path} 缺少 ${tool}`).toContain(tool);
+			}
 		}
+		expect(read('docs/memory-contract-v2.md')).toContain('memory_history');
 	});
 
 	it('产品文档不再公开旧接口，并保留升级恢复入口', () => {
@@ -71,8 +75,8 @@ describe('公开协议文档门禁', () => {
 		}
 		const contract = read('docs/memory-contract-v2.md');
 		for (const marker of [
-			'Schema V4',
-			'运行时只接受 `Schema V4`',
+			'Schema V5',
+			'运行时只接受 `Schema V5`',
 			'不会迁移旧数据库',
 			'lifeos upgrade',
 			'--accept-scope-map',
@@ -167,11 +171,13 @@ describe('公开协议文档门禁', () => {
 		const cases = [
 			{
 				path: 'assets/skills/archive/SKILL.zh.md',
-				check: /`?notify_failed`?\（记忆索引通知失败）[\s\S]{0,1200}补写通知失败[\s\S]{0,400}memory_notify\(contract_version=2, file_path="<目标路径>"\)[\s\S]{0,600}移动通知失败[\s\S]{0,400}previous_file_path="<源路径>"/,
+				check:
+					/`?notify_failed`?\（记忆索引通知失败）[\s\S]{0,1200}补写通知失败[\s\S]{0,400}memory_notify\(contract_version=2, file_path="<目标路径>"\)[\s\S]{0,600}移动通知失败[\s\S]{0,400}previous_file_path="<源路径>"/,
 			},
 			{
 				path: 'assets/skills/archive/SKILL.en.md',
-				check: /`?notify_failed`? \(memory index notification failure\)[\s\S]{0,1200}metadata-repair notification[\s\S]{0,400}memory_notify\(contract_version=2, file_path="<target-path>"\)[\s\S]{0,600}move notification[\s\S]{0,400}previous_file_path="<source-path>"/i,
+				check:
+					/`?notify_failed`? \(memory index notification failure\)[\s\S]{0,1200}metadata-repair notification[\s\S]{0,400}memory_notify\(contract_version=2, file_path="<target-path>"\)[\s\S]{0,600}move notification[\s\S]{0,400}previous_file_path="<source-path>"/i,
 			},
 		] as const;
 		for (const item of cases) {

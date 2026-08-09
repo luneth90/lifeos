@@ -33,6 +33,7 @@ memory_bootstrap
 | `memory_query` | 深读 Vault 中已索引的文件 |
 | `memory_log` | 写入显式 kind 与 scope 的持久记忆 |
 | `memory_rules` | 按 kind、scope、status 或 slot 审计条目 |
+| `memory_history` | 按 item ID 读取按时间与事件 ID 稳定排序的完整变更历史 |
 | `memory_forget` | 按 item ID 软归档并记录原因 |
 | `memory_notify` | 文件变化后更新索引与精准失效 |
 
@@ -46,7 +47,15 @@ memory_rules(
   status="active",
   limit=100
 )
+
+memory_history(
+  contract_version=2,
+  item_id=42,
+  limit=50
+)
 ```
+
+`memory_history` 的 `item_id` 必须是已存在的正整数，`limit` 范围为 1–100；未知条目会失败。它只读取历史，不提供删除或跨条目扫描。
 
 ## 作用域选择
 
@@ -143,6 +152,12 @@ memory_log(
 - 一次性完成记录属于 event，不允许通过普通 `memory_log` 写入。
 - **禁止为 `plan`/`draft` 类型的临时文件写入 `file` 作用域记忆**，无论 key 是 entity_id 还是文件路径形式；源码层按 `vault_index.type` 强制拦截。阶段性方案与过程决策保留在对应 Markdown 正文或计划文档中。
 - 归档使用 `memory_forget(contract_version=2, item_id=..., reason="...")`，禁止硬删除；批量清理某作用域下全部活跃记忆用 `memory_forget(contract_version=2, scope={type: ..., key: ...}, reason="...")`（`item_id` 与 `scope` 互斥，`global` 作用域禁止批量归档）。
+
+## 变更历史与隐私
+
+正常的创建、更新、归档、恢复、重分类和过期会在同一事务中更新当前投影并追加历史事件；任一步失败都会整体回滚。事件只保存确定性的前后投影、显式原因、稳定 actor 与 correlation ID，不得保存请求原文或提示词。
+
+技能和 MCP 只能软归档，不能硬删除。唯一例外是用户明确执行 CLI `lifeos rules purge`：目标必须已归档，双 item ID 必须一致，并且必须先创建、校验可恢复备份，再在单一事务中删除投影及其事件。MCP 不暴露 purge。
 
 ### 规则捕获判断
 

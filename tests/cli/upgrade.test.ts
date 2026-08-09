@@ -273,7 +273,7 @@ function vaultJournals(vaultRoot: string): string[] {
 	return findJournals(cutoverRoot(vaultRoot)).sort();
 }
 
-describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
+describe('lifeos upgrade：V3 一次性原子切到最终 V2/V5', () => {
 	let fixture: UpgradeFixture;
 	let logSpy: ReturnType<typeof vi.spyOn>;
 
@@ -292,7 +292,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 
 		expect(result.migratedItems).toBe(2);
 		expect(result.skipped).toEqual([]);
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 		const db = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
 		try {
 			const rows = db
@@ -355,7 +355,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		) as Record<string, unknown>;
 		expect(receipt).toMatchObject({
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			kind: 'upgrade',
 			state: 'opened',
 			runtime_version: VERSION,
@@ -368,7 +368,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		>;
 		expect(journal).toMatchObject({
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			state: 'opened',
 			backup_format: 'write-set-v1',
 			package_sha256: receipt.package_sha256,
@@ -381,6 +381,80 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		expect(vaultJournals(fixture.root)).toEqual([result.journalPath]);
 		expect(existsSync((journal.backup_path as string) ?? '')).toBe(true);
 		expect(existsSync(join(fixture.root, '90_系统', '记忆', 'migrations'))).toBe(false);
+	});
+
+	it('真实 V4 runtime 升级为 V5 baseline，且 cutover 备份可恢复 V4 边界', async () => {
+		await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
+		const receiptPath = join(fixture.root, '90_系统', '记忆', 'runtime-receipt.json');
+		const v5Receipt = JSON.parse(readFileSync(receiptPath, 'utf-8')) as Record<string, unknown>;
+		const v4Receipt = {
+			...Object.fromEntries(
+				Object.entries(v5Receipt).filter(([key]) => key !== 'journal_path' && key !== 'cutover_id'),
+			),
+			schema_version: 4,
+			kind: 'fresh-install',
+		};
+		writeFileSync(receiptPath, `${JSON.stringify(v4Receipt, null, 2)}\n`, 'utf-8');
+		const v4 = new Database(fixture.dbPath);
+		try {
+			v4.exec('DROP TABLE memory_item_events; UPDATE schema_version SET version = 4;');
+		} finally {
+			v4.close();
+		}
+
+		const upgraded = await upgrade([fixture.root]);
+		const journal = JSON.parse(readFileSync(upgraded.journalPath, 'utf-8')) as {
+			cutover_id: string;
+			prepared_at: string;
+		};
+		const v5 = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
+		try {
+			expect(dbVersion(fixture.dbPath)).toBe(5);
+			const itemCount = (
+				v5.prepare('SELECT COUNT(*) AS count FROM memory_items').get() as { count: number }
+			).count;
+			const baselines = v5
+				.prepare(`
+					SELECT item_id, COUNT(*) AS count, MIN(actor) AS actor,
+					       MIN(occurred_at) AS occurred_at, MIN(correlation_id) AS correlation_id
+					FROM memory_item_events
+					WHERE event_type = 'baseline_snapshot'
+					GROUP BY item_id ORDER BY item_id
+				`)
+				.all() as Array<Record<string, unknown>>;
+			expect(baselines).toHaveLength(itemCount);
+			expect(baselines).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						count: 1,
+						actor: 'migration:v4-to-v5',
+						occurred_at: journal.prepared_at,
+						correlation_id: `upgrade:${journal.cutover_id}`,
+					}),
+				]),
+			);
+		} finally {
+			v5.close();
+		}
+
+		await upgrade([fixture.root, '--restore', upgraded.journalPath]);
+		expect(dbVersion(fixture.dbPath)).toBe(4);
+		const restored = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
+		try {
+			expect(
+				restored
+					.prepare(
+						"SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'memory_item_events'",
+					)
+					.get(),
+			).toBeUndefined();
+		} finally {
+			restored.close();
+		}
+		expect(JSON.parse(readFileSync(receiptPath, 'utf-8'))).toMatchObject({
+			schema_version: 4,
+			kind: 'fresh-install',
+		});
 	});
 
 	it('重建阶段加载 custom_dict.txt，自定义词以整词进入 search_hints', async () => {
@@ -433,7 +507,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			expect(JSON.parse(readFileSync(journalPath, 'utf-8'))).toMatchObject({
 				state: 'restored',
 				contract_version: 2,
-				schema_version: 4,
+				schema_version: 5,
 			});
 		}
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
@@ -485,7 +559,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 
 			expect(readlinkSync(claudeSkills)).toBe('../.agents/skills');
 			expect(manifest.entries.some((entry) => entry.path === '.claude/skills')).toBe(false);
-			expect(dbVersion(fixture.dbPath)).toBe(4);
+			expect(dbVersion(fixture.dbPath)).toBe(5);
 		},
 	);
 
@@ -509,7 +583,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 			readFileSync(join(journal.backup_path, 'manifest.json'), 'utf-8'),
 		) as { entries: Array<{ path: string }> };
 
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 		expect(readFileSync(gitHead, 'utf-8')).toContain('concurrent');
 		expect(readFileSync(workspace, 'utf-8')).toContain('concurrent');
 		expect(manifest.entries.some((entry) => entry.path.startsWith('.git'))).toBe(false);
@@ -579,7 +653,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
 
 		expect(result.migratedItems).toBe(2);
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 		const generated = JSON.parse(readFileSync(fixture.mapPath, 'utf-8')) as {
 			summary: { total: number; confirmed: number; reviewRequired: number };
 			entries: Array<{ confirmed: boolean; suggestionReason: string; contentPreview: string }>;
@@ -599,7 +673,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		const result = await upgrade([fixture.root]);
 
 		expect(result.migratedItems).toBe(2);
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 		expect(existsSync(dirname(defaultMapPath))).toBe(false);
 	});
 
@@ -997,7 +1071,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		writeFileSync(fixture.mapPath, `${JSON.stringify(generated, null, 2)}\n`, 'utf-8');
 		const result = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
 		expect(result.migratedItems).toBe(3);
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 	});
 
 	it('显式 map 有有效歧义候选时，可在内存接受且不覆盖外部审阅文件', async () => {
@@ -1109,7 +1183,7 @@ describe('lifeos upgrade：V3 一次性原子切到最终 V2/V4', () => {
 		await upgrade([fixture.root]);
 		expect(before.contextFingerprint).toMatch(/^[a-f0-9]{64}$/);
 		expect(existsSync(dirname(defaultMapPath))).toBe(false);
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 	});
 
 	it('人工编辑过的默认 map 在上下文变化后受保护，不被自动覆盖', async () => {
@@ -1205,7 +1279,7 @@ setTimeout(() => {
 		}
 
 		expect(retries).toBeGreaterThan(0);
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 	});
 
 	it('SQLite 在线快照包含尚未 checkpoint 的 WAL 提交', async () => {
@@ -1359,7 +1433,7 @@ setTimeout(() => {
 		expect(JSON.parse(readFileSync(journals[0] ?? '', 'utf-8'))).toMatchObject({
 			state: 'restored',
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 		});
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
@@ -1392,7 +1466,7 @@ setTimeout(() => {
 			expect(JSON.parse(readFileSync(journalPath, 'utf-8'))).toMatchObject({
 				state: 'restored',
 				contract_version: 2,
-				schema_version: 4,
+				schema_version: 5,
 			});
 		}
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
@@ -1419,13 +1493,13 @@ setTimeout(() => {
 		await expect(upgrade([fixture.root, '--restore', uncontrolledJournal])).rejects.toThrow(
 			/受控恢复目录|路径不能经过符号链接/,
 		);
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 		const liveLock = acquireCutoverLock(fixture.root);
 		const lockBefore = readFileSync(cutoverLockPath(fixture.root), 'utf-8');
 		await expect(upgrade([fixture.root, '--restore', result.journalPath])).rejects.toThrow(
 			/仍由活动进程持有/,
 		);
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 		expect(readFileSync(cutoverLockPath(fixture.root), 'utf-8')).toBe(lockBefore);
 		expect(JSON.parse(readFileSync(result.journalPath, 'utf-8'))).toMatchObject({
 			state: 'opened',
@@ -1444,7 +1518,7 @@ setTimeout(() => {
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
-	it('数据库已是 V4 时不再读取旧 scope map，并将重复升级收敛为一个备份', async () => {
+	it('数据库已是 V5 时不再读取旧 scope map，并将重复升级收敛为一个备份', async () => {
 		const first = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
 		const firstJournal = JSON.parse(readFileSync(first.journalPath, 'utf-8')) as Record<
 			string,
@@ -1505,7 +1579,7 @@ setTimeout(() => {
 		expect(result.journalPath).not.toBe(first.journalPath);
 		expect(existsSync(first.journalPath)).toBe(false);
 		expect(vaultJournals(fixture.root)).toEqual([result.journalPath]);
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 		expect(existsSync(dirname(defaultMapPath))).toBe(false);
 		const config = parseYaml(readFileSync(yamlPath, 'utf-8')) as {
 			memory: {
@@ -1569,7 +1643,7 @@ setTimeout(() => {
 
 		expect(restored.journalPath).toBe(second.journalPath);
 		expect(readFileSync(userNote, 'utf-8')).toBe('第二次升级后用户继续编辑\n');
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 		expect(vaultJournals(fixture.root)).toEqual([second.journalPath]);
 		const receipt = JSON.parse(
 			readFileSync(join(fixture.root, '90_系统', '记忆', 'runtime-receipt.json'), 'utf-8'),
@@ -1592,7 +1666,7 @@ setTimeout(() => {
 		expect(existsSync(cutoverLockPath(fixture.root))).toBe(false);
 	});
 
-	it('V4 重跑允许保留当前 catalog 外的 archived project scope', async () => {
+	it('V5 重跑允许保留当前 catalog 外的 archived project scope', async () => {
 		await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
 		const archiveDir = join(fixture.root, '90_系统', '归档', '项目', '2026');
 		mkdirSync(archiveDir, { recursive: true });
@@ -1659,7 +1733,7 @@ setTimeout(() => {
 		);
 	});
 
-	it('V4 重跑失败后恢复原 Vault，并且仍只保留一个可用备份', async () => {
+	it('V5 重跑失败后恢复原 Vault，并且仍只保留一个可用备份', async () => {
 		const first = await upgrade([fixture.root, '--scope-map', fixture.mapPath]);
 		const yamlBefore = readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8');
 		const staleDb = new Database(fixture.dbPath);
@@ -1691,7 +1765,7 @@ setTimeout(() => {
 
 		await expect(upgrade([fixture.root])).rejects.toThrow(/当前项目 catalog 不存在/);
 
-		expect(dbVersion(fixture.dbPath)).toBe(4);
+		expect(dbVersion(fixture.dbPath)).toBe(5);
 		expect(readFileSync(join(fixture.root, 'lifeos.yaml'), 'utf-8')).toBe(yamlBefore);
 		const restoredDb = new Database(fixture.dbPath, { readonly: true, fileMustExist: true });
 		try {
@@ -1848,12 +1922,12 @@ setTimeout(() => {
 		);
 		const db = new Database(fixture.dbPath);
 		try {
-			db.prepare('UPDATE schema_version SET version = 5').run();
+			db.prepare('UPDATE schema_version SET version = 6').run();
 		} finally {
 			db.close();
 		}
 		await expect(upgrade([fixture.root, '--scope-map', fixture.mapPath])).rejects.toThrow(
-			/不支持的数据库 Schema：5/,
+			/不支持的数据库 Schema：6/,
 		);
 	});
 

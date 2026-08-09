@@ -145,6 +145,7 @@ const coreMock = vi.hoisted(() => ({
 		action: 'created',
 	})),
 	memoryRules: vi.fn(() => ({ items: [] })),
+	memoryHistory: vi.fn(() => ({ itemId: 1, events: [] })),
 	memoryForget: vi.fn(() => ({
 		itemId: 1,
 		itemKind: 'rule',
@@ -172,7 +173,7 @@ async function loadServerModule() {
 	return import('../src/server.js');
 }
 
-describe('server 最终 V2/V4 契约', () => {
+describe('server 最终 V2/V5 契约', () => {
 	let vault: TempVault;
 	let testing: Awaited<ReturnType<typeof loadServerTesting>>;
 
@@ -190,7 +191,7 @@ describe('server 最终 V2/V4 契约', () => {
 		vi.useRealTimers();
 	});
 
-	it('memory_bootstrap 是唯一无需 contract_version 的入口，并返回规范 V2/V4 元数据', () => {
+	it('memory_bootstrap 是唯一无需 contract_version 的入口，并返回规范 V2/V5 元数据', () => {
 		const result = testing.callMemoryBootstrap({ vault_root: vault.root });
 
 		expect(coreMock.memoryStartup).toHaveBeenCalledWith({
@@ -199,7 +200,7 @@ describe('server 最终 V2/V4 契约', () => {
 		});
 		expect(result).toMatchObject({
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			status: 'ok',
 			startup_ran: true,
 			layer0_refreshed: false,
@@ -497,6 +498,23 @@ describe('server 最终 V2/V4 契约', () => {
 		});
 	});
 
+	it('memory_history 只转发结构化 item_id 与 limit', () => {
+		const result = testing.callTool('memory_history', {
+			contract_version: 2,
+			vault_root: vault.root,
+			item_id: 1,
+			limit: 25,
+		});
+
+		expect(result).toEqual({ itemId: 1, events: [] });
+		expect(coreMock.memoryHistory).toHaveBeenCalledWith({
+			contractVersion: 2,
+			vaultRoot: vault.root,
+			itemId: 1,
+			limit: 25,
+		});
+	});
+
 	it('memory_context 将作用域参数封装为 request，不保留旧上下文字段', () => {
 		testing.callTool('memory_context', {
 			contract_version: 2,
@@ -670,7 +688,7 @@ describe('server 最终 V2/V4 契约', () => {
 	it('bootstrap 严格结果 schema 精确校验维护状态与可空指标', () => {
 		const output = {
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			status: 'ok',
 			startup_ran: true,
 			layer0_refreshed: false,

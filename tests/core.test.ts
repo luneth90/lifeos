@@ -26,7 +26,7 @@ afterEach(() => {
 	vault.cleanup();
 });
 
-describe('memoryStartup 最终 V2/V4 契约', () => {
+describe('memoryStartup 最终 V2/V5 契约', () => {
 	beforeEach(async () => prepareRuntimeVault(vault));
 
 	it('在完整最终 runtime 上只返回结构化 Layer 0', () => {
@@ -53,18 +53,18 @@ describe('memoryStartup 最终 V2/V4 契约', () => {
 		expect(existsSync(receiptPath)).toBe(true);
 		expect(JSON.parse(readFileSync(receiptPath, 'utf-8'))).toMatchObject({
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			kind: 'fresh-install',
 			state: 'opened',
 		});
 	});
 
-	it('拒绝已存在但为空的数据库，运行时不会把它初始化成新的 V4', () => {
+	it('拒绝已存在但为空的数据库，运行时不会把它初始化成新的 V5', () => {
 		for (const suffix of ['-wal', '-shm']) rmSync(`${vault.dbPath}${suffix}`, { force: true });
 		writeFileSync(vault.dbPath, '');
 
 		expect(() => memoryStartup({ dbPath: vault.dbPath, vaultRoot: vault.root })).toThrow(
-			/未版本化|需要离线迁移|Schema V4|schema_version/,
+			/未版本化|需要离线迁移|Schema V5|schema_version/,
 		);
 		expect(statSync(vault.dbPath).size).toBe(0);
 	});

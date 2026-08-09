@@ -12,10 +12,11 @@ import { refreshUserprofile } from './active-docs/index.js';
 import { VERSION } from './cli/utils/version.js';
 import { type VaultConfig, resolveConfig } from './config.js';
 import { assertNoActiveCutover } from './cutover-lock.js';
-import { assertSchemaV4 } from './db/schema.js';
+import { assertSchemaV5 } from './db/schema.js';
 import { CONTRACT_VERSION, assertRuntimeContract } from './runtime-contract.js';
 import { notifyFileChanged, notifyFilesChanged } from './services/capture.js';
 import { buildMemoryContext } from './services/context-router.js';
+import { type MemoryHistoryResult, getMemoryHistory } from './services/memory-history.js';
 import {
 	MemoryItemValidationError,
 	archiveMemoryItem,
@@ -63,7 +64,7 @@ function assertContractVersion(contractVersion: number): void {
 function openDb(dbPath: string): Database.Database {
 	const db = new Database(dbPath, { fileMustExist: true });
 	try {
-		assertSchemaV4(db);
+		assertSchemaV5(db);
 		db.pragma('journal_mode = WAL');
 		db.pragma('foreign_keys = ON');
 		return db;
@@ -88,7 +89,7 @@ function resolveDbAndVault(dbPath?: string, vaultRoot?: string): ResolvedRuntime
 		throw new Error('dbPath 必须指向 lifeos.yaml 配置的 Vault 内数据库');
 	}
 	if (!existsSync(resolvedDbPath)) {
-		throw new Error(`缺少 LifeOS Schema V4 数据库：${resolvedDbPath}`);
+		throw new Error(`缺少 LifeOS Schema V5 数据库：${resolvedDbPath}`);
 	}
 	const db = openDb(resolvedDbPath);
 
@@ -226,6 +227,8 @@ export function memoryLog(
 			source: opts.source,
 			relatedFiles: opts.relatedFiles,
 			expiresAt: opts.expiresAt,
+			actor: 'mcp:memory_log',
+			correlationId: `mcp:memory_log:${scope.type}:${scope.key}:${opts.slotKey}`,
 		});
 		refreshMemoryAuditView(db, vault, config);
 		return result;
@@ -245,6 +248,20 @@ export function memoryRules(
 	}));
 }
 
+export function memoryHistory(
+	opts: ContractRequest & {
+		dbPath?: string;
+		vaultRoot?: string;
+		itemId: number;
+		limit?: number;
+	},
+): MemoryHistoryResult {
+	assertContractVersion(opts.contractVersion);
+	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db }) =>
+		getMemoryHistory(db, { itemId: opts.itemId, limit: opts.limit }),
+	);
+}
+
 export function memoryForget(
 	opts: ContractRequest & {
 		dbPath?: string;
@@ -262,11 +279,19 @@ export function memoryForget(
 	}
 	return withResolvedDb(opts.dbPath, opts.vaultRoot, ({ db, vault, config }) => {
 		if (hasScope && opts.scope) {
-			const archived = forgetScopeMemoryItems(db, opts.scope, opts.reason);
+			const archived = forgetScopeMemoryItems(db, opts.scope, opts.reason, {
+				actor: 'mcp:memory_forget',
+				correlationId: `mcp:memory_forget:${opts.scope.type}:${opts.scope.key}`,
+			});
 			refreshMemoryAuditView(db, vault, config);
 			return { archived };
 		}
-		const input: ArchiveMemoryItemInput = { itemId: opts.itemId as number, reason: opts.reason };
+		const input: ArchiveMemoryItemInput = {
+			itemId: opts.itemId as number,
+			reason: opts.reason,
+			actor: 'mcp:memory_forget',
+			correlationId: `mcp:memory_forget:item:${String(opts.itemId)}`,
+		};
 		const result = archiveMemoryItem(db, input);
 		refreshMemoryAuditView(db, vault, config);
 		return result;

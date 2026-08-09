@@ -32,8 +32,9 @@ import {
 	type LegacyScopeMapEntry,
 	inspectLegacyMemoryItems,
 	migrateToV4,
+	migrateToV5,
 } from '../../db/migrations.js';
-import { assertSchemaV4 } from '../../db/schema.js';
+import { assertSchemaV5 } from '../../db/schema.js';
 import {
 	RUNTIME_RECEIPT_FILENAME,
 	expectedManagedAssetPaths,
@@ -1061,7 +1062,7 @@ function restoreCutover(vaultRoot: string, journalPath: string): UpgradeResult {
 	if (
 		!isValidCutoverId(journal.cutover_id) ||
 		journal.contract_version !== 2 ||
-		journal.schema_version !== 4 ||
+		journal.schema_version !== 5 ||
 		journal.to_version !== VERSION ||
 		![
 			'preparing',
@@ -1183,7 +1184,7 @@ export default async function upgrade(
 		if (!info) {
 			throw new Error('缺少旧记忆数据库；upgrade 不会创建空库，请对新 Vault 使用 lifeos init');
 		}
-		if (![1, 2, 3, 4].includes(info.version)) {
+		if (![1, 2, 3, 4, 5].includes(info.version)) {
 			throw new Error(`不支持的数据库 Schema：${info.version}`);
 		}
 		validateActiveDocs(targetPath, baseConfig);
@@ -1333,7 +1334,13 @@ export default async function upgrade(
 			});
 			migratedItems = migration.itemCount;
 		}
-		assertSchemaV4(db);
+		if (info.version < 5) {
+			migrateToV5(db, {
+				migratedAt: journal.prepared_at,
+				correlationId: `upgrade:${journal.cutover_id}`,
+			});
+		}
+		assertSchemaV5(db);
 		// Regenerate search_hints for every row with the current indexing
 		// logic. A configured custom dictionary must load before the scan
 		// state is dropped: dropping first and re-scanning with the default
@@ -1377,14 +1384,14 @@ export default async function upgrade(
 		removeMigrationArtifacts(targetPath, finalConfig);
 		const verificationDb = new Database(dbPath, { readonly: true, fileMustExist: true });
 		try {
-			assertSchemaV4(verificationDb);
+			assertSchemaV5(verificationDb);
 		} finally {
 			verificationDb.close();
 		}
 		advanceCutover(journalPath, journal, 'verified');
 		writeRuntimeReceipt(targetPath, {
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			kind: 'upgrade',
 			state: 'opened',
 			runtime_version: VERSION,

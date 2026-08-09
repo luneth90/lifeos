@@ -1,10 +1,11 @@
-/** MCP 七工具的结构化输出模式。 */
+/** MCP 八工具的结构化输出模式。 */
 
 import { z } from 'zod';
 import type { NotifyFileChangedResult } from './services/capture.js';
 import type { VaultQueryResult } from './services/retrieval.js';
 import type {
 	ContextResponse,
+	MemoryItemEvent,
 	MemoryScope,
 	ScopedMemoryItem,
 	UpsertMemoryItemResult,
@@ -152,7 +153,7 @@ const dbMaintenanceReportSchema = z
 const bootstrapSuccessOutputSchema = z
 	.object({
 		contract_version: z.literal(2),
-		schema_version: z.literal(4),
+		schema_version: z.literal(5),
 		status: z.literal('ok'),
 		startup_ran: z.boolean(),
 		layer0_refreshed: z.boolean(),
@@ -167,7 +168,7 @@ const bootstrapSuccessOutputSchema = z
 const bootstrapErrorOutputSchema = z
 	.object({
 		contract_version: z.literal(2),
-		schema_version: z.literal(4),
+		schema_version: z.literal(5),
 		status: z.literal('error'),
 		startup_ran: z.literal(false),
 		layer0_refreshed: z.literal(false),
@@ -293,6 +294,53 @@ export const memoryRulesOutputSchema = z.union([
 	startupErrorOutputSchema,
 ]);
 
+const memoryItemEventSchema: z.ZodType<MemoryItemEvent> = z
+	.object({
+		eventId: z.number().int().positive(),
+		itemId: z.number().int().positive(),
+		eventType: z.enum([
+			'baseline_snapshot',
+			'create',
+			'update',
+			'archive',
+			'restore',
+			'reclassify',
+			'expire',
+		]),
+		before: scopedMemoryItemSchema.nullable(),
+		after: scopedMemoryItemSchema.nullable(),
+		reason: z.string().nullable(),
+		actor: z.string().min(1),
+		occurredAt: z.string().min(1),
+		contractVersion: z.literal(2),
+		correlationId: z.string().min(1),
+	})
+	.strict()
+	.superRefine((event, ctx) => {
+		const startsHistory = event.eventType === 'baseline_snapshot' || event.eventType === 'create';
+		const hasInvalidSnapshots = startsHistory
+			? event.before !== null || event.after === null
+			: event.before === null || event.after === null;
+		if (hasInvalidSnapshots) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: `事件 ${event.eventType} 的 before/after 快照语义不一致`,
+			});
+		}
+	});
+
+const memoryHistorySuccessOutputSchema = z
+	.object({
+		itemId: z.number().int().positive(),
+		events: z.array(memoryItemEventSchema),
+	})
+	.strict();
+
+export const memoryHistoryOutputSchema = z.union([
+	memoryHistorySuccessOutputSchema,
+	startupErrorOutputSchema,
+]);
+
 const archivedCountSchema = z
 	.object({
 		archived: z.number().int().nonnegative(),
@@ -337,6 +385,7 @@ export const toolResultSchemas = {
 	memory_context: memoryContextOutputSchema,
 	memory_log: memoryLogOutputSchema,
 	memory_rules: memoryRulesOutputSchema,
+	memory_history: memoryHistoryOutputSchema,
 	memory_forget: memoryForgetOutputSchema,
 	memory_notify: memoryNotifyOutputSchema,
 } as const;
@@ -348,7 +397,7 @@ export const toolResultSchemas = {
 const memoryBootstrapMcpOutputSchema = z
 	.object({
 		contract_version: z.literal(2),
-		schema_version: z.literal(4),
+		schema_version: z.literal(5),
 		status: z.enum(['ok', 'error']),
 		startup_ran: z.boolean(),
 		layer0_refreshed: z.boolean(),
@@ -393,6 +442,14 @@ const memoryRulesMcpOutputSchema = memoryRulesSuccessOutputSchema
 	})
 	.strict();
 
+const memoryHistoryMcpOutputSchema = memoryHistorySuccessOutputSchema
+	.partial()
+	.extend({
+		status: z.literal('error').optional(),
+		startup_error: z.string().optional(),
+	})
+	.strict();
+
 const memoryForgetMcpOutputSchema = scopedMemoryItemSchema
 	.partial()
 	.extend({
@@ -416,6 +473,7 @@ export const toolOutputSchemas = {
 	memory_context: memoryContextMcpOutputSchema,
 	memory_log: memoryLogMcpOutputSchema,
 	memory_rules: memoryRulesMcpOutputSchema,
+	memory_history: memoryHistoryMcpOutputSchema,
 	memory_forget: memoryForgetMcpOutputSchema,
 	memory_notify: memoryNotifyMcpOutputSchema,
 } as const;

@@ -2,7 +2,7 @@ import { lstatSync } from 'node:fs';
 import { extname, isAbsolute, join, win32 } from 'node:path';
 import type Database from 'better-sqlite3';
 import type { VaultConfig } from '../../config.js';
-import { assertSchemaV4 } from '../../db/schema.js';
+import { assertSchemaV5 } from '../../db/schema.js';
 import { assertVaultPathSafe } from '../../utils/safe-path.js';
 import { deleteScanStateRows } from '../../utils/scan-state.js';
 import { indexFiles, recomputeAllBacklinks } from '../../utils/vault-indexer.js';
@@ -204,7 +204,7 @@ export function reindexAndAssertProjectCatalog(
 	config: VaultConfig,
 	catalog: readonly ScopeMapProject[],
 ): ProjectCatalogIndexResult {
-	assertSchemaV4(db);
+	assertSchemaV5(db);
 	const prepared = prepareCatalog(vaultRoot, config, catalog);
 	const projectPaths = prepared.projectFiles.map((project) => project.filePath);
 	const reindex = db.transaction((): ProjectCatalogIndexResult => {
@@ -240,7 +240,7 @@ export function assertProjectMemoryScopesResolveToCatalog(
 	config: VaultConfig,
 	catalog: readonly ScopeMapProject[],
 ): void {
-	assertSchemaV4(db);
+	assertSchemaV5(db);
 	const prepared = prepareCatalog(vaultRoot, config, catalog);
 	const currentProjects = new Map(
 		prepared.projectFiles.map((project) => [project.id, project.filePath]),

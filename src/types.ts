@@ -204,7 +204,51 @@ export interface ScopedMemoryItem {
 	archiveReason: string | null;
 }
 
-export interface UpsertMemoryItemInput {
+export const MEMORY_ITEM_EVENT_TYPES = [
+	'baseline_snapshot',
+	'create',
+	'update',
+	'archive',
+	'restore',
+	'reclassify',
+	'expire',
+] as const;
+
+export type MemoryItemEventType = (typeof MEMORY_ITEM_EVENT_TYPES)[number];
+
+export interface MemoryItemEventRow {
+	event_id: number;
+	item_id: number;
+	event_type: MemoryItemEventType;
+	before_json: string | null;
+	after_json: string | null;
+	reason: string | null;
+	actor: string;
+	occurred_at: string;
+	contract_version: 2;
+	correlation_id: string;
+}
+
+export interface MemoryItemEvent {
+	eventId: number;
+	itemId: number;
+	eventType: MemoryItemEventType;
+	before: ScopedMemoryItem | null;
+	after: ScopedMemoryItem | null;
+	reason: string | null;
+	actor: string;
+	occurredAt: string;
+	contractVersion: 2;
+	correlationId: string;
+}
+
+export interface MemoryEventMetadata {
+	actor?: string;
+	correlationId?: string;
+	reason?: string;
+}
+
+export interface UpsertMemoryItemInput extends MemoryEventMetadata {
 	slotKey: string;
 	content: string;
 	itemKind: MemoryItemKind;
@@ -214,6 +258,7 @@ export interface UpsertMemoryItemInput {
 	source?: MemorySource;
 	relatedFiles?: string[];
 	expiresAt?: string | null;
+	occurredAt?: string;
 }
 
 export type UpsertMemoryItemResult = ScopedMemoryItem & { action: 'created' | 'updated' };
@@ -228,18 +273,18 @@ export interface ListMemoryItemsInput {
 	limit?: number;
 }
 
-export interface ArchiveMemoryItemInput {
+export interface ArchiveMemoryItemInput extends Omit<MemoryEventMetadata, 'reason'> {
 	itemId: number;
 	reason: string;
 	archivedAt?: string;
 }
 
-export interface RestoreMemoryItemInput {
+export interface RestoreMemoryItemInput extends MemoryEventMetadata {
 	itemId: number;
 	restoredAt?: string;
 }
 
-export interface ReclassifyMemoryItemInput {
+export interface ReclassifyMemoryItemInput extends MemoryEventMetadata {
 	itemId: number;
 	scope?: MemoryScope;
 	itemKind?: MemoryItemKind;

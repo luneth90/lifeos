@@ -53,6 +53,7 @@ const TOOL_NAMES = [
 	'memory_context',
 	'memory_log',
 	'memory_rules',
+	'memory_history',
 	'memory_forget',
 	'memory_notify',
 ] as const;
@@ -162,7 +163,7 @@ function outputFixtures(): Record<(typeof TOOL_NAMES)[number], Record<string, un
 	return {
 		memory_bootstrap: {
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			status: 'ok',
 			startup_ran: true,
 			layer0_refreshed: false,
@@ -222,6 +223,23 @@ function outputFixtures(): Record<(typeof TOOL_NAMES)[number], Record<string, un
 		},
 		memory_log: { ...item, action: 'created' },
 		memory_rules: { items: [item] },
+		memory_history: {
+			itemId: 1,
+			events: [
+				{
+					eventId: 1,
+					itemId: 1,
+					eventType: 'create',
+					before: null,
+					after: item,
+					reason: null,
+					actor: 'mcp:memory_log',
+					occurredAt: '2026-08-09T00:00:00.000Z',
+					contractVersion: 2,
+					correlationId: 'request:create',
+				},
+			],
+		},
 		memory_forget: { archived: 1 },
 		memory_notify: {
 			action: 'indexed',
@@ -243,7 +261,7 @@ function errorOutputFixtures(): Record<(typeof TOOL_NAMES)[number], Record<strin
 	return {
 		memory_bootstrap: {
 			contract_version: 2,
-			schema_version: 4,
+			schema_version: 5,
 			status: 'error',
 			startup_ran: false,
 			layer0_refreshed: false,
@@ -258,6 +276,7 @@ function errorOutputFixtures(): Record<(typeof TOOL_NAMES)[number], Record<strin
 		memory_context: { ...startupError },
 		memory_log: { ...startupError },
 		memory_rules: { ...startupError },
+		memory_history: { ...startupError },
 		memory_forget: { ...startupError },
 		memory_notify: { ...startupError },
 	};
@@ -336,7 +355,7 @@ describe('lifeos bin entry', () => {
 		}
 	});
 
-	it('七个工具均发布 outputSchema，严格 Zod 模式拒绝缺字段、错误类型和额外字段', async () => {
+	it('八个工具均发布 outputSchema，严格 Zod 模式拒绝缺字段、错误类型和额外字段', async () => {
 		const vault = createTempVault();
 
 		try {
@@ -389,7 +408,7 @@ describe('lifeos bin entry', () => {
 		}
 	});
 
-	it('七个工具成功调用均返回与文本 JSON 同值的 structuredContent', async () => {
+	it('八个工具成功调用均返回与文本 JSON 同值的 structuredContent', async () => {
 		const vault = createTempVault();
 
 		try {
@@ -453,6 +472,26 @@ describe('lifeos bin entry', () => {
 				);
 				const loggedItem = logged.structuredContent as { itemId?: number } | undefined;
 				expect(loggedItem?.itemId, JSON.stringify(logged)).toBeTypeOf('number');
+				const history = await client.callTool({
+					name: 'memory_history',
+					arguments: {
+						contract_version: 2,
+						item_id: loggedItem?.itemId,
+						limit: 10,
+					},
+				});
+				results.push(history);
+				expect(history.structuredContent).toMatchObject({
+					itemId: loggedItem?.itemId,
+					events: [
+						expect.objectContaining({
+							eventType: 'create',
+							before: null,
+							actor: 'mcp:memory_log',
+							contractVersion: 2,
+						}),
+					],
+				});
 				results.push(
 					await client.callTool({
 						name: 'memory_forget',
@@ -495,6 +534,41 @@ describe('lifeos bin entry', () => {
 				expect(first?.type).toBe('text');
 				if (first?.type === 'text') expect(first.text).toContain('Input validation error');
 				expect(result.structuredContent).toBeUndefined();
+			});
+		} finally {
+			vault.cleanup();
+		}
+	});
+
+	it('memory_history 对旧契约、越界 limit 与未知 item 返回精确错误', async () => {
+		const vault = createTempVault();
+
+		try {
+			await prepareRuntimeVault(vault);
+			await withMcpClient(vault, async (client) => {
+				for (const arguments_ of [
+					{ contract_version: 1, item_id: 1, limit: 10 },
+					{ contract_version: 2, item_id: 1, limit: 101 },
+				]) {
+					const result = await client.callTool({ name: 'memory_history', arguments: arguments_ });
+					expect(result.isError).toBe(true);
+					expect(result.content[0]).toMatchObject({
+						type: 'text',
+						text: expect.stringContaining('Input validation error'),
+					});
+					expect(result.structuredContent).toBeUndefined();
+				}
+
+				const unknown = await client.callTool({
+					name: 'memory_history',
+					arguments: { contract_version: 2, item_id: 999, limit: 10 },
+				});
+				expect(unknown.isError).toBe(true);
+				expect(unknown.content[0]).toMatchObject({
+					type: 'text',
+					text: expect.stringContaining('未找到 memory item：999'),
+				});
+				expect(unknown.structuredContent).toBeUndefined();
 			});
 		} finally {
 			vault.cleanup();

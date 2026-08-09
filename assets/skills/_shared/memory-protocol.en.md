@@ -33,6 +33,7 @@ When a tool command or skill name differs from its stable tool ID, it may be pas
 | `memory_query` | Read indexed Vault files when source content is needed |
 | `memory_log` | Write durable memory with an explicit kind and scope |
 | `memory_rules` | Audit items by kind, scope, status, or slot |
+| `memory_history` | Read an item's complete change history in stable time and event-ID order |
 | `memory_forget` | Soft-archive an item by ID with a reason |
 | `memory_notify` | Reindex file changes and invalidate affected scopes |
 
@@ -46,7 +47,15 @@ memory_rules(
   status="active",
   limit=100
 )
+
+memory_history(
+  contract_version=2,
+  item_id=42,
+  limit=50
+)
 ```
+
+`memory_history` requires an existing positive `item_id`; `limit` must be 1–100. An unknown item is an error. The tool reads one item's history and provides neither deletion nor cross-item scanning.
 
 ## Choosing a Scope
 
@@ -143,6 +152,12 @@ memory_log(
 - One-off completion records are events and cannot be written through normal `memory_log`.
 - **Writing `file` scope memory for `plan`/`draft` type files is prohibited**, regardless of whether the key is an entity_id or file path. This is enforced at the source level via `vault_index.type`. Interim decisions and work-in-progress schemes must remain in the corresponding Markdown body or plan document.
 - Archive with `memory_forget(contract_version=2, item_id=..., reason="...")`; hard deletion is not available. To batch archive all active memory entries under a scope, use `memory_forget(contract_version=2, scope={type: ..., key: ...}, reason="...")` (`item_id` and `scope` are mutually exclusive; batch archiving `global` scope is prohibited).
+
+## Change History and Privacy
+
+Normal create, update, archive, restore, reclassify, and expiry operations update the current projection and append a history event in the same transaction. Any failure rolls back both sides. Events contain only deterministic before/after projections, an explicit reason, a stable actor, and a correlation ID; request text and prompts must never be stored.
+
+Skills and MCP can only soft-archive and cannot hard-delete. The sole exception is an explicit user invocation of CLI `lifeos rules purge`: the item must already be archived, both item-ID confirmations must match, and a verified recoverable backup must exist before one transaction deletes the projection and its events. Purge is never exposed through MCP.
 
 ### Capture Decision
 

@@ -9,8 +9,10 @@ import type {
 } from '../types.js';
 import {
 	MEMORY_ITEMS_V4_INDEX_SQL,
-	SCHEMA_VERSION,
+	MEMORY_ITEM_EVENTS_V5_INDEX_SQL,
 	assertSchemaV4,
+	assertSchemaV5,
+	createMemoryItemEventsTableSql,
 	createMemoryItemsTableSql,
 	tableExists,
 } from './schema.js';
@@ -39,6 +41,18 @@ export interface MigrationResult {
 	itemCount: number;
 	beforeHash: string;
 	afterHash: string;
+}
+
+export interface MigrateToV5Options {
+	migratedAt: string;
+	correlationId: string;
+}
+
+export interface MigrationV5Result {
+	fromVersion: 4 | 5;
+	toVersion: 5;
+	migrated: boolean;
+	baselineCount: number;
 }
 
 export interface LegacyMemoryInventoryItem {
@@ -394,6 +408,31 @@ function hashFinalTable(db: Database.Database): { count: number; hash: string } 
 	return { count: rows.length, hash: stableHash(projection) };
 }
 
+function memoryItemSnapshot(row: Record<string, unknown>): string {
+	const relatedFiles: unknown = JSON.parse(String(row.related_files));
+	if (!Array.isArray(relatedFiles) || relatedFiles.some((file) => typeof file !== 'string')) {
+		throw new MigrationValidationError('V4 memory_items.related_files 不是合法字符串数组');
+	}
+	return JSON.stringify({
+		itemId: Number(row.item_id),
+		slotKey: String(row.slot_key),
+		content: String(row.content),
+		itemKind: row.item_kind,
+		scope: { type: row.scope_type, key: row.scope_key },
+		priority: Number(row.priority),
+		enforcement: row.enforcement,
+		source: row.source,
+		relatedFiles,
+		manualFlag: Number(row.manual_flag) !== 0,
+		status: row.status,
+		createdAt: row.created_at,
+		updatedAt: row.updated_at,
+		expiresAt: row.expires_at,
+		archivedAt: row.archived_at,
+		archiveReason: row.archive_reason,
+	});
+}
+
 function readVersion(db: Database.Database): number {
 	if (!tableExists(db, 'schema_version')) {
 		throw new MigrationValidationError('旧数据库缺少 schema_version');
@@ -546,7 +585,7 @@ function rebuildVaultSchema(db: Database.Database): void {
 
 export function migrateToV4(db: Database.Database, options: MigrateToV4Options): MigrationResult {
 	const fromVersion = readVersion(db);
-	if (fromVersion === SCHEMA_VERSION) {
+	if (fromVersion === 4) {
 		assertSchemaV4(db);
 		const current = hashFinalTable(db);
 		return {
@@ -619,7 +658,7 @@ export function migrateToV4(db: Database.Database, options: MigrateToV4Options):
 		if (after.count !== legacyItems.length || after.hash !== beforeHash) {
 			throw new MigrationValidationError('迁移后字段哈希校验失败');
 		}
-		db.prepare('UPDATE schema_version SET version = ?').run(SCHEMA_VERSION);
+		db.prepare('UPDATE schema_version SET version = 4').run();
 		assertSchemaV4(db);
 		return {
 			fromVersion,
@@ -629,6 +668,62 @@ export function migrateToV4(db: Database.Database, options: MigrateToV4Options):
 			beforeHash,
 			afterHash: after.hash,
 		};
+	});
+	return migrate.exclusive();
+}
+
+export function migrateToV5(db: Database.Database, options: MigrateToV5Options): MigrationV5Result {
+	const fromVersion = readVersion(db);
+	if (fromVersion === 5) {
+		assertSchemaV5(db);
+		const baselineCount = (
+			db
+				.prepare(
+					"SELECT COUNT(*) AS count FROM memory_item_events WHERE event_type = 'baseline_snapshot'",
+				)
+				.get() as { count: number }
+		).count;
+		return { fromVersion, toVersion: 5, migrated: false, baselineCount };
+	}
+	if (fromVersion !== 4) {
+		throw new MigrationValidationError(`不支持从 Schema V${fromVersion} 迁移到 V5`);
+	}
+	const migratedAt = normalizedTimestamp(options.migratedAt, 'migratedAt');
+	const correlationId = options.correlationId.trim();
+	if (!correlationId) throw new MigrationValidationError('correlationId 不能为空');
+
+	const migrate = db.transaction((): MigrationV5Result => {
+		if (readVersion(db) !== 4) {
+			throw new MigrationValidationError('迁移期间 schema_version 发生变化');
+		}
+		assertSchemaV4(db);
+		db.exec(createMemoryItemEventsTableSql());
+		db.exec(MEMORY_ITEM_EVENTS_V5_INDEX_SQL);
+		const rows = db.prepare('SELECT * FROM memory_items ORDER BY item_id').all() as Array<
+			Record<string, unknown>
+		>;
+		const insert = db.prepare(`
+			INSERT INTO memory_item_events(
+				item_id, event_type, before_json, after_json, reason, actor,
+				occurred_at, contract_version, correlation_id
+			) VALUES (?, 'baseline_snapshot', NULL, ?, NULL, 'migration:v4-to-v5', ?, 2, ?)
+		`);
+		for (const row of rows) {
+			insert.run(Number(row.item_id), memoryItemSnapshot(row), migratedAt, correlationId);
+		}
+		const baselineCount = (
+			db
+				.prepare(
+					"SELECT COUNT(*) AS count FROM memory_item_events WHERE event_type = 'baseline_snapshot'",
+				)
+				.get() as { count: number }
+		).count;
+		if (baselineCount !== rows.length) {
+			throw new MigrationValidationError('V4→V5 baseline 数量与投影数量不一致');
+		}
+		db.prepare('UPDATE schema_version SET version = 5').run();
+		assertSchemaV5(db);
+		return { fromVersion: 4, toVersion: 5, migrated: true, baselineCount };
 	});
 	return migrate.exclusive();
 }

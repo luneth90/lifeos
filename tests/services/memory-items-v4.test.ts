@@ -222,6 +222,139 @@ describe('V4 记忆条目治理', () => {
 		});
 	});
 
+	it.each(['create', 'update', 'archive', 'restore', 'reclassify', 'expire'] as const)(
+		'%s 事件插入失败时不部分改变投影',
+		(eventType) => {
+			let itemId: number | undefined;
+			if (eventType !== 'create') {
+				const created = upsertMemoryItem(db, {
+					slotKey: 'fact:atomicity',
+					content: '原始内容',
+					itemKind: 'fact',
+					scope: { type: 'project', key: 'project-before' },
+					actor: 'test:setup',
+					correlationId: 'setup:create',
+					occurredAt: '2026-08-09T00:00:00.000Z',
+					expiresAt: eventType === 'expire' ? '2026-08-09T00:30:00.000Z' : undefined,
+				});
+				itemId = created.itemId;
+				if (eventType === 'restore') {
+					archiveMemoryItem(db, {
+						itemId,
+						reason: '准备恢复测试',
+						actor: 'test:setup',
+						correlationId: 'setup:archive',
+						archivedAt: '2026-08-09T00:01:00.000Z',
+					});
+				}
+			}
+			const projectionBefore = db.prepare('SELECT * FROM memory_items ORDER BY item_id').all();
+			const eventCountBefore = (
+				db.prepare('SELECT COUNT(*) AS count FROM memory_item_events').get() as { count: number }
+			).count;
+			db.exec(`
+				CREATE TRIGGER reject_${eventType}_event
+				BEFORE INSERT ON memory_item_events
+				WHEN new.event_type = '${eventType}'
+				BEGIN
+					SELECT RAISE(ABORT, '测试注入：${eventType} 事件失败');
+				END;
+			`);
+
+			const mutate = (): unknown => {
+				switch (eventType) {
+					case 'create':
+						return upsertMemoryItem(db, {
+							slotKey: 'fact:atomicity',
+							content: '新内容',
+							itemKind: 'fact',
+							scope: { type: 'project', key: 'project-before' },
+							actor: 'test:atomicity',
+							correlationId: 'atomicity:create',
+							occurredAt: '2026-08-09T01:00:00.000Z',
+						});
+					case 'update':
+						return upsertMemoryItem(db, {
+							slotKey: 'fact:atomicity',
+							content: '更新内容',
+							itemKind: 'fact',
+							scope: { type: 'project', key: 'project-before' },
+							actor: 'test:atomicity',
+							correlationId: 'atomicity:update',
+							occurredAt: '2026-08-09T01:00:00.000Z',
+						});
+					case 'archive':
+						return archiveMemoryItem(db, {
+							itemId: itemId as number,
+							reason: '原子性测试',
+							actor: 'test:atomicity',
+							correlationId: 'atomicity:archive',
+							archivedAt: '2026-08-09T01:00:00.000Z',
+						});
+					case 'restore':
+						return restoreMemoryItem(db, {
+							itemId: itemId as number,
+							reason: '原子性测试',
+							actor: 'test:atomicity',
+							correlationId: 'atomicity:restore',
+							restoredAt: '2026-08-09T01:00:00.000Z',
+						});
+					case 'reclassify':
+						return reclassifyMemoryItem(db, {
+							itemId: itemId as number,
+							scope: { type: 'project', key: 'project-after' },
+							reason: '原子性测试',
+							actor: 'test:atomicity',
+							correlationId: 'atomicity:reclassify',
+							updatedAt: '2026-08-09T01:00:00.000Z',
+						});
+					case 'expire':
+						return expireMemoryItems(db, {
+							now: '2026-08-09T01:00:00.000Z',
+							actor: 'test:atomicity',
+							correlationId: 'atomicity:expire',
+						});
+				}
+			};
+
+			expect(mutate).toThrow(new RegExp(`${eventType} 事件失败`));
+			expect(db.prepare('SELECT * FROM memory_items ORDER BY item_id').all()).toEqual(
+				projectionBefore,
+			);
+			expect(
+				(db.prepare('SELECT COUNT(*) AS count FROM memory_item_events').get() as { count: number })
+					.count,
+			).toBe(eventCountBefore);
+		},
+	);
+
+	it('批量 scope archive 任一事件失败时整批投影与历史回滚', () => {
+		for (const slotKey of ['fact:batch-a', 'fact:batch-b']) {
+			upsertMemoryItem(db, {
+				slotKey,
+				content: slotKey,
+				itemKind: 'fact',
+				scope: { type: 'project', key: 'project-batch' },
+			});
+		}
+		const projections = db.prepare('SELECT * FROM memory_items ORDER BY item_id').all();
+		const events = db.prepare('SELECT * FROM memory_item_events ORDER BY event_id').all();
+		db.exec(`
+			CREATE TRIGGER reject_second_batch_archive
+			BEFORE INSERT ON memory_item_events
+			WHEN new.event_type = 'archive' AND new.item_id = 2
+			BEGIN
+				SELECT RAISE(ABORT, '测试注入：第二条批量归档事件失败');
+			END;
+		`);
+
+		expect(() =>
+			forgetScopeMemoryItems(db, { type: 'project', key: 'project-batch' }, '批量归档'),
+		).toThrow(/第二条批量归档事件失败/);
+		expect(db.prepare('SELECT * FROM memory_items ORDER BY item_id').all()).toEqual(projections);
+		expect(db.prepare('SELECT * FROM memory_item_events ORDER BY event_id').all()).toEqual(events);
+	});
+
 	it('过期操作支持 dryRun，并只更新到期的 active 条目', () => {
 		const expired = upsertMemoryItem(db, {
 			slotKey: 'temporary:past',
@@ -391,12 +524,18 @@ describe('forgetScopeMemoryItems 批量归档', () => {
 			scope: { type: 'project', key: 'project-2' },
 		});
 
-		const archived = forgetScopeMemoryItems(db, { type: 'project', key: 'project-1' }, '项目归档清理');
+		const archived = forgetScopeMemoryItems(
+			db,
+			{ type: 'project', key: 'project-1' },
+			'项目归档清理',
+		);
 		expect(archived).toBe(2);
-		expect(listMemoryItems(db, { scope: { type: 'project', key: 'project-1' }, status: 'active' }))
-			.toHaveLength(0);
-		expect(listMemoryItems(db, { scope: { type: 'project', key: 'project-2' }, status: 'active' }))
-			.toHaveLength(1);
+		expect(
+			listMemoryItems(db, { scope: { type: 'project', key: 'project-1' }, status: 'active' }),
+		).toHaveLength(0);
+		expect(
+			listMemoryItems(db, { scope: { type: 'project', key: 'project-2' }, status: 'active' }),
+		).toHaveLength(1);
 	});
 
 	it('归档后 archived_at 和 archive_reason 字段正确写入', () => {
@@ -448,7 +587,11 @@ describe('forgetScopeMemoryItems 批量归档', () => {
 			scope: { type: 'project', key: 'project-1' },
 		});
 
-		const archived = forgetScopeMemoryItems(db, { type: 'project', key: 'project-1' }, '项目归档清理');
+		const archived = forgetScopeMemoryItems(
+			db,
+			{ type: 'project', key: 'project-1' },
+			'项目归档清理',
+		);
 		expect(archived).toBe(1);
 		const expiredItem = getMemoryItemById(db, expired.itemId);
 		expect(expiredItem?.status).toBe('expired');

@@ -3,6 +3,8 @@ import type {
 	ArchiveMemoryItemInput,
 	ExpireMemoryItemsResult,
 	ListMemoryItemsInput,
+	MemoryEventMetadata,
+	MemoryItemEventType,
 	MemoryItemRow,
 	MemoryScope,
 	ReclassifyMemoryItemInput,
@@ -132,6 +134,67 @@ function rowToItem(row: MemoryItemRow): ScopedMemoryItem {
 	};
 }
 
+interface EventContext {
+	actor: string;
+	correlationId: string;
+	reason: string | null;
+}
+
+function eventContext(
+	metadata: MemoryEventMetadata,
+	eventType: MemoryItemEventType,
+	itemId: number,
+	occurredAt: string,
+): EventContext {
+	const actor = metadata.actor?.trim() || 'service:memory-items';
+	const correlationId =
+		metadata.correlationId?.trim() || `${actor}:${eventType}:${itemId}:${occurredAt}`;
+	const reason = metadata.reason === undefined ? null : metadata.reason.trim();
+	if (metadata.actor !== undefined && !metadata.actor.trim()) {
+		throw new MemoryItemValidationError('actor 不能为空');
+	}
+	if (metadata.correlationId !== undefined && !metadata.correlationId.trim()) {
+		throw new MemoryItemValidationError('correlationId 不能为空');
+	}
+	if (metadata.reason !== undefined && !reason) {
+		throw new MemoryItemValidationError('事件原因不能为空');
+	}
+	return { actor, correlationId, reason };
+}
+
+function appendMemoryItemEvent(
+	db: Database.Database,
+	input: {
+		eventType: Exclude<MemoryItemEventType, 'baseline_snapshot'>;
+		before: ScopedMemoryItem | null;
+		after: ScopedMemoryItem;
+		occurredAt: string;
+		metadata: MemoryEventMetadata;
+	},
+): void {
+	const context = eventContext(
+		input.metadata,
+		input.eventType,
+		input.after.itemId,
+		input.occurredAt,
+	);
+	db.prepare(`
+		INSERT INTO memory_item_events(
+			item_id, event_type, before_json, after_json, reason, actor,
+			occurred_at, contract_version, correlation_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, 2, ?)
+	`).run(
+		input.after.itemId,
+		input.eventType,
+		input.before === null ? null : JSON.stringify(input.before),
+		JSON.stringify(input.after),
+		context.reason,
+		context.actor,
+		input.occurredAt,
+		context.correlationId,
+	);
+}
+
 function selectById(db: Database.Database, itemId: number): MemoryItemRow | undefined {
 	return db.prepare(`SELECT ${MEMORY_COLUMNS} FROM memory_items WHERE item_id = ?`).get(itemId) as
 		| MemoryItemRow
@@ -183,7 +246,7 @@ export function upsertMemoryItem(
 		input.expiresAt === null || input.expiresAt === undefined
 			? null
 			: normalizeTimestamp(input.expiresAt, 'expiresAt');
-	const now = new Date().toISOString();
+	const now = normalizeTimestamp(input.occurredAt ?? new Date().toISOString(), 'occurredAt');
 	const writesGlobalHard =
 		input.scope.type === 'global' &&
 		input.itemKind === 'rule' &&
@@ -213,6 +276,7 @@ export function upsertMemoryItem(
 			if (existing.item_kind !== input.itemKind) {
 				throw new MemoryItemConflictError('itemKind 变更必须使用 reclassifyMemoryItem');
 			}
+			const before = rowToItem(existing);
 			const finalSource =
 				existing.source === 'correction' && source === 'preference' ? 'correction' : source;
 			db.prepare(`
@@ -232,6 +296,13 @@ export function upsertMemoryItem(
 			);
 			const item = rowToItem(requireById(db, existing.item_id));
 			if (writesGlobalHard) assertGlobalHardSafety(db, { now, operation: 'write' });
+			appendMemoryItemEvent(db, {
+				eventType: 'update',
+				before,
+				after: item,
+				occurredAt: now,
+				metadata: input,
+			});
 			return { ...item, action: 'updated' };
 		}
 		const result = db
@@ -259,6 +330,13 @@ export function upsertMemoryItem(
 		const itemId = Number(result.lastInsertRowid);
 		const item = rowToItem(requireById(db, itemId));
 		if (writesGlobalHard) assertGlobalHardSafety(db, { now, operation: 'write' });
+		appendMemoryItemEvent(db, {
+			eventType: 'create',
+			before: null,
+			after: item,
+			occurredAt: now,
+			metadata: input,
+		});
 		return { ...item, action: 'created' };
 	});
 	return write.immediate();
@@ -340,6 +418,7 @@ export function archiveMemoryItem(
 	const archivedAt = normalizeTimestamp(input.archivedAt ?? new Date().toISOString(), 'archivedAt');
 	const archive = db.transaction(() => {
 		const existing = requireById(db, input.itemId);
+		const before = rowToItem(existing);
 		if (existing.status === 'archived') {
 			throw new MemoryItemConflictError(`memory item ${input.itemId} 已归档`);
 		}
@@ -347,7 +426,15 @@ export function archiveMemoryItem(
 			UPDATE memory_items SET status = 'archived', archived_at = ?,
 			archive_reason = ?, updated_at = ? WHERE item_id = ?
 		`).run(archivedAt, input.reason.trim(), archivedAt, input.itemId);
-		return rowToItem(requireById(db, input.itemId));
+		const item = rowToItem(requireById(db, input.itemId));
+		appendMemoryItemEvent(db, {
+			eventType: 'archive',
+			before,
+			after: item,
+			occurredAt: archivedAt,
+			metadata: { ...input, reason: input.reason },
+		});
+		return item;
 	});
 	return archive.immediate();
 }
@@ -356,6 +443,7 @@ export function forgetScopeMemoryItems(
 	db: Database.Database,
 	scope: MemoryScope,
 	reason: string,
+	metadata: Omit<MemoryEventMetadata, 'reason'> = {},
 ): number {
 	validateScope(scope);
 	if (scope.type === 'global') {
@@ -363,14 +451,38 @@ export function forgetScopeMemoryItems(
 		throw new MemoryItemValidationError('禁止批量归档 global scope，请改用逐条 item_id 归档');
 	}
 	if (!reason.trim()) throw new MemoryItemValidationError('归档原因不能为空');
-	// 仅清理 active 条目；expired 已是终态、不出现在 active 上下文，保留不动（预期语义）
-	const stmt = db.prepare(`
-		UPDATE memory_items
-		SET status = 'archived', archived_at = ?, archive_reason = ?, updated_at = ?
-		WHERE scope_type = ? AND scope_key = ? AND status = 'active'
-	`);
 	const now = new Date().toISOString();
-	return stmt.run(now, reason.trim(), now, scope.type, scope.key).changes;
+	const archive = db.transaction(() => {
+		const rows = db
+			.prepare(`
+				SELECT ${MEMORY_COLUMNS} FROM memory_items
+				WHERE scope_type = ? AND scope_key = ? AND status = 'active'
+				ORDER BY item_id
+			`)
+			.all(scope.type, scope.key) as MemoryItemRow[];
+		const update = db.prepare(`
+			UPDATE memory_items
+			SET status = 'archived', archived_at = ?, archive_reason = ?, updated_at = ?
+			WHERE item_id = ?
+		`);
+		const correlationId =
+			metadata.correlationId ??
+			`${metadata.actor ?? 'service:memory-items'}:archive-scope:${scope.type}:${scope.key}:${now}`;
+		for (const row of rows) {
+			const before = rowToItem(row);
+			update.run(now, reason.trim(), now, row.item_id);
+			const after = rowToItem(requireById(db, row.item_id));
+			appendMemoryItemEvent(db, {
+				eventType: 'archive',
+				before,
+				after,
+				occurredAt: now,
+				metadata: { ...metadata, correlationId, reason },
+			});
+		}
+		return rows.length;
+	});
+	return archive.immediate();
 }
 
 export function restoreMemoryItem(
@@ -380,6 +492,7 @@ export function restoreMemoryItem(
 	const restoredAt = normalizeTimestamp(input.restoredAt ?? new Date().toISOString(), 'restoredAt');
 	const restore = db.transaction(() => {
 		const existing = requireById(db, input.itemId);
+		const before = rowToItem(existing);
 		if (existing.status !== 'archived') {
 			throw new MemoryItemConflictError(`memory item ${input.itemId} 未归档`);
 		}
@@ -403,6 +516,13 @@ export function restoreMemoryItem(
 		) {
 			assertGlobalHardSafety(db, { now: restoredAt, operation: 'write' });
 		}
+		appendMemoryItemEvent(db, {
+			eventType: 'restore',
+			before,
+			after: item,
+			occurredAt: restoredAt,
+			metadata: input,
+		});
 		return item;
 	});
 	return restore.immediate();
@@ -415,6 +535,7 @@ export function reclassifyMemoryItem(
 	const updatedAt = normalizeTimestamp(input.updatedAt ?? new Date().toISOString(), 'updatedAt');
 	const reclassify = db.transaction(() => {
 		const existing = requireById(db, input.itemId);
+		const before = rowToItem(existing);
 		const scope = input.scope ?? { type: existing.scope_type, key: existing.scope_key };
 		const slotKey = input.slotKey ?? existing.slot_key;
 		const itemKind = input.itemKind ?? existing.item_kind;
@@ -447,6 +568,13 @@ export function reclassifyMemoryItem(
 		) {
 			assertGlobalHardSafety(db, { now: updatedAt, operation: 'write' });
 		}
+		appendMemoryItemEvent(db, {
+			eventType: 'reclassify',
+			before,
+			after: item,
+			occurredAt: updatedAt,
+			metadata: input,
+		});
 		return item;
 	});
 	return reclassify.immediate();
@@ -454,22 +582,38 @@ export function reclassifyMemoryItem(
 
 export function expireMemoryItems(
 	db: Database.Database,
-	options: { now?: string; dryRun?: boolean } = {},
+	options: { now?: string; dryRun?: boolean; actor?: string; correlationId?: string } = {},
 ): ExpireMemoryItemsResult {
 	const now = normalizeTimestamp(options.now ?? new Date().toISOString(), 'now');
-	const count = (
-		db
-			.prepare(`
-				SELECT COUNT(*) AS count FROM memory_items
-				WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < ?
-			`)
-			.get(now) as { count: number }
-	).count;
-	if (!options.dryRun && count > 0) {
-		db.prepare(`
-			UPDATE memory_items SET status = 'expired', updated_at = ?
+	const rows = db
+		.prepare(`
+			SELECT ${MEMORY_COLUMNS} FROM memory_items
 			WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at < ?
-		`).run(now, now);
+			ORDER BY item_id
+		`)
+		.all(now) as MemoryItemRow[];
+	if (options.dryRun || rows.length === 0) {
+		return { expired: rows.length, dryRun: options.dryRun === true };
 	}
-	return { expired: count, dryRun: options.dryRun === true };
+	const expire = db.transaction(() => {
+		const update = db.prepare(
+			"UPDATE memory_items SET status = 'expired', updated_at = ? WHERE item_id = ?",
+		);
+		const correlationId =
+			options.correlationId ?? `${options.actor ?? 'service:memory-items'}:expire-batch:${now}`;
+		for (const row of rows) {
+			const before = rowToItem(row);
+			update.run(now, row.item_id);
+			const after = rowToItem(requireById(db, row.item_id));
+			appendMemoryItemEvent(db, {
+				eventType: 'expire',
+				before,
+				after,
+				occurredAt: now,
+				metadata: { actor: options.actor, correlationId },
+			});
+		}
+	});
+	expire.immediate();
+	return { expired: rows.length, dryRun: false };
 }

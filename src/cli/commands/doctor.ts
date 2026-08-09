@@ -345,11 +345,11 @@ function checkDbHealth(
 		const versions = db.prepare('SELECT version FROM schema_version').all() as Array<{
 			version: number;
 		}>;
-		if (versions.length !== 1 || versions[0]?.version !== 4) {
-			check('database schema', 'fail', `expected 4, found ${versions[0]?.version ?? 'unknown'}`);
+		if (versions.length !== 1 || versions[0]?.version !== 5) {
+			check('database schema', 'fail', `expected 5, found ${versions[0]?.version ?? 'unknown'}`);
 			return;
 		}
-		check('database schema', 'pass', 'v4');
+		check('database schema', 'pass', 'v5');
 
 		// Integrity check
 		try {
@@ -393,16 +393,34 @@ function checkDbHealth(
 			const ftsCount = (db.prepare('SELECT COUNT(*) as n FROM vault_fts').get() as { n: number }).n;
 			const miCount = (db.prepare('SELECT COUNT(*) as n FROM memory_items').get() as { n: number })
 				.n;
+			const eventCount = (
+				db.prepare('SELECT COUNT(*) as n FROM memory_item_events').get() as { n: number }
+			).n;
+			const itemsWithoutHistory = (
+				db
+					.prepare(`
+						SELECT COUNT(*) AS count FROM memory_items m
+						WHERE NOT EXISTS (
+							SELECT 1 FROM memory_item_events e WHERE e.item_id = m.item_id
+						)
+					`)
+					.get() as { count: number }
+			).count;
 
 			const ftsOk = viCount === ftsCount;
 			check(
-				`database rows: vault=${viCount} fts=${ftsCount} memory=${miCount}`,
+				`database rows: vault=${viCount} fts=${ftsCount} memory=${miCount} events=${eventCount}`,
 				ftsOk ? 'pass' : 'warn',
 				ftsOk
 					? undefined
 					: 'vault_index and vault_fts row counts differ — FTS index may be out of sync',
 			);
 			check('database memory_items size', miCount > 1000 ? 'warn' : 'pass', `${miCount} rows`);
+			check(
+				'memory history coverage',
+				itemsWithoutHistory === 0 ? 'pass' : 'fail',
+				`${itemsWithoutHistory} item without history`,
+			);
 		} catch {
 			check('database rows', 'fail', 'query failed');
 		}

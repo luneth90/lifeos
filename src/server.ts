@@ -628,6 +628,7 @@ const server = new McpServer({ name: 'lifeos', version: VERSION });
 // server.tool('memory_context')
 // server.tool('memory_log')
 // server.tool('memory_rules')
+// server.tool('memory_history')
 // server.tool('memory_forget')
 // server.tool('memory_notify')
 
@@ -740,6 +741,22 @@ server.registerTool(
 );
 
 server.registerTool(
+	'memory_history',
+	{
+		description: '按稳定时间顺序读取单条记忆的完整变更历史。',
+		inputSchema: {
+			contract_version: contractVersionSchema,
+			db_path: z.string().default(''),
+			vault_root: z.string().default(''),
+			item_id: z.number().int().positive(),
+			limit: z.number().int().min(1).max(100).default(50),
+		},
+		outputSchema: toolOutputSchemas.memory_history,
+	},
+	handleTool(core.memoryHistory, toolResultSchemas.memory_history),
+);
+
+server.registerTool(
 	'memory_forget',
 	{
 		description:
@@ -801,6 +818,7 @@ export const __testing = {
 			| 'memory_context'
 			| 'memory_log'
 			| 'memory_rules'
+			| 'memory_history'
 			| 'memory_forget'
 			| 'memory_notify',
 		params: Record<string, unknown>,
@@ -830,6 +848,8 @@ export const __testing = {
 						filters: filters as Parameters<typeof core.memoryRules>[0]['filters'],
 					});
 				}, params);
+			case 'memory_history':
+				return runTool(core.memoryHistory, params);
 			case 'memory_forget':
 				return runTool(core.memoryForget, params, { afterSuccess: invalidateFromArchivedItem });
 			case 'memory_notify':

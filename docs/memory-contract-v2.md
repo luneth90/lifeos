@@ -1,19 +1,19 @@
 # LifeOS 记忆协议 V2
 
-本文是 LifeOS 当前唯一有效的记忆协议说明。运行时契约版本为 `contract_version=2`，数据库结构为 `Schema V4`。旧事件接口、会话日志接口和双结构兼容路径均已删除。
+本文是 LifeOS 当前唯一有效的记忆协议说明。运行时契约版本为 `contract_version=2`，数据库结构为 `Schema V5`。旧会话日志接口和双结构兼容路径均已删除；变更历史由当前投影的追加式事件日志提供。
 
 ## 不变量
 
-- MCP 固定暴露 7 个工具：`memory_bootstrap`、`memory_query`、`memory_context`、`memory_log`、`memory_rules`、`memory_forget`、`memory_notify`。
+- MCP 固定暴露 8 个工具：`memory_bootstrap`、`memory_query`、`memory_context`、`memory_log`、`memory_rules`、`memory_history`、`memory_forget`、`memory_notify`。隐私清除命令不通过 MCP 暴露。
 - `memory_bootstrap` 是唯一不接收 `contract_version` 的工具，也是唯一返回 `_layer0` 的工具。
-- 其余 6 个工具必须显式传入 `contract_version=2`。版本不匹配时，运行时在打开 Vault、数据库或执行启动逻辑前拒绝请求。
-- 运行时只接受 `Schema V4`，不会迁移旧数据库。`Schema V1`、`Schema V2`、`Schema V3` 只能通过离线 `lifeos upgrade` 升级到 `Schema V4`。
+- 其余 7 个工具必须显式传入 `contract_version=2`。版本不匹配时，运行时在打开 Vault、数据库或执行启动逻辑前拒绝请求。
+- 运行时只接受 `Schema V5`，不会迁移旧数据库。`Schema V1` 至 `Schema V4` 只能通过离线 `lifeos upgrade` 升级到 `Schema V5`。
 - Layer 0 只包含全局上下文，不包含 `skill`、`project`、`repository`、`tool` 或 `file` 作用域记忆。
 - 局部上下文必须在任务路由完成后，通过 `memory_context` 和显式 `scopes` 获取。
 
 ## MCP 结果格式
 
-七个工具都声明了 `outputSchema`。成功调用优先从 `structuredContent` 读取机器可解析结果；`content[0].text` 继续提供 JSON 文本兼容层，供尚未读取结构化结果的客户端使用。服务端从同一份 JSON 序列化值生成两条路径，因此始终满足：
+八个工具都声明了严格的 `outputSchema`。成功调用优先从 `structuredContent` 读取机器可解析结果；`content[0].text` 继续提供 JSON 文本兼容层，供尚未读取结构化结果的客户端使用。服务端从同一份 JSON 序列化值生成两条路径，因此始终满足：
 
 ```text
 structuredContent == JSON.parse(content[0].text)
@@ -21,7 +21,7 @@ structuredContent == JSON.parse(content[0].text)
 
 工具自身捕获的启动错误仍保持既有 `{ "status": "error", "startup_error": "..." }` 结果语义，并同时出现在结构化与文本路径中。MCP SDK 在输入模式校验失败或 handler 抛出异常时仍返回 `isError=true` 的协议错误；该路径保留 SDK 的纯文本错误格式，不伪装成工具成功结果，也不受工具 `outputSchema` 校验。
 
-## 七个 MCP 工具
+## 八个 MCP 工具
 
 | 工具 | 作用 | 必要约束 |
 | --- | --- | --- |
@@ -30,6 +30,7 @@ structuredContent == JSON.parse(content[0].text)
 | `memory_context` | 按显式 scope 读取局部规则、决策、事实、画像和关联文件 | 必须传 `contract_version=2` 与 `scopes` |
 | `memory_log` | 新建或更新规则、决策、事实、画像 | 必须传 `contract_version=2`、`slot_key`、`content`、`item_kind`、`scope` |
 | `memory_rules` | 按类型、scope、状态或 slot 审计记忆条目 | 必须传 `contract_version=2` |
+| `memory_history` | 按条目 ID 读取完整变更历史 | 必须传 `contract_version=2`、正整数 `item_id`；`limit` 默认为 50，范围为 1–100 |
 | `memory_forget` | 按 `item_id` 软归档条目 | 必须传 `contract_version=2` 与非空 `reason` |
 | `memory_notify` | 通知单个 Vault 文件已创建、修改、移动或删除 | 必须传 `contract_version=2` 与 Vault 内相对路径 |
 
@@ -45,6 +46,8 @@ memory_context(contract_version=2, scopes=[{"type":"project","key":"project-alge
 memory_log(contract_version=2, slot_key="format:proof", content="证明先列出假设与目标", item_kind="rule", scope={"type":"project","key":"project-algebra"}, priority=80, enforcement="soft", source="preference")
 
 memory_rules(contract_version=2, item_kind="rule", scope={"type":"global","key":""}, status="active", limit=100)
+
+memory_history(contract_version=2, item_id=42, limit=50)
 
 memory_forget(contract_version=2, item_id=42, reason="规则已被新约定替代")
 
@@ -106,6 +109,14 @@ FTS 与 LIKE 候选合并时，有真实 BM25 的 FTS 候选排在 `rankScore=nu
 
 `memory_log` 不接受 `item_kind="event"`。历史事件只能在离线升级时归档，或由治理命令把已归档条目重分类为 `event`；它不能恢复为有效记忆。
 
+## 变更历史与隐私
+
+`memory_items` 是当前状态投影；`memory_item_events` 是该投影的追加式变更日志。正常路径中的 `create`、`update`、`archive`、`restore`、`reclassify` 和 `expire` 都在同一数据库事务内先后更新投影并追加事件：任一步失败，投影和事件一起回滚，不会留下半次变更。除下述显式隐私清除外，事件不可更新或删除。
+
+事件按 `occurred_at ASC, event_id ASC` 返回，时间相同也有稳定顺序。每条事件包含 `event_id`、`item_id`、`event_type`、`before`、`after`、`reason`、`actor`、`occurred_at`、`contract_version` 和 `correlation_id`。`baseline_snapshot` 与 `create` 的 `before` 固定为 `null`，其余事件同时保留前后投影。`actor` 与 `correlation_id` 只记录稳定调用来源和关联标识；请求原文、提示词和未显式传入的理由不得写入事件。
+
+`memory_history` 只接受存在的正整数 `item_id`，未知条目会失败，不会返回空结果来掩盖错误。它不接受任意过滤或跨条目扫描，也不提供删除能力。
+
 ## 记忆条目模型
 
 每个条目都必须显式声明：
@@ -159,7 +170,7 @@ memory:
 
 ## 数据库与离线升级
 
-运行时只打开 `Schema V4`。发现未版本化非空数据库或 `Schema V1`、`Schema V2`、`Schema V3` 时，会要求先执行升级，不会在 MCP 请求期间修改结构。
+运行时只打开 `Schema V5`。发现未版本化非空数据库或 `Schema V1` 至 `Schema V4` 时，会要求先执行升级，不会在 MCP 请求期间修改结构。
 
 ```bash
 npm update -g lifeos
@@ -211,7 +222,9 @@ memory:
 
 对有效但有歧义的建议，审阅后可执行 `lifeos upgrade ./my-vault --accept-scope-map`；该开关不会接受 `file:__REVIEW_REQUIRED__` 占位符，未知条目仍必须人工填写真实 scope。`--scope-map <file>` 仅用于覆盖默认审阅文件位置。
 
-升级过程先以纯读方式形成计划；只有真正的歧义草案允许作为独立 preflight 诊断文件创建。高置信路径会取得外部写闸、重新盘点上下文、创建 Vault 外部备份和 cutover journal，进入 `prepared` 后才依次写项目 ID、最终配置、默认 scope map 与托管资产，随后迁移数据库、强制重索引全部正式项目、验证 `Schema V4`，最后写入运行时 receipt。任一步失败都会尝试恢复备份；自动恢复失败时写闸保持关闭，可执行 `lifeos upgrade ./my-vault --restore <journal>` 显式恢复。恢复会识别 staging/previous 残留并续接目录切换。数据库已是 V4 时不会再次消费旧 scope map 或重新自动发现 binding。`--override` 已删除，不能作为兼容入口使用。
+升级过程先以纯读方式形成计划；只有真正的歧义草案允许作为独立 preflight 诊断文件创建。高置信路径会取得外部写闸、重新盘点上下文、创建 Vault 外部备份和 cutover journal，进入 `prepared` 后才依次写项目 ID、最终配置、默认 scope map 与托管资产，随后按 `V1–V3 → V4 → V5` 或 `V4 → V5` 迁移数据库、强制重索引全部正式项目、验证 `Schema V5`，最后写入运行时 receipt。任一步失败都会尝试恢复备份；自动恢复失败时写闸保持关闭，可执行 `lifeos upgrade ./my-vault --restore <journal>` 显式恢复。恢复会识别 staging/previous 残留并续接目录切换。源运行时 receipt 只接受 Schema 4 或 5，目标 journal 固定为 Schema 5；恢复历史 V4 备份时会原样恢复 Schema V4 数据库与 receipt。数据库已是 V5 时不会再次消费旧 scope map、重新自动发现 binding 或重复写 baseline。`--override` 已删除，不能作为兼容入口使用。
+
+V4 升级到 V5 时，升级器在同一个排他事务内建立事件表，并为当时的每个投影写入恰好一个 `baseline_snapshot`。快照 JSON 的键顺序固定，时间使用升级 journal 的迁移时间，重复执行迁移不会生成重复 baseline。该 baseline 只陈述升级时可证明的当前状态，不伪造升级前的历史。事件写入、结构验证或版本更新任一步失败都会回滚到完整 V4。
 
 ## CLI 治理
 
@@ -222,12 +235,15 @@ lifeos rules export ./my-vault --output ./memory-export.json
 lifeos rules classify ./my-vault --id 42 --scope-type project --scope-key project-algebra --kind decision
 lifeos rules archive ./my-vault --id 42 --reason "已被新决策替代"
 lifeos rules restore ./my-vault --id 42
+lifeos rules purge ./my-vault --item-id 42 --confirm-item-id 42 --reason "用户要求清除该条隐私记忆"
 ```
 
 - `list`、`audit`、`export` 是只读操作。
 - `classify` 是显式治理入口，可修改 scope、`item_kind` 或 `slot_key`。
 - `archive` 必须记录原因；`restore` 只恢复可恢复的非事件条目。
 - `audit` 用于发现孤立的项目、文件和仓库 scope。
+- `purge` 是唯一的显式隐私删除例外，不属于 MCP 工具。它只接受已归档条目，要求 `--item-id` 与 `--confirm-item-id` 完全一致且理由非空；旧 `--id` 参数会被拒绝。
+- `purge` 先创建并校验可独立打开的 SQLite 备份，再开启删除事务，同时删除该条投影和全部关联事件。备份失败、备份校验失败、状态或事件数在备份后变化、删除失败都会安全失败，不产生部分删除。成功结果返回备份路径，恢复时以该备份为证据源；删除后的数据库不会再追加一条泄露被删除内容的 purge 事件。
 
 ## 知识掌握状态
 
