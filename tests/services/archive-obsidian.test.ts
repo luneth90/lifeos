@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 const spawnSync = vi.hoisted(() => vi.fn(() => ({ status: 0, stdout: 'Moved: ok', stderr: '' })));
@@ -29,7 +29,7 @@ describe('archive Obsidian CLI 边界', () => {
 			expect(spawnSync).toHaveBeenCalledWith(
 				'obsidian',
 				[
-					`vault=${root.slice(root.lastIndexOf('/') + 1)}`,
+					`vault=${basename(root)}`,
 					'move',
 					'path=10_日记/2026-07-01.md',
 					'to=90_系统/归档/日记/2026/07/2026-07-01.md',

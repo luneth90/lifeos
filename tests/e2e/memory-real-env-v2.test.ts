@@ -7,7 +7,7 @@ import {
 	writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import Database from 'better-sqlite3';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import doctor from '../../src/cli/commands/doctor.js';
@@ -42,7 +42,7 @@ describe('LifeOS v2 真实环境隔离夹具', () => {
 		const vault = createIsolatedMemoryVault();
 		cleanup = vault.cleanup;
 
-		expect(realpathSync(vault.root).startsWith(`${realpathSync(tmpdir())}/`)).toBe(true);
+		expect(realpathSync(vault.root).startsWith(realpathSync(tmpdir()) + sep)).toBe(true);
 		expect(vault.dbPath).toBe(join(vault.root, '90_系统', '记忆', 'memory.db'));
 		expect(existsSync(join(vault.root, 'lifeos.yaml'))).toBe(true);
 		expect(existsSync(join(vault.root, '.agents', 'skills', 'revise', 'SKILL.md'))).toBe(true);

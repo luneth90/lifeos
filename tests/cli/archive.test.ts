@@ -146,7 +146,8 @@ describe('lifeos archive 命令', () => {
 		}
 	});
 
-	it('已移动文件补写 archived 后重新通知记忆索引', async () => {
+	// Windows 无 POSIX 权限位，chmod 0o555 无法制造 archived 写入失败场景
+	it.skipIf(process.platform === 'win32')('已移动文件补写 archived 后重新通知记忆索引', async () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			await initCommand([root, '--lang', 'zh', '--no-mcp']);

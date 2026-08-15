@@ -296,7 +296,9 @@ export function installDashboard(
 	};
 	let content = readFileSync(src, 'utf-8');
 	for (const [placeholder, value] of Object.entries(placeholders)) {
-		content = content.split(placeholder).join(value);
+		// 占位符值统一正斜杠：Windows 上 join 产生反斜杠，会污染 Dashboard 里的
+		// dataview 路径与模板字段
+		content = content.split(placeholder).join(value.replace(/\\/g, '/'));
 	}
 
 	return syncAssetFiles(

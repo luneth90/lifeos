@@ -63,7 +63,7 @@ function escapeRegExp(value) {
 }
 
 function relativeDisplayPath(filePath, rootPath) {
-	return filePath.slice(rootPath.length + 1);
+	return filePath.slice(rootPath.length + 1).replace(/\\/g, '/');
 }
 
 function readFrontmatterVersion(filePath) {

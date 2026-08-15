@@ -111,6 +111,9 @@ function fsyncDirectory(path: string): void {
 }
 
 function fsyncTree(path: string): void {
+	// Windows 不允许对只读句柄 fsync（FlushFileBuffers 返回 EPERM），
+	// 与 fsyncDirectory 一致跳过；备份完整性由写入路径的 flush 保证
+	if (process.platform === 'win32') return;
 	const stat = lstatSync(path);
 	if (stat.isSymbolicLink()) return;
 	if (stat.isFile()) {

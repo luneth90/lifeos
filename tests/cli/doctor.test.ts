@@ -40,7 +40,7 @@ function makeTmpDir() {
 }
 
 const FIRST_DIR = { zh: '00_草稿', en: '00_Drafts' } as const;
-const DIGEST_DIR = { zh: join('90_系统', '信息'), en: join('90_System', 'Digest') } as const;
+const DIGEST_DIR = { zh: '90_系统/信息', en: '90_System/Digest' } as const;
 const GIT_AVAILABLE = spawnSync('git', ['--version']).status === 0;
 
 describe.each(['zh', 'en'] as const)('lifeos doctor --lang %s', (lang) => {

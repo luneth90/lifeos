@@ -15,6 +15,22 @@ export interface TempVault {
 }
 
 /**
+ * 递归删除目录树，Windows 上子进程退出后句柄释放有延迟，短暂重试避免 EPERM。
+ */
+export function removeTreeWithRetry(path: string, attempts = 5): void {
+	for (let attempt = 1; attempt <= attempts; attempt += 1) {
+		try {
+			rmSync(path, { recursive: true, force: true });
+			return;
+		} catch (error) {
+			if (attempt === attempts) throw error;
+			// 同步等待 200ms 后重试
+			Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+		}
+	}
+}
+
+/**
  * Creates a temporary Vault directory with standard LifeOS structure and lifeos.yaml.
  */
 export function createTempVault(): TempVault {

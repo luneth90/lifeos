@@ -7,7 +7,13 @@ import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import { AjvJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/ajv';
 import { describe, expect, it } from 'vitest';
 import { toolResultSchemas } from '../src/tool-schemas.js';
-import { type TempVault, createTempVault, prepareRuntimeVault, writeTestNote } from './setup.js';
+import {
+	type TempVault,
+	createTempVault,
+	prepareRuntimeVault,
+	removeTreeWithRetry,
+	writeTestNote,
+} from './setup.js';
 
 function createInitializeMessage(): string {
 	const payload = JSON.stringify({
@@ -43,7 +49,7 @@ function createSourceEntrySandbox(): {
 	return {
 		root,
 		entry: join(root, 'bin', 'lifeos.js'),
-		cleanup: () => rmSync(root, { recursive: true, force: true }),
+		cleanup: () => removeTreeWithRetry(root),
 	};
 }
 

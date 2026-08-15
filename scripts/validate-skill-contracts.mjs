@@ -905,7 +905,7 @@ export function validateSkillContracts(root) {
 	}
 
 	for (const path of walkFiles(skillRoot).filter((candidate) =>
-		/\/SKILL\.(zh|en)\.md$/.test(candidate),
+		/[\\/]SKILL\.(zh|en)\.md$/.test(candidate),
 	)) {
 		const { frontmatter, body } = markdown(path);
 		if (!frontmatter) continue;
