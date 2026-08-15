@@ -1,4 +1,6 @@
 import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const reserved = new Set(['placeholder', 'project-template']);
 const pattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -52,4 +54,4 @@ function main() {
 	}
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();

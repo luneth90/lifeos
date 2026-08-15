@@ -1,5 +1,6 @@
 import { existsSync, lstatSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep, win32 } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const RESERVED_NAMES = new Set([
 	'CON',
@@ -448,7 +449,7 @@ function readStdin() {
 	});
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
 	try {
 		const input = JSON.parse(await readStdin());
 		let result;
