@@ -103,6 +103,7 @@ describe('assetsDir', () => {
 		expect(validate(assetsDir())).toEqual({ ok: true, diagnostics: [] });
 	});
 
+	// 真实执行 npm run build + npm pack，coverage 插桩下耗时显著放大，显式放宽超时
 	test('npm 包清单包含完整 assets，且构建产物从包根解析 assets', async () => {
 		const directory = join(tmpdir(), `lifeos-pack-${Date.now()}`);
 		const packageSource = join(directory, 'source');
@@ -155,7 +156,7 @@ describe('assetsDir', () => {
 		} finally {
 			rmSync(directory, { recursive: true, force: true });
 		}
-	});
+	}, 60000);
 
 	test('points to existing assets/ directory', () => {
 		const dir = assetsDir();

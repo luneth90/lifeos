@@ -13,7 +13,12 @@ interface Workflow {
 	jobs?: Record<
 		string,
 		{
-			strategy?: { matrix?: { 'node-version'?: Array<string | number> } };
+			strategy?: {
+				matrix?: {
+					'node-version'?: Array<string | number>;
+					include?: Array<{ os?: string; 'node-version'?: string | number }>;
+				};
+			};
 			steps?: Step[];
 		}
 	>;
@@ -62,7 +67,13 @@ describe('GitHub 工作流发布门禁', () => {
 		).replace(/^>=/, '');
 		const ci = readWorkflow('.github/workflows/ci.yml').jobs?.test;
 		const release = readWorkflow('.github/workflows/release.yml').jobs?.release;
-		const ciVersions = ci?.strategy?.matrix?.['node-version'] ?? [];
+		const matrix = ci?.strategy?.matrix;
+		const ciVersions = [
+			...(matrix?.['node-version'] ?? []),
+			...(matrix?.include
+				?.map((entry) => entry['node-version'])
+				.filter((version): version is string | number => version !== undefined) ?? []),
+		];
 		const releaseNode = release?.steps?.find((step) => step.name === 'Set up Node.js')?.with?.[
 			'node-version'
 		];

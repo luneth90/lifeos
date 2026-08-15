@@ -1,0 +1,3 @@
+# 强制所有文本文件以 LF 检出（覆盖 Windows 默认 autocrlf），
+# 保证 biome/vitest 等工具在任意平台看到一致的行尾。
+* text=auto eol=lf

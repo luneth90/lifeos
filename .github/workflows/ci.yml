@@ -11,8 +11,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        node-version: ['24.14.1', '25']
+        include:
+          # Windows 仅跑 Node LTS：better-sqlite3 对 node 25 无 Windows 预编译二进制，
+          # node-gyp 源码构建在 windows runner 上会挂起（node 25 覆盖由 ubuntu 承担）
+          - os: windows-latest
+            node-version: '24.14.1'
+          - os: ubuntu-latest
+            node-version: '24.14.1'
+          - os: ubuntu-latest
+            node-version: '25'
     steps:
       - uses: actions/checkout@v7
       - name: Set up Python
