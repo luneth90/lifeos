@@ -315,22 +315,28 @@ describe('lifeos doctor', () => {
 				cleanup();
 			}
 		},
+		30000,
 	);
 
-	test.skipIf(!GIT_AVAILABLE)('Git worktree 已忽略 WAL/SHM 时通过检查', async () => {
-		const { dir, cleanup } = makeTmpDir();
-		try {
-			await initCommand([dir, '--lang', 'zh', '--no-mcp']);
-			spawnSync('git', ['init', dir], { stdio: 'ignore' });
-			writeFileSync(join(dir, '.gitignore'), '*.db-wal\n*.db-shm\n', 'utf-8');
-			const result = await doctorCommand([dir]);
-			expect(result.checks).toContainEqual(
-				expect.objectContaining({ name: 'database Git hygiene', status: 'pass' }),
-			);
-		} finally {
-			cleanup();
-		}
-	});
+	// Windows 上 git init + doctor 较慢（多次 spawn git），放宽超时
+	test.skipIf(!GIT_AVAILABLE)(
+		'Git worktree 已忽略 WAL/SHM 时通过检查',
+		async () => {
+			const { dir, cleanup } = makeTmpDir();
+			try {
+				await initCommand([dir, '--lang', 'zh', '--no-mcp']);
+				spawnSync('git', ['init', dir], { stdio: 'ignore' });
+				writeFileSync(join(dir, '.gitignore'), '*.db-wal\n*.db-shm\n', 'utf-8');
+				const result = await doctorCommand([dir]);
+				expect(result.checks).toContainEqual(
+					expect.objectContaining({ name: 'database Git hygiene', status: 'pass' }),
+				);
+			} finally {
+				cleanup();
+			}
+		},
+		30000,
+	);
 
 	test.skipIf(!GIT_AVAILABLE)(
 		'Git 已跟踪特殊字符路径中的 WAL 时告警且不修改索引或 .gitignore',
@@ -381,6 +387,7 @@ describe('lifeos doctor', () => {
 				cleanup();
 			}
 		},
+		30000,
 	);
 
 	test('已归档记忆不算孤儿作用域，孤儿只统计活跃记忆', async () => {
