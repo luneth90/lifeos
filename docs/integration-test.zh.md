@@ -41,6 +41,7 @@ lifeos doctor ./tmp/lifeos-integration
 | OpenCode | `opencode.json` |
 | Grok Build | `.mcp.json`（兼容加载 Claude Code 格式） |
 | Antigravity CLI | `.agents/mcp_config.json` |
+| DeepSeek Harness (DSH) | `~/.dsh/cordis.patch.yml`（home 级 patch） |
 
 分别启动客户端，确认不会连接旧的全局 LifeOS 服务实例。
 

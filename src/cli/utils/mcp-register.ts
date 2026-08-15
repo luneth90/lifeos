@@ -1,5 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { isMap, isSeq, parseDocument } from 'yaml';
+import type { Document, YAMLMap, YAMLSeq } from 'yaml';
 import { dim, green, log } from './ui.js';
 
 interface McpServerEntry {
@@ -9,7 +12,46 @@ interface McpServerEntry {
 
 export type MergeMode = 'replace' | 'merge-missing';
 
-export async function registerMcp(vaultRoot: string, mode: MergeMode = 'replace'): Promise<void> {
+export interface RegisterMcpOptions {
+	/** DeepSeek Harness home（$DSH_HOME 优先，默认 ~/.dsh），用于覆盖 DSH 注册目标目录。 */
+	dshHome?: string;
+}
+
+/** DSH 的 cordis.patch.yml 中 LifeOS MCP 插件条目 id。 */
+const DSH_MCP_ENTRY_ID = 'mcp-lifeos';
+/** DSH 的 MCP 桥接插件包名。 */
+const DSH_MCP_PLUGIN_NAME = '@deepseek-ai/dsh-mcp-client';
+
+function buildDshEntry(vaultRoot: string): Record<string, unknown> {
+	return {
+		id: DSH_MCP_ENTRY_ID,
+		name: DSH_MCP_PLUGIN_NAME,
+		config: {
+			serverName: 'lifeos',
+			transport: 'stdio',
+			command: 'lifeos',
+			args: ['--vault-root', vaultRoot],
+		},
+	};
+}
+
+/**
+ * 解析 DeepSeek Harness home：与 DSH 的 dsh-home-paths 解析规则一致，
+ * 显式配置优先，其次 $DSH_HOME（空白视为未设置），默认 ~/.dsh。
+ */
+function resolveDshHome(configured: string | undefined): string {
+	const fromEnv = process.env.DSH_HOME;
+	return resolve(
+		configured ??
+			(fromEnv !== undefined && fromEnv.trim().length > 0 ? fromEnv : join(homedir(), '.dsh')),
+	);
+}
+
+export async function registerMcp(
+	vaultRoot: string,
+	mode: MergeMode = 'replace',
+	options: RegisterMcpOptions = {},
+): Promise<void> {
 	const entry: McpServerEntry = {
 		command: 'lifeos',
 		args: ['--vault-root', vaultRoot],
@@ -46,9 +88,71 @@ export async function registerMcp(vaultRoot: string, mode: MergeMode = 'replace'
 	mergeJsonConfig(antigravityPath, 'mcpServers', 'lifeos', { ...entry }, mode);
 	registered.push(`Antigravity → ${dim(antigravityPath)}`);
 
+	// DSH（DeepSeek Harness）— home 级 cordis.patch.yml，对所有 profile 生效
+	const dshHome = resolveDshHome(options.dshHome);
+	const dshPatchPath = join(dshHome, 'cordis.patch.yml');
+	mergeDshPatch(dshPatchPath, vaultRoot, mode);
+	registered.push(`DSH → ${dim(dshPatchPath)}`);
+
 	for (const r of registered) {
 		log(green('✔'), r);
 	}
+}
+
+/**
+ * 把 LifeOS MCP 插件条目合并进 DSH 的 home 级 cordis.patch.yml。
+ * DSH 不读取 Claude Code 格式的 .mcp.json，MCP 服务器必须声明为
+ * `@deepseek-ai/dsh-mcp-client` 插件实例；home 级 patch 对所有 profile
+ * （web/headless 等）生效。DSH home 不存在时也强制创建，以便后续安装
+ * DSH 后开箱即用。
+ */
+function mergeDshPatch(filePath: string, vaultRoot: string, mode: MergeMode): void {
+	let doc: Document;
+	if (existsSync(filePath)) {
+		let parsed: Document;
+		try {
+			parsed = parseDocument(readFileSync(filePath, 'utf-8'));
+		} catch {
+			throw new Error(`现有 DSH patch 配置无法解析，拒绝覆盖：${filePath}`);
+		}
+		if (parsed.errors.length > 0) {
+			throw new Error(`现有 DSH patch 配置无法解析，拒绝覆盖：${filePath}`);
+		}
+		doc = parsed;
+	} else {
+		doc = parseDocument('');
+		doc.commentBefore =
+			' DeepSeek Harness 用户级 patch：由 lifeos init/upgrade 自动维护，应用于所有 profile。';
+	}
+	const root = doc.contents;
+	if (root !== null && !isSeq(root)) {
+		throw new Error(`现有 DSH patch 配置根节点必须是数组：${filePath}`);
+	}
+	if (root === null) doc.contents = doc.createNode([]);
+	const seq = doc.contents as YAMLSeq;
+
+	// 复用第一个 insert 条目，避免多次升级堆积重复的 insert 层
+	let insertEntry = seq.items.find((item) => isMap(item) && item.has('insert')) as
+		| YAMLMap
+		| undefined;
+	if (insertEntry === undefined) {
+		insertEntry = doc.createNode({ insert: [] }) as YAMLMap;
+		seq.add(insertEntry);
+	}
+	const insertSeq = insertEntry.get('insert') as YAMLSeq;
+	const existingIndex = insertSeq.items.findIndex(
+		(item) => isMap(item) && item.get('id') === DSH_MCP_ENTRY_ID,
+	);
+	if (existingIndex === -1) {
+		insertSeq.add(doc.createNode(buildDshEntry(vaultRoot)));
+	} else if (mode === 'replace') {
+		const existing = insertSeq.items[existingIndex] as YAMLMap;
+		existing.set('name', DSH_MCP_PLUGIN_NAME);
+		existing.set('config', doc.createNode(buildDshEntry(vaultRoot).config));
+	}
+
+	mkdirSync(dirname(filePath), { recursive: true });
+	writeFileSync(filePath, doc.toString());
 }
 
 function mergeJsonConfig(

@@ -168,6 +168,7 @@ no section table is created.
 | **Grok Build** | `.mcp.json` (loads Claude Code format for compatibility) | Verified on macOS |
 | **OMP (Oh My Pi)** CLI | `.mcp.json` (loads Claude Code format for compatibility) | Verified on macOS |
 | **Antigravity** CLI | `.agents/mcp_config.json` | Project-level MCP auto-registration supported; platform combinations not yet verified |
+| **DeepSeek Harness (DSH)** | `~/.dsh/cordis.patch.yml` (home-level patch, applies to all profiles) | Auto-registration supported; verified on macOS |
 
 Launch any supported client in the vault directory to use all skills. Other platforms or client combinations have not been validated yet.
 

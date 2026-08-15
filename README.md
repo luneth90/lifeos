@@ -174,6 +174,7 @@ memory_bootstrap
 | **Grok Build** | `.mcp.json`（兼容加载 Claude Code 格式） | macOS 已验证 |
 | **OMP (Oh My Pi)** CLI | `.mcp.json`（兼容加载 Claude Code 格式） | macOS 已验证 |
 | **Antigravity** CLI | `.agents/mcp_config.json` | 项目级 MCP 自动注册已支持；平台组合尚未验证 |
+| **DeepSeek Harness (DSH)** | `~/.dsh/cordis.patch.yml`（home 级 patch，所有 profile 生效） | 自动注册已支持；macOS 已验证 |
 
 在 Vault 目录下启动任一已支持的客户端即可使用全部技能。其他平台或客户端组合尚未验证。
 

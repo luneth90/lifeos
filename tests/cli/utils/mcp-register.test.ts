@@ -23,7 +23,9 @@ describe('registerMcp 配置保全', () => {
 		const malformed = '{"mcpServers":\n';
 		writeFileSync(path, malformed, 'utf-8');
 
-		await expect(registerMcp(root, 'replace')).rejects.toThrow(/无法解析，拒绝覆盖/);
+		await expect(
+			registerMcp(root, 'replace', { dshHome: join(root, '.absent-dsh') }),
+		).rejects.toThrow(/无法解析，拒绝覆盖/);
 
 		expect(readFileSync(path, 'utf-8')).toBe(malformed);
 		expect(existsSync(join(root, '.codex', 'config.toml'))).toBe(false);
@@ -33,16 +35,20 @@ describe('registerMcp 配置保全', () => {
 		const rootWithArray = makeRoot();
 		const arrayPath = join(rootWithArray, '.mcp.json');
 		writeFileSync(arrayPath, '[1, 2, 3]\n', 'utf-8');
-		await expect(registerMcp(rootWithArray, 'replace')).rejects.toThrow(/根节点必须是对象/);
+		await expect(
+			registerMcp(rootWithArray, 'replace', { dshHome: join(rootWithArray, '.absent-dsh') }),
+		).rejects.toThrow(/根节点必须是对象/);
 		expect(readFileSync(arrayPath, 'utf-8')).toBe('[1, 2, 3]\n');
 
 		const rootWithInvalidSection = makeRoot();
 		const sectionPath = join(rootWithInvalidSection, '.mcp.json');
 		const original = '{"sentinel":true,"mcpServers":[]}\n';
 		writeFileSync(sectionPath, original, 'utf-8');
-		await expect(registerMcp(rootWithInvalidSection, 'replace')).rejects.toThrow(
-			/mcpServers 必须是对象/,
-		);
+		await expect(
+			registerMcp(rootWithInvalidSection, 'replace', {
+				dshHome: join(rootWithInvalidSection, '.absent-dsh'),
+			}),
+		).rejects.toThrow(/mcpServers 必须是对象/);
 		expect(readFileSync(sectionPath, 'utf-8')).toBe(original);
 	});
 
@@ -60,7 +66,7 @@ command = "other"
 `;
 		writeFileSync(path, original, 'utf-8');
 
-		await registerMcp(root, 'replace');
+		await registerMcp(root, 'replace', { dshHome: join(root, '.absent-dsh') });
 
 		const updated = readFileSync(path, 'utf-8');
 		expect(updated).toContain(original.trim());
@@ -79,7 +85,9 @@ command = "one"
 command = "two"
 `;
 		writeFileSync(duplicatePath, duplicate, 'utf-8');
-		await expect(registerMcp(duplicateRoot, 'replace')).rejects.toThrow(/重复定义/);
+		await expect(
+			registerMcp(duplicateRoot, 'replace', { dshHome: join(duplicateRoot, '.absent-dsh') }),
+		).rejects.toThrow(/重复定义/);
 		expect(readFileSync(duplicatePath, 'utf-8')).toBe(duplicate);
 
 		const malformedRoot = makeRoot();
@@ -87,13 +95,15 @@ command = "two"
 		mkdirSync(join(malformedRoot, '.codex'));
 		const malformed = '[mcp_servers.other\ncommand = "other"\n';
 		writeFileSync(malformedPath, malformed, 'utf-8');
-		await expect(registerMcp(malformedRoot, 'replace')).rejects.toThrow(/无法安全定位/);
+		await expect(
+			registerMcp(malformedRoot, 'replace', { dshHome: join(malformedRoot, '.absent-dsh') }),
+		).rejects.toThrow(/无法安全定位/);
 		expect(readFileSync(malformedPath, 'utf-8')).toBe(malformed);
 	});
 
 	it('自动生成并合并 Antigravity 的 .agents/mcp_config.json 配置', async () => {
 		const root = makeRoot();
-		await registerMcp(root, 'replace');
+		await registerMcp(root, 'replace', { dshHome: join(root, '.absent-dsh') });
 
 		const path = join(root, '.agents', 'mcp_config.json');
 		expect(existsSync(path)).toBe(true);
@@ -129,7 +139,7 @@ command = "two"
 			'utf-8',
 		);
 
-		await registerMcp(root, 'replace');
+		await registerMcp(root, 'replace', { dshHome: join(root, '.absent-dsh') });
 
 		expect(JSON.parse(readFileSync(path, 'utf-8'))).toEqual({
 			projectSetting: 'keep',

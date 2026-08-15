@@ -1,5 +1,11 @@
 # 更新日志
 
+## Unreleased
+
+### 新增
+
+- `lifeos init` / `lifeos upgrade` 新增 DeepSeek Harness (DSH) 项目级 MCP 自动注册：把 `@deepseek-ai/dsh-mcp-client` 的 `mcp-lifeos` 插件条目合并进 `~/.dsh/cordis.patch.yml`（`$DSH_HOME` 优先）home 级 patch，对所有 profile 生效；DSH home 不存在时也强制创建，后续安装 DSH 后开箱即用。合并保持幂等并保留已有其他 insert 条目与注释，根节点非数组或 YAML 无法解析时拒绝覆盖并保留原文
+
 ## 2.5.0 (2026-08-09)
 
 ### 新增
