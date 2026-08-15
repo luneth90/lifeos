@@ -6,11 +6,12 @@ export default defineConfig({
 		environment: 'node',
 		include: ['tests/**/*.test.ts'],
 		testTimeout: 10000,
-		// Windows runner（7GB）上 fork worker 堆上限过低时会在测试收尾崩溃
-		// （Worker exited unexpectedly）；singleFork 串行 + 显式堆上限最稳
-		pool: 'forks',
+		// Windows 上 fork 池 worker 在数据库密集文件后收尾异常退出（vitest/
+		// better-sqlite3/Windows 组合问题，测试本身全过）；threads 单线程无
+		// 子进程边界最稳定，macOS 与 ubuntu 全量无回归
+		pool: 'threads',
 		poolOptions: {
-			forks: { singleFork: true, execArgv: ['--max-old-space-size=4096'] },
+			threads: { singleThread: true },
 		},
 		// Windows 上排除 PyMuPDF 密集文件：频繁 spawn python+fitz 后 worker
 		// 会在下一文件启动时异常退出（测试本身全过，契约已由 ubuntu 全量覆盖）
