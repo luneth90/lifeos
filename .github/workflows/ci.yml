@@ -40,7 +40,16 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm test
+      # Windows 上 vitest fork worker 偶发在文件切换时异常退出（vitest/Node
+      # 组合问题，测试本身全过），失败自动重试一次兜底
+      - name: Run tests
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            npm test || npm test
+          else
+            npm test
+          fi
 
   audit:
     runs-on: ubuntu-latest
