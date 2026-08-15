@@ -6,9 +6,12 @@ export default defineConfig({
 		environment: 'node',
 		include: ['tests/**/*.test.ts'],
 		testTimeout: 10000,
-		// threads 池：Windows 上 fork 池在 PyMuPDF 密集测试后 worker 收尾会
-		// 异常退出（Worker exited unexpectedly），threads 无子进程边界更稳定
-		pool: 'threads',
+		// Windows 上 fork 多 worker 并发时 PyMuPDF 密集测试的 worker 收尾会异常
+		// 退出，threads 池则主进程收尾异常；singleFork 单 worker 串行最稳定
+		pool: 'forks',
+		poolOptions: {
+			forks: { singleFork: true },
+		},
 		coverage: {
 			include: ['src/**/*.ts'],
 		},
