@@ -40,13 +40,23 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
-      # Windows 上 vitest fork worker 偶发在文件切换时异常退出（vitest/Node
-      # 组合问题，测试本身全过），失败自动重试一次兜底
+      # Windows 上 vitest fork worker 在跑完大量文件后偶发异常退出（疑似
+      # Windows 句柄/资源累积，vitest/Node 组合问题，测试本身全过）；
+      # 拆成三批独立进程运行，每批新 worker 重置资源，失败重试一次兜底
       - name: Run tests
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            npm test || npm test
+            npx vitest run tests/cli tests/services tests/db tests/utils || \
+              npx vitest run tests/cli tests/services tests/db tests/utils
+            npx vitest run tests/assets tests/security tests/scripts tests/skill-contracts tests/evals tests/active-docs || \
+              npx vitest run tests/assets tests/security tests/scripts tests/skill-contracts tests/evals tests/active-docs
+            npx vitest run tests/config.test.ts tests/core.test.ts tests/cutover-lock.test.ts \
+              tests/documentation-consistency.test.ts tests/runtime-contract.test.ts \
+              tests/server-entry.test.ts tests/server.test.ts tests/e2e || \
+              npx vitest run tests/config.test.ts tests/core.test.ts tests/cutover-lock.test.ts \
+                tests/documentation-consistency.test.ts tests/runtime-contract.test.ts \
+                tests/server-entry.test.ts tests/server.test.ts tests/e2e
           else
             npm test
           fi
