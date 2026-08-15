@@ -4,15 +4,18 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import hashlib
 import json
 import math
-import sys
 import tempfile
 from pathlib import Path
 from typing import Dict, Optional, Sequence, Tuple, Union
 
 import fitz
+# Windows 控制台默认代码页（cp1252/GBK）无法输出中文，强制 stdout 使用 UTF-8
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 
 BBox = Tuple[float, float, float, float]

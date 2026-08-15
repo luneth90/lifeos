@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import Database from 'better-sqlite3';
 import { stringify as stringifyYaml } from 'yaml';
 import { syncVault } from '../src/cli/utils/sync-vault.js';
@@ -165,7 +165,7 @@ export function writeTestNote(
 	body = '',
 ): void {
 	const fullPath = join(vaultRoot, relativePath);
-	const dir = fullPath.substring(0, fullPath.lastIndexOf('/'));
+	const dir = dirname(fullPath);
 	mkdirSync(dir, { recursive: true });
 
 	const yamlLines = Object.entries(frontmatter)

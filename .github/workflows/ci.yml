@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Windows 上 Python 子进程默认使用控制台代码页（cp1252），中文输出会抛
+# UnicodeEncodeError；统一强制 UTF-8（脚本内也已加 stdout reconfigure）
+env:
+  PYTHONIOENCODING: utf-8
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}

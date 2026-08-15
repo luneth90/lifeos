@@ -19,7 +19,8 @@ function walk(base: string, dir: string, lang: string, out: Map<string, string>)
 		// Python 执行技能脚本时可能在源码或已安装目录生成缓存；它们不是发布资产。
 		if (isGeneratedPythonCacheEntry(entry)) continue;
 		const full = join(dir, entry);
-		const rel = relative(base, full);
+		// 键统一为正斜杠：Windows 上 relative() 返回反斜杠，会污染 managed_assets 清单键
+		const rel = relative(base, full).replace(/\\/g, '/');
 		if (statSync(full).isDirectory()) {
 			walk(base, full, lang, out);
 			continue;
@@ -28,7 +29,7 @@ function walk(base: string, dir: string, lang: string, out: Map<string, string>)
 		if (m) {
 			if (m[2] === lang) {
 				// SKILL.zh.md → SKILL.md
-				const destRel = relative(base, join(dir, `${m[1]}.md`));
+				const destRel = relative(base, join(dir, `${m[1]}.md`)).replace(/\\/g, '/');
 				out.set(destRel, full);
 			}
 			// other lang → skip

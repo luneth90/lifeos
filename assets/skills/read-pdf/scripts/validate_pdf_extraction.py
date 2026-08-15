@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import json
 import math
 import re
-import sys
 import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Union
+# Windows 控制台默认代码页（cp1252/GBK）无法输出中文，强制 stdout 使用 UTF-8
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 
 Diagnostic = Dict[str, str]

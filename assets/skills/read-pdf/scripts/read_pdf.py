@@ -4,11 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 import hashlib
 import json
 import re
 import shutil
-import sys
 import tempfile
 import unicodedata
 from bisect import bisect_left, bisect_right
@@ -18,6 +18,9 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import fitz
+# Windows 控制台默认代码页（cp1252/GBK）无法输出中文，强制 stdout 使用 UTF-8
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
 
 
 MAX_DEFAULT_PAGES = 50
