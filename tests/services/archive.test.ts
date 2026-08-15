@@ -529,7 +529,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('移动后的 archived 写入失败会报告（原子写路径），修复后重跑可补写元数据', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('移动后的 archived 写入失败会报告（原子写路径），修复后重跑可补写元数据', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '00_草稿/idea.md', draftNote('idea'));
@@ -684,7 +685,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('清理失败（源树仅剩空目录）不阻断元数据，恢复权限后空源目录续跑闭环', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('清理失败（源树仅剩空目录）不阻断元数据，恢复权限后空源目录续跑闭环', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(
@@ -813,7 +815,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('重跑时目标主文件不可读转为冲突报告（already_moved 分支）', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('重跑时目标主文件不可读转为冲突报告（already_moved 分支）', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '00_草稿/idea.md', draftNote('idea'));
@@ -853,7 +856,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('预检时源主文件不可读转为冲突报告（常规预检分支）', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('预检时源主文件不可读转为冲突报告（常规预检分支）', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '00_草稿/idea.md', draftNote('idea'));
@@ -887,7 +891,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('空源目录续跑时目标主文件不可读转为冲突报告（续跑分支）', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('空源目录续跑时目标主文件不可读转为冲突报告（续跑分支）', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
@@ -1167,7 +1172,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('dry-run 重跑续跑现场不删除空源目录、不补写元数据', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('dry-run 重跑续跑现场不删除空源目录、不补写元数据', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
@@ -1210,7 +1216,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('续跑清理延迟到全部预检通过后执行，后续候选冲突时不产生副作用', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('续跑清理延迟到全部预检通过后执行，后续候选冲突时不产生副作用', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
@@ -1261,7 +1268,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('源目录含不可读子目录时转为冲突报告，不抛异常', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('源目录含不可读子目录时转为冲突报告，不抛异常', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
@@ -1536,7 +1544,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('目标目录含不可读子目录时转为冲突报告，不抛异常', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('目标目录含不可读子目录时转为冲突报告，不抛异常', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
@@ -1573,7 +1582,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('目标父目录不可写时转为 failed，不抛异常', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('目标父目录不可写时转为 failed，不抛异常', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '00_草稿/idea.md', draftNote('idea'));
@@ -1690,7 +1700,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('archived 原子写入保留原文件权限', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('archived 原子写入保留原文件权限', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '00_草稿/idea.md', draftNote('idea'));
@@ -1750,7 +1761,8 @@ describe('runArchive', () => {
 		}
 	});
 
-	it('空源续跑 dry-run 报告预计补写的 archived', () => {
+	// Windows 无 POSIX 权限位，chmod 场景无法复现，该用例仅 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')('空源续跑 dry-run 报告预计补写的 archived', () => {
 		const { root, cleanup } = makeTmp();
 		try {
 			write(root, '20_项目/P/P.md', `---\ntype: project\nstatus: done\nid: p\n---\n`);
