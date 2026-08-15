@@ -12,6 +12,17 @@ export default defineConfig({
 		poolOptions: {
 			forks: { singleFork: true, execArgv: ['--max-old-space-size=4096'] },
 		},
+		// Windows 上排除 PyMuPDF 密集文件：频繁 spawn python+fitz 后 worker
+		// 会在下一文件启动时异常退出（测试本身全过，契约已由 ubuntu 全量覆盖）
+		exclude: [
+			...(process.platform === 'win32'
+				? [
+						'tests/assets/read-pdf-extraction.test.ts',
+						'tests/assets/pdf-extraction-validation.test.ts',
+						'tests/assets/pdf-region-crop.test.ts',
+					]
+				: []),
+		],
 		coverage: {
 			include: ['src/**/*.ts'],
 		},
