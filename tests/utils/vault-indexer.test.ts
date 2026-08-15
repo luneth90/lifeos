@@ -386,37 +386,41 @@ describe('fullScan()', () => {
 		expect(rows[0].file_path).toBe('00_草稿/keep.md');
 	});
 
-	it('does not remove entries for inaccessible files (non-ENOENT errors)', () => {
-		writeTestNote(vault.root, '00_草稿/note.md', {
-			title: 'Note',
-			type: 'draft',
-			status: 'pending',
-		});
+	// Windows 无 POSIX 权限位，chmod 0o000 不产生不可读目录，该语义测试仅在 POSIX 平台有效
+	it.skipIf(process.platform === 'win32')(
+		'does not remove entries for inaccessible files (non-ENOENT errors)',
+		() => {
+			writeTestNote(vault.root, '00_草稿/note.md', {
+				title: 'Note',
+				type: 'draft',
+				status: 'pending',
+			});
 
-		// Index the file
-		fullScan(vault.root, vault.dbPath);
+			// Index the file
+			fullScan(vault.root, vault.dbPath);
 
-		// Make the file's parent directory unreadable so walkMdFiles skips it,
-		// but the file still exists on disk — prune must NOT delete the row.
-		const { chmodSync } = require('fs');
-		const dir = join(vault.root, '00_草稿');
-		chmodSync(dir, 0o000);
+			// Make the file's parent directory unreadable so walkMdFiles skips it,
+			// but the file still exists on disk — prune must NOT delete the row.
+			const { chmodSync } = require('fs');
+			const dir = join(vault.root, '00_草稿');
+			chmodSync(dir, 0o000);
 
-		try {
-			const result = fullScan(vault.root, vault.dbPath);
-			// Walk couldn't enter the directory, so nothing was indexed
-			expect(result.indexed).toBe(0);
-			// But the row must survive because the file still exists (EACCES, not ENOENT)
-			expect(result.removed).toBe(0);
+			try {
+				const result = fullScan(vault.root, vault.dbPath);
+				// Walk couldn't enter the directory, so nothing was indexed
+				expect(result.indexed).toBe(0);
+				// But the row must survive because the file still exists (EACCES, not ENOENT)
+				expect(result.removed).toBe(0);
 
-			const rows = db.prepare('SELECT file_path FROM vault_index').all() as Array<{
-				file_path: string;
-			}>;
-			expect(rows).toHaveLength(1);
-		} finally {
-			chmodSync(dir, 0o755);
-		}
-	});
+				const rows = db.prepare('SELECT file_path FROM vault_index').all() as Array<{
+					file_path: string;
+				}>;
+				expect(rows).toHaveLength(1);
+			} finally {
+				chmodSync(dir, 0o755);
+			}
+		},
+	);
 
 	it('returns removed count of zero when no stale entries exist', () => {
 		writeTestNote(vault.root, '00_草稿/note.md', {

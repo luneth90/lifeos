@@ -709,3 +709,4 @@ pending ──/research,/project,/knowledge──→ done ──/archive──�
 - 通过 @node-rs/jieba 实现中文分词
 - 会话记忆与上下文组装
 - 活跃文档（TaskBoard、UserProfile）
+- CI 测试矩阵新增 `windows-latest`（与 `ubuntu-latest` 组合，node 24.14.1 / 25 共 4 个组合）；`vault-indexer` 中依赖 POSIX 权限位的用例在 Windows 上按平台跳过
