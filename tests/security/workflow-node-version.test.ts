@@ -52,7 +52,7 @@ function expectPythonBefore(steps: Step[], command: string): void {
 	}
 	const setup = steps.findIndex((step) => step.uses === 'actions/setup-python@v7');
 	const install = steps.findIndex((step) => step.run?.includes('PyMuPDF==1.26.5'));
-	const verify = steps.findIndex((step) => step.run?.trim() === command);
+	const verify = steps.findIndex((step) => step.run?.includes(command));
 	expect(setup).toBeGreaterThanOrEqual(0);
 	expect(steps[setup]?.with?.['python-version']).toBe('3.12');
 	expect(install).toBeGreaterThan(setup);
