@@ -74,7 +74,7 @@ describe('crop_pdf_region.py', () => {
 			height: 200,
 		});
 		expect(existsSync(outputPath)).toBe(true);
-		expect(realpathSync(payload.output)).toBe(realpathSync(outputPath));
+		expect(realpathSync.native(payload.output)).toBe(realpathSync.native(outputPath));
 		expect(payload.sha256).toBe(
 			createHash('sha256').update(readFileSync(outputPath)).digest('hex'),
 		);

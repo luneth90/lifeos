@@ -298,7 +298,7 @@ describe('lifeos rules purge 永久清除协议', () => {
 			deletedProjection: 1,
 			deletedEvents: 2,
 		});
-		expect(realpathSync(result.backupPath).startsWith(realpathSync(vault.root))).toBe(true);
+		expect(realpathSync.native(result.backupPath).startsWith(realpathSync.native(vault.root))).toBe(true);
 		expect(db.prepare('SELECT COUNT(*) AS count FROM memory_items').get()).toEqual({ count: 0 });
 		expect(db.prepare('SELECT COUNT(*) AS count FROM memory_item_events').get()).toEqual({
 			count: 0,
