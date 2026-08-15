@@ -1,7 +1,7 @@
 ---
 name: research
 description: "Research a topic or draft in depth, producing a research plan and structured report."
-version: 2.5.0
+version: 2.5.1
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Research_Template.md"
