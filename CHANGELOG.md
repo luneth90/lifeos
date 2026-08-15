@@ -1,5 +1,23 @@
 # 更新日志
 
+## 2.5.2 (2026-08-15)
+
+### 修复
+
+- 修复 Windows 上升级备份流程崩溃：`write-set-backup` 的 `fsyncTree` 对只读句柄 `fsync` 在 Windows 上抛 `EPERM`（FlushFileBuffers 语义），与 `fsyncDirectory` 一致加平台守卫
+- 修复 Windows 上 managed asset 清单键被反斜杠污染：`resolveSkillFiles` 的 `relative()` 返回平台分隔符，导致 runtime contract 校验报"清单缺少"；键统一归一化正斜杠
+- 修复 Dashboard 占位符与 `check-version` 错误消息路径未归一化：Windows 上 `join()` 产生反斜杠路径污染 dataview 查询与诊断信息
+- 修复 Windows 上分发 Python 脚本中文输出崩溃：控制台默认代码页（cp1252）无法编码中文，脚本内 `stdout.reconfigure(encoding='utf-8')`，CI 同时设 `PYTHONIOENCODING=utf-8` 兜底
+- 修复技能脚本（`path_safety.mjs` / `project_identity.mjs`）CLI 入口判断在 Windows 不生效：`file://${process.argv[1]}` 拼接与反斜杠路径不匹配，改用 `pathToFileURL(resolve(argv[1]))` 跨平台比较
+- 修复技能契约校验器对 Windows 反斜杠路径失效：`/\/SKILL\.(zh|en)\.md$/` 硬编码正斜杠过滤导致依赖/能力校验整体跳过，改用 `[\\/]` 匹配
+
+### 改进
+
+- 测试基础设施跨平台化：`writeTestNote` 改用 `dirname`（Windows 上 `lastIndexOf('/')` 产生空路径连锁失败）；路径断言统一 `realpathSync.native` 展开 8.3 短名；`DIGEST_DIR` 等常量改用正斜杠
+- 新增 `.gitattributes` 强制文本文件 LF 检出，修复 Windows checkout 的 CRLF 导致 biome 全文件格式误报
+- CI 矩阵新增 Windows（Node LTS 24.14.1）：依赖 POSIX 权限语义的用例（archive、vault-indexer 等）按平台跳过，`git init` 相关用例放宽超时；Windows job 运行稳定核心子集验证平台行为，全量覆盖由 ubuntu 承担
+- 依赖升级：`nanoid` 3.3.17 → 3.3.18 修复 GHSA-2v37-7h3g-55p8（高危）
+
 ## 2.5.1 (2026-08-15)
 
 ### 新增
