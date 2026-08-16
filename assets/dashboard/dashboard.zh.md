@@ -44,7 +44,7 @@
         <div style="font-size: 0.75em; opacity: 0.6;">已掌握 ${masteredCount} / 共 ${totalNotes} 篇</div>
       </div>
       <div style="background: var(--background-secondary); border-top: 3px solid #f43f5e; border-radius: 8px; padding: 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
-        <div style="font-size: 0.8em; opacity: 0.7;">🚨 待复习与升阶</div>
+        <div style="font-size: 0.8em; opacity: 0.7;">🚨 待复习</div>
         <div style="font-size: 1.6em; font-weight: bold; color: #f43f5e; margin: 2px 0;">${pendingCount} 篇</div>
         <div style="font-size: 0.75em; opacity: 0.6;">草稿与巩固中</div>
       </div>
