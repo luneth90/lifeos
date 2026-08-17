@@ -1,7 +1,7 @@
 ---
 name: revise
 description: "Review knowledge notes with active recall; generate questions, grade answers, and update mastery status."
-version: 2.5.3
+version: 2.5.4
 dependencies:
   templates:
     - path: "{system directory}/{templates subdirectory}/Revise_Template.md"

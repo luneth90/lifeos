@@ -1,5 +1,23 @@
 # 更新日志
 
+## 2.5.4 (2026-08-17)
+
+### 新增
+
+- Dashboard 全面重构：新增「今日焦点」区块（紧急复习 top5 按 `file.mtime` 升序 + 待处理草稿 + 行动建议）；新增「活跃项目进度矩阵」区块（掌握度进度条 + 章节状态圆点 ⚪🔴🟡🟢）；新增冻结项目计数提示；KPI 新增「学习中」卡片
+- Dashboard KPI 语义修正：待复习仅统计 `review`/`revised`（不再混入 `draft`），学习中仅统计 `draft`，与 lifecycle 状态机对齐
+
+### 修复
+
+- Dashboard 遗忘衰减优先读取同目录复习记录（`created` 日期），兜底 `file.mtime`；复习记录筛选兼容 `review-record` 与 `revise-record` 两种 type（Vault 实际数据两种并存）
+- Dashboard 遗忘衰减与热力图数据源排除冻结/归档项目关联笔记；热力图数据源缩窄为知识/研究/草稿三路径
+- Dashboard 生命周期流转条改用全量统计口径，修复三段进度和不足 100% 的问题；排除集统一构建并在全部区块复用，支持 path/name/title/id 多格式匹配
+- Dashboard 亮色主题兼容：`box-shadow` 统一为 `C.shadow` 变量、badge 背景改用 `color-mix()`、去除白色 `rgba` 硬编码；链接 `href` 增加 HTML 转义
+
+### 改进
+
+- Dashboard 待复习区块移除说明注释；zh/en 双模板同步
+
 ## 2.5.3 (2026-08-17)
 
 ### 修复
