@@ -579,7 +579,6 @@
 
 ## 🚨 Needs Review
 
-<!-- Note: this table only lists notes with review / revised status (drafts must first be processed via /knowledge, so they are not included), and excludes notes linked to frozen (status: frozen) or archived (files under {archive projects directory}) projects; notes whose project link cannot be resolved (title form / plain string / pointing to a non-existent file) are also hidden, to avoid leaking notes from frozen or archived projects. -->
 
 ```dataview
 TABLE WITHOUT ID

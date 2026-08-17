@@ -579,7 +579,6 @@
 
 ## 🚨 待复习
 
-<!-- 说明：本表仅列出 review / revised 状态（draft 需先通过 /knowledge 整理完成，不计入待复习）且排除关联冻结（status: frozen）或已归档（文件位于 {归档项目目录}）项目的笔记；project 链接无法解析（标题形式/纯字符串/指向不存在文件）的笔记同样不显示，避免冻结/归档项目笔记漏出。 -->
 
 ```dataview
 TABLE WITHOUT ID
