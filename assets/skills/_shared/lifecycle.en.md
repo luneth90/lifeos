@@ -55,6 +55,7 @@ active ⇄ frozen ──→ done ──/archive──→ keep done
 
 - User manually sets frontmatter `status: frozen` to freeze, changes back to `status: active` to unfreeze
 - Knowledge notes linked to a frozen project (via `project` field) are hidden from the review list
+- Knowledge notes linked to an archived project (project file moved under `{system directory}/{archive subdirectory}/projects/` by `lifeos archive`) are likewise hidden from the review list: the today review scan, TaskBoard review panel, Dashboard review stats, and review recommendations all exclude them
 - A frozen project can transition directly to `done` or be unfrozen back to `active`
 - /archive only archives a project whose overall status is `done`. After `lifeos archive` finishes moving it, the command appends `archived: "YYYY-MM-DD"` and preserves `status: done`. Folder-project sub-files are never archived independently.
 

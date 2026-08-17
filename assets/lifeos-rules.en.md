@@ -86,7 +86,7 @@ See `.agents/skills/_shared/lifecycle.md` for the full state machines for each n
 
 Global hard constraints:
 - Drafts with `status: pending` are **never** archived
-- Projects with `status: frozen` and their linked knowledge notes are excluded from TaskBoard focus, active-project lists, and review flows
+- Projects with `status: frozen` or archived (project file moved under `{system directory}/{archive subdirectory}/projects/`) and their linked knowledge notes are excluded from TaskBoard focus, active-project lists, today's review scan, and review flows
 - Knowledge note status **only goes up, never down** (draft → review → revised → mastered); `/revise` consumes `review` by default, the first complete grading pass always moves `review → revised`, and only a later explicit review that meets the threshold moves `revised → mastered`
 
 ### Learning Project Knowledge Accuracy

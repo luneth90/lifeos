@@ -23,9 +23,40 @@
     const allKnowledge = dv.pages('"{{knowledge_notes}}"').where(n => n && n.type === "knowledge");
     const totalNotes = allKnowledge.length || 0;
 
+    // Notes linked to frozen/archived projects stay out of the review chain:
+    // exclude them from KPI stats and the review panel entirely.
+    // Match keys cover file path, file name, and frontmatter title — the note's
+    // project field may use a title-form link (e.g. "[[Visual Group Theory 学习]]")
+    // that Obsidian cannot resolve by file name; title fallback keeps it excluded.
+    const excludedProjectKeys = new Set();
+    for (const p of dv.pages('"{{projects}}"').where(p => p && p.status === "frozen")) {
+        excludedProjectKeys.add(p.file.path);
+        if (p.file.name) excludedProjectKeys.add(p.file.name);
+        if (p.title) excludedProjectKeys.add(String(p.title));
+    }
+    for (const p of dv.pages('"{{archive_root}}/Projects"')) {
+        excludedProjectKeys.add(p.file.path);
+        if (p.file.name) excludedProjectKeys.add(p.file.name);
+        if (p.title) excludedProjectKeys.add(String(p.title));
+    }
+    const linkedToExcludedProject = (n) => {
+        if (!n || !n.project) return false;
+        const p = n.project;
+        if (typeof p === 'object' && p.path) {
+            const pathKey = String(p.path).replace(/\.md$/, '');
+            return excludedProjectKeys.has(pathKey) || excludedProjectKeys.has(String(p.path));
+        }
+        if (typeof p === 'string') {
+            const name = p.replace(/^\[\[|\]\]$/g, '').split('|')[0].split('#')[0].trim();
+            return excludedProjectKeys.has(name);
+        }
+        return false;
+    };
+    const knowledgeInReviewChain = allKnowledge.where(n => !linkedToExcludedProject(n));
+
     const masteredCount = allKnowledge.where(n => n.status === "mastered").length;
-    const reviewCount = allKnowledge.where(n => n.status === "review" || n.status === "revised").length;
-    const draftCount = allKnowledge.where(n => n.status === "draft").length;
+    const reviewCount = knowledgeInReviewChain.where(n => n.status === "review" || n.status === "revised").length;
+    const draftCount = knowledgeInReviewChain.where(n => n.status === "draft").length;
 
     const masteryPct = totalNotes > 0 ? Math.round((masteredCount / totalNotes) * 100) : 0;
     const reviewPct = totalNotes > 0 ? Math.round((reviewCount / totalNotes) * 100) : 0;
@@ -212,6 +243,8 @@
 
 ## 🚨 Due for Review
 
+<!-- Note: this table excludes notes linked to frozen (`status: frozen`) or archived (file under {archived projects dir}) projects; notes whose `project` link cannot be resolved (title-form / plain string / dangling) are also hidden to prevent frozen/archived project notes from leaking through. -->
+
 ```dataview
 TABLE WITHOUT ID
     file.link as "🚨 Note",
@@ -220,6 +253,7 @@ TABLE WITHOUT ID
     dateformat(file.mtime, "yyyy-MM-dd HH:mm") as "Last Modified"
 FROM "{{knowledge_notes}}"
 WHERE type = "knowledge" AND status != "mastered"
+  AND ( !project OR ( project.file != null AND !contains(project.file.path, "{{archive_root}}/Projects") AND project.status != "frozen" ) )
 SORT file.mtime ASC
 ```
 

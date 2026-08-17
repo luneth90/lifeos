@@ -83,10 +83,12 @@ Help the user start a new day: review yesterday's progress, create today's diary
    memory_query(contract_version=2, query="", filters={"type":"knowledge","status":"review"})
    ```
    - The default review list contains only `status: review`; `draft` is unfinished, while `revised` requires an explicit follow-up request
+   - **Exclude notes linked to frozen/archived projects**: notes whose `project` field points to a project with `status: frozen`, or to an archived project (project file moved under `{system directory}/{archive subdirectory}/projects/`), must be excluded entirely from the review count and candidate list. To confirm, read the candidate note's `project` field as needed and query/read the referenced project file's status, or check the archived project list under `{system directory}/{archive subdirectory}/projects/`
    - Also check if any revise-record entries have pending status (user received questions but hasn't answered):
      ```
      memory_query(contract_version=2, query="", filters={"type":"revise-record","status":"pending"})
      ```
+   - Skip the revise-record reminder for records whose linked note belongs to a frozen or archived project (trace via the review file's `note` frontmatter field)
    - Count the number of items pending review
 
 6. **Query the drafts pool** (via VaultIndex)
@@ -101,7 +103,7 @@ Help the user start a new day: review yesterday's progress, create today's diary
    - Identify time-sensitive items (deadlines, appointments)
    - Prefer the "Current Focus" and "Active Projects" aggregated in TaskBoard
    - Find stalled projects with no updates for 3+ days (via modified_at field)
-   - Projects with `status: frozen` and their linked knowledge notes are excluded from active task lists and review recommendations
+   - Projects with `status: frozen` or archived (project file moved under `{system directory}/{archive subdirectory}/projects/`) and their linked knowledge notes are excluded from active task lists and review recommendations
    - Determine a reasonable next step for each active project
 
 8. **Check event-driven profile candidate signals**
@@ -129,8 +131,8 @@ Before interacting, read `_shared/client-capabilities.md` and use the `ask_user`
 2. **Populate diary content:**
    - **To-do items**: Write the `<!-- BEGIN AUTO:tasks -->` to `<!-- END AUTO:tasks -->` managed block; use nearest deadline → yesterday's carryover → user-selected active projects → other candidates, and include only user-selected items
      - Each automatic task's `task_id` is written as a trailing HTML comment **at the end of the task line, after all wikilinks**: `- [ ] task text [[link|display]] <!-- task_id: xxx -->`. Placing it before a wikilink breaks link parsing in Obsidian reading view, rendering `[[...]]` as raw text
-     - If there are review files with `status: pending` (user received questions but hasn't answered), prioritize the reminder: `📝 Complete review answers: [[Review_YYYY-MM-DD]] ([[chapter note name]])`
-     - If there are notes pending review (only `status: review`), list each as `/revise [[note name]]` in to-dos
+     - If there are review files with `status: pending` (user received questions but hasn't answered, and the linked note's project is not frozen or archived), prioritize the reminder: `📝 Complete review answers: [[Review_YYYY-MM-DD]] ([[chapter note name]])`
+     - If there are notes pending review (only `status: review`, whose linked project is not frozen or archived), list each as `/revise [[note name]]` in to-dos
    - **Log**: Leave empty for the user
    - **Notes**: Fill in suggestions (time-sensitive items, stalled project reminders, pending draft count)
    - **Related projects**: Write the `<!-- BEGIN AUTO:related-projects -->` to `<!-- END AUTO:related-projects -->` managed block; list only user-selected active projects with their current status
@@ -216,6 +218,7 @@ Ready to go! Quick actions:
 - **Be specific with priorities** — "Create wireframes for [[Project]]" instead of "work on project"
 - **Time-sensitive items first** — deadlines and appointments go to the top
 - **Flag stalled projects** — remind about projects with no updates for 3+ days
+- **Exclude notes of frozen/archived projects** — knowledge notes linked to projects with `status: frozen` or archived (under `{system directory}/{archive subdirectory}/projects/`) must never enter the review list, counts, or review recommendations
 - **Preserve user selection** — candidates support selection; only selected items may enter today's managed blocks
 - **Do not overwrite existing content** — if today's diary already exists, update carefully without overwriting
 - **Use the template format** — keep diary structure consistent

@@ -86,7 +86,7 @@ Vault 目录布局定义在根目录 `lifeos.yaml` 中。默认映射：
 
 全局硬约束：
 - `status: pending` 的草稿**绝不**被归档
-- `frozen` 状态的项目及其关联知识笔记不进入 TaskBoard 焦点、活跃项目和复习链路
+- `frozen` 状态或已归档（项目文件已移入 `{系统目录}/{归档子目录}/项目/`）的项目及其关联知识笔记，不进入 TaskBoard 焦点、活跃项目、今日待复习扫描与复习链路
 - 知识笔记 status **只升不降**（draft → review → revised → mastered）；`/revise` 默认只消费 `review`，首次完整批改固定 `review → revised`，仅后续显式复核达标才 `revised → mastered`
 
 ### 学习类项目知识准确性

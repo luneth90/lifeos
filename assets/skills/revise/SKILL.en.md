@@ -73,7 +73,7 @@ memory_query(contract_version=2, query="<chapter topic or source book convention
    - `draft`: stop and ask the user to finish `/knowledge` curation so the note can advance to `review`
    - `mastered`: load only for an explicitly requested retest; keep the status at `mastered`
 3. Otherwise:
-   - Scan projects with `status: active` in `{projects directory}/` to obtain chapter lists (skip projects with `status: frozen` and their linked knowledge notes)
+   - Scan projects with `status: active` in `{projects directory}/` to obtain chapter lists (skip projects with `status: frozen` or archived — archived means the project file was moved under `{system directory}/{archive subdirectory}/projects/` — and their linked knowledge notes)
    - By default, scan only notes with `status: review` in `{knowledge directory}/{notes subdirectory}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md`
 4. Scan existing review files (`Review_*.md`) under the chapter directory to obtain historical review performance
 5. Compile reviewable content statistics:

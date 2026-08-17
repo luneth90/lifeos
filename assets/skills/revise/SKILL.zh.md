@@ -73,7 +73,7 @@ memory_query(contract_version=2, query="<章节主题或原书约定关键词> �
    - `draft`：停止，提示先用 `/knowledge` 完成整理并推进到 `review`
    - `mastered`：仅在用户明确要求重测时加载，完成后保持 `mastered`
 3. 否则：
-   - 扫描 `{项目目录}/` 中 `status: active` 的项目，获取章节列表（跳过 `status: frozen` 的项目及其关联知识笔记）
+   - 扫描 `{项目目录}/` 中 `status: active` 的项目，获取章节列表（跳过 `status: frozen` 及已归档项目的关联知识笔记；已归档指项目文件已移入 `{系统目录}/{归档子目录}/项目/`）
    - 默认只扫描 `{知识目录}/{笔记子目录}/<Domain>/<BookName>/<ChapterName>/<ChapterName>.md` 中 `status: review` 的笔记
 4. 扫描章节目录下已有的复习文件（`复习_*.md`），获取历史复习表现
 5. 统计可复习内容：

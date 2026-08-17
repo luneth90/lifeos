@@ -55,6 +55,7 @@ active ⇄ frozen ──→ done ──/archive──→ 保留 done
 
 - 用户手动修改 frontmatter `status: frozen` 完成冻结，改回 `status: active` 解冻
 - frozen 项目的关联知识笔记（通过 `project` 字段关联）从复习列表中隐藏
+- 已归档项目（`lifeos archive` 将项目文件移入 `{系统目录}/{归档子目录}/项目/`）的关联知识笔记同样从复习列表中隐藏：today 待复习扫描、TaskBoard 待复习面板、Dashboard 待复习统计与复习推荐一律排除
 - frozen 项目可直接转为 `done`，也可解冻回 `active`
 - /archive 只归档整体状态为 `done` 的项目；`lifeos archive` 移动完成后追加 `archived: "YYYY-MM-DD"` 并保留 `status: done`。文件夹项目的子文件不单独归档。
 

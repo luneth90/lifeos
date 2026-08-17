@@ -23,9 +23,39 @@
     const allKnowledge = dv.pages('"{{knowledge_notes}}"').where(n => n && n.type === "knowledge");
     const totalNotes = allKnowledge.length || 0;
 
+    // 冻结/归档项目关联的知识笔记不进入复习链路：KPI 统计与待复习面板一律排除
+    // 匹配 key 同时覆盖文件路径、文件名与 frontmatter title——笔记 project 字段可能用
+    // 标题形式链接（如 "[[Visual Group Theory 学习]]"），Obsidian 按文件名解析失败时
+    // 仅靠路径无法关联，必须按 title 兜底匹配
+    const excludedProjectKeys = new Set();
+    for (const p of dv.pages('"{{projects}}"').where(p => p && p.status === "frozen")) {
+        excludedProjectKeys.add(p.file.path);
+        if (p.file.name) excludedProjectKeys.add(p.file.name);
+        if (p.title) excludedProjectKeys.add(String(p.title));
+    }
+    for (const p of dv.pages('"{{archive_root}}/项目"')) {
+        excludedProjectKeys.add(p.file.path);
+        if (p.file.name) excludedProjectKeys.add(p.file.name);
+        if (p.title) excludedProjectKeys.add(String(p.title));
+    }
+    const linkedToExcludedProject = (n) => {
+        if (!n || !n.project) return false;
+        const p = n.project;
+        if (typeof p === 'object' && p.path) {
+            const pathKey = String(p.path).replace(/\.md$/, '');
+            return excludedProjectKeys.has(pathKey) || excludedProjectKeys.has(String(p.path));
+        }
+        if (typeof p === 'string') {
+            const name = p.replace(/^\[\[|\]\]$/g, '').split('|')[0].split('#')[0].trim();
+            return excludedProjectKeys.has(name);
+        }
+        return false;
+    };
+    const knowledgeInReviewChain = allKnowledge.where(n => !linkedToExcludedProject(n));
+
     const masteredCount = allKnowledge.where(n => n.status === "mastered").length;
-    const reviewCount = allKnowledge.where(n => n.status === "review" || n.status === "revised").length;
-    const draftCount = allKnowledge.where(n => n.status === "draft").length;
+    const reviewCount = knowledgeInReviewChain.where(n => n.status === "review" || n.status === "revised").length;
+    const draftCount = knowledgeInReviewChain.where(n => n.status === "draft").length;
 
     const masteryPct = totalNotes > 0 ? Math.round((masteredCount / totalNotes) * 100) : 0;
     const reviewPct = totalNotes > 0 ? Math.round((reviewCount / totalNotes) * 100) : 0;
@@ -212,6 +242,8 @@
 
 ## 🚨 待复习
 
+<!-- 说明：本表排除关联冻结（status: frozen）或已归档（文件位于 {归档项目目录}）项目的笔记；project 链接无法解析（标题形式/纯字符串/指向不存在文件）的笔记同样不显示，避免冻结/归档项目笔记漏出。 -->
+
 ```dataview
 TABLE WITHOUT ID
     file.link as "🚨 章节笔记名称",
@@ -220,6 +252,7 @@ TABLE WITHOUT ID
     dateformat(file.mtime, "yyyy-MM-dd HH:mm") as "最后修改时间"
 FROM "{{knowledge_notes}}"
 WHERE type = "knowledge" AND status != "mastered"
+  AND ( !project OR ( project.file != null AND !contains(project.file.path, "{{archive_root}}/项目") AND project.status != "frozen" ) )
 SORT file.mtime ASC
 ```
 

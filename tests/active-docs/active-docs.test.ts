@@ -12,7 +12,7 @@ import { buildUserprofileSections } from '../../src/active-docs/userprofile.js';
 import { VaultConfig, _resetDefaultInstance, setVaultConfig } from '../../src/config.js';
 import { initDb } from '../../src/db/schema.js';
 import { upsertMemoryItem } from '../../src/services/memory-items.js';
-import { createTempVault } from '../setup.js';
+import { createTempVault, writeTestNote } from '../setup.js';
 
 function createInMemoryDb(): Database.Database {
 	const db = new Database(':memory:');
@@ -152,6 +152,131 @@ describe('buildTaskboardSections', () => {
 		const sections = buildTaskboardSections(db, '/tmp/vault');
 		expect(sections.revises).not.toContain('Frozen Note');
 		expect(sections.revises).toContain('暂无待复习的知识笔记');
+	});
+
+	it('excludes revision notes linked to archived projects (files moved to archive dir)', () => {
+		const vault = createTempVault();
+		try {
+			// 归档项目文件不在 vault_index 中（system 目录被排除索引），只存在于归档目录
+			writeTestNote(
+				vault.root,
+				'90_系统/归档/项目/2026/ArchivedProject.md',
+				{ title: 'Archived Project', type: 'project', status: 'archived' },
+				'',
+			);
+			db.prepare(`
+        INSERT INTO vault_index (file_path, title, type, status, project, modified_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+				'40_知识/笔记/ArchivedNote.md',
+				'Archived Note',
+				'note',
+				'review',
+				'[[Archived Project]]',
+				new Date().toISOString(),
+			);
+
+			const sections = buildTaskboardSections(db, vault.root);
+			expect(sections.revises).not.toContain('Archived Note');
+			expect(sections.revises).toContain('暂无待复习的知识笔记');
+		} finally {
+			vault.cleanup();
+		}
+	});
+
+	it('excludes revision notes linked to archived projects via frontmatter title key', () => {
+		const vault = createTempVault();
+		try {
+			// 归档项目文件名与 frontmatter title 不一致（连字符 vs 空格），
+			// 笔记 project 使用标题形式链接——必须通过 title key 匹配排除
+			writeTestNote(
+				vault.root,
+				'90_系统/归档/项目/2026/Archived-Title-Project.md',
+				{ title: 'Archived Title Project', type: 'project', status: 'archived' },
+				'',
+			);
+			db.prepare(`
+        INSERT INTO vault_index (file_path, title, type, status, project, modified_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(
+				'40_知识/笔记/TitledNote.md',
+				'Titled Note',
+				'note',
+				'review',
+				'[[Archived Title Project]]',
+				new Date().toISOString(),
+			);
+
+			const sections = buildTaskboardSections(db, vault.root);
+			expect(sections.revises).not.toContain('Titled Note');
+		} finally {
+			vault.cleanup();
+		}
+	});
+
+	it('keeps review notes without a project field', () => {
+		db.prepare(`
+      INSERT INTO vault_index (file_path, title, type, status, modified_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+			'40_知识/笔记/OrphanNote.md',
+			'Orphan Note',
+			'note',
+			'review',
+			new Date().toISOString(),
+		);
+
+		const sections = buildTaskboardSections(db, '/tmp/vault');
+		expect(sections.revises).toContain('Orphan Note');
+	});
+
+	it('tolerates a missing archive directory', () => {
+		const vault = createTempVault();
+		try {
+			// createTempVault 默认不创建 90_系统/归档/项目 目录
+			db.prepare(`
+        INSERT INTO vault_index (file_path, title, type, status, modified_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(
+				'40_知识/笔记/PlainNote.md',
+				'Plain Note',
+				'note',
+				'review',
+				new Date().toISOString(),
+			);
+
+			const sections = buildTaskboardSections(db, vault.root);
+			expect(sections.revises).toContain('Plain Note');
+		} finally {
+			vault.cleanup();
+		}
+	});
+
+	it('keeps revision notes linked to active projects in revises', () => {
+		db.prepare(`
+      INSERT INTO vault_index (file_path, title, type, status, modified_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(
+			'20_项目/ActiveProject.md',
+			'Active Project',
+			'project',
+			'active',
+			new Date().toISOString(),
+		);
+		db.prepare(`
+      INSERT INTO vault_index (file_path, title, type, status, project, modified_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+			'40_知识/笔记/ActiveNote.md',
+			'Active Note',
+			'note',
+			'review',
+			'[[Active Project]]',
+			new Date().toISOString(),
+		);
+
+		const sections = buildTaskboardSections(db, '/tmp/vault');
+		expect(sections.revises).toContain('Active Note');
 	});
 });
 

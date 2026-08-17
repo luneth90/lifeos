@@ -61,7 +61,6 @@ export function buildLayer0Context(
 	vaultRoot: string,
 	budgets: ContextBudgets,
 ): Layer0Context {
-	void vaultRoot;
 	const now = new Date().toISOString();
 	assertGlobalHardSafety(db, { now });
 	const rules = listMemoryItems(db, {
@@ -128,7 +127,7 @@ export function buildLayer0Context(
 	if (profileResult.loadedLines < profileResult.totalLines) {
 		warnings.push('UserProfile 速览已按预算裁剪');
 	}
-	const revisionCount = countRevisionCandidates(db);
+	const revisionCount = countRevisionCandidates(db, vaultRoot);
 	let revisionReminderLoaded = 0;
 	if (revisionCount > 0) {
 		const reminder = { title: '复习提醒', body: `待复习笔记：${revisionCount} 篇` };
